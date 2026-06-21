@@ -1,0 +1,97 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Least-privilege: the test workflow only needs to read the repository.
+permissions:
+  contents: read
+
+# Supersede in-flight runs for the same ref to save CI minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test + coverage (CPU torch backend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
+        with:
+          version: "0.11.23"
+          python-version: "3.14"
+          enable-cache: true
+
+      # torch-cpu pulls the small CPU-only torch wheel (no multi-GB CUDA stack),
+      # so CI installs fast; the PINN tests still run on CPU.
+      - name: Sync dependencies (core + CPU torch backend + dev tools)
+        run: uv sync --extra torch-cpu --locked
+
+      - name: Run test suite with coverage gate
+        run: uv run pytest --cov-report=xml --cov-fail-under=85
+
+      - name: Upload coverage report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: error
+
+  jax:
+    # Exercises the JAX backend (Equinox + Optax). Pinned to 3.12 where jaxlib
+    # wheels are guaranteed available; no coverage gate (pinn_jax is omitted from
+    # coverage, like the other optional backends).
+    name: jax backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
+        with:
+          version: "0.11.23"
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Sync dependencies (core + JAX backend + dev tools)
+        run: uv sync --extra jax-cpu --locked
+
+      - name: Run test suite (JAX tests included; torch tests skip)
+        run: uv run pytest --no-cov
+
+  minimal:
+    # Runs on 3.12 — the minimum supported version (and what Google Colab uses),
+    # so the lower bound of requires-python is actually exercised.
+    name: core only, min Python (no optional extras)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
+        with:
+          version: "0.11.23"
+          python-version: "3.12"
+          enable-cache: true
+
+      # No extras: proves the numpy/scipy core runs and the torch/deepxde import
+      # guards degrade gracefully (their tests skip rather than error).
+      - name: Sync core + dev tools only
+        run: uv sync --locked
+
+      - name: Run core test suite
+        run: uv run pytest --no-cov

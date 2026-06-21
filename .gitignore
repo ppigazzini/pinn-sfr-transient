@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.ty_cache/
+
+# uv / virtualenv
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Build
+dist/
+build/
+
+# Coverage
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Generated artifacts: `pinn-sfr reference` rebuilds results/ (figure + .npz) on
+# demand and the CLI recreates the directory, so the binaries are not tracked.
+/results/
+
+# Scratch / pasted logs (e.g. CI run logs saved locally)
+*.log

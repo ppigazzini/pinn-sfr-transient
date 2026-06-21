@@ -1,0 +1,233 @@
+[project]
+name = "pinn-sfr-transient"
+version = "0.1.0"
+description = "Physics-Informed Neural Network for the SFR Unprotected-Loss-of-Flow transient (point kinetics + lumped thermal-hydraulics + positive sodium void feedback)."
+readme = "README.md"
+# 3.12 is the floor so the package installs on Google Colab (currently 3.12.x);
+# tested on 3.12 (min) and 3.14 in CI.
+requires-python = ">=3.12"
+license = "BlueOak-1.0.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Pasquale Pigazzini", email = "pasquale.pigazzini@gmail.com" }]
+keywords = ["pinn", "scientific-machine-learning", "nuclear", "sfr", "point-kinetics"]
+# No `License ::` trove classifier: PEP 639 SPDX `license` is the single source of truth.
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+dependencies = [
+    # Floors are deliberately conservative (the code only uses long-stable
+    # solve_ivp / numpy / matplotlib APIs). Keeping them at or below the stack
+    # Google Colab pre-installs means `pip install` there does NOT upgrade
+    # numpy/scipy in the running kernel — an in-session upgrade corrupts the
+    # numpy/scipy ABI (`ImportError: cannot import name '_center'`). uv/CI still
+    # resolve to the latest versions.
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "matplotlib>=3.7",
+]
+
+[project.optional-dependencies]
+# Two PINN backends, each with a CPU and a CUDA build. Within a framework the two
+# builds are mutually exclusive (see [tool.uv] conflicts); the two frameworks can
+# coexist (e.g. `--extra torch-cpu --extra jax-cpu`).
+#
+# PyTorch backend (torch >= 2.12; CPython 3.12-3.14):
+#   uv sync --extra torch-cpu   # small CPU-only wheel from the PyTorch CPU index
+#   uv sync --extra torch-gpu   # CUDA build from PyPI (large: pulls the nvidia stack)
+torch-cpu = ["torch>=2.12.1"]
+torch-gpu = ["torch>=2.12.1"]
+# JAX backend (Equinox model + Optax optimisers). jax's CUDA wheels are on PyPI,
+# so no custom index is needed:
+#   uv sync --extra jax-cpu     # CPU-only jaxlib
+#   uv sync --extra jax-gpu     # CUDA jaxlib (pulls the nvidia stack)
+jax-cpu = ["jax>=0.4.34", "equinox>=0.11", "optax>=0.2.4"]
+jax-gpu = ["jax[cuda12]>=0.4.34", "equinox>=0.11", "optax>=0.2.4"]
+# DeepXDE variant — needs a torch backend, so combine with one:
+#   uv sync --extra deepxde --extra torch-cpu
+deepxde = ["deepxde>=1.15"]
+# Interactive walkthrough notebooks (notebooks/).
+notebook = ["jupyterlab>=4.6", "ipykernel>=7.3"]
+
+[project.urls]
+Homepage = "https://github.com/ppigazzini/pinn-sfr-transient"
+Repository = "https://github.com/ppigazzini/pinn-sfr-transient"
+Issues = "https://github.com/ppigazzini/pinn-sfr-transient/issues"
+
+[project.scripts]
+pinn-sfr = "pinn_sfr_transient.cli:main"
+
+# PEP 735 development dependency group (installed by `uv sync`).
+[dependency-groups]
+dev = [
+    "ruff>=0.15",
+    "ty>=0.0.51",
+    "pre-commit>=4.6",
+    "pytest>=9.1",
+    "pytest-cov>=7.1",
+    # Strips notebook outputs on commit so figure binaries are never committed
+    # (they live once under docs/img/); pulls in nbformat for notebook tooling.
+    "nbstripout>=0.8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pinn_sfr_transient"]
+
+# ----------------------------------------------------------------------------
+# uv
+# ----------------------------------------------------------------------------
+[tool.uv]
+# The package is importable in tests/CLI without a manual editable install step.
+package = true
+# Never resolve a framework's CPU and CUDA build together (different wheels).
+conflicts = [
+    [{ extra = "torch-cpu" }, { extra = "torch-gpu" }],
+    [{ extra = "jax-cpu" }, { extra = "jax-gpu" }],
+]
+
+# CPU-only PyTorch wheels live on a dedicated index; the default PyPI wheel is the
+# (large) CUDA build, which the `torch-gpu` extra uses as-is. `explicit` keeps this
+# index from being consulted for anything except packages pinned to it below.
+# (jax needs no equivalent — its CUDA wheels are plain PyPI extras.)
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+# `--extra torch-cpu` pulls torch from the CPU index; `--extra torch-gpu` -> PyPI.
+torch = [{ index = "pytorch-cpu", extra = "torch-cpu" }]
+
+# ----------------------------------------------------------------------------
+# Ruff  (linter + formatter)
+# ----------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+# Notebooks use compact, idiomatic cell style (inline imports, semicolons in
+# plotting cells); lint the package, not the teaching notebook.
+extend-exclude = ["notebooks"]
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    # --- Conflicts with the Ruff formatter (Ruff's own recommendation) -------
+    "COM812",  # missing-trailing-comma — the formatter owns comma placement
+    "ISC001",  # single-line-implicit-string-concatenation — formatter-managed
+
+    # --- Physics notation: symbols are not snake_case (P, C_i, T_f, UA, dT_void…)
+    "N802",  # function name should be lowercase
+    "N803",  # argument name should be lowercase
+    "N806",  # variable in function should be lowercase
+    "N815",  # mixedCase variable in class scope (e.g. dT_void = ΔT_void)
+    "N816",  # mixedCase variable in global scope
+
+    # --- Deliberate, user-facing console output (CLI summary + training logs) -
+    "T201",  # print
+
+    # --- Domain/third-party conventions --------------------------------------
+    "FBT003",   # boolean positional in *calls* (e.g. torch `requires_grad_(True)`)
+    "ERA001",   # "commented-out code" misfires on math derivations written as comments
+    "PLR2004",  # magic-value-comparison — inline physical tolerances read clearer
+
+    # --- Annotations -----------------------------------------------------------
+    # Every module uses `from __future__ import annotations` (portable across
+    # 3.12-3.14); keep dataclass/annotation imports at module scope rather than
+    # forcing them into TYPE_CHECKING blocks.
+    "TC001",
+    "TC002",
+    "TC003",
+
+    # --- Class docstrings document their own methods/inits ---------------------
+    "D102",  # undocumented-public-method
+    "D105",  # undocumented-magic-method
+    "D107",  # undocumented-public-init
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.isort]
+known-first-party = ["pinn_sfr_transient"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+    "S101",    # asserts are the whole point of a test
+    "D",       # docstrings optional in tests
+    "ANN",     # type annotations optional in tests (incl. pytest fixtures)
+    "SLF001",  # tests deliberately exercise private members
+    "E402",    # `importorskip` for an optional backend must precede its imports
+    "INP001",  # tests/ is a collection dir, not an importable package
+]
+"src/pinn_sfr_transient/pinn_deepxde.py" = [
+    "ANN001",  # DeepXDE backend tensors are untyped at the residual boundary
+    "ANN202",
+]
+
+[tool.ruff.format]
+docstring-code-format = true
+
+# ----------------------------------------------------------------------------
+# ty  (type checker)
+# ----------------------------------------------------------------------------
+[tool.ty.environment]
+python-version = "3.12"
+
+[tool.ty.src]
+# Type-check the package source. Tests lean on dynamic fixtures, monkeypatching
+# and **kwargs that fight strict typing; they are validated by running, not ty.
+include = ["src"]
+# Exclude the optional deep-learning backends: they wrap heavy optional deps with
+# incomplete type information (DeepXDE ships no stubs; torch.func confuses the
+# return-type inference), so checking them makes the gate flip depending on
+# whether the extras are installed. Keep ty deterministic; they are validated by
+# running. Mirrors the coverage `omit` of pinn_deepxde.
+exclude = [
+    "src/pinn_sfr_transient/pinn_torch.py",
+    "src/pinn_sfr_transient/pinn_deepxde.py",
+    "src/pinn_sfr_transient/pinn_jax.py",
+]
+
+[tool.ty.rules]
+# An optional-dependency import guarded by `# ty: ignore[unresolved-import]` is
+# legitimately "used" without the extra and "unused" with it; don't fail on that.
+unused-ignore-comment = "ignore"
+
+# ----------------------------------------------------------------------------
+# pytest + coverage
+# ----------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q --cov --cov-report=term-missing"
+filterwarnings = [
+    # PyTorch internally references torch.jit.script, which it flags as unsupported
+    # on Python 3.14. We never use it and the suite passes; silence the noise.
+    "ignore:`torch.jit.script` is not supported in Python 3.14:DeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["pinn_sfr_transient"]
+branch = true
+# Optional backends not installed in the coverage job (the torch job): exclude
+# them so they don't drag the total. The JAX backend is covered by its own job.
+omit = ["*/pinn_deepxde.py", "*/pinn_jax.py"]
+
+[tool.coverage.report]
+show_missing = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise SystemExit",                 # optional-dependency import guards
+    "if __name__ == .__main__.:",
+    "@(abc\\.)?abstractmethod",
+]
