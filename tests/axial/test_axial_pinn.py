@@ -24,6 +24,7 @@ from pinn_sfr_transient.axial.pinn_torch import (
     AxialPinn,
     AxialTrainConfig,
     Trainer,
+    _precursors,
     relative_l2,
 )
 from pinn_sfr_transient.axial.reference import solve_reference, steady_profile
@@ -38,13 +39,33 @@ def model():
 
 # --- hard constraints: must hold for ANY weights ---------------------------
 def test_initial_condition_is_exact(model):
-    """`theta = theta_0 + t_hat * N` — the IC cannot be violated, untrained or not."""
+    """`theta = theta_0 + t_hat N` — the IC cannot be violated, untrained or not.
+
+    Asserted against the model's *own* ``theta0``, which is the actual claim: the
+    ``t_hat`` gate is identically zero at ``t = 0``, so the network contributes
+    nothing there for any weights. Agreement between the torch and numpy steady
+    profiles is a separate question, tested below — the two run independent Newton
+    solves for the fuel temperature and differ in the last bits.
+    """
+    p = AxialParams()
+    zeta = np.linspace(0.0, 1.0, 33)
+    got = model.predict(zeta, np.array([0.0]))
+    zt = torch.tensor(zeta.reshape(-1, 1), dtype=torch.float64)
+    theta0 = model.theta0(zt).detach().numpy()
+    for k in range(4):
+        expected = p.T_in + theta0[:, k] * model.dT
+        np.testing.assert_allclose(got[k][:, 0], expected, rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(got[4][:, 0], 0.0, rtol=0.0, atol=0.0)  # void-free
+
+
+def test_initial_condition_matches_the_reference_steady_state(model):
+    """And that hard IC is the same state the reference solver starts from."""
     p = AxialParams()
     zeta = np.linspace(0.0, 1.0, 33)
     got = model.predict(zeta, np.array([0.0]))
     names = ("T_f", "T_cl", "T_s", "T_c", "alpha")
     for f, ref, name in zip(got, steady_profile(p, zeta)[:5], names, strict=True):
-        np.testing.assert_allclose(f[:, 0], ref, rtol=0.0, atol=0.0, err_msg=name)
+        np.testing.assert_allclose(f[:, 0], ref, atol=1e-9, err_msg=name)
 
 
 def test_inlet_boundary_condition_is_exact(model):
@@ -226,3 +247,81 @@ def test_relative_l2_reports_every_field(model):
     err = relative_l2(model, solve_reference(AxialParams(), n_out=21))
     assert set(err) == {"T_f", "T_cl", "T_s", "T_c", "L_void_max_err_m"}
     assert all(np.isfinite(v) for v in err.values())
+
+
+# --- M6: the PINN with the kinetics closed ---------------------------------
+PLAN_A = AxialTrainConfig(
+    width=8, depth=2, feedback=True, n_time=16, adam_iters=3, lbfgs_iters=2, log_every=100
+)
+
+
+@pytest.fixture
+def plan_a_model():
+    return AxialPinn(AxialParams(), PLAN_A)
+
+
+def test_precursors_start_at_one_and_stay_positive(plan_a_model):
+    """`c = exp(t_hat N)` pins `c(0) = 1` exactly and makes `c > 0` unconditional.
+
+    Positivity is not decoration: with `c > 0` and the pole guard on `beta - rho`,
+    `P = sum(beta_i c_i)/(beta - rho)` cannot reach zero. That is the structural
+    answer to the power-collapse question REPORT-01 section 5.2 is about — the
+    trivial solution is removed by construction rather than avoided by training.
+    """
+    c0 = _precursors(plan_a_model, torch.zeros(1, 1, dtype=torch.float64))
+    np.testing.assert_allclose(c0.detach().numpy(), 1.0, rtol=0.0, atol=0.0)
+    c = _precursors(plan_a_model, torch.rand(64, 1, dtype=torch.float64))
+    assert bool((c > 0).all())
+
+
+def test_closed_loop_power_starts_at_nominal(plan_a_model):
+    """`P(0) = sum(beta_i)/beta = 1` exactly, for any weights and with no offset."""
+    power, rho = plan_a_model.predict_power(np.array([0.0]))
+    assert power[0] == pytest.approx(1.0, rel=1e-12)
+    assert abs(rho[0]) < 1e-15
+
+
+def test_closed_loop_has_six_blocks_and_they_are_per_time(plan_a_model):
+    that = torch.rand(16, 1, dtype=torch.float64)
+    blocks = plan_a_model.closed_loop_blocks(that)
+    assert len(blocks) == 6  # four temperatures, void, precursors
+    assert all(b.shape == (16,) for b in blocks)
+    assert all(bool(torch.isfinite(b).all()) for b in blocks)
+
+
+def test_closed_loop_gradients_reach_both_networks(plan_a_model):
+    """The field net and the precursor net must both be trained by the loss."""
+    blocks = plan_a_model.closed_loop_blocks(torch.rand(16, 1, dtype=torch.float64))
+    grads = torch.autograd.grad(
+        sum(b.mean() for b in blocks), list(plan_a_model.parameters()), allow_unused=True
+    )
+    assert all(g is not None for g in grads)
+
+
+def test_plan_a_training_runs_and_reduces_the_loss():
+    cfg = AxialTrainConfig(
+        width=8, depth=2, feedback=True, n_time=16, adam_iters=40, lbfgs_iters=0, log_every=1000
+    )
+    model = AxialPinn(AxialParams(), cfg)
+    trainer = Trainer(model, cfg)
+    zeta, that = trainer.collocation()
+    before = trainer.causal_loss(zeta, that).item()
+    trainer.train(verbose=False)
+    assert trainer.causal_loss(zeta, that).item() < before
+
+
+def test_plan_a_collocates_in_time_only():
+    """The axial direction is the fixed quadrature the reactivity integral needs."""
+    cfg = AxialTrainConfig(width=8, depth=2, feedback=True, n_time=16)
+    trainer = Trainer(AxialPinn(AxialParams(), cfg), cfg)
+    zeta, that = trainer.collocation()
+    assert zeta.shape == that.shape
+    assert torch.equal(zeta, that)
+
+
+def test_rar_is_disabled_under_feedback():
+    """RAR adds arbitrary points; a quadrature rule cannot absorb them."""
+    cfg = AxialTrainConfig(width=8, depth=2, feedback=True, n_time=16)
+    trainer = Trainer(AxialPinn(AxialParams(), cfg), cfg)
+    trainer.rar_refine()
+    assert trainer.rar.numel() == 0
