@@ -57,6 +57,11 @@ The heavy lifting is in the docs and notebooks:
   training, the adaptive recipe (causal weighting, gradient-norm loss weights,
   residual-adaptive sampling, forward-mode autodiff), **and a JAX-vs-PyTorch
   comparison** (§9) of the two backends.
+- [`docs/axial_physics.md`](docs/axial_physics.md) — **work in progress**: a
+  second, axially resolved model with sodium boiling, following the
+  [SAS4A/SASSYS-1 manual](https://sas-doc.nse.anl.gov/latest/). Currently
+  scaffolding only (milestone M0); the page doubles as the register of every
+  deviation from the manual.
 - [`docs/usage.md`](docs/usage.md) — install, run, train, use as a library,
   compute requirements, troubleshooting.
 - [`docs/references.md`](docs/references.md) — annotated bibliography
