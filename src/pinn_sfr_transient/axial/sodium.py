@@ -46,8 +46,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import numpy as np
-
+from pinn_sfr_transient.axial._backend import xp as _xp
 from pinn_sfr_transient.config import FloatArray
 
 type Scalar = float | FloatArray
@@ -102,29 +101,6 @@ _A48, _A49, _A50, _A51 = 1.1045e2, -6.5112e-2, 1.5430e-5, -2.4617e-9
 _A52, _A53, _A54, _A55 = 3.6522e-5, 0.16626, -4.56877e1, 2.8733e4
 # Enthalpy of saturated liquid, Eq. 12.13-13
 _A56, _A57, _A58, _A59 = -111136.04, 1722.2578, -0.45544483, 1.4692883e-4
-
-
-def _xp(x: Any) -> Any:  # noqa: ANN401 - deliberately backend-agnostic
-    """Return the array module (``numpy``, ``torch`` or ``jax.numpy``) matching ``x``.
-
-    Keeps a single transcription of every correlation: all three backends execute
-    the same expression tree, so they cannot drift apart. ``torch`` and ``jax``
-    are optional extras and are imported only when their array type is actually
-    passed, so this module imports fine with neither installed.
-
-    The ``jax`` test covers concrete arrays (``jaxlib._jax.ArrayImpl``) and
-    tracers (``jax._src...``) alike -- both module paths start with ``jax``.
-    """
-    mod = type(x).__module__
-    if mod.startswith("torch"):
-        import torch  # noqa: PLC0415 - optional extra, imported only when used
-
-        return torch
-    if mod.startswith("jax"):
-        import jax.numpy as jnp  # noqa: PLC0415 - optional extra, imported only when used
-
-        return jnp
-    return np
 
 
 def in_range(T: Scalar) -> Any:  # noqa: ANN401 - bool array of the caller's backend

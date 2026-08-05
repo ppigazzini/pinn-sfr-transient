@@ -63,6 +63,7 @@ class AxialParams:
     # This is the manual's gamma_2 of section 12.5.1. Set to 0.0 to drop the
     # structure node entirely (see deviation D-GEOM-2).
     gamma_2: float = 0.5
+    t_struct: float = 2.0e-3  # structure (duct) wall thickness [m]
 
     # --- Material properties (constant; sodium is M1's job) ----------------
     rho_f: float = 9.70e3  # fuel density [kg/m^3]
@@ -71,8 +72,13 @@ class AxialParams:
     c_cl: float = 550.0  # cladding specific heat [J/kg-K]
     rho_s: float = 7.80e3  # structure density [kg/m^3]
     c_s: float = 550.0  # structure specific heat [J/kg-K]
-    rho_c: float = 850.0  # coolant density [kg/m^3] (nominal; M1 replaces)
-    c_c: float = 1.27e3  # coolant specific heat [J/kg-K] (nominal; M1 replaces)
+    # Coolant properties are held CONSTANT at M2 (deviation D-TH-3): the defaults
+    # below are the section 12.13 correlations evaluated at `T_ref_props`, which
+    # keeps the steady state analytically exact for solver verification. M4
+    # replaces them with the temperature-dependent forms from `axial.sodium`.
+    T_ref_props: float = 700.0  # reference temperature for the frozen properties [K]
+    rho_c: float = 849.09  # = sodium.liquid_density(700 K) [kg/m^3]
+    c_c: float = 1272.29  # = sodium.liquid_heat_capacity(700 K) [J/kg-K]
 
     # --- Heat transfer (manual Eq. 3.3-4, Eq. 3.3-5) -----------------------
     h_gap: float = 1.0e4  # fuel-cladding bond gap conductance [W/m^2-K]
@@ -116,7 +122,7 @@ class AxialParams:
     # --- Flow (manual Eq. 5.3-61 analogue; see deviation D-FLOW-1) ---------
     tau_pump: float = 5.0  # coast-down time constant [s]
     f_nc: float = 0.15  # natural-circulation floor, fraction of nominal
-    w_0: float = 0.30  # nominal coolant mass flow per pin [kg/s]
+    w_0: float = 0.25  # nominal coolant mass flow per pin [kg/s]
     T_in: float = 628.0  # core inlet temperature [K]
 
     # --- Axial power shape -------------------------------------------------
@@ -160,6 +166,9 @@ class AxialParams:
             "Lambda": self.Lambda,
             "dT_smooth": self.dT_smooth,
             "delta_sign": self.delta_sign,
+            "t_struct": self.t_struct,
+            "rho_c": self.rho_c,
+            "c_c": self.c_c,
         }
         for name, value in positives.items():
             if value <= 0.0:

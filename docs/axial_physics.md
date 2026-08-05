@@ -7,12 +7,14 @@ lumped 0D model of [`physics_theory.md`](physics_theory.md), which it does not
 replace — the 0D model remains the fast regression harness and the pedagogical
 entry point.
 
-> **Status: milestone M1.** Implemented so far: `axial/config.py` — the
-> parameter container, axial mesh, power and void-worth shapes, and the Doppler
-> coefficient interpolation (M0); `axial/sodium.py` — the thirteen section 12.13
-> sodium correlations (M1). The reference solver (M2), boiling onset (M4) and the
-> kinetics closure (M6) are **not implemented**. No transient has been solved
-> against a reference yet; do not quote transient numbers from this model.
+> **Status: milestone M2.** Implemented: `axial/config.py` — parameters, axial
+> mesh, power and void-worth shapes, Doppler interpolation (M0);
+> `axial/sodium.py` — the thirteen section 12.13 correlations (M1);
+> `axial/physics.py` + `axial/reference.py` — the single-phase Chapter 3 energy
+> balance and its stiff reference solver (M2). Boiling onset (M4) and the
+> kinetics closure (M6) are **not implemented**, so power is prescribed and the
+> transient is driven entirely by the pump coast-down. The reference is a
+> *verification vehicle*, not yet a physical ULOF: see §5.
 
 ---
 
@@ -31,11 +33,11 @@ onset and feedback laws from the manual.
 
 | Physics | Manual location | Status here |
 |---|---|---|
-| Fuel and cladding conduction | Eq. 3.3-1 | M2 |
-| Fuel-to-cladding flux (gap conductance **+ radiation**) | Eq. 3.3-4 | M2 |
-| Coolant energy, three sources `Q_c + Q_ec + Q_sc` | Eq. 3.3-5 | M2 |
-| Direct neutron/gamma heating in the coolant, `γ_c` | Eq. 3.3-6 | M2 (`gamma_c`) |
-| Pre-boiling momentum, `w = w(t)` independent of `z` | Eq. 3.9-1 | M2/M3 |
+| Fuel and cladding conduction | Eq. 3.3-1 | **done**, radially lumped |
+| Fuel-to-cladding flux (gap conductance **+ radiation**) | Eq. 3.3-4 | **done** |
+| Coolant energy, three sources `Q_c + Q_ec + Q_sc` | Eq. 3.3-5 | **done** |
+| Direct neutron/gamma heating in the coolant, `γ_c` | Eq. 3.3-6 | **done** (`gamma_c`) |
+| Pre-boiling momentum, `w = w(t)` independent of `z` | Eq. 3.9-1 | **done** |
 | Point kinetics | Eq. 4.2-4 | M6 |
 | Delayed-neutron precursors | Eq. 4.3-1 | M6 (`beta_i`, `lambda_i`) |
 | Decay heat, `ψ_t = ψ_f + ψ_h`, ANS standard | Eq. 4.2-2, §4.4 | M6 (decision pending) |
@@ -290,7 +292,46 @@ its 820 K void onset as a demonstration threshold rather than the sodium
 saturation temperature. Boiling onset now comes from `Ts(Ps)` plus the §12.4
 superheat, at the right temperature.
 
-## 5. Parameter provenance
+## 5. The M2 reference solver
+
+Method of lines: Chapter 3's energy equations discretised in `z`, advanced by an
+implicit Radau integrator. Four verification handles, none of which assumes the
+solver is correct:
+
+| Check | Result |
+|---|---|
+| `rhs(0, y_steady)` — steady state is an exact oracle | **3.4e-11 K/s** |
+| Steady rise equals the telescoped nodal sources | exact to 1e-12 relative |
+| Constant flow (`f_nc = 1`) holds the steady state | `< 1e-6 K` over 30 s |
+| Energy balance closure | **1.4e-5** at `n_out = 241`, converging to zero as `Δt²` |
+| Mesh convergence, transient (L2-in-time of `T_out`) | ratio **≈ 2** — first order |
+| Mesh convergence, quasi-steady (`T_out` at `t_end`) | ratio **≈ 4** — second order |
+
+The two convergence orders differ *for a reason*, and that is itself the check.
+First-order upwind advection dominates during the coast-down. But in steady state
+the upwind stencil telescopes to the **exact** integral of the nodal sources and
+contributes no truncation error at all, leaving only the second-order midpoint
+quadrature of the axial power shape. Seeing 1 and 2 in the right places is much
+stronger evidence than seeing one number twice.
+
+Upwind is deliberate rather than convenient: it is monotone, so it will not
+oscillate across the void front that M4 introduces. First order is the price.
+
+**Radau needs the Jacobian sparsity pattern.** Every coupling is local — a node
+talks to its material neighbours and, for the coolant, its upwind neighbour — so
+of the `(4n)²` entries only `O(n)` are non-zero. Supplying that pattern turned
+the `n = 640` convergence study from intractable into 1.8 s. A test finite-
+differences the true Jacobian and asserts the pattern covers every real coupling,
+because a missing entry would silently degrade Radau's Newton solve rather than
+fail loudly.
+
+**Scope limit, asserted rather than hidden.** M2 is single-phase by construction,
+but with the default coast-down the coolant passes the sodium saturation
+temperature (~1159 K at 1 atm) at about **t = 11 s**. From there the run is
+non-physical: it is a *solver verification vehicle* until M4 adds boiling. A test
+asserts the crossing happens, so the limitation cannot quietly disappear.
+
+## 6. Parameter provenance
 
 **The defaults in `AxialParams` are representative placeholders**, order-of-
 magnitude correct for an oxide-fuelled SFR pin cell and not taken from any
@@ -298,13 +339,13 @@ specific reactor. Chapter 2 of the manual (the input-deck reference) is the plac
 to source a consistent realistic set; that is M2 work. Until then, nothing from
 this model should be quoted as a physical prediction.
 
-## 6. Milestone status
+## 7. Milestone status
 
 | M | Deliverable | State |
 |---|---|---|
 | **M0** | Package scaffolding, `AxialParams`, axial shapes, this register | **done** |
 | **M1** | Sodium properties (§12.13) from the manual | **done** |
-| M2 | Method-of-lines reference solver, held-out truth | not started |
+| **M2** | Method-of-lines reference solver, held-out truth | **done** |
 | M3 | Plan B PINN — prescribed power, no feedback | not started |
 | M4 | Boiling onset and void field | not started |
 | M5 | Film / dryout heat path (§12.5.1) | not started |
