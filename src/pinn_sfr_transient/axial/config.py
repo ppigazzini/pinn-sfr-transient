@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from pinn_sfr_transient.axial._backend import xp as _xp
 from pinn_sfr_transient.config import _BETA_I_U235, _LAMBDA_I, FloatArray
 
 type Scalar = float | FloatArray
@@ -276,7 +277,9 @@ class AxialParams:
         bound the excursion. Set ``alpha_D_voided == alpha_D_flooded`` to
         disable the coupling.
         """
-        a = np.clip(np.asarray(void_fraction), 0.0, 1.0)
+        # Backend-agnostic: this is called from inside the PINN residual, where
+        # `void_fraction` is a torch or JAX array that must stay differentiable.
+        a = _xp(void_fraction).clip(void_fraction, 0.0, 1.0)
         return self.alpha_D_flooded + (self.alpha_D_voided - self.alpha_D_flooded) * a
 
     def steady_precursors(self, power: float = 1.0) -> FloatArray:

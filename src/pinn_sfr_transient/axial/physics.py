@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from pinn_sfr_transient.axial import sodium
+from pinn_sfr_transient.axial._backend import like as _like
 from pinn_sfr_transient.axial._backend import xp as _xp
 
 if TYPE_CHECKING:
@@ -334,14 +335,20 @@ def prompt_jump_power(c: Field, rho: Field, p: AxialParams, floor: float = 0.05)
     callers must still report ``max rho/beta`` and treat anything approaching 1 as
     outside the approximation rather than as a result.
     """
-    xp = _xp(c)
-    denom = xp.maximum(p.beta_eff - rho, floor * p.beta_eff)
-    return (p.beta_i * c).sum(-1) / denom
+    # `clip` rather than `maximum` because torch's `maximum` demands two tensors
+    # while `clip` accepts a scalar bound, and numpy/torch/JAX all spell it the
+    # same way. The clamp is a guard, not a model: callers must still report
+    # `max rho/beta` and treat anything near 1 as outside the approximation.
+    gap = _xp(rho).clip(p.beta_eff - rho, floor * p.beta_eff, None)
+    weighted = (_like(c, p.beta_i) * c).sum(-1)
+    if getattr(c, "ndim", 1) > 1:
+        weighted = weighted.reshape(-1, 1)
+    return weighted / gap
 
 
 def precursor_derivatives(c: Field, power: Field, p: AxialParams) -> Field:
     """``dc_i/dt = lambda_i (P - c_i)`` — Eq. 4.3-1 in normalised form."""
-    return p.lambda_i * (power - c)
+    return _like(c, p.lambda_i) * (power - c)
 
 
 # --- the coupled right-hand side -------------------------------------------

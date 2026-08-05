@@ -37,7 +37,15 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from pinn_sfr_transient.axial.config import AxialParams
-from pinn_sfr_transient.axial.physics import continuous_derivatives, line_geometry
+from pinn_sfr_transient.axial.physics import (
+    N_GROUPS,
+    continuous_derivatives,
+    kinetics_weights,
+    line_geometry,
+    precursor_derivatives,
+    prompt_jump_power,
+    reactivity,
+)
 from pinn_sfr_transient.axial.reference import solve_reference
 
 try:
@@ -79,13 +87,20 @@ class AxialTrainConfig:
     rar_add: int = 200
     rar_cap: int = 4000
 
+    # Milestone M6: close the kinetics loop. With `feedback = False` the power is
+    # prescribed (Plan B, M3); with it on, power becomes an output of the
+    # prompt-jump closure and the reactivity integrals bring every axial node into
+    # every residual — which is what forces the tensor collocation below.
+    feedback: bool = False
+    n_time: int = 128  # collocation times when feedback is on
+
     device: str = "cpu"
     seed: int = 0
     log_every: int = 1000
 
 
 class MLP(nn.Module):
-    """Plain tanh MLP, ``2 -> n_out``.
+    """Plain tanh MLP, ``n_in -> n_out``.
 
     Weights *and* biases from ``U(-k, k)`` with ``k = 1/sqrt(fan_in)``, matching
     Equinox. That is not cosmetic: ``docs/neural_network.md`` §9 records that the
@@ -94,9 +109,9 @@ class MLP(nn.Module):
     magnitude worse. Same recipe, same init.
     """
 
-    def __init__(self, n_out: int = 4, width: int = 64, depth: int = 5) -> None:
+    def __init__(self, n_out: int = 4, width: int = 64, depth: int = 5, n_in: int = 2) -> None:
         super().__init__()
-        layers: list[nn.Module] = [nn.Linear(2, width), nn.Tanh()]
+        layers: list[nn.Module] = [nn.Linear(n_in, width), nn.Tanh()]
         for _ in range(depth - 1):
             layers += [nn.Linear(width, width), nn.Tanh()]
         layers += [nn.Linear(width, n_out)]
@@ -120,7 +135,17 @@ class AxialPinn(nn.Module):
         self.cfg = cfg
         torch.manual_seed(cfg.seed)  # before init: nn.init draws from the global RNG
         self.net = MLP(len(FIELDS), cfg.width, cfg.depth).to(cfg.device).double()
+        # Precursors are functions of time alone, so they get their own smaller
+        # one-input network rather than a head on the (zeta, t) field network.
+        kin = MLP(N_GROUPS, cfg.width // 2, 2, n_in=1) if cfg.feedback else None
+        self.kin = kin.to(cfg.device).double() if kin is not None else None
         self.geo = line_geometry(p)
+        # Fixed axial quadrature for the reactivity integrals (deviation note
+        # section 3.5a of the plan): RAR may add arbitrary points to the field
+        # residual, but an integral needs a rule, so the two collocation sets are
+        # kept separate. Same nodes and weights as the reference's own sum.
+        self.w_D, self.w_void = (torch.tensor(w, dtype=torch.float64) for w in kinetics_weights(p))
+        self.zeta_q = torch.tensor(p.zeta_nodes().reshape(-1, 1), dtype=torch.float64)
         self.dT = p.P_0 / (p.w_0 * p.c_c)  # nominal core rise, the temperature scale
         self.t_end = float(p.t_end)
 
@@ -190,6 +215,60 @@ class AxialPinn(nn.Module):
         return theta, d_dt, d_dz
 
     # -- residuals ----------------------------------------------------------
+    def closed_loop_blocks(self, that: torch.Tensor) -> tuple[torch.Tensor, ...]:
+        """Residual blocks with the kinetics closed (milestone M6).
+
+        The reactivity is an axial *integral* (Eq. 4.5-3, Eq. 4.5-25), so a single
+        power amplitude couples every node at a given time to every other. The
+        collocation therefore has to be a **tensor grid** — ``n_time`` times times
+        the fixed axial quadrature — rather than scattered points: you cannot
+        evaluate an integral on a random cloud. This is the two-collocation-set
+        design of the plan's section 3.5a, in its simplest correct form.
+
+        Returns the four field blocks, the void block, and the precursor block.
+        """
+        n_t, n_z = that.shape[0], self.zeta_q.shape[0]
+        zeta = self.zeta_q.repeat(n_t, 1)
+        t_rep = that.repeat_interleave(n_z, dim=0)
+        theta, d_dt, d_dz = self.state_and_grads(zeta, t_rep)
+        fields = self.to_physical(theta)
+
+        T_f0 = self.p.T_in + self.theta0(self.zeta_q)[:, 0:1] * self.dT
+        T_f_g = fields[0].reshape(n_t, n_z)
+        alpha_g = fields[4].reshape(n_t, n_z)
+        rho = reactivity(T_f_g, alpha_g, T_f0.reshape(1, n_z), self.w_D, self.w_void, self.p)
+
+        # Precursors and their time derivative in one forward-mode pass, exactly
+        # as the fields get theirs.
+        c, dc = torch.func.jvp(lambda h: _precursors(self, h), (that,), (torch.ones_like(that),))
+        power = prompt_jump_power(c, rho.reshape(-1, 1), self.p)  # (n_t, 1)
+
+        amp = power.repeat_interleave(n_z, dim=0)
+        rhs = continuous_derivatives(
+            t_rep * self.t_end,
+            *fields,
+            d_dz[:, 3:4] * self.dT / self.p.H,
+            d_dz[:, 4:5] / self.p.H,
+            self.p,
+            self.geo,
+            _power_shape(self.p, zeta),
+            amp,
+        )
+        # Reduce each field block over the axial quadrature so every block is one
+        # value per time. That is what makes the six comparable, and it is also
+        # the natural shape for causal weighting, which chunks in time.
+        scales = [self.t_end / self.dT] * N_TEMPS + [self.t_end]
+        blocks = [
+            (d_dt[:, k : k + 1] - scales[k] * rhs[k]).pow(2).reshape(n_t, n_z).mean(1)
+            for k in range(len(FIELDS))
+        ]
+
+        # Precursors: dc_i/dt_hat = t_end * lambda_i (P - c_i), Eq. 4.3-1 in
+        # normalised time. Averaged over the six groups, as the 0D model does.
+        d_phys = precursor_derivatives(c, power, self.p)
+        blocks.append((dc - self.t_end * d_phys).pow(2).mean(1))
+        return tuple(blocks)
+
     def residual_blocks(self, zeta: torch.Tensor, that: torch.Tensor) -> tuple[torch.Tensor, ...]:
         """Squared residual of each field, shape ``(N,)`` each.
 
@@ -217,6 +296,28 @@ class AxialPinn(nn.Module):
         )
 
     @torch.no_grad()
+    def predict_power(self, t: FloatArray) -> tuple[FloatArray, FloatArray]:
+        """Normalised power and net reactivity on a time grid (Plan A only)."""
+        that = torch.tensor(
+            (np.asarray(t) / self.t_end).reshape(-1, 1), dtype=torch.float64, device=self.cfg.device
+        )
+        n_z = self.zeta_q.shape[0]
+        zeta = self.zeta_q.repeat(that.shape[0], 1)
+        fields = self.to_physical(self.normalised_state(zeta, that.repeat_interleave(n_z, dim=0)))
+        T_f0 = self.p.T_in + self.theta0(self.zeta_q)[:, 0:1] * self.dT
+        rho = reactivity(
+            fields[0].reshape(-1, n_z),
+            fields[4].reshape(-1, n_z),
+            T_f0.reshape(1, n_z),
+            self.w_D,
+            self.w_void,
+            self.p,
+        )
+        c = _precursors(self, that)
+        power = prompt_jump_power(c, rho.reshape(-1, 1), self.p)
+        return power.cpu().numpy().ravel(), rho.cpu().numpy().ravel()
+
+    @torch.no_grad()
     def predict(self, zeta: FloatArray, t: FloatArray) -> tuple[FloatArray, ...]:
         """Evaluate on a ``(zeta, t)`` mesh grid, returning physical fields ``(n_z, n_t)``."""
         zz, tt = np.meshgrid(zeta, t, indexing="ij")
@@ -230,6 +331,18 @@ class AxialPinn(nn.Module):
 
 _ALPHA_GATE: float = 10.0
 """Sharpness of the void gate; large enough to saturate away from the boundaries."""
+
+
+def _precursors(model: AxialPinn, that: torch.Tensor) -> torch.Tensor:
+    """``c_i(t_hat)`` with ``c(0) = 1`` exact and ``c > 0`` guaranteed.
+
+    ``c = exp(t_hat * N(t_hat))`` does both at once: the ``t_hat`` factor pins the
+    initial condition for any weights, and the exponential makes the precursors
+    positive by construction. Positivity matters because it is what makes
+    ``P = sum(beta_i c_i)/(beta - rho)`` unable to reach zero — the collapse mode
+    that REPORT-01 section 5.2 spends its length on.
+    """
+    return torch.exp(that * model.kin(that))
 
 
 def _power_shape(p: AxialParams, zeta: torch.Tensor) -> torch.Tensor:
@@ -247,13 +360,14 @@ def _power_integral(p: AxialParams, zeta: torch.Tensor) -> torch.Tensor:
 
 
 def _fuel_temperature(
-    q: torch.Tensor, T_cl: torch.Tensor, area: float, p: AxialParams, iters: int = 12
+    q: torch.Tensor, T_cl: torch.Tensor, area: float, p: AxialParams, iters: int = 5
 ) -> torch.Tensor:
     """Invert Eq. 3.3-4 for the fuel temperature; radiation makes it nonlinear.
 
     A fixed unrolled Newton rather than a convergence loop: the iteration count
     must not depend on the data for the graph to be traceable, and 40 steps is
-    far past convergence for this smooth scalar problem (Newton is quadratic).
+    past convergence for this smooth scalar problem: measured, 4 iterations already
+    reach machine precision, so 5 carries a margin of one.
     """
     sigma = 5.670374419e-8
     T_f = T_cl + q / (p.h_gap * area)
@@ -270,11 +384,25 @@ class Trainer:
         self.model = model
         self.cfg = cfg
         self.dev = cfg.device
-        self.block_w = torch.ones(len(FIELDS), dtype=torch.float64, device=self.dev)
+        n_blocks = len(FIELDS) + (1 if cfg.feedback else 0)
+        self.block_w = torch.ones(n_blocks, dtype=torch.float64, device=self.dev)
         self.rar = torch.empty(0, 2, dtype=torch.float64, device=self.dev)
+
+    def _blocks(self, zeta: torch.Tensor, that: torch.Tensor) -> tuple[torch.Tensor, ...]:
+        """Residual blocks for whichever plan is active."""
+        if self.cfg.feedback:
+            return self.model.closed_loop_blocks(that)
+        return self.model.residual_blocks(zeta, that)
 
     def collocation(self) -> tuple[torch.Tensor, torch.Tensor]:
         """Uniform points over ``(zeta, t_hat)``, clustered early, plus the RAR reservoir."""
+        if self.cfg.feedback:
+            # Plan A collocates in TIME only: the axial direction is the fixed
+            # quadrature the reactivity integral needs (section 3.5a).
+            that = torch.rand(self.cfg.n_time, 1, dtype=torch.float64, device=self.dev)
+            early = torch.rand(self.cfg.n_time // 2, 1, dtype=torch.float64, device=self.dev) * 0.4
+            allt = torch.cat([that, early], dim=0)
+            return allt, allt
         n = self.cfg.n_colloc
         pts = torch.rand(n, 2, dtype=torch.float64, device=self.dev)
         early = torch.rand(n // 2, 2, dtype=torch.float64, device=self.dev)
@@ -287,8 +415,8 @@ class Trainer:
         return allp[:, 0:1], allp[:, 1:2]
 
     def _pointwise(self, zeta: torch.Tensor, that: torch.Tensor) -> torch.Tensor:
-        blocks = self.model.residual_blocks(zeta, that)
-        return sum(self.block_w[k] * blocks[k] for k in range(len(FIELDS)))
+        blocks = self._blocks(zeta, that)
+        return sum(self.block_w[k] * blocks[k] for k in range(len(blocks)))
 
     def causal_loss(self, zeta: torch.Tensor, that: torch.Tensor) -> torch.Tensor:
         """Time-chunked loss with causal weights [Wang, Sankaran & Perdikaris 2024]."""
@@ -304,7 +432,7 @@ class Trainer:
 
     def update_block_weights(self, zeta: torch.Tensor, that: torch.Tensor) -> None:
         """Balance the four blocks by gradient norm [Wang, Teng & Perdikaris 2021]."""
-        blocks = self.model.residual_blocks(zeta, that)
+        blocks = self._blocks(zeta, that)
         params = [q for q in self.model.parameters() if q.requires_grad]
         norms = []
         for b in blocks:
@@ -323,6 +451,8 @@ class Trainer:
     @torch.no_grad()
     def rar_refine(self) -> None:
         """Append the worst-residual candidates to the reservoir [Wu et al. 2023]."""
+        if self.cfg.feedback:
+            return  # Plan A's collocation is a tensor grid; RAR would break the quadrature
         pool = torch.rand(self.cfg.rar_pool, 2, dtype=torch.float64, device=self.dev)
         e = self._pointwise(pool[:, 0:1], pool[:, 1:2])
         top = torch.topk(e, min(self.cfg.rar_add, e.numel())).indices
