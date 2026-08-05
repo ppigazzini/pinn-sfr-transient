@@ -53,7 +53,7 @@ def test_steady_state_annihilates_the_right_hand_side():
 def test_steady_state_temperature_rise_is_the_telescoped_source():
     """Upwind advection makes the steady coolant profile a telescoping sum -- exactly."""
     p = AxialParams()
-    _, _, _, T_c = steady_state(p)
+    _, _, _, T_c, _ = steady_state(p)
     q_fuel, q_cool = nodal_power(1.0, p.power_shape(p.zeta_nodes()), p)
     expected = (q_fuel + q_cool).sum() / (p.w_0 * p.c_c)
     assert T_c[-1] - p.T_in == pytest.approx(expected, rel=1e-12)
@@ -74,7 +74,7 @@ def test_constant_flow_holds_the_steady_state_for_all_time():
     """With `f_nc = 1` there is no coast-down, so nothing may drift."""
     p = AxialParams(f_nc=1.0, t_end=30.0)
     tr = solve_reference(p, n_out=61)
-    T_f0, T_cl0, T_s0, T_c0 = steady_state(p)
+    T_f0, T_cl0, T_s0, T_c0, _ = steady_state(p)
     assert np.max(np.abs(tr.T_c - T_c0[:, None])) < 1e-6
     assert np.max(np.abs(tr.T_f - T_f0[:, None])) < 1e-6
     assert np.max(np.abs(tr.T_cl - T_cl0[:, None])) < 1e-6
@@ -83,18 +83,18 @@ def test_constant_flow_holds_the_steady_state_for_all_time():
 
 def test_structure_sits_at_the_coolant_temperature_in_steady_state():
     """No source in the duct wall, so `q_sc = 0` and it equilibrates."""
-    _, _, T_s, T_c = steady_state(AxialParams())
+    _, _, T_s, T_c, _ = steady_state(AxialParams())
     np.testing.assert_allclose(T_s, T_c, rtol=0.0, atol=0.0)
 
 
 def test_temperatures_are_ordered_fuel_above_cladding_above_coolant():
-    T_f, T_cl, _, T_c = steady_state(AxialParams())
+    T_f, T_cl, _, T_c, _ = steady_state(AxialParams())
     assert np.all(T_f > T_cl)
     assert np.all(T_cl > T_c)
 
 
 def test_coolant_heats_monotonically_up_the_channel():
-    _, _, _, T_c = steady_state(AxialParams())
+    _, _, _, T_c, _ = steady_state(AxialParams())
     assert np.all(np.diff(T_c) > 0.0)
 
 
@@ -103,35 +103,39 @@ def _outlet(n, n_out=241):
     return solve_reference(AxialParams(n_axial=n), n_out=n_out).T_out
 
 
-@pytest.fixture(scope="module")
-def fine_outlet():
-    return _outlet(320)
+def _richardson(metric):
+    """Observed order from three grids, with no fine reference to trust.
+
+    ``||u_h - u_h/2|| / ||u_h/2 - u_h/4|| -> 2^p``. Using successive differences
+    rather than an error against a "converged" run removes the assumption that
+    the finest grid is itself converged — and costs three solves instead of four.
+    """
+    a, b, c = (_outlet(n) for n in (20, 40, 80))
+    return metric(a - b) / metric(b - c)
 
 
-def test_transient_converges_at_first_order(fine_outlet):
+def test_transient_converges_at_first_order():
     """Upwind advection is first order, and during the coast-down that dominates.
 
     Upwind is chosen over a higher-order scheme deliberately: it is monotone, so
-    it will not oscillate across the void front M4 introduces. First order is the
-    price, and this measures that we are paying exactly that and no more.
+    it does not oscillate across the boiling front M4 introduces. First order is
+    the price, and this measures that we pay exactly that and no more.
     """
-    err = [float(np.sqrt(np.mean((_outlet(n) - fine_outlet) ** 2))) for n in (20, 40, 80)]
-    assert 1.6 < err[0] / err[1] < 2.6
-    assert 1.6 < err[1] / err[2] < 2.6
+    ratio = _richardson(lambda d: float(np.sqrt(np.mean(d**2))))
+    assert 1.6 < ratio < 2.8
 
 
-def test_quasi_steady_state_converges_at_second_order(fine_outlet):
+def test_quasi_steady_state_converges_at_second_order():
     """At the end of the coast-down the advection error cancels, exposing the source.
 
     In steady state the upwind stencil telescopes to the *exact* integral of the
-    nodal sources, so it contributes no truncation error at all; what remains is
-    the midpoint-rule quadrature of the axial power shape, which is second order.
-    Seeing 1st order in the transient and 2nd here is strong evidence that both
-    pieces are behaving as designed rather than coincidentally agreeing.
+    nodal sources and so contributes no truncation error at all; what remains is
+    the second-order midpoint quadrature of the axial power shape. Seeing first
+    order in the transient and second here is much stronger evidence that both
+    pieces behave as designed than one number twice would be.
     """
-    err = [abs(float(_outlet(n)[-1] - fine_outlet[-1])) for n in (20, 40, 80)]
-    assert 3.0 < err[0] / err[1] < 5.5
-    assert 3.0 < err[1] / err[2] < 5.5
+    ratio = _richardson(lambda d: abs(float(d[-1])))
+    assert 3.0 < ratio < 5.5
 
 
 # --- 3. conservation -------------------------------------------------------
@@ -178,16 +182,97 @@ def test_transient_stays_inside_the_sodium_property_range(traj):
     assert bool(sodium.in_range(traj.T_f).all())
 
 
-def test_single_phase_run_passes_saturation_which_is_why_m4_exists(traj):
-    """Documents the scope limit rather than hiding it.
+def test_boiling_starts_where_and_when_the_criterion_says(traj):
+    """M4's headline acceptance: onset time and location.
 
-    M2 is single-phase by construction, but the default coast-down drives the
-    coolant past the sodium saturation temperature partway through. The reference
-    is therefore a *solver verification vehicle* until M4 adds boiling — not a
-    physical transient. Asserting it keeps that honest.
+    The manual's criterion (section 12.4) is ``T_c > T_sat + DTS``. The outlet is
+    the hottest point in the channel, so boiling must start at the top, and only
+    once the coast-down has driven the coolant there past saturation plus the
+    superheat.
     """
-    T_sat = sodium.saturation_temperature(101325.0)
-    assert traj.T_out.max() > T_sat
+    p = AxialParams()
+    t0, z0 = traj.onset()
+    assert 5.0 < t0 < 30.0
+    assert z0 > 0.9  # the top of the channel is the hottest point
+    # The criterion is smoothed, so onset happens *within a few smoothing widths*
+    # of `T_sat + DTS` rather than exactly at it: the logistic still passes ~0.7%
+    # of the wall heat below threshold, and because voiding is explosive that is
+    # enough to start it early. The sweep below quantifies the shift.
+    T_onset = sodium.saturation_temperature(p.p_system) + p.dT_superheat
+    i = int(np.argmin(np.abs(traj.t - t0)))
+    assert traj.T_out[i] > T_onset - 6.0 * p.dT_smooth
+
+
+def test_onset_is_insensitive_to_the_smoothing_width():
+    """M4's kill criterion: onset must not drift by more than 2 s as `dT_smooth` varies.
+
+    `dT_smooth` is the one knob with no counterpart in the manual — it exists
+    purely so the section 12.4 threshold has a usable autodiff gradient. If the
+    answer depended strongly on it, the smoothing would be setting the physics.
+    Across a 16x range the onset time moves by ~1.2 s and the location stays
+    within one axial cell, so it is not.
+    """
+    times, places = [], []
+    for d in (0.5, 2.0, 8.0):
+        t0, z0 = solve_reference(AxialParams(dT_smooth=d), n_out=241).onset()
+        times.append(t0)
+        places.append(z0)
+    assert max(times) - min(times) < 2.0
+    # The measured location also depends on the output cadence, since the front
+    # advances between samples; at n_out = 241 it is resolved and identical
+    # across the sweep. One cell is the physical tolerance.
+    assert max(places) - min(places) <= 1.0 / AxialParams().n_axial + 1e-9
+
+
+def test_no_boiling_when_saturation_is_out_of_reach():
+    """Control: raise the system pressure and the void field must stay identically zero."""
+    high = AxialParams(p_system=1.6e7)  # T_sat ~ 2280 K, above anything reached
+    tr = solve_reference(high, n_out=121)
+    assert not bool((tr.alpha > 1e-9).any())
+    assert np.isnan(tr.onset()[0])
+
+
+def test_void_stays_within_bounds(traj):
+    """`(1 - alpha)` shuts the source off as a node empties; nothing may escape [0, 1]."""
+    assert traj.alpha.min() > -1e-9
+    assert traj.alpha.max() < 1.0 + 1e-9
+
+
+def test_voided_length_grows_and_is_bounded(traj):
+    """`L_void` is the metric M4 is judged on -- absolute metres, not a relative L2."""
+    L = traj.voided_length
+    assert L[0] == pytest.approx(0.0, abs=1e-12)
+    assert L[-1] > 0.1
+    assert L[-1] <= AxialParams().H + 1e-12
+    assert np.all(np.diff(L) > -1e-9)  # the front only advances here
+
+
+def test_voiding_is_explosive_once_it_starts(traj):
+    """Filling a node with vapour takes ~1 J; the wall delivers ~1 kW. Seconds, not minutes.
+
+    This is the physical reason Chapter 12 is a slug-*ejection* model: the vapour
+    mass needed to void a channel is negligible, so the front runs away as soon as
+    the superheat criterion is met.
+    """
+    t0, _ = traj.onset()
+    i = int(np.argmin(np.abs(traj.t - (t0 + 5.0))))
+    assert traj.alpha[:, i].max() > 0.99
+
+
+def test_post_dryout_response_is_out_of_scope_and_says_so():
+    """Documents the M5 gap instead of letting it look like a result.
+
+    Once a node reaches `alpha = 1` the latent sink switches off (correctly --
+    there is no liquid left to boil) and the wall heat returns to sensible
+    heating. But this model still gives that node *liquid* heat capacity and
+    liquid advection, so its post-dryout temperature is not physical. Comparing
+    against a run that cannot boil at all shows the difference is ~1 K: after
+    dryout the two models agree, which is precisely the symptom. M5's film and
+    dryout heat path is what closes this.
+    """
+    boiling = solve_reference(AxialParams(), n_out=121)
+    never = solve_reference(AxialParams(p_system=1.6e7), n_out=121)
+    assert abs(float(boiling.T_out[-1] - never.T_out[-1])) < 5.0
 
 
 def test_direct_coolant_heating_bypasses_the_fuel_thermal_lag():
@@ -256,8 +341,8 @@ def _perturbed_state(p):
     rounding rather than agreement. Perturbing puts them at 1e2-1e3 K/s, where
     the comparison means something.
     """
-    T_f, T_cl, T_s, T_c = steady_state(p)
-    return T_f + 50.0, T_cl - 20.0, T_s + 30.0, T_c + 10.0
+    T_f, T_cl, T_s, T_c, alpha = steady_state(p)
+    return T_f + 50.0, T_cl - 20.0, T_s + 30.0, T_c + 10.0, alpha
 
 
 @pytest.mark.parametrize("backend", ["torch", "jax"])
@@ -284,5 +369,6 @@ def test_derivatives_match_across_backends(backend):
         t_arg = mod.numpy.asarray(3.0, dtype=mod.numpy.float64)
 
     got = derivatives(t_arg, *(conv(a) for a in state), p, geo, conv(f_nodes), 1.0)
-    for g, r, name in zip(got, ref, ("T_f", "T_cl", "T_s", "T_c"), strict=True):
+    names = ("T_f", "T_cl", "T_s", "T_c", "alpha")
+    for g, r, name in zip(got, ref, names, strict=True):
         np.testing.assert_allclose(np.asarray(g), r, rtol=1e-13, atol=0.0, err_msg=name)

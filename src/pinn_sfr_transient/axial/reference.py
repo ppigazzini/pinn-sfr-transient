@@ -1,4 +1,4 @@
-"""Stiff reference solver for the single-phase axial channel (milestone M2).
+"""Stiff reference solver for the axial channel (milestones M2 and M4).
 
 Method of lines: :mod:`pinn_sfr_transient.axial.physics` discretises Chapter 3's
 energy equations in ``z``, and an implicit Radau integrator advances the
@@ -30,6 +30,7 @@ import numpy as np
 from scipy.integrate import solve_ivp
 from scipy.sparse import lil_matrix
 
+from pinn_sfr_transient.axial import sodium
 from pinn_sfr_transient.axial.physics import (
     N_FIELDS,
     clad_coolant_flux,
@@ -64,7 +65,9 @@ class AxialTrajectory:
     T_cl: FloatArray
     T_s: FloatArray
     T_c: FloatArray
+    alpha: FloatArray  # void fraction, dimensionless
     flow: FloatArray  # mass flow rate w(t) [kg/s]
+    H: float = 1.0  # active height [m], for the voided-length integral
 
     @property
     def T_out(self) -> FloatArray:
@@ -76,9 +79,31 @@ class AxialTrajectory:
         """Hottest cladding temperature anywhere, any time [K]."""
         return float(self.T_cl.max())
 
+    @property
+    def voided_length(self) -> FloatArray:
+        """Voided length ``L_void(t) = integral of alpha dz`` [m].
 
-def steady_state(p: AxialParams) -> tuple[FloatArray, FloatArray, FloatArray, FloatArray]:
-    """Exact steady state of the discretised system, as ``(T_f, T_cl, T_s, T_c)``.
+        The metric M4 is judged on rather than a relative ``L2`` of ``alpha``:
+        the void field is zero over most of the domain for most of the transient,
+        so a relative norm there is dominated by its denominator and reads as
+        noise. An absolute length in metres is what a reactor engineer checks.
+        """
+        return self.alpha.sum(axis=0) * (self.zeta[1] - self.zeta[0]) * self.H
+
+    def onset(self, threshold: float = 0.01) -> tuple[float, float]:
+        """First time and normalised height at which the void exceeds ``threshold``.
+
+        Returns ``(nan, nan)`` if boiling never starts.
+        """
+        hit = self.alpha > threshold
+        if not hit.any():
+            return float("nan"), float("nan")
+        i = int(np.argmax(hit.any(axis=0)))
+        return float(self.t[i]), float(self.zeta[int(np.argmax(hit[:, i]))])
+
+
+def steady_state(p: AxialParams) -> tuple[FloatArray, ...]:
+    """Exact steady state of the discretised system, as ``(T_f, T_cl, T_s, T_c, alpha)``.
 
     Obtained by dropping the time derivatives, which is how the manual derives
     its own steady state (section 3.4). The system then unwinds in closed form:
@@ -107,22 +132,51 @@ def steady_state(p: AxialParams) -> tuple[FloatArray, FloatArray, FloatArray, Fl
     T_cl = T_c + q_fuel / (p.h_clad_coolant * geo.A_ec)
 
     # Fuel: gap conductance plus radiation, Newton on each node.
-    T_f = T_cl + q_fuel / (p.h_gap * geo.A_fe)
+    T_f = _fuel_from_flux(q_fuel, T_cl, geo.A_fe, p)
+    # The nominal state is subcooled everywhere, so the channel starts void-free.
+    return T_f, T_cl, T_s, T_c, np.zeros_like(T_c)
+
+
+def _fuel_from_flux(q: FloatArray, T_cl: FloatArray, area: float, p: AxialParams) -> FloatArray:
+    """Invert Eq. 3.3-4 for the fuel temperature; radiation makes it nonlinear."""
+    sigma = 5.670374419e-8
+    T_f = T_cl + q / (p.h_gap * area)
     for _ in range(_NEWTON_ITERS):
-        f = (
-            geo.A_fe * (p.h_gap * (T_f - T_cl) + p.emissivity * 5.670374419e-8 * (T_f**4 - T_cl**4))
-            - q_fuel
-        )
-        df = geo.A_fe * (p.h_gap + 4.0 * p.emissivity * 5.670374419e-8 * T_f**3)
-        step = f / df
+        f = area * (p.h_gap * (T_f - T_cl) + p.emissivity * sigma * (T_f**4 - T_cl**4)) - q
+        step = f / (area * (p.h_gap + 4.0 * p.emissivity * sigma * T_f**3))
         T_f = T_f - step
         if np.max(np.abs(step)) < _NEWTON_TOL:
             break
-    else:  # pragma: no cover - defensive; the Newton iteration converges quickly
-        msg = "steady-state fuel temperature did not converge"
+    else:  # pragma: no cover - defensive; Newton converges in a handful of steps
+        msg = "fuel temperature did not converge"
         raise RuntimeError(msg)
+    return T_f
 
-    return T_f, T_cl, T_s, T_c
+
+def steady_profile(p: AxialParams, zeta: FloatArray) -> tuple[FloatArray, ...]:
+    """Continuous steady state at arbitrary heights, ``(T_f, T_cl, T_s, T_c, alpha)``.
+
+    The mesh-free twin of :func:`steady_state`, and the PINN's hard initial
+    condition. Where the discrete version telescopes a nodal sum, this uses the
+    closed-form power integral,
+    ``T_c(zeta) = T_in + (P_0 / (w_0 c_c)) F(zeta)``, so the ansatz can satisfy
+    both the initial condition and the inlet boundary condition *identically*
+    rather than approximately.
+
+    The two steady states differ by the midpoint-rule error of the axial shape,
+    ``O(dz^2)``, and converge to each other as the mesh refines — asserted in the
+    tests rather than assumed.
+    """
+    dT = p.P_0 / (p.w_0 * p.c_c)
+    T_c: FloatArray = np.asarray(p.T_in + dT * p.power_shape_integral(zeta), dtype=np.float64)
+    T_s = T_c
+    # Per unit length, i.e. the fluxes of `node_geometry` with dz = 1.
+    q_fuel: FloatArray = np.asarray(
+        (1.0 - p.gamma_c) * p.P_0 * p.power_shape(zeta) / p.H, dtype=np.float64
+    )
+    T_cl = T_c + q_fuel / (p.h_clad_coolant * 2.0 * np.pi * p.r_co)
+    T_f = _fuel_from_flux(q_fuel, T_cl, 2.0 * np.pi * p.r_fo, p)
+    return T_f, T_cl, T_s, T_c, np.zeros_like(T_c)
 
 
 def jacobian_sparsity(p: AxialParams) -> Any:  # noqa: ANN401 - scipy sparse matrix
@@ -153,6 +207,12 @@ def jacobian_sparsity(p: AxialParams) -> Any:  # noqa: ANN401 - scipy sparse mat
     pattern[c + j, st + j] = 1
     pattern[c + j, c + j] = 1
     pattern[c + j[1:], c + j[:-1]] = 1  # ... and its upwind neighbour
+    a = 4 * n
+    pattern[a + j, cl + j] = 1  # void <- the wall heat that makes it ...
+    pattern[a + j, st + j] = 1
+    pattern[a + j, c + j] = 1  # ... the superheat that gates it ...
+    pattern[a + j, a + j] = 1
+    pattern[a + j[1:], a + j[:-1]] = 1  # ... and its own upwind neighbour
     return pattern.tocsr()
 
 
@@ -192,7 +252,7 @@ def solve_reference(  # noqa: PLR0913 - solver knobs are clearer flat than bundl
         msg = f"reference integration failed: {sol.message}"
         raise RuntimeError(msg)
 
-    T_f, T_cl, T_s, T_c = unpack(sol.y, p.n_axial)
+    T_f, T_cl, T_s, T_c, alpha = unpack(sol.y, p.n_axial)
     return AxialTrajectory(
         t=sol.t,
         zeta=p.zeta_nodes(),
@@ -200,7 +260,9 @@ def solve_reference(  # noqa: PLR0913 - solver knobs are clearer flat than bundl
         T_cl=T_cl,
         T_s=T_s,
         T_c=T_c,
+        alpha=alpha,
         flow=flow_rate(sol.t, p),
+        H=p.H,
     )
 
 
@@ -237,13 +299,27 @@ def energy_balance(
     p_discrete = float((q_fuel + q_cool).sum())
     amp = np.ones_like(traj.t) if amplitude is None else np.array([amplitude(t) for t in traj.t])
 
+    # Sensible storage in the four materials, plus the LATENT heat locked up in
+    # the vapour. Omitting the latent term would make the balance fail the moment
+    # boiling starts -- which is exactly how the M4 conservation defect surfaced.
+    T_sat = sodium.saturation_temperature(p.p_system)
+    latent_per_unit_void = sodium.vapor_density(T_sat) * sodium.latent_heat(T_sat) * p.A_c * geo.dz
     stored = (
         geo.C_f * traj.T_f.sum(axis=0)
         + geo.C_cl * traj.T_cl.sum(axis=0)
         + geo.C_s * traj.T_s.sum(axis=0)
         + geo.C_c * traj.T_c.sum(axis=0)
+        + latent_per_unit_void * traj.alpha.sum(axis=0)
     )
-    net = amp * p_discrete - traj.flow * p.c_c * (traj.T_out - p.T_in)
+    # Convected out of the top: sensible heat in the liquid, AND latent heat in
+    # the vapour that leaves with it. Omitting the second term leaves a residual
+    # of exactly the vapour outflow -- about 45 W against 50 kW here, i.e. 9e-4,
+    # which is what the closure floored at before this term was added.
+    u_out = traj.flow / (p.rho_c * p.A_c)
+    latent_out = (
+        u_out * traj.alpha[-1] * sodium.vapor_density(T_sat) * sodium.latent_heat(T_sat) * p.A_c
+    )
+    net = amp * p_discrete - traj.flow * p.c_c * (traj.T_out - p.T_in) - latent_out
     delivered = _trapezoid(amp * p_discrete, traj.t)
     return float(abs((stored[-1] - stored[0]) - _trapezoid(net, traj.t)) / delivered)
 

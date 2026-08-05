@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from pinn_sfr_transient.axial import sodium
 from pinn_sfr_transient.axial._backend import xp as _xp
 
 if TYPE_CHECKING:
@@ -43,8 +44,8 @@ if TYPE_CHECKING:
 STEFAN_BOLTZMANN: float = 5.670374419e-8
 """Stefan-Boltzmann constant [W/m^2-K^4], radiation term of Eq. 3.3-4."""
 
-N_FIELDS: int = 4
-"""Temperature fields per axial node: fuel, cladding, structure, coolant."""
+N_FIELDS: int = 5
+"""Fields per axial node: fuel, cladding, structure and coolant temperatures, plus void."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,6 +84,32 @@ def node_geometry(p: AxialParams) -> NodeGeometry:
         C_cl=p.rho_cl * p.c_cl * v_cl,
         C_s=p.rho_s * p.c_s * v_s,
         C_c=p.rho_c * p.c_c * v_c,
+    )
+
+
+def line_geometry(p: AxialParams) -> NodeGeometry:
+    """Per-unit-length geometry: :func:`node_geometry` with ``dz = 1``.
+
+    Every area and heat capacity in :class:`NodeGeometry` scales linearly with
+    ``dz``, so setting it to one turns the nodal quantities into per-metre ones.
+    That lets :func:`continuous_derivatives` and :func:`derivatives` share the
+    exact same flux functions — the PDE form and its discretisation cannot drift
+    apart, because there is only one of each.
+    """
+    from dataclasses import replace  # noqa: PLC0415 - local to keep the import graph flat
+
+    per_node = node_geometry(p)
+    scale = 1.0 / per_node.dz
+    return replace(
+        per_node,
+        dz=1.0,
+        A_fe=per_node.A_fe * scale,
+        A_ec=per_node.A_ec * scale,
+        A_sc=per_node.A_sc * scale,
+        C_f=per_node.C_f * scale,
+        C_cl=per_node.C_cl * scale,
+        C_s=per_node.C_s * scale,
+        C_c=per_node.C_c * scale,
     )
 
 
@@ -146,30 +173,83 @@ def nodal_power(amplitude: Any, f_nodes: Any, p: AxialParams) -> tuple[Any, Any]
     return (1.0 - p.gamma_c) * total, p.gamma_c * total
 
 
+# --- boiling (milestone M4) -------------------------------------------------
+def boiling_fraction(T_c: Any, p: AxialParams) -> Any:  # noqa: ANN401 - backend-agnostic
+    """Fraction of the wall heat going into vaporisation rather than sensible heat.
+
+    The manual's onset criterion (section 12.4) is a hard threshold: a bubble
+    forms when the coolant exceeds saturation by at least ``DTS``, about 10 K for
+    the first bubble. A hard threshold has no usable autodiff gradient, so it is
+    replaced by a logistic of width ``dT_smooth`` centred on the same criterion —
+    the same smoothing the 0D model applies, but now around a *physical*
+    saturation temperature from Eq. 12.13-4 rather than a demonstration value.
+
+    ``dT_smooth`` is a real accuracy/trainability knob, not a fudge: too wide and
+    boiling starts early and gradually, too narrow and the front is too sharp for
+    a smooth network. It is swept, not guessed.
+    """
+    xp = _xp(T_c)
+    T_sat = sodium.saturation_temperature(p.p_system)
+    x = (T_c - T_sat - p.dT_superheat) / p.dT_smooth
+    return 0.5 * (1.0 + xp.tanh(0.5 * x))
+
+
+def latent_fraction(T_c: Any, alpha: Any, p: AxialParams) -> Any:  # noqa: ANN401
+    """Fraction of the wall heat that becomes vapour, ``b (1 - alpha)``.
+
+    ``b`` is the superheat switch of :func:`boiling_fraction`; the ``(1 - alpha)``
+    factor shuts the source off as a node empties, so the void cannot leave
+    ``[0, 1)`` even before the network's sigmoid clamps it.
+
+    **The same fraction must be removed from the sensible balance and no more.**
+    An earlier version diverted the full ``b q_wall`` from the coolant but only
+    vaporised ``b (1 - alpha) q_wall``, so energy quietly vanished once a node
+    approached dryout — caught by the energy-balance test, not by inspection.
+    Returning the difference to the sensible term conserves energy exactly.
+    Physically, at ``alpha -> 1`` the wall heat goes on heating what is now
+    vapour; that the node keeps the liquid heat capacity is a documented
+    simplification which M5's film and dryout model replaces.
+    """
+    return boiling_fraction(T_c, p) * (1.0 - alpha)
+
+
+def vapour_source(T_c: Any, alpha: Any, q_wall: Any, p: AxialParams) -> Any:  # noqa: ANN401
+    """Void generation rate ``d alpha/dt`` from wall heat [1/s].
+
+    Once the superheat criterion is met the wall heat stops raising the coolant
+    temperature and starts making vapour: ``Gamma = b_eff q_wall / lambda_vap``
+    kilograms per second per metre, filling the flow area at the saturated vapour
+    density of Eq. 12.13-6.
+    """
+    T_sat = sodium.saturation_temperature(p.p_system)
+    rho_v = sodium.vapor_density(T_sat)
+    lam = sodium.latent_heat(T_sat)
+    return latent_fraction(T_c, alpha, p) * q_wall / (lam * rho_v * p.A_c)
+
+
 # --- the coupled right-hand side -------------------------------------------
-def derivatives(  # noqa: PLR0913 - four coupled fields plus the driving terms
+def derivatives(  # noqa: PLR0913 - five coupled fields plus the driving terms
     t: Any,  # noqa: ANN401
     T_f: Any,  # noqa: ANN401
     T_cl: Any,  # noqa: ANN401
     T_s: Any,  # noqa: ANN401
     T_c: Any,  # noqa: ANN401
+    alpha: Any,  # noqa: ANN401
     p: AxialParams,
     geo: NodeGeometry,
     f_nodes: Any,  # noqa: ANN401
     amplitude: Any = 1.0,  # noqa: ANN401
-) -> tuple[Any, Any, Any, Any]:
-    """Time derivatives of the four temperature fields [K/s].
+) -> tuple[Any, ...]:
+    """Time derivatives of the four temperatures [K/s] and the void fraction [1/s].
 
-    Backend-agnostic: every operation is arithmetic plus ``exp`` and
-    ``concatenate``, all of which numpy, torch and JAX provide under the same
-    name, so the reference solver and the M3 PINN residual share one expression
-    tree.
+    Backend-agnostic: arithmetic plus ``exp``, ``tanh`` and ``concatenate``, all
+    provided under the same name by numpy, torch and JAX, so the reference solver
+    and the PINN residual share one expression tree.
 
-    The coolant advection term is the conservative flux form of Eq. 3.3-5,
-    ``d(w c T)/dz``, discretised **first-order upwind**. Upwind rather than a
-    higher order deliberately: it is monotone, so it will not oscillate across
-    the void front that M4 introduces. The price is first-order mesh
-    convergence, which ``tests/axial/test_axial_reference.py`` measures.
+    Both advected fields use **first-order upwind** differencing of the
+    conservative flux form of Eq. 3.3-5. Upwind rather than a higher order was
+    chosen at M2 precisely because it is monotone and will not oscillate across
+    the boiling front introduced here.
     """
     xp = _xp(T_c)
     q_fe = gap_flux(T_f, T_cl, geo, p)
@@ -177,33 +257,80 @@ def derivatives(  # noqa: PLR0913 - four coupled fields plus the driving terms
     q_sc = struct_coolant_flux(T_s, T_c, geo, p)
     q_fuel, q_cool = nodal_power(amplitude, f_nodes, p)
 
-    # Upwind neighbour: the inlet feeds node 0, node j-1 feeds node j. Building
-    # the inlet element as `T_c[:1] * 0 + T_in` keeps dtype, device and backend
-    # without a literal-array constructor that differs between frameworks.
+    # Wall heat reaching the coolant. Below the superheat criterion it raises the
+    # temperature; above it, it makes vapour instead (manual section 12.4).
+    q_wall = q_cool + q_ec + q_sc
+    b = latent_fraction(T_c, alpha, p)
+
     inlet = T_c[:1] * 0.0 + p.T_in
     T_up = xp.concatenate([inlet, T_c[:-1]])
     advection = flow_rate(t, p) * p.c_c * (T_up - T_c)
 
-    # The structure derivative is written with the gamma_2 factor CANCELLED:
-    # q_sc carries gamma_2 through A_sc, and C_s carries it through the structure
-    # volume, so the ratio is gamma_2-free. Dividing them as written would be
-    # 0/0 at gamma_2 = 0 — which deviation D-GEOM-2 documents as the supported
-    # way to disable the structure node. How fast a given piece of duct responds
-    # cannot depend on how much of it the coolant sees; only the coolant's q_sc
-    # does, and that keeps its gamma_2.
-    dT_s = -p.h_struct_coolant * (T_s - T_c) / (p.rho_s * p.c_s * p.t_struct)
+    # Void advects at the liquid velocity; the inlet is subcooled, so none enters.
+    a_up = xp.concatenate([alpha[:1] * 0.0, alpha[:-1]])
+    u = flow_rate(t, p) / (p.rho_c * p.A_c)
+    d_alpha = vapour_source(T_c, alpha, q_wall / geo.dz, p) + u * (a_up - alpha) / geo.dz
 
+    dT_s = -p.h_struct_coolant * (T_s - T_c) / (p.rho_s * p.c_s * p.t_struct)
     return (
         (q_fuel - q_fe) / geo.C_f,
         (q_fe - q_ec) / geo.C_cl,
         dT_s,
-        (advection + q_cool + q_ec + q_sc) / geo.C_c,
+        (advection + (1.0 - b) * q_wall) / geo.C_c,
+        d_alpha,
     )
 
 
-def unpack(y: Any, n: int) -> tuple[Any, Any, Any, Any]:  # noqa: ANN401 - backend-agnostic
-    """Split a flat state vector into ``(T_f, T_cl, T_s, T_c)``."""
-    return y[:n], y[n : 2 * n], y[2 * n : 3 * n], y[3 * n :]
+def continuous_derivatives(  # noqa: PLR0913 - five coupled fields plus the driving terms
+    t: Any,  # noqa: ANN401
+    T_f: Any,  # noqa: ANN401
+    T_cl: Any,  # noqa: ANN401
+    T_s: Any,  # noqa: ANN401
+    T_c: Any,  # noqa: ANN401
+    alpha: Any,  # noqa: ANN401
+    dTc_dz: Any,  # noqa: ANN401
+    dalpha_dz: Any,  # noqa: ANN401
+    p: AxialParams,
+    geo: NodeGeometry,
+    f_zeta: Any,  # noqa: ANN401
+    amplitude: Any = 1.0,  # noqa: ANN401
+) -> tuple[Any, ...]:
+    """PDE right-hand sides — the mesh-free form of :func:`derivatives`.
+
+    Identical physics, with the discrete upwind differences replaced by the true
+    axial gradients supplied by the caller (autodiff, for the PINN). ``geo`` must
+    be :func:`line_geometry` and ``f_zeta`` the axial shape at the same points.
+
+    Sharing the flux and boiling closures with the reference solver means the
+    network and its ground truth solve the same equations by construction rather
+    than by review.
+    """
+    q_fe = gap_flux(T_f, T_cl, geo, p)
+    q_ec = clad_coolant_flux(T_cl, T_c, geo, p)
+    q_sc = struct_coolant_flux(T_s, T_c, geo, p)
+    # Power per METRE. `nodal_power` returns per-node watts (it divides by
+    # n_axial) and a node spans dz = H / n_axial, so the per-metre form is simply
+    # the total divided by H -- no factor of n_axial anywhere.
+    total = amplitude * p.P_0 * f_zeta / p.H
+    q_cool, q_fuel = p.gamma_c * total, (1.0 - p.gamma_c) * total
+
+    q_wall = q_cool + q_ec + q_sc
+    b = latent_fraction(T_c, alpha, p)
+    advection = flow_rate(t, p) * p.c_c * dTc_dz
+    u = flow_rate(t, p) / (p.rho_c * p.A_c)
+    dT_s = -p.h_struct_coolant * (T_s - T_c) / (p.rho_s * p.c_s * p.t_struct)
+    return (
+        (q_fuel - q_fe) / geo.C_f,
+        (q_fe - q_ec) / geo.C_cl,
+        dT_s,
+        ((1.0 - b) * q_wall - advection) / geo.C_c,
+        vapour_source(T_c, alpha, q_wall, p) - u * dalpha_dz,
+    )
+
+
+def unpack(y: Any, n: int) -> tuple[Any, ...]:  # noqa: ANN401 - backend-agnostic
+    """Split a flat state vector into ``(T_f, T_cl, T_s, T_c, alpha)``."""
+    return tuple(y[k * n : (k + 1) * n] for k in range(N_FIELDS))
 
 
 def make_rhs(
@@ -228,8 +355,8 @@ def make_rhs(
     n = p.n_axial
 
     def rhs(t: float, y: FloatArray) -> FloatArray:
-        T_f, T_cl, T_s, T_c = unpack(y, n)
-        d = derivatives(t, T_f, T_cl, T_s, T_c, p, geo, f_nodes, amp(t))
+        T_f, T_cl, T_s, T_c, alpha = unpack(y, n)
+        d = derivatives(t, T_f, T_cl, T_s, T_c, alpha, p, geo, f_nodes, amp(t))
         return np.concatenate(d)
 
     return rhs

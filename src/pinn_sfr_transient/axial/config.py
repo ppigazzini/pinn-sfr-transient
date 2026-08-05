@@ -115,6 +115,7 @@ class AxialParams:
     rho_ext: float = 0.0  # external insertion; criticality offset is M2's job
 
     # --- Boiling onset (manual section 12.4) -------------------------------
+    p_system: float = 1.01325e5  # system pressure setting T_sat via Eq. 12.13-4 [Pa]
     dT_superheat: float = 10.0  # DTS: superheat for the first bubble [K]
     dT_superheat_later: float = 3.0  # DTSI: subsequent bubbles [K]
     dT_smooth: float = 2.0  # logistic width making the onset differentiable [K]
@@ -167,6 +168,7 @@ class AxialParams:
             "dT_smooth": self.dT_smooth,
             "delta_sign": self.delta_sign,
             "t_struct": self.t_struct,
+            "p_system": self.p_system,
             "rho_c": self.rho_c,
             "c_c": self.c_c,
         }
@@ -228,6 +230,20 @@ class AxialParams:
         # integral of cos(pi k (z - 1/2)) over [0, 1] = (2 / (pi k)) sin(pi k / 2)
         norm = (2.0 / (np.pi * k)) * np.sin(0.5 * np.pi * k)
         return np.cos(np.pi * k * (np.asarray(zeta) - 0.5)) / norm
+
+    def power_shape_integral(self, zeta: Scalar) -> Scalar:
+        """Cumulative axial power fraction, the closed-form integral of :meth:`power_shape`.
+
+        ``F(zeta) = integral of f from 0 to zeta``, with ``F(0) = 0`` and
+        ``F(1) = 1``. Having it in closed form matters for the PINN: the
+        continuous steady state -- its hard initial condition -- is
+        ``T_c0(zeta) = T_in + (P_0 / (w_0 c_c)) F(zeta)``, so an exact ``F``
+        makes the ansatz satisfy the inlet boundary condition identically rather
+        than approximately.
+        """
+        k = 1.0 / (1.0 + 2.0 * self.power_extrap)
+        half = 0.5 * np.pi * k
+        return (np.sin(np.pi * k * (np.asarray(zeta) - 0.5)) + np.sin(half)) / (2.0 * np.sin(half))
 
     def _void_shape(self, zeta: Scalar) -> Scalar:
         """Unnormalised axial void-worth shape (positive low, negative high)."""
