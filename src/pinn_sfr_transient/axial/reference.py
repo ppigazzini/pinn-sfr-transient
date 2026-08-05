@@ -68,6 +68,7 @@ class AxialTrajectory:
     alpha: FloatArray  # void fraction, dimensionless
     flow: FloatArray  # mass flow rate w(t) [kg/s]
     H: float = 1.0  # active height [m], for the voided-length integral
+    stopped_early: bool = False  # True if the run hit the validity limit
 
     @property
     def T_out(self) -> FloatArray:
@@ -206,6 +207,11 @@ def jacobian_sparsity(p: AxialParams) -> Any:  # noqa: ANN401 - scipy sparse mat
     pattern[c + j, cl + j] = 1  # coolant <- cladding, structure, coolant
     pattern[c + j, st + j] = 1
     pattern[c + j, c + j] = 1
+    # M5: the film coefficient depends on the void, so every wall-to-coolant
+    # path acquires a dependence on alpha.
+    pattern[cl + j, 4 * n + j] = 1
+    pattern[st + j, 4 * n + j] = 1
+    pattern[c + j, 4 * n + j] = 1
     pattern[c + j[1:], c + j[:-1]] = 1  # ... and its upwind neighbour
     a = 4 * n
     pattern[a + j, cl + j] = 1  # void <- the wall heat that makes it ...
@@ -229,15 +235,33 @@ def solve_reference(  # noqa: PLR0913 - solver knobs are clearer flat than bundl
     rtol: float = 1e-8,
     atol: float = 1e-8,
     amplitude: Callable[[float], float] | None = None,
+    T_limit: float = sodium.T_MAX,
 ) -> AxialTrajectory:
     """Integrate the channel from its exact steady state over ``[0, t_end]``.
 
     ``amplitude`` prescribes the normalised power ``P(t)/P_0`` and defaults to a
-    constant 1.0. M2 is the prescribed-power milestone: the transient is driven
-    entirely by the pump coast-down.
+    constant 1.0 — M2 and M3 are the prescribed-power milestones.
+
+    **The run terminates when any temperature reaches ``T_limit``**, which
+    defaults to :data:`~pinn_sfr_transient.axial.sodium.T_MAX`, the upper bound
+    of the section 12.13 property fits. That is not a numerical convenience.
+    Past dryout this model has no melting, no cladding motion and no fuel
+    relocation (Chapters 8-16, deviation D-SCOPE-1), and the sodium correlations
+    themselves stop at 2270 K; integrating on would extrapolate three models at
+    once and present the result as a prediction. Stopping makes the model state
+    in its own output exactly where it ceases to apply, and ``stopped_early``
+    records that it did.
     """
     y0 = steady_state_vector(p)
     t_eval = np.linspace(0.0, p.t_end, n_out)
+    n_temp = (N_FIELDS - 1) * p.n_axial  # the void is not a temperature
+
+    def _too_hot(_t: float, y: FloatArray) -> float:
+        return float(T_limit - np.max(y[:n_temp]))
+
+    _too_hot.terminal = True  # ty: ignore[unresolved-attribute]
+    _too_hot.direction = -1.0  # ty: ignore[unresolved-attribute]
+
     sol = solve_ivp(
         make_rhs(p, amplitude),
         (0.0, p.t_end),
@@ -247,6 +271,7 @@ def solve_reference(  # noqa: PLR0913 - solver knobs are clearer flat than bundl
         rtol=rtol,
         atol=atol,
         jac_sparsity=jacobian_sparsity(p),
+        events=_too_hot,
     )
     if not sol.success:  # pragma: no cover - solver failure is not expected
         msg = f"reference integration failed: {sol.message}"
@@ -263,6 +288,7 @@ def solve_reference(  # noqa: PLR0913 - solver knobs are clearer flat than bundl
         alpha=alpha,
         flow=flow_rate(sol.t, p),
         H=p.H,
+        stopped_early=bool(sol.status == 1),
     )
 
 

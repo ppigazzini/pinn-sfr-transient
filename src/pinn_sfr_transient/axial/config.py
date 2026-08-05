@@ -83,8 +83,12 @@ class AxialParams:
     # --- Heat transfer (manual Eq. 3.3-4, Eq. 3.3-5) -----------------------
     h_gap: float = 1.0e4  # fuel-cladding bond gap conductance [W/m^2-K]
     emissivity: float = 0.70  # fuel thermal emissivity, radiation term of Eq. 3.3-4
-    h_clad_coolant: float = 8.0e4  # cladding-coolant film coefficient [W/m^2-K]
-    h_struct_coolant: float = 8.0e4  # structure-coolant film coefficient [W/m^2-K]
+    h_clad_coolant: float = 8.0e4  # cladding-coolant film coefficient, wetted [W/m^2-K]
+    h_struct_coolant: float = 8.0e4  # structure-coolant film coefficient, wetted [W/m^2-K]
+    # Vapour-phase film coefficient after dryout (manual section 12.5.1: the
+    # combined liquid-film and vapour resistance). Two to three ORDERS smaller
+    # than the wetted value -- which is why losing the liquid is the safety event.
+    h_vapour: float = 5.0e2
     # Fraction of total power deposited DIRECTLY in the coolant by neutron and
     # gamma heating (manual Eq. 3.3-6). Small, but it bypasses the fuel and
     # cladding thermal lag entirely, so power reaches the coolant with no delay.
