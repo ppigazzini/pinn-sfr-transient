@@ -6,16 +6,27 @@ https://sas-doc.nse.anl.gov/latest/Part04/Ch12/12.13.html), transcribed with
 their equation numbers. These replace the 0D model's demonstration void ramp at
 820 K with real sodium: at 1 atm the saturation temperature is ~1154 K.
 
-**One implementation, two backends.** Every function dispatches on its argument
-type, so numpy arrays and torch tensors evaluate the *same* expression tree
-rather than two transcriptions that could drift apart. What that buys is exact:
-the pure-polynomial correlations are **bit-identical** across backends, since
-IEEE-754 pins ``+`` and ``*``; the ones using ``exp``, ``log`` or division agree
-to **~1 ULP**, because the two backends call different libm implementations and
-IEEE-754 does not require correctly-rounded transcendentals. Both bounds are
-asserted in ``tests/axial/test_sodium.py``. All functions are pure, closed-form
-and differentiable over the validity range, so they can sit inside a PINN
-residual and be differentiated by autodiff.
+**One implementation, three backends.** Every function dispatches on its
+argument type, so numpy arrays, torch tensors and JAX arrays evaluate the *same*
+expression tree rather than three transcriptions that could drift apart. What
+that buys is exact: the pure-polynomial correlations are **bit-identical** across
+all three, since IEEE-754 pins ``+`` and ``*``; the ones using ``exp``, ``log``
+or division agree to **~1 ULP**, because the backends call different libm
+implementations and IEEE-754 does not require correctly-rounded transcendentals.
+Both bounds are asserted in ``tests/axial/test_sodium.py``. All functions are
+pure, closed-form and differentiable over the validity range, so they can sit
+inside a PINN residual and be differentiated by ``torch.autograd`` or
+``jax.grad`` alike.
+
+Carrying all three is a **correctness mechanism**, not bookkeeping:
+``docs/neural_network.md`` §9 records that the PyTorch initialisation bug (which
+left the power trajectory at ``L2 ~ 0.3``) was identified precisely because the
+JAX twin fit well at the same budget. A discrepancy between backends is a signal.
+
+JAX users must enable float64 (``jax.config.update("jax_enable_x64", True)``, as
+``pinn_jax`` does at import); at the default float32 these correlations lose
+about eight significant digits, and the ``Ts(Ps(T))`` round-trip degrades from
+1e-11 K to ~1e-2 K.
 
 **Validity: 590 K to 2270 K** (:data:`T_MIN`, :data:`T_MAX`). The manual stops
 the polynomial fits at ~90% of the critical point (:data:`T_CRIT` = 2503.3 K) to
@@ -94,16 +105,25 @@ _A56, _A57, _A58, _A59 = -111136.04, 1722.2578, -0.45544483, 1.4692883e-4
 
 
 def _xp(x: Any) -> Any:  # noqa: ANN401 - deliberately backend-agnostic
-    """Return the array module (``numpy`` or ``torch``) matching ``x``.
+    """Return the array module (``numpy``, ``torch`` or ``jax.numpy``) matching ``x``.
 
-    Keeps a single transcription of every correlation: the numpy and torch paths
-    execute the same expression tree, so they cannot drift apart. ``torch`` is an
-    optional extra and is imported only when a tensor is actually passed.
+    Keeps a single transcription of every correlation: all three backends execute
+    the same expression tree, so they cannot drift apart. ``torch`` and ``jax``
+    are optional extras and are imported only when their array type is actually
+    passed, so this module imports fine with neither installed.
+
+    The ``jax`` test covers concrete arrays (``jaxlib._jax.ArrayImpl``) and
+    tracers (``jax._src...``) alike -- both module paths start with ``jax``.
     """
-    if type(x).__module__.startswith("torch"):
+    mod = type(x).__module__
+    if mod.startswith("torch"):
         import torch  # noqa: PLC0415 - optional extra, imported only when used
 
         return torch
+    if mod.startswith("jax"):
+        import jax.numpy as jnp  # noqa: PLC0415 - optional extra, imported only when used
+
+        return jnp
     return np
 
 

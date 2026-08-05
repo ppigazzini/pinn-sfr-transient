@@ -248,14 +248,26 @@ nor raises**: a hard guard inside a residual would break autodiff and abort a
 training run the moment a transient overshot. `sodium.in_range(T)` is provided so
 callers can diagnose it instead; M2 should assert it on the reference solution.
 
-**Backend agreement is bounded, not absolute.** One implementation serves both
-numpy and torch by dispatching on argument type, so the two evaluate the same
-expression tree. Measured consequence: the pure-polynomial correlations are
-**bit-identical**, while those using `exp`, `log` or division agree to **~1 ULP**
-— the backends call different libm implementations, and IEEE-754 does not
-require correctly-rounded transcendentals. Both bounds are asserted, because a
-looser tolerance would hide genuine transcription drift and a tighter one would
-fail on rounding alone.
+**All three backends, from the first module — and that is a correctness
+mechanism.** One implementation serves numpy, torch and JAX by dispatching on
+argument type, so all three evaluate the same expression tree. `neural_network.md`
+§9 records why this matters here specifically: the PyTorch initialisation bug
+that left the power trajectory at `L2 ≈ 0.3` was identified *because* the JAX
+twin fit well at the same budget. A cross-backend discrepancy is a signal, and
+two backends cannot tell you which one is wrong.
+
+Measured agreement: the pure-polynomial correlations are **bit-identical** across
+all three, while those using `exp`, `log` or division agree to **~1 ULP** — the
+backends call different libm implementations, and IEEE-754 does not require
+correctly-rounded transcendentals. Both bounds are asserted, because a looser
+tolerance would hide genuine transcription drift and a tighter one fails on
+rounding alone. Torch and JAX are additionally checked against *each other*, and
+their autodiff gradients are checked to agree to 1e-12.
+
+**JAX must run in float64.** `jax.config.update("jax_enable_x64", True)`, as
+`pinn_jax` does at import. At the default float32 the `Ts(Ps(T))` round-trip
+degrades from 1e-11 K to ~1e-2 K; a test asserts the gap so the requirement
+cannot quietly lapse.
 
 Verification at the normal boiling point, against values independent of the
 manual (a self-consistent but mistyped coefficient would otherwise pass):

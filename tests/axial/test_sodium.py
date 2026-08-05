@@ -8,12 +8,18 @@ Three things are checked, in order of importance:
 2. **The numbers are physically right** — every property is compared against
    independently known sodium values at the normal boiling point, so a wrong
    coefficient cannot hide behind self-consistency.
-3. **numpy and torch agree**, and the correlations survive autodiff, which is
-   the whole reason they exist in this form. The pure polynomials are asserted
-   *bit-identical*; those using ``exp``/``log`` or division are asserted equal to
-   ~1 ULP, because the two backends call different libm implementations. That
-   split is the sharpest statement available: anything looser would hide a real
-   transcription drift, anything tighter fails on rounding alone.
+3. **numpy, torch and JAX agree**, and the correlations survive autodiff in
+   both frameworks, which is the whole reason they exist in this form. The pure
+   polynomials are asserted *bit-identical*; those using ``exp``/``log`` or
+   division are asserted equal to ~1 ULP, because the backends call different
+   libm implementations. That split is the sharpest statement available:
+   anything looser would hide real transcription drift, anything tighter fails
+   on rounding alone.
+
+   Carrying all three backends is a correctness mechanism. ``neural_network.md``
+   §9 records that the PyTorch initialisation bug was caught because the JAX twin
+   fit well at the same budget — a cross-backend discrepancy is a signal, so it
+   is worth having a third opinion on every number.
 """
 
 from __future__ import annotations
@@ -152,29 +158,65 @@ TRANSCENDENTAL_OF_T = [
 ]
 
 
-@pytest.mark.parametrize("fn", POLYNOMIAL_OF_T)
-def test_polynomial_correlations_are_bit_identical_across_backends(fn):
-    """Only `+` and `*`, so IEEE-754 leaves the backends no freedom to differ."""
+def _as_torch(x):
     torch = pytest.importorskip("torch")
+    return torch.tensor(x, dtype=torch.float64)
+
+
+def _as_jax(x):
+    jax = pytest.importorskip("jax")
+    jax.config.update("jax_enable_x64", True)  # float32 loses ~8 digits here
+    return jax.numpy.asarray(x, dtype=jax.numpy.float64)
+
+
+BACKENDS = [_as_torch, _as_jax]
+
+
+@pytest.mark.parametrize("to_backend", BACKENDS, ids=["torch", "jax"])
+@pytest.mark.parametrize("fn", POLYNOMIAL_OF_T)
+def test_polynomial_correlations_are_bit_identical_across_backends(fn, to_backend):
+    """Only `+` and `*`, so IEEE-754 leaves the backends no freedom to differ."""
     T = np.linspace(700.0, 2200.0, 257)
-    got = fn(torch.tensor(T, dtype=torch.float64)).numpy()
+    got = np.asarray(fn(to_backend(T)))
     np.testing.assert_allclose(got, fn(T), rtol=0.0, atol=0.0)
 
 
+@pytest.mark.parametrize("to_backend", BACKENDS, ids=["torch", "jax"])
 @pytest.mark.parametrize("fn", TRANSCENDENTAL_OF_T)
-def test_transcendental_correlations_agree_to_one_ulp(fn):
+def test_transcendental_correlations_agree_to_one_ulp(fn, to_backend):
     """Different libm, same expression tree: rounding may differ, the maths may not."""
-    torch = pytest.importorskip("torch")
     T = np.linspace(700.0, 2200.0, 257)
-    got = fn(torch.tensor(T, dtype=torch.float64)).numpy()
+    got = np.asarray(fn(to_backend(T)))
     np.testing.assert_allclose(got, fn(T), rtol=1e-14, atol=0.0)
 
 
-def test_saturation_temperature_matches_across_backends():
-    torch = pytest.importorskip("torch")
+@pytest.mark.parametrize("to_backend", BACKENDS, ids=["torch", "jax"])
+def test_saturation_temperature_matches_across_backends(to_backend):
     Ps = np.geomspace(1e3, 1e7, 257)
-    got = na.saturation_temperature(torch.tensor(Ps, dtype=torch.float64)).numpy()
+    got = np.asarray(na.saturation_temperature(to_backend(Ps)))
     np.testing.assert_allclose(got, na.saturation_temperature(Ps), rtol=1e-14, atol=0.0)
+
+
+def test_torch_and_jax_agree_with_each_other():
+    """Third opinion: a numpy-vs-one-backend check cannot tell which of the two is wrong."""
+    T = np.linspace(700.0, 2200.0, 257)
+    for fn in POLYNOMIAL_OF_T + TRANSCENDENTAL_OF_T:
+        t = np.asarray(fn(_as_torch(T)))
+        j = np.asarray(fn(_as_jax(T)))
+        np.testing.assert_allclose(t, j, rtol=1e-14, atol=0.0, err_msg=fn.__name__)
+
+
+def test_jax_float32_is_visibly_worse_and_must_not_be_used():
+    """Documents why `jax_enable_x64` is mandatory rather than advisory."""
+    jax = pytest.importorskip("jax")
+    jax.config.update("jax_enable_x64", True)
+    T = np.linspace(700.0, 2200.0, 257)
+    ps32 = na.saturation_pressure(jax.numpy.asarray(T, dtype=jax.numpy.float32))
+    err32 = np.max(np.abs(np.asarray(na.saturation_temperature(ps32)) - T))
+    ps64 = na.saturation_pressure(jax.numpy.asarray(T, dtype=jax.numpy.float64))
+    err64 = np.max(np.abs(np.asarray(na.saturation_temperature(ps64)) - T))
+    assert err64 < 1e-9
+    assert err32 > 1e4 * err64
 
 
 def test_saturation_pressure_is_differentiable_under_autograd():
@@ -194,3 +236,23 @@ def test_saturation_temperature_is_differentiable_under_autograd():
     na.saturation_temperature(Ps).backward()
     assert Ps.grad is not None
     assert float(Ps.grad[0]) > 0.0  # hotter saturation at higher pressure
+
+
+def test_saturation_pressure_is_differentiable_under_jax_grad():
+    """`jax.grad` traces a different array type than a concrete jax array."""
+    jax = pytest.importorskip("jax")
+    jax.config.update("jax_enable_x64", True)
+    grad = jax.grad(na.saturation_pressure)(1154.0)
+    expected = na.saturation_pressure(1154.0) * (na._A6 / 1154.0**2 + 2 * na._A7 / 1154.0**3)
+    assert float(grad) == pytest.approx(expected, rel=1e-12)
+
+
+def test_torch_and_jax_gradients_agree():
+    """Same derivative from two autodiff engines -- the cross-check that caught the init bug."""
+    torch = pytest.importorskip("torch")
+    jax = pytest.importorskip("jax")
+    jax.config.update("jax_enable_x64", True)
+    T = torch.tensor([1154.0], dtype=torch.float64, requires_grad=True)
+    na.saturation_pressure(T).backward()
+    g_jax = float(jax.grad(na.saturation_pressure)(1154.0))
+    assert float(T.grad[0]) == pytest.approx(g_jax, rel=1e-12)
