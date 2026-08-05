@@ -165,7 +165,9 @@ def test_reference_solution_approaches_the_pde_as_the_mesh_refines():
     """
     errs = []
     for n in (40, 80, 160):
-        p = AxialParams(n_axial=n)
+        # Non-boiling: the statement is about the discretisation, and a boiling
+        # run stops at the validity limit at a mesh-dependent time.
+        p = AxialParams(n_axial=n, p_system=1.6e7)
         traj = solve_reference(p, n_out=121)
         j, i = n // 2, 60
         dz, dt = p.H / n, traj.t[1] - traj.t[0]

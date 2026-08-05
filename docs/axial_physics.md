@@ -44,7 +44,7 @@ onset and feedback laws from the manual.
 | **Doppler, logarithmic**, flooded↔voided interpolation | Eq. 4.5-2, 4.5-3 | M0 (`alpha_D`) |
 | **Coolant density + void as one worth sum** | Eq. 4.5-25 | M0 (`void_worth`) |
 | Boiling onset: saturation + superheat | §12.4 | **done** (`boiling_fraction`) |
-| Cladding/structure → vapour heat path | §12.5.1 | M5 |
+| Cladding/structure → vapour heat path | §12.5.1 | **done** (`film_coefficient`) |
 | Sodium properties | Eq. 12.13-1 … 12.13-13 | **done** (`axial/sodium.py`) |
 
 The chapters are mirrored for offline reading; regenerate with
@@ -385,15 +385,41 @@ seconds of onset. This is exactly why Chapter 12 is a slug-*ejection* model.
 **Two conservation defects were caught by the energy-balance test, not by
 inspection** — see §7.
 
-## 7. Known gaps and honest limits
+### 6.3 M5 — film degradation and dryout
 
-**Post-dryout response is out of scope (M5).** Once a node reaches `α = 1` the
-latent sink correctly switches off — there is no liquid left to boil — and the
-wall heat returns to sensible heating. But this model still gives that node
-*liquid* heat capacity and liquid advection, so its temperature afterwards is not
-physical. Measured symptom: past dryout, the boiling run and a run that cannot
-boil at all agree to ~1 K. M5's film and dryout heat path is what closes this,
-and a test asserts the symptom so it cannot be mistaken for a result.
+Section 12.5.1 puts the liquid film and the vapour **in series** in the
+wall-to-coolant resistance. M5 implements that as a void-weighted blend,
+`h_eff = (1−α)·h_wet + α·h_vapour`, with the vapour value two to three orders
+smaller. This is what turns boiling from a temperature *plateau* into a cladding
+*excursion*, and it is why M4 alone was not enough — before M5 a boiling run and
+one that could not boil agreed to ~1 K.
+
+| Quantity | Result |
+|---|---|
+| Peak cladding, boiling | 2149 K |
+| Peak cladding, cannot boil | 1685 K |
+| **Dryout excursion** | **+464 K** |
+| Energy closure | 5.0e-5, still converging as `Δt²` |
+
+**The run now stops at the validity limit.** Once dryout drives temperatures
+toward the 2270 K ceiling of the §12.13 fits, integration terminates and
+`stopped_early` records it. With the default parameters that is **t = 16.5 s**,
+5.7 s after onset. This is not a numerical convenience: past dryout this model
+has no melting, no cladding motion and no fuel relocation (Chapters 8–16), and
+the sodium correlations stop at 2270 K, so integrating on would extrapolate three
+models at once and present the result as a prediction. Stopping makes the model
+state in its own output exactly where it ceases to apply.
+
+**One thing M5 deliberately does *not* do.** The mixture heat capacity
+`(1−α)ρ_l c_l + α ρ_v c_g` is implemented (`coolant_capacity`) and correct, but is
+**not used in the residuals**. Substituting it into the *temperature*-form energy
+equation breaks conservation — a changing capacity needs an enthalpy
+formulation — and measurably so: the closure degrades from 3.6e-6 to ~2e-2. M5
+therefore degrades the film coefficient, which is the mechanism §12.5.1 actually
+describes, and leaves the capacity to a future enthalpy-form revision. A test
+pins the expression and records why it is unused.
+
+## 7. Known gaps and honest limits
 
 **Two energy-conservation defects, both found by the balance check:**
 
@@ -424,6 +450,6 @@ this model should be quoted as a physical prediction.
 | **M2** | Method-of-lines reference solver, held-out truth | **done** |
 | **M3** | Plan B PINN — prescribed power, no feedback | **done** |
 | **M4** | Boiling onset and void field | **done** |
-| M5 | Film / dryout heat path (§12.5.1) | not started |
+| **M5** | Film / dryout heat path (§12.5.1) | **done** |
 | M6 | Prompt-jump kinetics closure — Plan B → Plan A | not started |
 | M7–M9 | Hardening, Chapter 12 comparison, parametric sweep | not started |

@@ -41,6 +41,13 @@ if TYPE_CHECKING:
     from pinn_sfr_transient.axial.config import AxialParams
     from pinn_sfr_transient.config import FloatArray
 
+type Field = Any
+"""A numeric field: numpy array, torch tensor or JAX array, or a plain float.
+
+Named rather than bare ``Any`` so the backend-agnostic signatures below say what
+they mean, and so they do not each need an ``ANN401`` suppression.
+"""
+
 STEFAN_BOLTZMANN: float = 5.670374419e-8
 """Stefan-Boltzmann constant [W/m^2-K^4], radiation term of Eq. 3.3-4."""
 
@@ -114,7 +121,7 @@ def line_geometry(p: AxialParams) -> NodeGeometry:
 
 
 # --- flow ------------------------------------------------------------------
-def flow_fraction(t: Any, p: AxialParams) -> Any:  # noqa: ANN401 - backend-agnostic
+def flow_fraction(t: Field, p: AxialParams) -> Field:
     """Normalised pump coast-down ``g(t)``, with ``g(0) = 1`` (deviation D-FLOW-1).
 
     The manual's table-look-up pump prescribes *head*, ``H(t) = H_r f(t)`` with
@@ -129,13 +136,13 @@ def flow_fraction(t: Any, p: AxialParams) -> Any:  # noqa: ANN401 - backend-agno
     return p.f_nc + (1.0 - p.f_nc) * xp.exp(-t / p.tau_pump)
 
 
-def flow_rate(t: Any, p: AxialParams) -> Any:  # noqa: ANN401 - backend-agnostic
+def flow_rate(t: Field, p: AxialParams) -> Field:
     """Coolant mass flow rate ``w(t)`` [kg/s], ``z``-independent per Eq. 3.9-1."""
     return p.w_0 * flow_fraction(t, p)
 
 
 # --- heat transfer paths ---------------------------------------------------
-def gap_flux(T_f: Any, T_cl: Any, geo: NodeGeometry, p: AxialParams) -> Any:  # noqa: ANN401
+def gap_flux(T_f: Field, T_cl: Field, geo: NodeGeometry, p: AxialParams) -> Field:
     """Fuel-to-cladding heat flow per node [W] — Eq. 3.3-4.
 
     ``q_fe = h_b (T_f - T_cl) + eps sigma (T_f^4 - T_cl^4)``. The radiation term
@@ -147,20 +154,63 @@ def gap_flux(T_f: Any, T_cl: Any, geo: NodeGeometry, p: AxialParams) -> Any:  # 
     return geo.A_fe * (conduction + radiation)
 
 
-def clad_coolant_flux(T_cl: Any, T_c: Any, geo: NodeGeometry, p: AxialParams) -> Any:  # noqa: ANN401
+def film_coefficient(h_wet: float, alpha: Field, p: AxialParams) -> Field:
+    """Effective wall-to-coolant film coefficient as the node voids (milestone M5).
+
+    Section 12.5.1 writes the wall-to-vapour resistance as ``1/h_ec + R_ehf``,
+    where ``h_ec`` carries the *combined* liquid-film and vapour resistance. Here
+    that combination is a void-weighted blend between the wetted value and a
+    vapour value two to three orders smaller:
+
+    ``h_eff = (1 - alpha) h_wet + alpha h_vapour``
+
+    This is the safety-relevant coupling and the reason M4 alone was not enough.
+    Losing the liquid does not merely stop the coolant heating up — it removes
+    the heat path, so the cladding temperature runs away. Before M5 the model
+    kept full wetted heat transfer in a fully voided node, which made a boiling
+    run indistinguishable from one that could not boil.
+    """
+    return (1.0 - alpha) * h_wet + alpha * p.h_vapour
+
+
+def coolant_capacity(alpha: Field, p: AxialParams) -> Field:
+    """Volumetric heat capacity of the two-phase mixture [J/m^3-K].
+
+    ``(1 - alpha) rho_l c_l + alpha rho_v c_g``: a voided node has almost no
+    thermal inertia, so it tracks the wall almost instantly.
+
+    **Not used in the residuals, deliberately.** Substituting it into the
+    *temperature*-form energy equation breaks conservation: as ``alpha`` changes
+    the capacity changes, and the correct accounting then needs an enthalpy
+    formulation rather than ``c dT/dt``. Measured cost of using it anyway: the
+    energy closure degrades from 3.6e-6 to ~2e-2. So M5 degrades the **film
+    coefficient** — which is the mechanism section 12.5.1 actually describes —
+    and leaves the mixture capacity to a future enthalpy-form revision. Kept here
+    because it is the right expression and the tests pin its value.
+    """
+    T_sat = sodium.saturation_temperature(p.p_system)
+    vapour = sodium.vapor_density(T_sat) * sodium.vapor_heat_capacity(T_sat)
+    return (1.0 - alpha) * p.rho_c * p.c_c + alpha * vapour
+
+
+def clad_coolant_flux(
+    T_cl: Field, T_c: Field, geo: NodeGeometry, p: AxialParams, alpha: Field = 0.0
+) -> Field:
     """Cladding-to-coolant heat flow per node [W] — the ``Q_ec`` term of Eq. 3.3-5."""
-    return p.h_clad_coolant * geo.A_ec * (T_cl - T_c)
+    return film_coefficient(p.h_clad_coolant, alpha, p) * geo.A_ec * (T_cl - T_c)
 
 
-def struct_coolant_flux(T_s: Any, T_c: Any, geo: NodeGeometry, p: AxialParams) -> Any:  # noqa: ANN401
+def struct_coolant_flux(
+    T_s: Field, T_c: Field, geo: NodeGeometry, p: AxialParams, alpha: Field = 0.0
+) -> Field:
     """Structure-to-coolant heat flow per node [W] — the ``Q_sc`` term of Eq. 3.3-5.
 
     Vanishes when ``gamma_2 = 0``, i.e. when the structure node is disabled.
     """
-    return p.h_struct_coolant * geo.A_sc * (T_s - T_c)
+    return film_coefficient(p.h_struct_coolant, alpha, p) * geo.A_sc * (T_s - T_c)
 
 
-def nodal_power(amplitude: Any, f_nodes: Any, p: AxialParams) -> tuple[Any, Any]:  # noqa: ANN401
+def nodal_power(amplitude: Field, f_nodes: Field, p: AxialParams) -> tuple[Any, Any]:
     """Split the nodal power into its fuel and direct-coolant parts [W].
 
     Returns ``(Q_fuel, Q_coolant)``. The manual deposits a fraction ``gamma_c``
@@ -174,7 +224,7 @@ def nodal_power(amplitude: Any, f_nodes: Any, p: AxialParams) -> tuple[Any, Any]
 
 
 # --- boiling (milestone M4) -------------------------------------------------
-def boiling_fraction(T_c: Any, p: AxialParams) -> Any:  # noqa: ANN401 - backend-agnostic
+def boiling_fraction(T_c: Field, p: AxialParams) -> Field:
     """Fraction of the wall heat going into vaporisation rather than sensible heat.
 
     The manual's onset criterion (section 12.4) is a hard threshold: a bubble
@@ -194,7 +244,7 @@ def boiling_fraction(T_c: Any, p: AxialParams) -> Any:  # noqa: ANN401 - backend
     return 0.5 * (1.0 + xp.tanh(0.5 * x))
 
 
-def latent_fraction(T_c: Any, alpha: Any, p: AxialParams) -> Any:  # noqa: ANN401
+def latent_fraction(T_c: Field, alpha: Field, p: AxialParams) -> Field:
     """Fraction of the wall heat that becomes vapour, ``b (1 - alpha)``.
 
     ``b`` is the superheat switch of :func:`boiling_fraction`; the ``(1 - alpha)``
@@ -213,7 +263,7 @@ def latent_fraction(T_c: Any, alpha: Any, p: AxialParams) -> Any:  # noqa: ANN40
     return boiling_fraction(T_c, p) * (1.0 - alpha)
 
 
-def vapour_source(T_c: Any, alpha: Any, q_wall: Any, p: AxialParams) -> Any:  # noqa: ANN401
+def vapour_source(T_c: Field, alpha: Field, q_wall: Field, p: AxialParams) -> Field:
     """Void generation rate ``d alpha/dt`` from wall heat [1/s].
 
     Once the superheat criterion is met the wall heat stops raising the coolant
@@ -229,16 +279,16 @@ def vapour_source(T_c: Any, alpha: Any, q_wall: Any, p: AxialParams) -> Any:  # 
 
 # --- the coupled right-hand side -------------------------------------------
 def derivatives(  # noqa: PLR0913 - five coupled fields plus the driving terms
-    t: Any,  # noqa: ANN401
-    T_f: Any,  # noqa: ANN401
-    T_cl: Any,  # noqa: ANN401
-    T_s: Any,  # noqa: ANN401
-    T_c: Any,  # noqa: ANN401
-    alpha: Any,  # noqa: ANN401
+    t: Field,
+    T_f: Field,
+    T_cl: Field,
+    T_s: Field,
+    T_c: Field,
+    alpha: Field,
     p: AxialParams,
     geo: NodeGeometry,
-    f_nodes: Any,  # noqa: ANN401
-    amplitude: Any = 1.0,  # noqa: ANN401
+    f_nodes: Field,
+    amplitude: Field = 1.0,
 ) -> tuple[Any, ...]:
     """Time derivatives of the four temperatures [K/s] and the void fraction [1/s].
 
@@ -253,8 +303,8 @@ def derivatives(  # noqa: PLR0913 - five coupled fields plus the driving terms
     """
     xp = _xp(T_c)
     q_fe = gap_flux(T_f, T_cl, geo, p)
-    q_ec = clad_coolant_flux(T_cl, T_c, geo, p)
-    q_sc = struct_coolant_flux(T_s, T_c, geo, p)
+    q_ec = clad_coolant_flux(T_cl, T_c, geo, p, alpha)
+    q_sc = struct_coolant_flux(T_s, T_c, geo, p, alpha)
     q_fuel, q_cool = nodal_power(amplitude, f_nodes, p)
 
     # Wall heat reaching the coolant. Below the superheat criterion it raises the
@@ -271,7 +321,11 @@ def derivatives(  # noqa: PLR0913 - five coupled fields plus the driving terms
     u = flow_rate(t, p) / (p.rho_c * p.A_c)
     d_alpha = vapour_source(T_c, alpha, q_wall / geo.dz, p) + u * (a_up - alpha) / geo.dz
 
-    dT_s = -p.h_struct_coolant * (T_s - T_c) / (p.rho_s * p.c_s * p.t_struct)
+    dT_s = (
+        -film_coefficient(p.h_struct_coolant, alpha, p)
+        * (T_s - T_c)
+        / (p.rho_s * p.c_s * p.t_struct)
+    )
     return (
         (q_fuel - q_fe) / geo.C_f,
         (q_fe - q_ec) / geo.C_cl,
@@ -282,18 +336,18 @@ def derivatives(  # noqa: PLR0913 - five coupled fields plus the driving terms
 
 
 def continuous_derivatives(  # noqa: PLR0913 - five coupled fields plus the driving terms
-    t: Any,  # noqa: ANN401
-    T_f: Any,  # noqa: ANN401
-    T_cl: Any,  # noqa: ANN401
-    T_s: Any,  # noqa: ANN401
-    T_c: Any,  # noqa: ANN401
-    alpha: Any,  # noqa: ANN401
-    dTc_dz: Any,  # noqa: ANN401
-    dalpha_dz: Any,  # noqa: ANN401
+    t: Field,
+    T_f: Field,
+    T_cl: Field,
+    T_s: Field,
+    T_c: Field,
+    alpha: Field,
+    dTc_dz: Field,
+    dalpha_dz: Field,
     p: AxialParams,
     geo: NodeGeometry,
-    f_zeta: Any,  # noqa: ANN401
-    amplitude: Any = 1.0,  # noqa: ANN401
+    f_zeta: Field,
+    amplitude: Field = 1.0,
 ) -> tuple[Any, ...]:
     """PDE right-hand sides — the mesh-free form of :func:`derivatives`.
 
@@ -306,8 +360,8 @@ def continuous_derivatives(  # noqa: PLR0913 - five coupled fields plus the driv
     than by review.
     """
     q_fe = gap_flux(T_f, T_cl, geo, p)
-    q_ec = clad_coolant_flux(T_cl, T_c, geo, p)
-    q_sc = struct_coolant_flux(T_s, T_c, geo, p)
+    q_ec = clad_coolant_flux(T_cl, T_c, geo, p, alpha)
+    q_sc = struct_coolant_flux(T_s, T_c, geo, p, alpha)
     # Power per METRE. `nodal_power` returns per-node watts (it divides by
     # n_axial) and a node spans dz = H / n_axial, so the per-metre form is simply
     # the total divided by H -- no factor of n_axial anywhere.
@@ -318,7 +372,11 @@ def continuous_derivatives(  # noqa: PLR0913 - five coupled fields plus the driv
     b = latent_fraction(T_c, alpha, p)
     advection = flow_rate(t, p) * p.c_c * dTc_dz
     u = flow_rate(t, p) / (p.rho_c * p.A_c)
-    dT_s = -p.h_struct_coolant * (T_s - T_c) / (p.rho_s * p.c_s * p.t_struct)
+    dT_s = (
+        -film_coefficient(p.h_struct_coolant, alpha, p)
+        * (T_s - T_c)
+        / (p.rho_s * p.c_s * p.t_struct)
+    )
     return (
         (q_fuel - q_fe) / geo.C_f,
         (q_fe - q_ec) / geo.C_cl,
@@ -328,7 +386,7 @@ def continuous_derivatives(  # noqa: PLR0913 - five coupled fields plus the driv
     )
 
 
-def unpack(y: Any, n: int) -> tuple[Any, ...]:  # noqa: ANN401 - backend-agnostic
+def unpack(y: Field, n: int) -> tuple[Any, ...]:
     """Split a flat state vector into ``(T_f, T_cl, T_s, T_c, alpha)``."""
     return tuple(y[k * n : (k + 1) * n] for k in range(N_FIELDS))
 

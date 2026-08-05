@@ -21,7 +21,9 @@ import pytest
 
 from pinn_sfr_transient.axial import AxialParams, sodium
 from pinn_sfr_transient.axial.physics import (
+    coolant_capacity,
     derivatives,
+    film_coefficient,
     flow_fraction,
     make_rhs,
     nodal_power,
@@ -99,8 +101,16 @@ def test_coolant_heats_monotonically_up_the_channel():
 
 
 # --- 2. mesh convergence ---------------------------------------------------
+# The convergence studies run the NON-BOILING case (`p_system` raised so
+# saturation is out of reach). Two reasons, both necessary: the orders being
+# measured are properties of the single-phase discretisation, isolated from the
+# boiling nonlinearity; and a boiling run terminates at the validity limit at a
+# mesh-dependent time, so the trajectories would not even be comparable.
+_BENIGN = {"p_system": 1.6e7}
+
+
 def _outlet(n, n_out=241):
-    return solve_reference(AxialParams(n_axial=n), n_out=n_out).T_out
+    return solve_reference(AxialParams(n_axial=n, **_BENIGN), n_out=n_out).T_out
 
 
 def _richardson(metric):
@@ -259,20 +269,60 @@ def test_voiding_is_explosive_once_it_starts(traj):
     assert traj.alpha[:, i].max() > 0.99
 
 
-def test_post_dryout_response_is_out_of_scope_and_says_so():
-    """Documents the M5 gap instead of letting it look like a result.
+def test_dryout_collapses_the_heat_path_and_spikes_the_cladding():
+    """M5's whole point: losing the liquid removes the heat path, not just the coolant.
 
-    Once a node reaches `alpha = 1` the latent sink switches off (correctly --
-    there is no liquid left to boil) and the wall heat returns to sensible
-    heating. But this model still gives that node *liquid* heat capacity and
-    liquid advection, so its post-dryout temperature is not physical. Comparing
-    against a run that cannot boil at all shows the difference is ~1 K: after
-    dryout the two models agree, which is precisely the symptom. M5's film and
-    dryout heat path is what closes this.
+    Section 12.5.1 puts the liquid film and the vapour in series in the
+    wall-to-coolant resistance. Blending toward the vapour value as a node voids
+    is what turns boiling from a temperature *plateau* into a cladding
+    *excursion* — the safety-relevant behaviour, and the reason M4 alone was not
+    enough. Before M5, a boiling run and one that could not boil agreed to ~1 K.
     """
     boiling = solve_reference(AxialParams(), n_out=121)
     never = solve_reference(AxialParams(p_system=1.6e7), n_out=121)
-    assert abs(float(boiling.T_out[-1] - never.T_out[-1])) < 5.0
+    assert boiling.peak_clad > never.peak_clad + 300.0
+
+
+def test_film_coefficient_blends_between_wetted_and_vapour():
+    p = AxialParams()
+    assert film_coefficient(p.h_clad_coolant, 0.0, p) == pytest.approx(p.h_clad_coolant)
+    assert film_coefficient(p.h_clad_coolant, 1.0, p) == pytest.approx(p.h_vapour)
+    assert p.h_vapour < p.h_clad_coolant / 100.0  # orders apart, which is the point
+
+
+def test_run_stops_at_the_validity_limit_rather_than_extrapolating():
+    """The model states in its own output where it stops applying.
+
+    Past dryout there is no melting, no cladding motion and no fuel relocation
+    here (Chapters 8-16), and the section 12.13 correlations themselves stop at
+    2270 K. Integrating on would extrapolate three models at once.
+    """
+    tr = solve_reference(AxialParams(), n_out=121)
+    assert tr.stopped_early
+    assert tr.t[-1] < AxialParams().t_end
+    assert bool(sodium.in_range(tr.T_c).all())
+    assert tr.T_f.max() <= sodium.T_MAX + 1.0
+
+
+def test_a_benign_run_does_not_stop_early():
+    """The termination must trigger on the physics, not on every run."""
+    tr = solve_reference(AxialParams(p_system=1.6e7), n_out=61)
+    assert not tr.stopped_early
+    assert tr.t[-1] == pytest.approx(AxialParams().t_end)
+
+
+def test_mixture_capacity_is_correct_but_deliberately_unused():
+    """It is the right expression; using it in the temperature form breaks conservation.
+
+    Documented in `coolant_capacity`: substituting it into `c dT/dt` degrades the
+    energy closure from 3.6e-6 to ~2e-2, because a changing capacity needs an
+    enthalpy formulation. M5 therefore degrades the film coefficient — the
+    mechanism section 12.5.1 actually describes — and leaves this to a future
+    enthalpy-form revision.
+    """
+    p = AxialParams()
+    assert coolant_capacity(0.0, p) == pytest.approx(p.rho_c * p.c_c)
+    assert coolant_capacity(1.0, p) < coolant_capacity(0.0, p) / 100.0
 
 
 def test_direct_coolant_heating_bypasses_the_fuel_thermal_lag():
