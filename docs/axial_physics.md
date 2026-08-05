@@ -7,12 +7,12 @@ lumped 0D model of [`physics_theory.md`](physics_theory.md), which it does not
 replace — the 0D model remains the fast regression harness and the pedagogical
 entry point.
 
-> **Status: milestone M0 (scaffolding).** Implemented so far:
-> `src/pinn_sfr_transient/axial/config.py` — the parameter container, the axial
-> mesh, the power and void-worth shapes, and the Doppler coefficient
-> interpolation. The reference solver (M2), boiling onset (M4) and the kinetics
-> closure (M6) are **not implemented**. Nothing here is validated against a
-> reference yet; do not quote numbers from it.
+> **Status: milestone M1.** Implemented so far: `axial/config.py` — the
+> parameter container, axial mesh, power and void-worth shapes, and the Doppler
+> coefficient interpolation (M0); `axial/sodium.py` — the thirteen section 12.13
+> sodium correlations (M1). The reference solver (M2), boiling onset (M4) and the
+> kinetics closure (M6) are **not implemented**. No transient has been solved
+> against a reference yet; do not quote transient numbers from this model.
 
 ---
 
@@ -43,7 +43,7 @@ onset and feedback laws from the manual.
 | **Coolant density + void as one worth sum** | Eq. 4.5-25 | M0 (`void_worth`) |
 | Boiling onset: saturation + superheat | §12.4 | M4 (`dT_superheat`) |
 | Cladding/structure → vapour heat path | §12.5.1 | M5 |
-| Sodium properties | Eq. 12.13-1 … 12.13-13 | M1 |
+| Sodium properties | Eq. 12.13-1 … 12.13-13 | **done** (`axial/sodium.py`) |
 
 The chapters are mirrored for offline reading; regenerate with
 `python __DEV/sasdoc_fetch.py <outdir>`.
@@ -235,7 +235,50 @@ corollary that must be checked, not assumed: results are only self-consistent
 while the transient stays bounded and cladding stays intact. If a parameter sweep
 pushes a case past that, the case is outside the model, not a prediction.
 
-## 4. Parameter provenance
+## 4. Sodium properties (M1)
+
+`axial/sodium.py` implements all thirteen numbered relations of §12.13. Two
+things are worth knowing before using them.
+
+**Validity is 590–2270 K and nothing enforces it.** The manual stops the
+polynomial fits at ~90 % of the critical point (2503.3 K) to avoid fitting the
+rapid near-critical variation, and `C_l`, `β_s` and `α_p` all contain
+`1/(T_c − T)`, so they diverge there. The module deliberately **neither clamps
+nor raises**: a hard guard inside a residual would break autodiff and abort a
+training run the moment a transient overshot. `sodium.in_range(T)` is provided so
+callers can diagnose it instead; M2 should assert it on the reference solution.
+
+**Backend agreement is bounded, not absolute.** One implementation serves both
+numpy and torch by dispatching on argument type, so the two evaluate the same
+expression tree. Measured consequence: the pure-polynomial correlations are
+**bit-identical**, while those using `exp`, `log` or division agree to **~1 ULP**
+— the backends call different libm implementations, and IEEE-754 does not
+require correctly-rounded transcendentals. Both bounds are asserted, because a
+looser tolerance would hide genuine transcription drift and a tighter one would
+fail on rounding alone.
+
+Verification at the normal boiling point, against values independent of the
+manual (a self-consistent but mistyped coefficient would otherwise pass):
+
+| Quantity | This module at 1154 K | Literature |
+|---|---|---|
+| `Ts` at 1 atm | 1159 K | 1154–1156 K |
+| Latent heat | 3.88e6 J/kg | ~3.9e6 |
+| Liquid density | 743 kg/m³ | 740–780 |
+| Vapour density | 0.263 kg/m³ | ~0.28 |
+| Liquid heat capacity | 1272 J/kg-K | 1260–1300 |
+| Liquid conductivity | 52.1 W/m-K | 46–50 |
+| Liquid viscosity | 1.65e-4 Pa-s | ~1.8e-4 |
+
+Round-trip `Ts(Ps(T)) − T` over the full range: **1.6e-11 K**, as expected from
+Eq. 12.13-4 being the exact analytic inverse of Eq. 12.13-2.
+
+**This closes the headline caveat of the 0D model.** `physics_theory.md` §6 flags
+its 820 K void onset as a demonstration threshold rather than the sodium
+saturation temperature. Boiling onset now comes from `Ts(Ps)` plus the §12.4
+superheat, at the right temperature.
+
+## 5. Parameter provenance
 
 **The defaults in `AxialParams` are representative placeholders**, order-of-
 magnitude correct for an oxide-fuelled SFR pin cell and not taken from any
@@ -243,12 +286,12 @@ specific reactor. Chapter 2 of the manual (the input-deck reference) is the plac
 to source a consistent realistic set; that is M2 work. Until then, nothing from
 this model should be quoted as a physical prediction.
 
-## 5. Milestone status
+## 6. Milestone status
 
 | M | Deliverable | State |
 |---|---|---|
 | **M0** | Package scaffolding, `AxialParams`, axial shapes, this register | **done** |
-| M1 | Sodium properties (§12.13) from the manual | not started |
+| **M1** | Sodium properties (§12.13) from the manual | **done** |
 | M2 | Method-of-lines reference solver, held-out truth | not started |
 | M3 | Plan B PINN — prescribed power, no feedback | not started |
 | M4 | Boiling onset and void field | not started |

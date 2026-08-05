@@ -9,13 +9,15 @@ saturation-plus-superheat boiling criterion.
 Every deviation from the manual is registered in ``docs/axial_physics.md`` with
 the equation number it departs from. Nothing here changes the 0D model.
 
-Milestone status: **M0 (scaffolding)**. This package currently provides the
-parameter container and the axial shape functions only; the physics residuals
-(M2), boiling onset (M4) and kinetics closure (M6) are not implemented yet.
+Milestone status: **M1**. This package provides the parameter container, the
+axial shape functions (M0) and the section 12.13 sodium property correlations
+(M1). The physics residuals (M2), boiling onset (M4) and kinetics closure (M6)
+are not implemented yet.
 """
 
 from __future__ import annotations
 
+from pinn_sfr_transient.axial import sodium
 from pinn_sfr_transient.axial.config import AxialParams
 
-__all__ = ["AxialParams"]
+__all__ = ["AxialParams", "sodium"]
