@@ -7,14 +7,14 @@ lumped 0D model of [`physics_theory.md`](physics_theory.md), which it does not
 replace — the 0D model remains the fast regression harness and the pedagogical
 entry point.
 
-> **Status: milestone M2.** Implemented: `axial/config.py` — parameters, axial
-> mesh, power and void-worth shapes, Doppler interpolation (M0);
-> `axial/sodium.py` — the thirteen section 12.13 correlations (M1);
-> `axial/physics.py` + `axial/reference.py` — the single-phase Chapter 3 energy
-> balance and its stiff reference solver (M2). Boiling onset (M4) and the
-> kinetics closure (M6) are **not implemented**, so power is prescribed and the
-> transient is driven entirely by the pump coast-down. The reference is a
-> *verification vehicle*, not yet a physical ULOF: see §5.
+> **Status: milestone M4.** Implemented: `axial/config.py` — parameters, mesh,
+> shapes, Doppler interpolation (M0); `axial/sodium.py` — the thirteen §12.13
+> correlations (M1); `axial/physics.py` + `axial/reference.py` — the Chapter 3
+> energy balance, its stiff reference solver (M2) and the §12.4 boiling onset
+> with a mixture void field (M4); `axial/pinn_torch.py` — the PINN trained on
+> those residuals (M3). The film and dryout heat path (M5) and the kinetics
+> closure (M6) are **not implemented**, so power is still prescribed and the
+> post-dryout response is out of scope — see §7.
 
 ---
 
@@ -43,7 +43,7 @@ onset and feedback laws from the manual.
 | Decay heat, `ψ_t = ψ_f + ψ_h`, ANS standard | Eq. 4.2-2, §4.4 | M6 (decision pending) |
 | **Doppler, logarithmic**, flooded↔voided interpolation | Eq. 4.5-2, 4.5-3 | M0 (`alpha_D`) |
 | **Coolant density + void as one worth sum** | Eq. 4.5-25 | M0 (`void_worth`) |
-| Boiling onset: saturation + superheat | §12.4 | M4 (`dT_superheat`) |
+| Boiling onset: saturation + superheat | §12.4 | **done** (`boiling_fraction`) |
 | Cladding/structure → vapour heat path | §12.5.1 | M5 |
 | Sodium properties | Eq. 12.13-1 … 12.13-13 | **done** (`axial/sodium.py`) |
 
@@ -331,7 +331,83 @@ temperature (~1159 K at 1 atm) at about **t = 11 s**. From there the run is
 non-physical: it is a *solver verification vehicle* until M4 adds boiling. A test
 asserts the crossing happens, so the limitation cannot quietly disappear.
 
-## 6. Parameter provenance
+## 6. The M3 PINN and the M4 void field
+
+### 6.1 M3 — the network
+
+A network of `(ζ, t)` trained on the Chapter 3 residuals alone; no reference data
+enters the loss. Power is prescribed, so this is the plan's **Plan B**: the
+thermal-hydraulics is validated before the kinetics feedback is closed at M6.
+
+**One set of equations.** The residual calls `continuous_derivatives` — the same
+function, and therefore the same flux and boiling expressions, that the M2
+reference discretises. A test rebuilds the residual by hand from it and asserts
+bit-equality, so the network and its ground truth cannot drift apart. That test
+is this model's answer to the 0D `tests/test_consistency.py`.
+
+**Three hard constraints, none of them in the loss:**
+
+| Constraint | Mechanism | Measured |
+|---|---|---|
+| Initial condition | `θ = θ₀(ζ) + t̂·N` | exact, `0.0` error |
+| Coolant inlet `T_c(0,t) = T_in` | extra `ζ` factor on that column | exact, `0.0` error |
+| Void `α ∈ [0,1)`, void-free start, no void at inlet | `tanh(a t̂)·tanh(a ζ)·σ(N)` | exact by construction |
+
+Eq. 3.9-1 admits exactly one upstream condition and the void equation likewise,
+so those are the only boundary conditions imposed — no more, no fewer.
+
+The steady profile is implemented **twice**, once in numpy and once in torch,
+because `jvp` cannot trace a numpy detour and the ansatz must differentiate with
+respect to `ζ`. A test asserts they agree to 1e-9, so there is still one
+definition being checked rather than two being trusted.
+
+### 6.2 M4 — boiling onset and the void field
+
+The §12.4 criterion `T_c > T_sat + DTS` becomes a logistic of width `dT_smooth`,
+now around a **physical** saturation temperature from Eq. 12.13-4 (~1159 K at
+1 atm) rather than the 0D model's 820 K demonstration value. Above it, the wall
+heat stops raising the coolant temperature and starts making vapour.
+
+Measured on the reference:
+
+| Quantity | Result |
+|---|---|
+| Boiling onset | **t = 10.8 s at ζ = 0.96** — the top of the channel, the hottest point |
+| Void bounds | `α ∈ [0, 1]` to round-off, by the `(1−α)` shutoff |
+| Voided length | 0.50 m, reached by t ≈ 40 s |
+| Energy closure **with** latent heat | 3.6e-6, converging to zero as `Δt²` |
+| Control (`p_system` raised so `T_sat` ≈ 2280 K) | void identically zero |
+
+**Voiding is explosive, and that is physical.** Filling one node with vapour
+takes about 1 J while the wall delivers about 1 kW, so the front runs away within
+seconds of onset. This is exactly why Chapter 12 is a slug-*ejection* model.
+
+**Two conservation defects were caught by the energy-balance test, not by
+inspection** — see §7.
+
+## 7. Known gaps and honest limits
+
+**Post-dryout response is out of scope (M5).** Once a node reaches `α = 1` the
+latent sink correctly switches off — there is no liquid left to boil — and the
+wall heat returns to sensible heating. But this model still gives that node
+*liquid* heat capacity and liquid advection, so its temperature afterwards is not
+physical. Measured symptom: past dryout, the boiling run and a run that cannot
+boil at all agree to ~1 K. M5's film and dryout heat path is what closes this,
+and a test asserts the symptom so it cannot be mistaken for a result.
+
+**Two energy-conservation defects, both found by the balance check:**
+
+1. The model diverted `b·q_wall` from the coolant but vaporised only
+   `b·(1−α)·q_wall`, so energy vanished as a node approached dryout. Fixed by
+   using the same `b(1−α)` on both sides.
+2. The balance itself omitted the **latent heat convected out of the top with the
+   vapour** — about 45 W against 50 kW, i.e. 9e-4, which is exactly where the
+   closure floored. Adding it recovered clean `Δt²` convergence to zero.
+
+Neither was visible in the trajectories, which looked entirely plausible
+throughout. This is the argument for conservation checks over eyeball validation.
+
+## 8. Parameter provenance
 
 **The defaults in `AxialParams` are representative placeholders**, order-of-
 magnitude correct for an oxide-fuelled SFR pin cell and not taken from any
@@ -339,15 +415,15 @@ specific reactor. Chapter 2 of the manual (the input-deck reference) is the plac
 to source a consistent realistic set; that is M2 work. Until then, nothing from
 this model should be quoted as a physical prediction.
 
-## 7. Milestone status
+## 9. Milestone status
 
 | M | Deliverable | State |
 |---|---|---|
 | **M0** | Package scaffolding, `AxialParams`, axial shapes, this register | **done** |
 | **M1** | Sodium properties (§12.13) from the manual | **done** |
 | **M2** | Method-of-lines reference solver, held-out truth | **done** |
-| M3 | Plan B PINN — prescribed power, no feedback | not started |
-| M4 | Boiling onset and void field | not started |
+| **M3** | Plan B PINN — prescribed power, no feedback | **done** |
+| **M4** | Boiling onset and void field | **done** |
 | M5 | Film / dryout heat path (§12.5.1) | not started |
 | M6 | Prompt-jump kinetics closure — Plan B → Plan A | not started |
 | M7–M9 | Hardening, Chapter 12 comparison, parametric sweep | not started |

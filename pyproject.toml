@@ -197,6 +197,9 @@ exclude = [
     "src/pinn_sfr_transient/pinn_torch.py",
     "src/pinn_sfr_transient/pinn_deepxde.py",
     "src/pinn_sfr_transient/pinn_jax.py",
+    # Same reason as the 0D backend above: `torch.func.jvp` returns a tuple whose
+    # arity ty cannot infer, and `requires_grad_` is missing from the stubs.
+    "src/pinn_sfr_transient/axial/pinn_torch.py",
 ]
 
 [tool.ty.rules]
