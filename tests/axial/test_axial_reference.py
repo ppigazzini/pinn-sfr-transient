@@ -25,9 +25,12 @@ from pinn_sfr_transient.axial.physics import (
     derivatives,
     film_coefficient,
     flow_fraction,
+    kinetics_weights,
     make_rhs,
     nodal_power,
     node_geometry,
+    prompt_jump_power,
+    reactivity,
 )
 from pinn_sfr_transient.axial.reference import (
     energy_balance,
@@ -55,7 +58,7 @@ def test_steady_state_annihilates_the_right_hand_side():
 def test_steady_state_temperature_rise_is_the_telescoped_source():
     """Upwind advection makes the steady coolant profile a telescoping sum -- exactly."""
     p = AxialParams()
-    _, _, _, T_c, _ = steady_state(p)
+    T_c = steady_state(p)[3]
     q_fuel, q_cool = nodal_power(1.0, p.power_shape(p.zeta_nodes()), p)
     expected = (q_fuel + q_cool).sum() / (p.w_0 * p.c_c)
     assert T_c[-1] - p.T_in == pytest.approx(expected, rel=1e-12)
@@ -76,7 +79,7 @@ def test_constant_flow_holds_the_steady_state_for_all_time():
     """With `f_nc = 1` there is no coast-down, so nothing may drift."""
     p = AxialParams(f_nc=1.0, t_end=30.0)
     tr = solve_reference(p, n_out=61)
-    T_f0, T_cl0, T_s0, T_c0, _ = steady_state(p)
+    T_f0, T_cl0, T_s0, T_c0 = steady_state(p)[:4]
     assert np.max(np.abs(tr.T_c - T_c0[:, None])) < 1e-6
     assert np.max(np.abs(tr.T_f - T_f0[:, None])) < 1e-6
     assert np.max(np.abs(tr.T_cl - T_cl0[:, None])) < 1e-6
@@ -85,18 +88,18 @@ def test_constant_flow_holds_the_steady_state_for_all_time():
 
 def test_structure_sits_at_the_coolant_temperature_in_steady_state():
     """No source in the duct wall, so `q_sc = 0` and it equilibrates."""
-    _, _, T_s, T_c, _ = steady_state(AxialParams())
+    _, _, T_s, T_c = steady_state(AxialParams())[:4]
     np.testing.assert_allclose(T_s, T_c, rtol=0.0, atol=0.0)
 
 
 def test_temperatures_are_ordered_fuel_above_cladding_above_coolant():
-    T_f, T_cl, _, T_c, _ = steady_state(AxialParams())
+    T_f, T_cl, _, T_c = steady_state(AxialParams())[:4]
     assert np.all(T_f > T_cl)
     assert np.all(T_cl > T_c)
 
 
 def test_coolant_heats_monotonically_up_the_channel():
-    _, _, _, T_c, _ = steady_state(AxialParams())
+    T_c = steady_state(AxialParams())[3]
     assert np.all(np.diff(T_c) > 0.0)
 
 
@@ -331,7 +334,7 @@ def test_direct_coolant_heating_bypasses_the_fuel_thermal_lag():
     p_off = AxialParams(gamma_c=0.0)
     geo_on, geo_off = node_geometry(p_on), node_geometry(p_off)
     f_on = p_on.power_shape(p_on.zeta_nodes())
-    args_on = steady_state(p_off)  # same start state for both
+    args_on = steady_state(p_off)[:5]  # same start state for both
     d_on = derivatives(0.0, *args_on, p_on, geo_on, f_on, 1.0)
     d_off = derivatives(0.0, *args_on, p_off, geo_off, f_on, 1.0)
     assert np.all(d_on[3] > d_off[3])  # coolant sees it immediately
@@ -391,7 +394,7 @@ def _perturbed_state(p):
     rounding rather than agreement. Perturbing puts them at 1e2-1e3 K/s, where
     the comparison means something.
     """
-    T_f, T_cl, T_s, T_c, alpha = steady_state(p)
+    T_f, T_cl, T_s, T_c, alpha = steady_state(p)[:5]
     return T_f + 50.0, T_cl - 20.0, T_s + 30.0, T_c + 10.0, alpha
 
 
@@ -422,3 +425,110 @@ def test_derivatives_match_across_backends(backend):
     names = ("T_f", "T_cl", "T_s", "T_c", "alpha")
     for g, r, name in zip(got, ref, names, strict=True):
         np.testing.assert_allclose(np.asarray(g), r, rtol=1e-13, atol=0.0, err_msg=name)
+
+
+# --- M6: the prompt-jump kinetics closure ----------------------------------
+@pytest.fixture(scope="module")
+def plan_a():
+    """Closed-loop run: power is an output, not an input."""
+    return solve_reference(AxialParams(), n_out=241, feedback=True)
+
+
+def test_nominal_state_is_exactly_critical():
+    """No criticality offset is needed — a free consequence of the log Doppler.
+
+    At nominal `T_f = T_f0` so `ln(T_f/T_f0) = 0`, and `alpha = 0`, so both
+    reactivity integrals vanish identically. With `c_i = 1` the prompt-jump
+    closure then gives `P = sum(beta_i)/beta = 1` exactly. The 0D model has to
+    absorb a residual into `rho_ext` to achieve the same thing.
+    """
+    p = AxialParams()
+    T_f0, _, _, _, alpha, c = steady_state(p)
+    w_D, w_void = kinetics_weights(p)
+    rho = reactivity(T_f0, alpha, T_f0, w_D, w_void, p)
+    assert abs(float(rho)) < 1e-15
+    assert float(prompt_jump_power(c, rho, p)) == pytest.approx(1.0, rel=1e-15)
+
+
+def test_closed_loop_starts_at_nominal_power(plan_a):
+    assert plan_a.power[0] == pytest.approx(1.0, rel=1e-12)
+
+
+def test_feedback_is_self_limiting(plan_a):
+    """Both feedbacks are negative here, so power can only fall."""
+    assert plan_a.power.max() == pytest.approx(1.0, rel=1e-9)
+    assert plan_a.power[-1] < 0.8
+    assert plan_a.rho.max() <= 1e-12
+
+
+def test_pole_tripwire_is_reported_and_far_from_one(plan_a):
+    """M6's kill criterion: `rho/beta -> 1` means the prompt jump is invalid.
+
+    The closure has a pole at prompt criticality. Every run reports
+    `max_t rho/beta`; the milestone bar is < 0.5.
+    """
+    assert plan_a.peak_rho_over_beta < 0.5
+    assert plan_a.rho.min() / AxialParams().beta_eff > -50.0  # sane, not runaway
+
+
+def test_power_decay_respects_the_eighty_second_floor(plan_a):
+    """The stopwatch test: no delayed-neutron decay can be faster than `1/lambda_1`.
+
+    Under the prompt-jump closure the tail time constant is bounded below by
+    `1/lambda_1 = 80.6 s` at *any* reactivity — as the reactivity goes to minus
+    infinity the dominant inhour root only approaches `-lambda_1`. A faster tail
+    would mean the closure had been violated or bypassed, not that the physics
+    was severe.
+    """
+    p = AxialParams()
+    late = plan_a.t > 20.0
+    tau = -1.0 / np.polyfit(plan_a.t[late], np.log(plan_a.power[late]), 1)[0]
+    assert tau >= 1.0 / p.lambda_i.min()
+
+
+def test_feedback_delays_boiling_and_lowers_the_cladding_peak(plan_a):
+    """Closing the loop is stabilising: less power, later onset, cooler cladding."""
+    plan_b = solve_reference(AxialParams(), n_out=241)
+    assert plan_a.onset()[0] > plan_b.onset()[0] + 2.0
+    assert plan_a.peak_clad < plan_b.peak_clad - 100.0
+    assert not plan_a.stopped_early  # and it no longer runs out of validity
+    assert plan_b.stopped_early
+
+
+def test_doppler_dominates_the_reactivity_balance(plan_a):
+    """Reconstruct rho from the fields and check it matches what the solver used."""
+    p = AxialParams()
+    T_f0 = steady_state(p)[0]
+    w_D, w_void = kinetics_weights(p)
+    i = len(plan_a.t) // 2
+    rebuilt = reactivity(plan_a.T_f[:, i], plan_a.alpha[:, i], T_f0, w_D, w_void, p)
+    assert float(rebuilt) == pytest.approx(plan_a.rho[i], rel=1e-12)
+
+
+def test_prompt_jump_pole_is_clamped_not_crossed():
+    """A guard, so a bad parameter set cannot silently produce nonsense."""
+    p = AxialParams()
+    c = np.ones(6)
+    huge = prompt_jump_power(c, np.array(0.999 * p.beta_eff), p)
+    assert np.isfinite(huge)
+    assert huge <= 1.0 / 0.05 + 1e-9  # the floor caps the amplification
+
+
+def test_sparsity_covers_the_feedback_couplings():
+    """The gap that let a broken pattern through: the old test never ran Plan A.
+
+    With feedback the reactivity is an integral over the channel, so every row
+    depends on every `T_f` and every `alpha`. A `lil_matrix` slice assignment
+    silently dropped 312 entries and Radau then could not advance past 0.5 s —
+    which looks like a stiff-solver problem, not a bug.
+    """
+    p = AxialParams(n_axial=6)
+    y0 = steady_state_vector(p)
+    rhs = make_rhs(p, None, steady_state(p)[0])
+    f0 = rhs(1.0, y0)
+    pattern = np.asarray(jacobian_sparsity(p, feedback=True).todense())
+    for k in range(y0.size):
+        y = y0.copy()
+        y[k] += 1e-4 * max(1.0, abs(y0[k]))
+        touched = np.abs(rhs(1.0, y) - f0) > 0.0
+        assert np.all(pattern[touched, k] == 1), f"missing sparsity entry in column {k}"

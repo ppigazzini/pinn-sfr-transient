@@ -277,6 +277,73 @@ def vapour_source(T_c: Field, alpha: Field, q_wall: Field, p: AxialParams) -> Fi
     return latent_fraction(T_c, alpha, p) * q_wall / (lam * rho_v * p.A_c)
 
 
+# --- kinetics closure (milestone M6) ----------------------------------------
+N_GROUPS: int = 6
+"""Delayed-neutron precursor groups (manual Eq. 4.3-1)."""
+
+
+def reactivity(  # noqa: PLR0913 - two feedbacks, each with its own axial weight
+    T_f: Field,
+    alpha: Field,
+    T_f0: Field,
+    w_D: Field,
+    w_void: Field,
+    p: AxialParams,
+) -> Field:
+    """Net reactivity from the axial fields (manual section 4.5).
+
+    Two mechanisms, both as the manual writes them and both as axial *integrals*
+    rather than lumped coefficients:
+
+    * **Doppler, logarithmic** — ``delta_k_D = alpha_D ln(T_f/T_f0)`` (Eq. 4.5-3,
+      integrated from ``T_f d(delta_k)/dT_f = alpha_D``), with ``alpha_D`` itself
+      interpolated between its flooded and voided values (section 4.5.3), so
+      voiding modulates the feedback that has to bound the excursion.
+    * **Coolant density and voiding together** — ``sum_j (rho_c)_j alpha_j``
+      (Eq. 4.5-25). One worth distribution, not two coefficients: that is the
+      manual's model and it removes the double-counting the 0D split risks at
+      onset.
+
+    ``w_D`` and ``w_void`` are the per-segment weights times the axial cell width,
+    so the sums are quadratures. **No criticality offset is needed**: at nominal
+    ``T_f = T_f0`` and ``alpha = 0``, so both terms vanish identically and the
+    reactor is exactly critical — a free consequence of the logarithmic form.
+    """
+    xp = _xp(T_f)
+    doppler = w_D * p.alpha_D(alpha) * xp.log(T_f / T_f0)
+    return p.rho_ext + doppler.sum(-1) + (w_void * alpha).sum(-1)
+
+
+def prompt_jump_power(c: Field, rho: Field, p: AxialParams, floor: float = 0.05) -> Field:
+    """Normalised power from the prompt jump approximation.
+
+    Setting ``dP/dt = 0`` in Eq. 4.2-4 and eliminating ``P``:
+
+    ``P = sum_i beta_i c_i / (beta - rho)``
+
+    With ``c_i(0) = 1`` this gives ``P(0) = beta/beta = 1`` exactly, so the
+    nominal state is a true fixed point with no tuning.
+
+    **This is a deviation from SAS4A, not a simplification of it** (D-KIN-1): the
+    manual solves the full point kinetics equations and the phrase "prompt jump"
+    appears nowhere in it. The justification is PINN trainability — it removes the
+    ``Lambda ~ 5e-7 s`` mode — not fidelity.
+
+    The closure has a **pole at prompt criticality**. ``floor`` clamps the
+    denominator at ``floor * beta`` so a run cannot silently pass through it;
+    callers must still report ``max rho/beta`` and treat anything approaching 1 as
+    outside the approximation rather than as a result.
+    """
+    xp = _xp(c)
+    denom = xp.maximum(p.beta_eff - rho, floor * p.beta_eff)
+    return (p.beta_i * c).sum(-1) / denom
+
+
+def precursor_derivatives(c: Field, power: Field, p: AxialParams) -> Field:
+    """``dc_i/dt = lambda_i (P - c_i)`` — Eq. 4.3-1 in normalised form."""
+    return p.lambda_i * (power - c)
+
+
 # --- the coupled right-hand side -------------------------------------------
 def derivatives(  # noqa: PLR0913 - five coupled fields plus the driving terms
     t: Field,
@@ -387,13 +454,35 @@ def continuous_derivatives(  # noqa: PLR0913 - five coupled fields plus the driv
 
 
 def unpack(y: Field, n: int) -> tuple[Any, ...]:
-    """Split a flat state vector into ``(T_f, T_cl, T_s, T_c, alpha)``."""
-    return tuple(y[k * n : (k + 1) * n] for k in range(N_FIELDS))
+    """Split a flat state vector into the five fields plus the precursor vector.
+
+    Layout: ``[T_f, T_cl, T_s, T_c, alpha]`` of length ``n`` each, then the six
+    delayed-neutron precursors. The precursors are global rather than axial —
+    the point kinetics amplitude is one number for the whole channel, which is
+    exactly the separable-flux assumption of Eq. 4.2-1 that justifies point
+    kinetics in the first place.
+    """
+    fields = tuple(y[k * n : (k + 1) * n] for k in range(N_FIELDS))
+    return (*fields, y[N_FIELDS * n :])
+
+
+def kinetics_weights(p: AxialParams) -> tuple[Field, Field]:
+    """Axial quadrature weights for the two reactivity integrals.
+
+    Doppler is weighted by the axial power shape — the feedback follows the flux,
+    which is the manual's ``WDOPA`` in continuous form — and the void by the
+    per-segment worth of Eq. 4.5-25. Both carry the cell width, so the sums in
+    :func:`reactivity` are quadratures rather than bare sums.
+    """
+    zeta = p.zeta_nodes()
+    dz = 1.0 / p.n_axial
+    return p.power_shape(zeta) * dz, p.void_worth(zeta) * dz
 
 
 def make_rhs(
     p: AxialParams,
     amplitude: Callable[[float], float] | None = None,
+    T_f0: FloatArray | None = None,
 ) -> Callable[[float, FloatArray], FloatArray]:
     """Build ``f(t, y)`` for :func:`scipy.integrate.solve_ivp`.
 
@@ -409,12 +498,18 @@ def make_rhs(
     """
     geo = node_geometry(p)
     f_nodes = p.power_shape(p.zeta_nodes())
-    amp = amplitude if amplitude is not None else (lambda _t: 1.0)
     n = p.n_axial
+    w_D, w_void = kinetics_weights(p)
 
     def rhs(t: float, y: FloatArray) -> FloatArray:
-        T_f, T_cl, T_s, T_c, alpha = unpack(y, n)
-        d = derivatives(t, T_f, T_cl, T_s, T_c, alpha, p, geo, f_nodes, amp(t))
-        return np.concatenate(d)
+        T_f, T_cl, T_s, T_c, alpha, c = unpack(y, n)
+        if T_f0 is None:
+            # Plan B (M2/M3): power is prescribed, the precursors just decay.
+            power = amplitude(t) if amplitude is not None else 1.0
+        else:
+            # Plan A (M6): power is an OUTPUT, closed by the prompt jump.
+            power = prompt_jump_power(c, reactivity(T_f, alpha, T_f0, w_D, w_void, p), p)
+        d = derivatives(t, T_f, T_cl, T_s, T_c, alpha, p, geo, f_nodes, power)
+        return np.concatenate([*d, precursor_derivatives(c, power, p)])
 
     return rhs
