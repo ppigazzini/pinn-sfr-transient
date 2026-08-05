@@ -38,8 +38,8 @@ onset and feedback laws from the manual.
 | Coolant energy, three sources `Q_c + Q_ec + Q_sc` | Eq. 3.3-5 | **done** |
 | Direct neutron/gamma heating in the coolant, `γ_c` | Eq. 3.3-6 | **done** (`gamma_c`) |
 | Pre-boiling momentum, `w = w(t)` independent of `z` | Eq. 3.9-1 | **done** |
-| Point kinetics | Eq. 4.2-4 | M6 |
-| Delayed-neutron precursors | Eq. 4.3-1 | M6 (`beta_i`, `lambda_i`) |
+| Point kinetics (prompt jump) | Eq. 4.2-4 | **done** (`prompt_jump_power`) |
+| Delayed-neutron precursors | Eq. 4.3-1 | **done** |
 | Decay heat, `ψ_t = ψ_f + ψ_h`, ANS standard | Eq. 4.2-2, §4.4 | M6 (decision pending) |
 | **Doppler, logarithmic**, flooded↔voided interpolation | Eq. 4.5-2, 4.5-3 | M0 (`alpha_D`) |
 | **Coolant density + void as one worth sum** | Eq. 4.5-25 | M0 (`void_worth`) |
@@ -419,6 +419,44 @@ therefore degrades the film coefficient, which is the mechanism §12.5.1 actuall
 describes, and leaves the capacity to a future enthalpy-form revision. A test
 pins the expression and records why it is unused.
 
+### 6.4 M6 — the kinetics closure (reference side)
+
+`solve_reference(..., feedback=True)` makes power an **output**: six precursor
+ODEs (Eq. 4.3-1) closed by the prompt jump, `P = Σβᵢcᵢ/(β−ρ)`, with reactivity
+from two axial integrals — logarithmic Doppler (Eq. 4.5-3, with the flooded↔voided
+`α_D`) and the merged coolant/void worth (Eq. 4.5-25).
+
+**The nominal state is exactly critical with no offset.** At nominal
+`ln(T_f/T_f0) = 0` and `α = 0`, so both integrals vanish identically and
+`P = Σβᵢ/β = 1` to the last bit. The 0D model has to absorb a residual into
+`rho_ext` to get the same thing; the logarithmic form gives it for free.
+
+| Quantity | Plan A | Plan B (prescribed) |
+|---|---|---|
+| `P(0)` | 1.000000000000 | — |
+| Peak power | **1.0000 at t = 0** — feedback only removes reactivity | — |
+| Final power | 0.4984 | — |
+| **max ρ/β (pole tripwire)** | **+0.0000** (bar: < 0.5) | — |
+| min ρ/β | −0.207 | — |
+| Boiling onset | 15.3 s | 10.8 s |
+| Peak cladding | **1893 K** | 2149 K |
+| Reaches the validity limit? | **no**, completes 60 s | yes, stops at 16.5 s |
+
+Closing the loop is **stabilising**: less power, later onset, cooler cladding, and
+the run no longer leaves its own validity range.
+
+**The stopwatch test passes.** The report's §5.2 predicted that under the
+prompt-jump closure no delayed-neutron tail can decay faster than
+`1/λ₁ = 80.6 s`, at any reactivity. Measured tail: **260 s**. A faster tail would
+have meant the closure was violated or bypassed rather than that the physics was
+severe.
+
+**Not done: the PINN side of M6.** `pinn_torch.py` still runs Plan B with power
+prescribed. Extending it needs a second network for the precursors (functions of
+`t` alone) and the axial quadrature of §3.5a inside the residual. The M6
+acceptance criterion "reference and PINN agree on peak power and time" is
+therefore **unverified**.
+
 ## 7. Known gaps and honest limits
 
 **Two energy-conservation defects, both found by the balance check:**
@@ -451,5 +489,5 @@ this model should be quoted as a physical prediction.
 | **M3** | Plan B PINN — prescribed power, no feedback | **done** |
 | **M4** | Boiling onset and void field | **done** |
 | **M5** | Film / dryout heat path (§12.5.1) | **done** |
-| M6 | Prompt-jump kinetics closure — Plan B → Plan A | not started |
+| **M6** | Prompt-jump kinetics closure — Plan B → Plan A | **reference done; PINN not extended** |
 | M7–M9 | Hardening, Chapter 12 comparison, parametric sweep | not started |

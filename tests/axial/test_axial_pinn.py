@@ -43,7 +43,7 @@ def test_initial_condition_is_exact(model):
     zeta = np.linspace(0.0, 1.0, 33)
     got = model.predict(zeta, np.array([0.0]))
     names = ("T_f", "T_cl", "T_s", "T_c", "alpha")
-    for f, ref, name in zip(got, steady_profile(p, zeta), names, strict=True):
+    for f, ref, name in zip(got, steady_profile(p, zeta)[:5], names, strict=True):
         np.testing.assert_allclose(f[:, 0], ref, rtol=0.0, atol=0.0, err_msg=name)
 
 
@@ -72,7 +72,7 @@ def test_torch_steady_profile_matches_the_numpy_one(model):
     p = AxialParams()
     zeta = np.linspace(0.0, 1.0, 101)
     theta = model.theta0(torch.tensor(zeta.reshape(-1, 1), dtype=torch.float64)).numpy()
-    ref = steady_profile(p, zeta)
+    ref = steady_profile(p, zeta)[:5]
     for k, name in enumerate(("T_f", "T_cl", "T_s", "T_c")):
         got = p.T_in + theta[:, k] * model.dT
         np.testing.assert_allclose(got, ref[k], atol=1e-9, err_msg=name)
@@ -133,7 +133,7 @@ def test_continuous_steady_profile_annihilates_the_pde_residual():
     """
     p = AxialParams()
     zeta = np.linspace(0.0, 1.0, 257)
-    T_f, T_cl, T_s, T_c, alpha = steady_profile(p, zeta)
+    T_f, T_cl, T_s, T_c, alpha = steady_profile(p, zeta)[:5]
     dT = p.P_0 / (p.w_0 * p.c_c)
     dTc_dz = dT * p.power_shape(zeta) / p.H  # analytic: F' = f
     zeros = np.zeros_like(zeta)

@@ -28,16 +28,20 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from scipy.integrate import solve_ivp
-from scipy.sparse import lil_matrix
+from scipy.sparse import csr_matrix
 
 from pinn_sfr_transient.axial import sodium
 from pinn_sfr_transient.axial.physics import (
     N_FIELDS,
+    N_GROUPS,
     clad_coolant_flux,
     flow_rate,
+    kinetics_weights,
     make_rhs,
     nodal_power,
     node_geometry,
+    prompt_jump_power,
+    reactivity,
     unpack,
 )
 
@@ -66,6 +70,9 @@ class AxialTrajectory:
     T_s: FloatArray
     T_c: FloatArray
     alpha: FloatArray  # void fraction, dimensionless
+    c: FloatArray  # delayed-neutron precursors, shape (6, n_time)
+    power: FloatArray  # normalised power P(t)/P_0
+    rho: FloatArray  # net reactivity, absolute units — never dollars
     flow: FloatArray  # mass flow rate w(t) [kg/s]
     H: float = 1.0  # active height [m], for the voided-length integral
     stopped_early: bool = False  # True if the run hit the validity limit
@@ -90,6 +97,17 @@ class AxialTrajectory:
         noise. An absolute length in metres is what a reactor engineer checks.
         """
         return self.alpha.sum(axis=0) * (self.zeta[1] - self.zeta[0]) * self.H
+
+    @property
+    def peak_rho_over_beta(self) -> float:
+        """``max_t rho/beta`` — the prompt-jump pole tripwire (deviation D-KIN-1).
+
+        The closure has a pole at ``rho = beta``. Every run must report this and
+        anything approaching 1 is outside the approximation, not a result.
+        """
+        return float(self.rho.max() / self._beta)
+
+    _beta: float = 3.5e-3
 
     def onset(self, threshold: float = 0.01) -> tuple[float, float]:
         """First time and normalised height at which the void exceeds ``threshold``.
@@ -134,8 +152,9 @@ def steady_state(p: AxialParams) -> tuple[FloatArray, ...]:
 
     # Fuel: gap conductance plus radiation, Newton on each node.
     T_f = _fuel_from_flux(q_fuel, T_cl, geo.A_fe, p)
-    # The nominal state is subcooled everywhere, so the channel starts void-free.
-    return T_f, T_cl, T_s, T_c, np.zeros_like(T_c)
+    # Subcooled everywhere, so void-free; and c_i = 1 makes P(0) = 1 exactly,
+    # since sum(beta_i) / (beta - 0) = 1. No criticality offset is needed.
+    return T_f, T_cl, T_s, T_c, np.zeros_like(T_c), np.ones(N_GROUPS)
 
 
 def _fuel_from_flux(q: FloatArray, T_cl: FloatArray, area: float, p: AxialParams) -> FloatArray:
@@ -177,49 +196,65 @@ def steady_profile(p: AxialParams, zeta: FloatArray) -> tuple[FloatArray, ...]:
     )
     T_cl = T_c + q_fuel / (p.h_clad_coolant * 2.0 * np.pi * p.r_co)
     T_f = _fuel_from_flux(q_fuel, T_cl, 2.0 * np.pi * p.r_fo, p)
-    return T_f, T_cl, T_s, T_c, np.zeros_like(T_c)
+    return T_f, T_cl, T_s, T_c, np.zeros_like(T_c), np.ones(N_GROUPS)
 
 
-def jacobian_sparsity(p: AxialParams) -> Any:  # noqa: ANN401 - scipy sparse matrix
+def jacobian_sparsity(p: AxialParams, *, feedback: bool = False) -> Any:  # noqa: ANN401
     """Sparsity pattern of the method-of-lines Jacobian.
 
-    Every coupling in :func:`~pinn_sfr_transient.axial.physics.derivatives` is
-    local: a node talks to the material above and below it in the resistance
-    chain, and the coolant additionally to its **upwind neighbour** ``j-1``. So
-    of the ``(4n)^2`` entries only ``O(n)`` are non-zero.
+    Without feedback every coupling is local — a node talks to its material
+    neighbours and, for the advected fields, to its upwind neighbour — so of the
+    ``(5n+6)^2`` entries only ``O(n)`` are non-zero. Supplying that to Radau took
+    the ``n = 640`` convergence study from intractable to seconds.
 
-    Handing this to Radau matters a great deal in practice. Without it the
-    integrator finite-differences a dense Jacobian and factorises it densely,
-    which is ``O(n^3)`` per step: the mesh-convergence study at ``n = 640``
-    (2560 states) does not finish in reasonable time. With it, seconds.
+    **With feedback the picture changes qualitatively.** The reactivity is an
+    *integral* over the whole channel (Eq. 4.5-3, Eq. 4.5-25) and the resulting
+    power amplitude drives every node, so every row depends on every ``T_f`` and
+    every ``alpha``. Those blocks are genuinely dense and the pattern says so;
+    the saving is correspondingly smaller, which is a property of the physics
+    rather than of the implementation.
+
+    Built as a dense boolean array and converted at the end. An earlier version
+    used ``lil_matrix`` slice assignment for the kinetics blocks, which silently
+    did nothing: Radau then had a Jacobian missing 312 entries and could not
+    advance past ``t = 0.5 s``. A wrong pattern is worse than no pattern, and it
+    fails in a way that looks like a stiff-solver problem rather than a bug.
     """
     n = p.n_axial
-    pattern = lil_matrix((N_FIELDS * n, N_FIELDS * n), dtype=np.int8)
-    f, cl, st, c = 0, n, 2 * n, 3 * n
+    size = N_FIELDS * n + N_GROUPS
+    m = np.zeros((size, size), dtype=np.int8)
+    f, cl, st, c, a = 0, n, 2 * n, 3 * n, 4 * n
     j = np.arange(n)
-    pattern[f + j, f + j] = 1  # fuel <- fuel, cladding
-    pattern[f + j, cl + j] = 1
-    pattern[cl + j, f + j] = 1  # cladding <- fuel, cladding, coolant
-    pattern[cl + j, cl + j] = 1
-    pattern[cl + j, c + j] = 1
-    pattern[st + j, st + j] = 1  # structure <- structure, coolant
-    pattern[st + j, c + j] = 1
-    pattern[c + j, cl + j] = 1  # coolant <- cladding, structure, coolant
-    pattern[c + j, st + j] = 1
-    pattern[c + j, c + j] = 1
-    # M5: the film coefficient depends on the void, so every wall-to-coolant
-    # path acquires a dependence on alpha.
-    pattern[cl + j, 4 * n + j] = 1
-    pattern[st + j, 4 * n + j] = 1
-    pattern[c + j, 4 * n + j] = 1
-    pattern[c + j[1:], c + j[:-1]] = 1  # ... and its upwind neighbour
-    a = 4 * n
-    pattern[a + j, cl + j] = 1  # void <- the wall heat that makes it ...
-    pattern[a + j, st + j] = 1
-    pattern[a + j, c + j] = 1  # ... the superheat that gates it ...
-    pattern[a + j, a + j] = 1
-    pattern[a + j[1:], a + j[:-1]] = 1  # ... and its own upwind neighbour
-    return pattern.tocsr()
+
+    m[f + j, f + j] = 1  # fuel <- fuel, cladding
+    m[f + j, cl + j] = 1
+    m[cl + j, f + j] = 1  # cladding <- fuel, cladding, coolant, void (film)
+    m[cl + j, cl + j] = 1
+    m[cl + j, c + j] = 1
+    m[cl + j, a + j] = 1
+    m[st + j, st + j] = 1  # structure <- structure, coolant, void (film)
+    m[st + j, c + j] = 1
+    m[st + j, a + j] = 1
+    m[c + j, cl + j] = 1  # coolant <- cladding, structure, coolant, void
+    m[c + j, st + j] = 1
+    m[c + j, c + j] = 1
+    m[c + j, a + j] = 1
+    m[c + j[1:], c + j[:-1]] = 1  # ... and its upwind neighbour
+    m[a + j, cl + j] = 1  # void <- the wall heat that makes it ...
+    m[a + j, st + j] = 1
+    m[a + j, c + j] = 1  # ... the superheat that gates it ...
+    m[a + j, a + j] = 1
+    m[a + j[1:], a + j[:-1]] = 1  # ... and its own upwind neighbour
+    kin = N_FIELDS * n
+    g = np.arange(N_GROUPS)
+    m[kin + g, kin + g] = 1  # precursors always decay into themselves
+
+    if feedback:
+        m[:, kin:] = 1  # every field is driven by the power amplitude
+        m[kin:, :] = 1  # the precursors see every field through the integrals
+        m[:, f : f + n] = 1  # ... and the Doppler integral couples all T_f ...
+        m[:, a : a + n] = 1  # ... the void integral all alpha
+    return csr_matrix(m)
 
 
 def steady_state_vector(p: AxialParams) -> FloatArray:
@@ -236,6 +271,7 @@ def solve_reference(  # noqa: PLR0913 - solver knobs are clearer flat than bundl
     atol: float = 1e-8,
     amplitude: Callable[[float], float] | None = None,
     T_limit: float = sodium.T_MAX,
+    feedback: bool = False,
 ) -> AxialTrajectory:
     """Integrate the channel from its exact steady state over ``[0, t_end]``.
 
@@ -253,6 +289,7 @@ def solve_reference(  # noqa: PLR0913 - solver knobs are clearer flat than bundl
     records that it did.
     """
     y0 = steady_state_vector(p)
+    T_f0 = steady_state(p)[0] if feedback else None
     t_eval = np.linspace(0.0, p.t_end, n_out)
     n_temp = (N_FIELDS - 1) * p.n_axial  # the void is not a temperature
 
@@ -263,21 +300,31 @@ def solve_reference(  # noqa: PLR0913 - solver knobs are clearer flat than bundl
     _too_hot.direction = -1.0  # ty: ignore[unresolved-attribute]
 
     sol = solve_ivp(
-        make_rhs(p, amplitude),
+        make_rhs(p, amplitude, T_f0),
         (0.0, p.t_end),
         y0,
         method=method,
         t_eval=t_eval,
         rtol=rtol,
         atol=atol,
-        jac_sparsity=jacobian_sparsity(p),
+        jac_sparsity=jacobian_sparsity(p, feedback=feedback),
         events=_too_hot,
     )
     if not sol.success:  # pragma: no cover - solver failure is not expected
         msg = f"reference integration failed: {sol.message}"
         raise RuntimeError(msg)
 
-    T_f, T_cl, T_s, T_c, alpha = unpack(sol.y, p.n_axial)
+    T_f, T_cl, T_s, T_c, alpha, c = unpack(sol.y, p.n_axial)
+    if feedback:
+        w_D, w_void = kinetics_weights(p)
+        rho = np.array(
+            [reactivity(T_f[:, i], alpha[:, i], T_f0, w_D, w_void, p) for i in range(sol.t.size)]
+        )
+        power = np.array([prompt_jump_power(c[:, i], rho[i], p) for i in range(sol.t.size)])
+    else:
+        amp = amplitude if amplitude is not None else (lambda _t: 1.0)
+        power = np.array([amp(float(t)) for t in sol.t])
+        rho = np.zeros_like(power)
     return AxialTrajectory(
         t=sol.t,
         zeta=p.zeta_nodes(),
@@ -286,8 +333,12 @@ def solve_reference(  # noqa: PLR0913 - solver knobs are clearer flat than bundl
         T_s=T_s,
         T_c=T_c,
         alpha=alpha,
+        c=c,
+        power=power,
+        rho=rho,
         flow=flow_rate(sol.t, p),
         H=p.H,
+        _beta=p.beta_eff,
         stopped_early=bool(sol.status == 1),
     )
 
