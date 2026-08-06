@@ -59,9 +59,14 @@ The heavy lifting is in the docs and notebooks:
   comparison** (§9) of the two backends.
 - [`docs/axial_physics.md`](docs/axial_physics.md) — **work in progress**: a
   second, axially resolved model with sodium boiling, following the
-  [SAS4A/SASSYS-1 manual](https://sas-doc.nse.anl.gov/latest/). Currently
-  scaffolding only (milestone M0); the page doubles as the register of every
-  deviation from the manual.
+  [SAS4A/SASSYS-1 manual](https://sas-doc.nse.anl.gov/latest/) — four material
+  fields, real sodium properties, saturation-plus-superheat boiling onset, film
+  dryout, and a prompt-jump kinetics closure. The reference solver is verified;
+  the page doubles as the register of every deviation from the manual.
+- [`docs/axial_nn.md`](docs/axial_nn.md) — **work in progress**: the axial PINN —
+  ansatz, hard constraints, training recipe, both backends, and every measured
+  result including the negative ones. The network does **not** yet meet its
+  accuracy bar; that page says so and explains what is known about why.
 - [`docs/usage.md`](docs/usage.md) — install, run, train, use as a library,
   compute requirements, troubleshooting.
 - [`docs/references.md`](docs/references.md) — annotated bibliography
