@@ -70,6 +70,13 @@ FIELDS: tuple[str, ...] = ("T_f", "T_cl", "T_s", "T_c", "alpha")
 N_TEMPS: int = 4
 _ALPHA_GATE: float = 10.0
 _NEWTON_ITERS: int = 5
+_EXP_BOUND: float = 4.0
+"""Bound on the exponent of the multiplicative ansatz; see the torch twin."""
+
+
+def _bounded_exp(x: jax.Array) -> jax.Array:
+    """``exp`` with a smooth ceiling and floor, so the ansatz cannot overflow."""
+    return jnp.exp(_EXP_BOUND * jnp.tanh(x / _EXP_BOUND))
 
 
 @dataclass(slots=True)
@@ -183,16 +190,19 @@ def normalised_state(
 ) -> jax.Array:
     """``theta(zeta, t_hat)`` with every hard constraint satisfied identically.
 
-    Same three constraints as the torch twin, and for the same reasons: the
-    ``t_hat`` factor makes ``t = 0`` exact, the extra ``zeta`` pins
-    ``T_c(0, t) = T_in`` (Eq. 3.9-1 admits exactly one upstream condition), and
-    the void is a sigmoid behind a gate so it cannot leave ``[0, 1)``, starts
-    void-free and never crosses the subcooled inlet.
+    Same constraints as the torch twin, and for the same reasons. The ansatz is
+    **multiplicative**, ``theta = theta_0 exp(t_hat N)``: ``exp(0) = 1`` makes the
+    initial condition exact, ``theta_0 >= 0`` with a positive exponential keeps
+    every temperature at or above the inlet, and ``theta_c0(0) = 0`` pins
+    ``T_c(0, t) = T_in`` for free — Eq. 3.9-1 admits exactly one upstream
+    condition and this is it, with no separate gate.
+
+    The additive form it replaced let the optimiser drive ``T_f`` negative while
+    the loss fell, which made the logarithmic Doppler of Eq. 4.5-3 return NaN.
     """
     raw = model.mlp(jnp.concatenate([zeta, that]))
     base = theta0(p, zeta)
-    gate = jnp.concatenate([jnp.repeat(that, N_TEMPS - 1), that * zeta])
-    temps = base[:N_TEMPS] + gate * raw[:N_TEMPS]
+    temps = base[:N_TEMPS] * _bounded_exp(that * raw[:N_TEMPS])
     alpha = jnp.tanh(_ALPHA_GATE * that) * jnp.tanh(_ALPHA_GATE * zeta) * jax.nn.sigmoid(raw[-1:])
     return jnp.concatenate([temps, alpha])
 
@@ -204,7 +214,7 @@ def precursors(model: AxialPinn, that: jax.Array) -> jax.Array:
     ``P = sum(beta_i c_i)/(beta - rho)`` cannot reach zero, so the power-collapse
     mode is removed by construction rather than avoided by training.
     """
-    return jnp.exp(that * model.kin(that))
+    return _bounded_exp(that * model.kin(that))
 
 
 def state_and_grads(
