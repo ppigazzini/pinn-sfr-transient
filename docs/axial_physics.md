@@ -7,14 +7,18 @@ lumped 0D model of [`physics_theory.md`](physics_theory.md), which it does not
 replace — the 0D model remains the fast regression harness and the pedagogical
 entry point.
 
-> **Status: milestone M4.** Implemented: `axial/config.py` — parameters, mesh,
-> shapes, Doppler interpolation (M0); `axial/sodium.py` — the thirteen §12.13
-> correlations (M1); `axial/physics.py` + `axial/reference.py` — the Chapter 3
-> energy balance, its stiff reference solver (M2) and the §12.4 boiling onset
-> with a mixture void field (M4); `axial/pinn_torch.py` — the PINN trained on
-> those residuals (M3). The film and dryout heat path (M5) and the kinetics
-> closure (M6) are **not implemented**, so power is still prescribed and the
-> post-dryout response is out of scope — see §7.
+> **Status: milestone M7.** Implemented: parameters, mesh and shapes (M0); the
+> thirteen §12.13 sodium correlations (M1); the Chapter 3 energy balance and its
+> stiff reference solver (M2); the PINN with prescribed power (M3); §12.4 boiling
+> onset with a mixture void field (M4); §12.5.1 film degradation and dryout (M5);
+> the prompt-jump kinetics closure in both the reference and the PINN (M6); and
+> the JAX twin (M7). M8 (single-bubble Chapter 12 comparison) and M9 (parametric
+> sweep) are not started.
+>
+> **The reference solver is verified — with one measured exception in §6.5, where
+> the void fraction is not mesh-converged at the default resolution. The PINN is
+> not converged**; [`axial_nn.md`](axial_nn.md) records every measurement,
+> including the negative ones.
 
 ---
 
@@ -40,9 +44,9 @@ onset and feedback laws from the manual.
 | Pre-boiling momentum, `w = w(t)` independent of `z` | Eq. 3.9-1 | **done** |
 | Point kinetics (prompt jump) | Eq. 4.2-4 | **done** (`prompt_jump_power`) |
 | Delayed-neutron precursors | Eq. 4.3-1 | **done** |
-| Decay heat, `ψ_t = ψ_f + ψ_h`, ANS standard | Eq. 4.2-2, §4.4 | M6 (decision pending) |
-| **Doppler, logarithmic**, flooded↔voided interpolation | Eq. 4.5-2, 4.5-3 | M0 (`alpha_D`) |
-| **Coolant density + void as one worth sum** | Eq. 4.5-25 | M0 (`void_worth`) |
+| Decay heat, `ψ_t = ψ_f + ψ_h`, ANS standard | Eq. 4.2-2, §4.4 | **not implemented** (D-KIN-2, open) |
+| **Doppler, logarithmic**, flooded↔voided interpolation | Eq. 4.5-2, 4.5-3 | **done** (`alpha_D`, `reactivity`) |
+| **Coolant density + void as one worth sum** | Eq. 4.5-25 | **done** (`void_worth`, `reactivity`) |
 | Boiling onset: saturation + superheat | §12.4 | **done** (`boiling_fraction`) |
 | Cladding/structure → vapour heat path | §12.5.1 | **done** (`film_coefficient`) |
 | Sodium properties | Eq. 12.13-1 … 12.13-13 | **done** (`axial/sodium.py`) |
