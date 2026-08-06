@@ -319,22 +319,6 @@ def test_plan_a_collocates_in_time_only():
     assert torch.equal(zeta, that)
 
 
-def test_void_head_starts_near_empty_not_half_voided(model):
-    """The reference void field is zero over ~96% of the channel; so must the ansatz be.
-
-    A bare `sigmoid(raw)` sits at ~0.5 at initialisation, and the void is not an
-    inert output — it degrades the film coefficient, shifts `alpha_D` between its
-    flooded and voided values, and enters the reactivity integral. The
-    temperatures start exactly on the steady profile, so the void starting half
-    open was an unintended asymmetry between the two halves of the ansatz.
-    """
-    zeta = torch.linspace(0.0, 1.0, 41, dtype=torch.float64).reshape(-1, 1)
-    that = torch.full_like(zeta, 0.5)
-    alpha = model.normalised_state(zeta, that)[:, 4].detach().numpy()
-    assert alpha.max() < 0.05
-    assert alpha.min() >= 0.0
-
-
 def test_pseudo_time_anchor_uses_real_zeta_under_feedback():
     """Plan A collocates in time only, so the anchor has to rebuild the tensor grid.
 

@@ -210,29 +210,8 @@ def test_causal_weighting_matches_the_torch_backend():
         )
     )
     np.testing.assert_allclose(j_losses, t_losses, rtol=1e-14)
-    assert pt._ALPHA_BIAS == pj._ALPHA_BIAS  # and the two ansatzes stay identical
-    assert pt._ALPHA_GATE == pj._ALPHA_GATE
+    assert pt._ALPHA_GATE == pj._ALPHA_GATE  # and the two ansatzes stay identical
     assert pt._EXP_BOUND == pj._EXP_BOUND
-
-
-def test_void_head_starts_near_empty_not_half_voided():
-    """The reference void field is zero over ~96% of the channel; so must the ansatz be.
-
-    Without the bias the sigmoid sits at ~0.5 at initialisation, which is not an
-    inert output: it degrades the film coefficient, shifts `alpha_D` and enters
-    the reactivity integral, all before a single gradient step.
-    """
-    p = AxialParams()
-    cfg = pj.AxialTrainConfig(width=16, depth=2)
-    model = pj.AxialPinn(cfg, jax.random.PRNGKey(0))
-    zeta = np.linspace(0.0, 1.0, 41).reshape(-1, 1)
-    that = np.full_like(zeta, 0.5)
-    theta = jax.vmap(lambda a, b: pj.normalised_state(model, p, a, b))(
-        jnp.asarray(zeta), jnp.asarray(that)
-    )
-    alpha = np.asarray(theta[:, 4])
-    assert alpha.max() < 0.05
-    assert np.all(alpha >= 0.0)
 
 
 def test_rar_is_disabled_under_feedback():

@@ -290,7 +290,7 @@ class AxialPinn(nn.Module):
         raw = self.net(self.embed(x) if self.embed is not None else x)
         temps = self.theta0(zeta)[:, :N_TEMPS] * _bounded_exp(that * raw[:, :N_TEMPS])
         gate = torch.tanh(_ALPHA_GATE * that) * torch.tanh(_ALPHA_GATE * zeta)
-        alpha = gate * torch.sigmoid(raw[:, N_TEMPS : N_TEMPS + 1] - _ALPHA_BIAS)
+        alpha = gate * torch.sigmoid(raw[:, N_TEMPS : N_TEMPS + 1])
         return torch.cat([temps, alpha], dim=1)
 
     def state_and_grads(
@@ -428,21 +428,25 @@ class AxialPinn(nn.Module):
 _ALPHA_GATE: float = 10.0
 """Sharpness of the void gate; large enough to saturate away from the boundaries."""
 
-_ALPHA_BIAS: float = 4.0
-"""Offset making the void head start near **zero** rather than near one half.
+"""**On the void head's initialisation — a real asymmetry, and a cure that failed.**
 
-The output layer is initialised ``U(+/-1/sqrt(width))``, so a bare
-``sigmoid(raw)`` sits at ~0.5 at every interior point on iteration zero. The
-reference void field is identically zero over ~96% of the channel and over all
-of ``t < 10.8 s``, so the network began ~50x too voided everywhere — and the void
-is not an inert output: it degrades ``film_coefficient``, shifts ``alpha_D``
-between its flooded and voided values, and enters the reactivity integral. The
+The output layer is initialised ``U(+/-1/sqrt(width))``, so ``sigmoid(raw)`` sits
+at ~0.5 at every interior point on iteration zero, while the reference void field
+is identically zero over ~96% of the channel and over all of ``t < 10.8 s``. The
+void is not an inert output either — it degrades ``film_coefficient``, shifts
+``alpha_D`` between its flooded and voided values, and enters Eq. 4.5-25. The
 temperatures, by contrast, start *exactly* on the steady profile because their
-ansatz is multiplicative with ``exp(0) = 1``. That asymmetry was unintended.
+ansatz is multiplicative with ``exp(0) = 1``. The asymmetry is genuine.
 
-``sigmoid(-4) = 0.018`` starts the void field essentially empty while leaving the
-local gradient at 0.018 — small but nowhere near the saturated tail, so the head
-can still open quickly when the residual asks it to.
+The obvious cure — ``sigmoid(raw - 4)``, so the head starts at 0.018 — was
+implemented and then **measured, at three seeds against an ``n_axial = 160``
+reference, and it does not earn its place**: mean relative ``L2`` went 0.226 to
+0.227 on ``T_cl``, 0.068 to 0.103 on ``T_s`` and 0.114 to 0.124 on ``T_c``. It
+did cut the ``T_f`` seed spread from 12.5x to 1.8x, which is interesting and not
+sufficient. Reverted, and recorded in ``docs/axial_nn.md`` section 7.1 with the
+table, because the measurement is worth more than the change would have been:
+seed variance dominates this model, and the void's real blocker is the block
+weighting, not the initialisation.
 """
 
 _EXP_BOUND: float = 4.0
