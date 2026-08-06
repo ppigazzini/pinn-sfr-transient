@@ -44,6 +44,7 @@ from pinn_sfr_transient.axial.physics import (
     line_geometry,
     precursor_derivatives,
     prompt_jump_power,
+    quasi_steady_void,
     reactivity,
     residual_normalisation,
 )
@@ -121,6 +122,13 @@ class AxialTrainConfig:
     # come out analytically. REPORT-01 D39 measured this as a no-op, correctly,
     # back when the adaptive weights were unbounded and cancelled it.
     residual_scaling: bool = True
+
+    # Eliminate the void algebraically instead of solving it (deviation D-TH-3).
+    # `alpha` fills a node in 0.71 ms against a 0.113 s transport time, so it is a
+    # fast variable slaved to `T_c` -- the same elimination D-KIN-1 makes for the
+    # prompt neutron mode. Removes a residual block whose normalised rate is 8.5e4
+    # and lets the front appear analytically where `T_c` crosses saturation.
+    void_closure: bool = True
 
     # Residual-based adaptive refinement [Wu et al. 2023]
     rar_every: int = 2000
@@ -273,6 +281,8 @@ class AxialPinn(nn.Module):
         # `p.t_end` — see `AxialTrainConfig.t_train_frac`.
         self.t_end = float(p.t_end) * cfg.t_train_frac
         # Variable scaling per residual block; ones when disabled.
+        # The void block is absent when it is closed algebraically.
+        self.n_blocks = N_TEMPS if cfg.void_closure else len(FIELDS)
         self.res_norm: tuple[float, ...] = (
             residual_normalisation(p, self.t_end) if cfg.residual_scaling else (1.0,) * len(FIELDS)
         )
@@ -339,8 +349,14 @@ class AxialPinn(nn.Module):
         x = torch.cat([zeta, that], dim=1)
         raw = self.net(self.embed(x) if self.embed is not None else x)
         temps = self.theta0(zeta)[:, :N_TEMPS] * _bounded_exp(that * raw[:, :N_TEMPS])
-        gate = torch.tanh(_ALPHA_GATE * that) * torch.tanh(_ALPHA_GATE * zeta)
-        alpha = gate * torch.sigmoid(raw[:, N_TEMPS : N_TEMPS + 1])
+        if self.cfg.void_closure:
+            # `b` underflows to exactly zero below saturation, so alpha = 0 at
+            # t = 0 and at the inlet fall out of the closure -- no gate needed.
+            T_c = self.p.T_in + temps[:, 3:4] * self.dT
+            alpha = quasi_steady_void(T_c, self.p)
+        else:
+            gate = torch.tanh(_ALPHA_GATE * that) * torch.tanh(_ALPHA_GATE * zeta)
+            alpha = gate * torch.sigmoid(raw[:, N_TEMPS : N_TEMPS + 1])
         return torch.cat([temps, alpha], dim=1)
 
     def state_and_grads(
@@ -409,7 +425,7 @@ class AxialPinn(nn.Module):
             .pow(2)
             .reshape(n_t, n_z)
             .mean(1)
-            for k in range(len(FIELDS))
+            for k in range(self.n_blocks)
         ]
 
         # Precursors: dc_i/dt_hat = t_end * lambda_i (P - c_i), Eq. 4.3-1 in
@@ -443,7 +459,7 @@ class AxialPinn(nn.Module):
         scales = [self.t_end / self.dT] * N_TEMPS + [self.t_end]
         return tuple(
             ((d_dt[:, k : k + 1] - scales[k] * rhs[k]) * self.res_norm[k]).pow(2).squeeze(1)
-            for k in range(len(FIELDS))
+            for k in range(self.n_blocks)
         )
 
     @torch.no_grad()
@@ -607,7 +623,7 @@ class Trainer:
         self.model = model
         self.cfg = cfg
         self.dev = cfg.device
-        n_blocks = len(FIELDS) + (1 if cfg.feedback else 0)
+        n_blocks = model.n_blocks + (1 if cfg.feedback else 0)
         self.block_w = torch.ones(n_blocks, dtype=torch.float64, device=self.dev)
         self.rar = torch.empty(0, 2, dtype=torch.float64, device=self.dev)
         # Pseudo-time stepping state: the anchor is the previous pseudo-step's
