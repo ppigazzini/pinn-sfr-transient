@@ -288,9 +288,17 @@ def residual_scales(p: AxialParams) -> tuple[float, ...]:
     at all, and that VS-PINN and the scale-aware-residual literature formalise.
 
     The blocks' time constants are 0.58 s (fuel), 0.025 s (cladding), 0.107 s
-    (structure) and 0.113 s (coolant transit) against a 60 s horizon, so scaling
-    all four by ``t_end`` leaves ``t_end/tau`` spanning 104 to 2378 — a 23x
-    spread between residual blocks.
+    (structure), 0.113 s (coolant transit) and **7.1e-4 s (void)** against a 60 s
+    horizon, so ``t_end/tau`` spans 104 to **8.5e4** — a 800x spread between
+    residual blocks, almost all of it the void.
+
+    **The void entry used to repeat the coolant transit time**, 0.113 s, which is
+    160x too slow. The vapour source fills a node in
+    ``lambda rho_v A_c H / P_0 = 7.1e-4 s`` — ``d alpha/dt`` reaches ~1400 /s —
+    so in normalised time the void residual carries a term of order 8.5e4 where
+    every other block is order 1e2 to 1e3. That is the M4 problem stated in one
+    number: it is a property of the *equation*, present in the reference solver
+    too, where Radau simply absorbs it. See ``docs/axial_nn.md`` section 6.
 
     **Exposed as diagnostic information, NOT applied to the residuals — because
     applying it provably does nothing.** Measured: rescaling each block by its
@@ -316,7 +324,11 @@ def residual_scales(p: AxialParams) -> tuple[float, ...]:
     tau_cl = geo.C_cl / (p.h_clad_coolant * geo.A_ec)
     tau_s = p.rho_s * p.c_s * p.t_struct / p.h_struct_coolant
     tau_c = geo.C_c / (p.w_0 * p.c_c / p.H)  # advective transit over the height
-    return (tau_f, tau_cl, tau_s, tau_c, tau_c)
+    # Void: the time for the wall heat to vaporise one node's worth of liquid.
+    T_sat = sodium.saturation_temperature(p.p_system)
+    lam, rho_v = sodium.latent_heat(T_sat), sodium.vapor_density(T_sat)
+    tau_alpha = float(lam) * float(rho_v) * p.A_c * p.H / p.P_0
+    return (tau_f, tau_cl, tau_s, tau_c, tau_alpha)
 
 
 # --- kinetics closure (milestone M6) ----------------------------------------

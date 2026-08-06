@@ -31,6 +31,7 @@ from pinn_sfr_transient.axial.physics import (
     node_geometry,
     prompt_jump_power,
     reactivity,
+    residual_scales,
 )
 from pinn_sfr_transient.axial.reference import (
     energy_balance,
@@ -519,6 +520,23 @@ def test_doppler_dominates_the_reactivity_balance(plan_a):
     i = len(plan_a.t) // 2
     rebuilt = reactivity(plan_a.T_f[:, i], plan_a.alpha[:, i], T_f0, w_D, w_void, p)
     assert float(rebuilt) == pytest.approx(plan_a.rho[i], rel=1e-12)
+
+
+def test_void_block_time_constant_is_the_vaporisation_time_not_the_transit_time():
+    """The void entry used to repeat the coolant transit time — 160x too slow.
+
+    The wall heat fills a node with vapour in `lambda rho_v A_c H / P_0`, about
+    0.7 ms, so `d alpha/dt` reaches ~1400 /s. Against a 60 s horizon that is a
+    normalised term of order 8.5e4 where every other block is 1e2 to 1e3, which
+    is the M4 problem stated in one number. Reporting 0.113 s there hid it.
+    """
+    p = AxialParams()
+    tau = residual_scales(p)
+    T_sat = sodium.saturation_temperature(p.p_system)
+    expected = sodium.latent_heat(T_sat) * sodium.vapor_density(T_sat) * p.A_c * p.H / p.P_0
+    assert tau[4] == pytest.approx(expected, rel=1e-12)
+    assert tau[4] < 1e-3
+    assert tau[4] < tau[3] / 100.0  # and it is nothing like the coolant transit
 
 
 def test_reactivity_components_sum_to_the_net(plan_a):

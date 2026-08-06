@@ -104,6 +104,8 @@ class AxialTrainConfig:
     causal_chunks: int = 32
     weight_update_every: int = 250
     weight_momentum: float = 0.9
+    # Bound on the block-weight spread; see the torch twin for the measurement.
+    weight_max_ratio: float = 10.0
 
     # RAR keeps a FIXED count so `jit` never recompiles (the torch twin grows an
     # unbounded reservoir instead — same idea, framework-appropriate form).
@@ -367,6 +369,20 @@ def _block_grad_norms(
     return jnp.stack(norms)
 
 
+def bounded_weights(target: jax.Array, cap: float) -> jax.Array:
+    """Renormalise block weights to unit geometric mean, then clamp to ``[1/cap, cap]``.
+
+    The unbounded scheme lets a well-fitted block's weight run away — measured to
+    3.1e5-6.2e6 against 0.451 on the void block, with every field worse for it
+    (``docs/axial_nn.md`` section 7.2). Only ratios can matter, since Adam is
+    scale-invariant to a global factor, so renormalising first bounds the spread
+    without touching the balance. ``cap = 1`` disables the weighting entirely.
+    """
+    if cap <= 1.0:
+        return jnp.ones_like(target)
+    return jnp.clip(target / jnp.exp(jnp.log(target).mean()), 1.0 / cap, cap)
+
+
 # --- collocation ------------------------------------------------------------
 def _collocation(p: AxialParams, cfg: AxialTrainConfig, key: jax.Array) -> tuple:
     """Uniform points with an early-time cluster; time-only when feedback is on."""
@@ -453,7 +469,8 @@ def train(
         pts = _merge(_collocation(p, cfg, ck), rar, feedback=cfg.feedback)
         if it and it % cfg.weight_update_every == 0:
             gn = _block_grad_norms(model, p, cfg, pts)
-            w = cfg.weight_momentum * w + (1.0 - cfg.weight_momentum) * (gn.mean() / (gn + 1e-12))
+            target = bounded_weights(gn.mean() / (gn + 1e-12), cfg.weight_max_ratio)
+            w = cfg.weight_momentum * w + (1.0 - cfg.weight_momentum) * target
         model, opt_state, loss = step(model, opt_state, pts, w)
         if verbose and it % cfg.log_every == 0:
             print(f"[adam {it:6d}] loss={float(loss):.3e}")

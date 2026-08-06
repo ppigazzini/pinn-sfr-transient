@@ -212,6 +212,22 @@ def test_causal_weighting_matches_the_torch_backend():
     np.testing.assert_allclose(j_losses, t_losses, rtol=1e-14)
     assert pt._ALPHA_GATE == pj._ALPHA_GATE  # and the two ansatzes stay identical
     assert pt._EXP_BOUND == pj._EXP_BOUND
+    # ... and so does the block-weight bound, or the backends drift apart again
+    assert pt.AxialTrainConfig().weight_max_ratio == pj.AxialTrainConfig().weight_max_ratio
+    raw = np.array([1.0, 2.0, 4.0, 8.0, 0.5])
+    np.testing.assert_allclose(
+        np.asarray(pj.bounded_weights(jnp.asarray(raw), 100.0)),
+        pt._bounded_weights(torch.tensor(raw), 100.0).numpy(),
+        rtol=1e-14,
+    )
+
+
+def test_bounded_weights_clamps_the_spread():
+    """The measured fix: the ratio between the most- and least-weighted block is capped."""
+    raw = jnp.asarray([1e6, 1.0, 1e-6, 1.0, 1.0])
+    out = pj.bounded_weights(raw, 10.0)
+    assert float(out.max() / out.min()) <= 100.0 + 1e-9
+    np.testing.assert_allclose(np.asarray(pj.bounded_weights(raw, 1.0)), np.ones(5))
 
 
 def test_rar_is_disabled_under_feedback():

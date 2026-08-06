@@ -24,6 +24,7 @@ from pinn_sfr_transient.axial.pinn_torch import (
     AxialPinn,
     AxialTrainConfig,
     Trainer,
+    _bounded_weights,
     _precursors,
     relative_l2,
 )
@@ -317,6 +318,39 @@ def test_plan_a_collocates_in_time_only():
     zeta, that = trainer.collocation()
     assert zeta.shape == that.shape
     assert torch.equal(zeta, that)
+
+
+def test_block_weight_spread_is_bounded(model):
+    """The unbounded scheme ran to 6.2e6 against 0.451 and every field was worse for it.
+
+    `lambda_k = mean(g)/g_k` gives a block that is being fitted well an
+    ever-larger weight, with nothing to stop the feedback. Bounding the ratio is
+    the whole fix; measured in `docs/axial_nn.md` §7.2.
+    """
+    cfg = AxialTrainConfig(width=8, depth=2, n_colloc=64, weight_max_ratio=10.0)
+    trainer = Trainer(model, cfg)
+    for _ in range(40):  # far past where the unbounded version had diverged
+        trainer.update_block_weights(*trainer.collocation())
+    w = trainer.block_w
+    assert float(w.max() / w.min()) <= 10.0**2 + 1e-9
+    assert torch.all(w > 0.0)
+
+
+def test_block_weighting_can_be_switched_off_by_the_ratio_knob(model):
+    """`weight_max_ratio = 1` is the measured-equivalent "no weighting" setting."""
+    cfg = AxialTrainConfig(width=8, depth=2, n_colloc=64, weight_max_ratio=1.0)
+    trainer = Trainer(model, cfg)
+    for _ in range(5):
+        trainer.update_block_weights(*trainer.collocation())
+    np.testing.assert_allclose(trainer.block_w.numpy(), np.ones(5))
+
+
+def test_bounded_weights_preserves_ratios_below_the_cap():
+    """Only ratios matter (Adam is scale-invariant), so renormalising must not move them."""
+    raw = torch.tensor([1.0, 2.0, 4.0, 8.0, 0.5], dtype=torch.float64)
+    out = _bounded_weights(raw, cap=100.0)  # nothing clamps: spread is 16 < 100
+    np.testing.assert_allclose((out / out[0]).numpy(), (raw / raw[0]).numpy(), rtol=1e-14)
+    assert float(torch.log(out).mean().abs()) < 1e-14  # unit geometric mean
 
 
 def test_pseudo_time_anchor_uses_real_zeta_under_feedback():

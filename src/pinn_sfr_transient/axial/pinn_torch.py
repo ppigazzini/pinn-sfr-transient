@@ -80,6 +80,14 @@ class AxialTrainConfig:
     # Gradient-norm adaptive block weights [Wang, Teng & Perdikaris 2021]
     weight_update_every: int = 250
     weight_momentum: float = 0.9
+    # Largest factor by which any block weight may depart from the geometric mean,
+    # so the spread between the most- and least-weighted block is bounded by its
+    # square. **Measured, not chosen**: unbounded (the original scheme) the
+    # weights ran to 3.1e5-6.2e6 on `T_f` against 0.451 on the void, and every
+    # field was worse for it — see `docs/axial_nn.md` section 7.2. 1.0 disables
+    # the weighting entirely, which measures the same as 10.0 to within seed
+    # noise; 10.0 keeps the mechanism live where it is useful.
+    weight_max_ratio: float = 10.0
 
     # Residual-based adaptive refinement [Wu et al. 2023]
     rar_every: int = 2000
@@ -465,6 +473,16 @@ def _bounded_exp(x: torch.Tensor) -> torch.Tensor:
     return torch.exp(_EXP_BOUND * torch.tanh(x / _EXP_BOUND))
 
 
+def _bounded_weights(target: torch.Tensor, cap: float) -> torch.Tensor:
+    """Renormalise block weights to unit geometric mean, then clamp to ``[1/cap, cap]``.
+
+    ``cap = 1`` collapses every weight to one, i.e. no weighting at all.
+    """
+    if cap <= 1.0:
+        return torch.ones_like(target)
+    return (target / torch.exp(torch.log(target).mean())).clamp(1.0 / cap, cap)
+
+
 def _precursors(model: AxialPinn, that: torch.Tensor) -> torch.Tensor:
     """``c_i(t_hat)`` with ``c(0) = 1`` exact and ``c > 0`` guaranteed.
 
@@ -630,7 +648,23 @@ class Trainer:
         return (w * losses).mean() + self._pts_penalty()
 
     def update_block_weights(self, zeta: torch.Tensor, that: torch.Tensor) -> None:
-        """Balance the four blocks by gradient norm [Wang, Teng & Perdikaris 2021]."""
+        """Balance the blocks by gradient norm [Wang, Teng & Perdikaris 2021], **bounded**.
+
+        The scheme sets ``lambda_k = mean(g)/g_k``, so a block whose gradient
+        falls as it is fitted earns an ever-larger weight — a positive feedback
+        with nothing to stop it. Measured over three seeds, the weights reached
+        3.1e5 to 6.2e6 on ``T_f`` while the void block pinned at 0.451, a spread
+        of up to 5e6, and the run-to-run spread in the ``T_f`` error was 10.4x.
+        Bounding the ratio removes both: every field improves and the seed spread
+        collapses to 1.1-1.2x. The full table is in ``docs/axial_nn.md``
+        section 7.2.
+
+        Only *ratios* between blocks can matter — Adam is scale-invariant to a
+        global factor, which is exactly the argument REPORT-01 D39 uses to show
+        fixed per-equation scaling is a no-op — so the target is renormalised to
+        unit geometric mean before clamping. That leaves the relative balance
+        untouched and bounds only the spread.
+        """
         blocks = self._blocks(zeta, that)
         params = [q for q in self.model.parameters() if q.requires_grad]
         norms = []
@@ -643,7 +677,7 @@ class Trainer:
             norms.append(torch.sqrt(sq + 1e-30))
         gn = torch.stack(norms)
         with torch.no_grad():
-            target = gn.mean() / (gn + 1e-12)
+            target = _bounded_weights(gn.mean() / (gn + 1e-12), self.cfg.weight_max_ratio)
             m = self.cfg.weight_momentum
             self.block_w = m * self.block_w + (1.0 - m) * target
 
