@@ -241,7 +241,31 @@ adds 0.083 `β` of negative reactivity: −0.4498 `β` becomes −0.5329 `β`.
 Radial core expansion and control-rod-drive expansion remain unimplemented, so
 D-FB-3 narrows rather than closes.
 
-### D-TH-2 — Axially uniform flow after voiding *(open — M4)*
+### D-TH-2 — Axially uniform flow after voiding *(open — implemented, not usable)*
+
+**Annex A, N7b: a kinematic closure was built and measured.** Mixture continuity
+with both phases incompressible gives `du/dz = Γ_α (1 − ρ_v/ρ_l)`, integrated
+upward from the inlet — `physics.expansion_velocity`, behind
+`AxialParams.flow_expansion`, default `False`.
+
+It is **not usable as formulated.** Sizing it on the baseline solution the extra
+velocity is 1.6 m/s against a base 1.6 m/s at t = 16.5 s, i.e. a 2× CFL
+reduction, which should be affordable. It is not: with the term active the Radau
+solve fails to complete a 14 s transient at `n_axial = 40` inside 110 s, where the
+same case without it finishes in seconds.
+
+The reason is a feedback loop the CFL estimate does not see — expansion
+accelerates the flow, which sweeps more wall heat into the boiling region, which
+makes more vapour, which accelerates the flow. That loop *is* slug ejection, and
+it is why Chapter 12 carries a dedicated implicit slug-momentum solver rather
+than adding an expansion term to the energy equation. A kinematic `du/dz` cannot
+substitute for `Fc`, the condensation momentum loss, and the interface momentum
+balance of §12.6.
+
+**So D-TH-2 stays open, and now with its cost measured rather than assumed.**
+Closing it is the Lagrangian slug model, i.e. a scope change back toward what
+D-TH-1 replaced — not a coefficient and not a closure.
+
 
 **Departs from:** §12.2. **Status: open.**
 
