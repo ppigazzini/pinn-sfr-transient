@@ -1,0 +1,5936 @@
+==============================================================================
+CHAPTER 11. FPIN2: Pre-Failure Metal Fuel Pin Behavior Model
+source: https://sas-doc.nse.anl.gov/latest/Part03/Ch11/Ch11.html   (ANL/NSE-SAS/5.8.1)
+scope: out of scope: FPIN2
+==============================================================================
+[anchor: fpin2-pre-failure-metal-fuel-pin-behavior-model]
+
+# 11. FPIN2: Pre-Failure Metal Fuel Pin Behavior Model
+
+11.1. Introduction
+
+11.1.1. Brief Description of FPIN2
+
+11.1.2. Overview
+
+11.2. Fuel Element Mechanics
+
+11.2.1. Basic Stress-Strain-Displacement Equations
+
+11.2.2. Algorithm for Separating the Components of the Total Strain
+
+11.2.3. Continuous Cracking Model
+
+11.2.4. Finite Element Formulation
+
+11.2.5. Large Strain Analysis
+
+11.3. Metal Fuel Element Models
+
+11.3.1. Central Cavity and Plenum Models
+
+11.3.2. Extrusion of Molten Fuel into the Plenum
+
+11.3.3. Basic Metal Fuel Properties
+
+11.3.4. Secondary Creep of Metallic Fuels
+
+11.3.5. Fission Induced Gas Swelling of Metal Fuels
+
+11.3.6. Generalized Plastic Flow Behavior of Cladding Materials
+
+11.3.7. Fuel-Cladding Eutectic Formation
+
+11.3.8. Fuel Element Failure
+
+11.4. Integration into SAS4A/SASSYS-1 and Usage of Integrated Model
+
+11.4.1. SAS-FPIN2 Coupling Methodology
+
+11.4.2. Input Description for Interfaced SAS-FPIN2 Calculation
+
+11.4.3. Pre-transient Fuel Element Characterization
+
+11.4.4. Output Description and Graphics File Usage
+
+11.5. References
+
+11.6. Nomenclature
+
+11.7. Appendices
+
+11.7.1. Explicit Formulas for Stiffness Matrix and Load Vector
+
+11.7.2. List of Input Variables for Standalone FPIN2 Calculation
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch11/introduction.html]
+------------------------------------------------------------------------------
+[anchor: introduction]
+
+# 11.1. Introduction
+
+Since fuel element behavior during fast reactor transients can
+significantly affect accident energetics, an accurate and detailed model
+for the mechanical response of fuel elements is needed in safety
+assessments. During transients that lead to overheating of fuel and
+cladding, plastic straining of the cladding due to internal fission gas
+pressure and differential expansion between the fuel and cladding may
+result in cladding rupture and release of fission products to the
+primary coolant. In addition to the fundamental concern for cladding
+failure, fuel axial expansion can also have an important role due to the
+associated negative reactivity potential.
+
+FPIN2 is a validated computer code that provides mathematical models
+that simulate fuel and cladding mechanical response and predict fuel
+element performance over a wide range of transients. It performs an
+analysis of metal fuel and cladding deformation, including the impact of
+fuel-cladding interactions, and estimates cladding failure locations and
+times.
+
+FPIN2 has been incorporated into the SAS4A/SASSYS-1 code system for
+mechanical analysis of individual fuel elements. In this implementation,
+SAS4A/SASSYS-1 provides fuel and cladding temperatures, and FPIN2 performs
+the analysis of fuel element deformation and predicts the time and
+location of cladding failure. FPIN2 results are also used for the
+estimates of axial fuel expansion and the associated reactivity effects.
+In this chapter, FPIN2’s mechanical model, the SAS-FPIN2 coupling
+methodology, and the integrated SAS-FPIN2 model usage are presented.
+
+[anchor: brief-description-of-fpin2]
+
+## 11.1.1. Brief Description of FPIN2
+
+The FPIN2 code has been developed to analyze the thermal-mechanical
+phenomena that control fuel element behavior during fast reactor
+transients. The early versions of the code were based on the
+characteristics of oxide and carbide ceramic fuels [11-1,11-2]. More
+recently, FPIN2 has been adapted for the analysis of metallic fuels
+[11-3,11-4]. The overall modeling for this metallic fuel version of the
+code was validated through comparison of FPIN2 calculations with the
+data from TREAT tests on EBR-II irradiated fuel, prototypic of the IFR
+concept [11-5,11-6]. The most recent version of the code integrated with
+SAS4A/SASSYS-1 includes numerous model improvements that reflect the
+experience gained during these validation efforts.
+
+A wide range of material behavior is modeled in the code that describes
+elastic, plastic, thermal, and swelling performance of fuel elements.
+Since the primary emphasis in FPIN2 is on the mechanical analysis of the
+fuel and cladding, in the standalone version of the code temperatures
+are calculated using a simple model based on pin-in-a-pipe geometry and
+single-phase flow. The mechanical model, on the other hand, is based on
+a rigorous force-displacement formulation and uses an implicit finite
+element method with linear shape functions. The finite element scheme
+used allows convenient modular coding in which different models for
+material behavior and improvements in specific algorithms are easily
+implemented. The equilibrium equations are derived form equations of
+virtual work. The elements are defined in an (r,z) mesh; however, axial
+symmetry and generalized plane strain are assumed so that the analysis
+is essentially one-dimensional. The elements are allowed to interact
+only at the radial boundaries (nodes), and the displacements within the
+elements are approximated by linear functions of the nodal
+displacements.
+
+Additional models for metallic fuels such as models for fission gas
+generation and release, molten cavity formation, the large gas plenum,
+and fuel-cladding eutectic alloy formation are also provided in FPIN2 to
+complement the fuel element mechanics calculations. Internal pin
+pressure is determined from direct mass and volume balances in the
+central cavity and gas plenum. The molten fuel cavity in FPIN2 is
+located by the axial and radial extent to which the fuel has reached its
+solidus temperature and the elements inside the cavity boundary are
+dropped out of the stress-chain calculation. For cases where initial
+fuel melting occurs below the top axial segment, the plenum pressure
+calculation is decoupled from the molten cavity pressure calculation.
+Once melting reaches cavity-gas plenum interface, the two pressures are
+assumed to equilibrate and the plenum/cavity pressure-volume equations
+are solved together to give a common pin pressure and amount of molten
+fuel extruded into the plenum.
+
+Checking rupture is predicted in the code by using the life fraction
+criterion. The life fraction change over a time step is determined from
+the change in rupture time for the instantaneous average cladding
+temperature and the hoop stress obtained form the thin-shell equations
+used in developing the life fraction correlations. The effect of low
+melting point eutectic formation between the fuel and the cladding is
+included in the calculations by considering only the thickness of
+unaffected cladding that is available to carry the load.
+
+[anchor: overview]
+
+## 11.1.2. Overview
+
+The finite element formulation that constitutes the basic structure of
+FPIN2’s mechanics calculation is described in Section 11.2. Although the
+models presented in Section 11.2 are primarily developed for oxide fuel,
+they provide a substantially robust structure that allows modifications
+to handle metallic fuels. The modifications and additions to the code
+for metal fuels are discussed separately in Section 11.3. Most of these
+models for metallic fuels reflect the experience gained during FPIN2
+validation efforts through comparison with the data from TREAT tests.
+
+Two modes of SAS-FPIN2 coupled operations are provided. In the
+stand-alone mode, independent FPIN2 input is used and FPIN2 is executed
+without interfacing to SAS4A/SASSYS-1. In the interfaced mode,
+SAS4A/SASSYS-1 calculated fuel and cladding temperatures are transferred
+to FPIN2, and FPIN2 results are used in the analysis of fuel behavior.
+The SAS-FPIN2 coupling methodology and the integrated SAS-FPIN2 model
+usage along with input and output descriptions are presented in Section 11.4.
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch11/fuel-pin-mechanics.html]
+------------------------------------------------------------------------------
+[anchor: fuel-element-mechanics]
+
+# 11.2. Fuel Element Mechanics
+
+The mechanical model of FPIN2 uses an implicit finite element method
+based on a force-displacement formulation. The elements are defined by
+dividing the fuel and cladding into a number of axial segments and
+radial rings. Axial symmetry of the loads and generalized plane strain
+are assumed; therefore, the elements are allowed to interact only at the
+radial boundaries (nodes). The displacements within the elements are
+approximated by linear functions.
+
+The mechanical analysis of FPIN2 basically provides the fuel and
+cladding stresses, $\sigma$ , and nodal displacements, $\delta$ , for each element
+during overpower and undercooling events. The fuel and cladding behavior
+model includes thermal expansions, elastic/plastic/creep deformations,
+cracking, and melting. A continuous cracking model is used in which an
+element is assumed to crack in the radial direction when the tensile
+stress exceeds the fracture stress. Pre-existing cracks are also handled
+by specifying initial crack strains.
+
+The finite element equilibrium equations are derived from equations of
+virtual work that leads to a force balance between the external and
+internal forces
+
+$$\underline{f}^{\text{int}}\left( \sigma \right) = \underline{f}^{\text{ext}}$$ [eq 11.2-1]
+
+The external source vector in this equation, $\underline{f}^{\text{ext}}$ ,
+describes the external loads at the cavity boundary and the cladding
+outer surfaces, and the internal force vector, $\underline{f}^{\text{int}} \left( \sigma \right)$ , depends
+on the unknown stress field that must be found to satisfy Eq. (11.2-1) and
+the constitutive laws for the materials. When this generally non-linear
+set is linearized and the equations for both the fuel and cladding
+elements are assembled together for the unknown nodal displacements at
+each axial segment, the resulting linear equation set can be written
+symbolically as
+
+$$\left\lbrack K \right\rbrack \underline{\delta} = \underline{f}$$ [eq 11.2-2]
+
+where $\left\lbrack K \right\rbrack$ is the stiffness matrix. An elastic-plastic approximation is
+used in FPIN2 to derive the elements of the stiffness matrix involving
+the total derivatives of the constitutive equations. The force vector in
+Eq. (11.2-2) includes the external loads, thermal and other initial
+strains, and pseudo-forces involving approximations to the plastic
+and/or creep strains.
+
+The equilibrium equations, Eq. (11.2-1), and the linear equations, Eq. (11.2-2),
+are solved iteratively for each axial segment by making use of
+residuals. In this scheme, first the stiffness matrix, $\left\lbrack K \right\rbrack$ , and an
+initial guess for the force vector, $\underline{f}_{0}$ , are assembled using
+available information from the previous time step. Then, the linear
+equations Eq. (11.2-2) are solved for the new nodal displacements, and
+from them the increments of total strain are obtained. Assuming that the
+total material strain is a superposition of elastic, plastic, thermal,
+and swelling strains, the elastic component of the increments of total
+strain is separated (see Section 11.2.2) and used to calculate the
+stress field throughout the fuel element that satisfies the material
+constitutive equations. These stresses, then, are used to obtain the
+residuals form the equilibrium equations, Eq. (11.2-1), as follows
+
+$$\underline{r}_{\text{n}} = \underline{f}^{\text{ext}} - \underline{f}^{\text{int}}\left( \sigma_{\text{n}} \right)$$ [eq 11.2-3]
+
+where $n$ is the iteration index. Using these residuals, the initial
+estimate for the force vector in linear equations Eq. (11.2-2) is
+modified according to
+
+$$\underline{f}_{\text{n} + 1} = \underline{f}_{\text{n}} + \underline{r}_{\text{n}}$$ [eq 11.2-4]
+
+The procedure is repeated until convergence is established. This basic
+scheme is generalized in FPIN2 to include analysis of additional
+material performance in fuel and cladding such as cracking and melting.
+
+The details of this procedure described above are given in the following
+sections. The basic stress, strain, and nodal displacement relationships
+are discussed in Section 11.2.1, and the algorithm for separating
+elastic strain from the total strain is presented in Section 11.2.2.
+FPIN2 uses a continuous cracking model that permits cracks in the radial
+plane. The principles of this model are described in Section 11.2.3. The
+finite element formulation and the details of the implicit solution
+scheme outlined above are presented in Section 11.2.4. The formulations
+given in the aforementioned sections are based on updated geometry and
+can handle large strains. This is accomplished by performing the
+mechanics calculation on an incremental basis and updating the fuel
+element geometry at the end of each time step as described in Section 11.2.5.
+
+[anchor: basic-stress-strain-displacement-equations]
+
+## 11.2.1. Basic Stress-Strain-Displacement Equations
+
+In this section, a number of definitions and basic equations relating
+stresses, strains, and modal displacements are collected and presented
+in a uniform notation. These equations constitute the foundation of
+FPIN2’s mechanics model and serve as the basis for derivations in later
+sections. Formulas are derived for large-strain finite element analysis
+of deformation in a cylindrical fuel element under accident conditions.
+At the beginning of the analysis, the fuel element is assumed to be
+stress-free with steady-state thermal conditions. Thermoeleastic-plastic
+behavior is assumed for both the fuel and cladding. Swelling (including
+hot-pressing) and cracking are also allowed in both materials.
+
+Fuel elements are assumed to consist of a number of axial segments. The
+finite elements are defined in each axial segment separately and allowed
+to interact only at the radial boundaries (nodes). The displacements
+within the elements are approximated by linear functions of the nodal
+displacements. Axial symmetry of temperatures and external loads is
+assumed; therefore, the finite elements can be viewed as a series of
+concentric annular rings. The generalized plane strain assumption is
+used describe the interaction between the axial segments.
+
+Figure 11.2.1 FPIN2 Geometry
+
+Each axial segment is allowed to have regions containing central cavity
+gas and/or molten fuel, regions of solid material that are uncracked,
+and regions that contain radial cracks (Figure 11.2.1). If an element does
+not contain any cracks, the axisymmetry assumption dictates that the
+deformation depends only on $r$ . Although the existence of radial
+cracks, in general, destroys this symmetry, it is assumed that the
+number of cracks in an element is large enough to make the deformation
+essentially axisymmetric.
+
+[anchor: strain-displacement-relationships]
+
+### 11.2.1.1. Strain-Displacement Relationships
+
+In cylindrical coordinates, the strain-displacement relations are given
+by
+
+$$\underline{\varepsilon}^{t} = \left\{ \varepsilon_{\text{r}}^{t}, \varepsilon_{\theta}^{t}, \varepsilon_{\text{z}}^{t} \right\}^{T} = \left\{ \frac{\partial \text{u}}{\partial \text{r}} , \frac{u}{r} + \frac{1}{r} \frac{\partial \text{v}}{\partial\theta} , \frac{\partial \text{w}}{\partial \text{z}} \right\}^{T}$$ [eq 11.2-5]
+
+where $u, v$ , and $w$ are displacements in $r, \theta$ and $z$ coordinate
+directions, respectively. If the material is continuous, the deformation
+depends only on $r$ due to axisymmetry of temperatures and loads. If the
+material contains radial cracks, the tangential displacement, $v$ , can
+be expressed as a linear function of $\theta$ in a first order approximation
+assuming that sufficiently numerous radial cracks exist in the element.
+In the axial direction, the generalized plane strain condition requires
+that
+
+$$w = \psi z$$ [eq 11.2-6]
+
+where $\psi$ is a constant.
+
+For convenience, we may rewrite the strain-displacement relation as
+follows to differentiate the crack strain from continuous material
+strain
+
+$$\underline{\varepsilon}^{t} = \underline{\varepsilon}^{a} + \underline{\varepsilon}^{c}$$ [eq 11.2-7]
+
+where “apparent total strain” and “crack strain” vectors are given
+respectively by
+
+$$\underline{\varepsilon}^{a} = \left\{ \frac{\text{du}}{\text{dr}} , \frac{u}{r} , \psi \right\}^{T}$$ [eq 11.2-8]
+
+$$\underline{\varepsilon}^{c} = \left\{ 0, \varepsilon_{\theta}^{c}, 0 \right\}^{T}$$ [eq 11.2-9]
+
+Here, $\underline{\varepsilon}_{\theta}^{c}$ is the unknown crack strain component
+related to radial creaks in the material.
+
+[anchor: components-of-total-strain]
+
+### 11.2.1.2. Components of Total Strain
+
+The total material strain, $\underline{\varepsilon}^{t}$ , can be written as the sum of
+the elastic strain, $\underline{\varepsilon}^{e}$ , the plastic strain, $\underline{\varepsilon}^{p}$ ,
+the thermal strain, $\underline{\varepsilon}^{\theta}$ , and the swelling strain,
+ $\underline{\varepsilon}^{s}$ :
+
+$$\underline{\varepsilon}^{t} = \underline{\varepsilon}^{e} + \underline{\varepsilon}^{p} + \underline{\varepsilon}^{\theta} + \underline{\varepsilon}^{s}$$ [eq 11.2-10]
+
+[anchor: elastic-strain]
+
+#### 11.2.1.2.1. Elastic Strain
+
+In linear elasticity, the components of elastic strain are related to
+normal stresses through the generalized Hook’s law
+
+$$\underline{\sigma} = \left\lbrack C \right\rbrack \underline{\varepsilon}^{e}$$ [eq 11.2-11]
+
+where the matrix $\left\lbrack C \right\rbrack$ is given in terms of Young’s modulus, $E$ , and
+Poisson’s ratio, $\nu$ , as follows
+
+$$\begin{split}\left\lbrack C \right\rbrack = \frac{E\left( 1 - \nu \right)}{\left( 1 + \nu \right) \left( 1 - 2\nu \right)}\ \begin{bmatrix}
+1 & \frac{\nu}{\left( 1 - \nu \right)} & \frac{\nu}{\left( 1 - \nu \right)} \\
+\frac{\nu}{\left( 1 - \nu \right)} & 1 & \frac{\nu}{\left( 1 - \nu \right)} \\
+\frac{\nu}{\left( 1 - \nu \right)} & \frac{\nu}{\left( 1 - \nu \right)} & 1
+\end{bmatrix}\end{split}$$ [eq 11.2-12]
+
+In general, the elastic parameters $E$ and $\nu$ are functions of
+temperature, $T$ .
+
+[anchor: thermal-strain]
+
+#### 11.2.1.2.2. Thermal Strain
+
+In the original oxide fuel version of FPIN2, the components of isotropic
+thermal strain, $\underline{\varepsilon}^{\theta}$ , are expressed in terms of mean
+thermal expansion coefficient, $\alpha_{\text{m}}$ , as follows
+
+$$\varepsilon_{\text{r}}^{\Theta} = \varepsilon_{\theta}^{\Theta} = \varepsilon_{\text{z}}^{\Theta} = \alpha_{\text{m}} \left( T - T_{0} \right)$$ [eq 11.2-13]
+
+where $T_{0}$ is a reference temperature. In more recent
+applications for metallic fuels, the thermal expansion is expressed in
+terms of handbook linear thermal expansion data [11-7],
+ $\Delta L/L_{0}$ , as discussed in Section 11.3.3. Using the thermal
+data provides more detailed information since it automatically includes
+the total fuel expansion at solid-to-solid phase transitions. Any other
+stress-independent isotropic swelling strains (such as selling due to
+solid fission products or small surface tension dominated gas bubbles)
+are treated in the same manner as thermal strains in the model.
+
+[anchor: swelling-strain]
+
+#### 11.2.1.2.3. Swelling strain
+
+Stress dependent swelling strains, $\underline{\varepsilon}^{s}$ , due to fission gas in
+the fuel are also assumed to be isotropic and required to be expressed
+by an implicit function of the form
+
+$$g \left( \sigma_{\text{m}}, \varepsilon^{s}, \frac{\text{d}\varepsilon^{s}}{\text{dt}}, T, \nabla T, \rho \right) = 0$$ [eq 11.2-14]
+
+Here, the mean hydrostatic stress $\sigma_{\text{m}}$ is calculated from
+
+$$\sigma_{\text{m}} = \frac{\sigma_{\text{r}} + \sigma_{\theta} + \sigma_{\text{z}}}{3}$$ [eq 11.2-15]
+
+Hot-pressing is also considered in the model as a negative contribution
+to the total swelling.
+
+[anchor: plastic-strain]
+
+#### 11.2.1.2.4. Plastic strain
+
+The plastic deformation of the material is postulated to occur when a
+generalized von Mises flow condition is satisfied:
+
+$$f\left( \sigma_{\text{e}}, {\overline{\varepsilon}}^{p}, \frac{d{\overline{\varepsilon}}^{p}}{\text{dt}} , T \right) = 0$$ [eq 11.2-16]
+
+where the equivalent stress, $\sigma_{\text{e}}$ , and equivalent plastic
+strain, ${\overline{\varepsilon}}^{p}$ , are given
+respectively by the following equations
+
+$$\sigma_{\text{e}} = \sqrt{\frac{3}{2}\left( S_{\text{r}}^{2} + S_{\theta}^{2} + S_{\text{z}}^{2} \right)}$$ [eq 11.2-17]
+
+$${\overline{\varepsilon}}^{p} = \int{d{\overline{\varepsilon}}^{p}} = \int{\sqrt{\frac{2}{3}\left\lbrack \left( d\varepsilon_{r}^{p} \right)^{2} + \left( d\varepsilon_{\theta}^{p} \right)^{2} + \left( d\varepsilon_{z}^{p} \right)^{2} \right\rbrack}}$$ [eq 11.2-18]
+
+with the deviatoric stresses defined as
+
+$$S_{\text{i}} = \sigma_{\text{i}} - \sigma_{\text{m}}$$ [eq 11.2-19]
+
+ $\left( i = r, \theta, z \right)$ . The normality condition of plasticity states that
+the increment of the plastic strain is proportional to the gradient in
+stress space of the flow condition:
+
+$$\underline{\text{d}\varepsilon}^{p} = \text{d}\lambda \underline{W}$$ [eq 11.2-20]
+
+where $\text{d}\lambda$ is the proportionality factor. The gradient vector is given
+by
+
+$$\underline{W} = \left\{ \frac{\partial\sigma_{\text{e}}}{\partial\sigma_{\text{r}}} ,\frac{\partial\sigma_{\text{e}}}{\partial\sigma_{\theta}} , \frac{\partial\sigma_{\text{e}}}{\partial\sigma_{\text{z}}} \right\}^{T} = \frac{3}{2\sigma_{\text{e}}}\left\{ S_{\text{r}}, S_{\theta}, S_{\text{z}} \right\}^{T}$$ [eq 11.2-21]
+
+For the particular form of flow conditions chosen in this model, the
+factor of proportionality, $\text{d} \lambda$ , is identical to the increment in
+equivalent plastic
+strain, $\text{d}{\overline{\varepsilon}}^{p}$ . The plastic
+strains are assumed to occur with zero volume change:
+
+$$\varepsilon_{\text{r}}^{p} + \varepsilon_{\theta}^{p} + \varepsilon_{\text{z}}^{p} = 0$$ [eq 11.2-22]
+
+The constitutive equations for plastic deformation as well as swelling
+(Eq. (11.2-16) and Eq. (11.2-14)) indicate that, in general, the deformation
+depends on the changes in stress and temperature. Also, a major part of
+the deformation in a fuel element at high temperatures is rate
+dependent. The discussion of the material properties for the swelling
+and plastic behavior of the metallic fuel pins is given in Section 11.3.
+
+[anchor: incremental-stress-strain-relationships]
+
+### 11.2.1.3. Incremental Stress-Strain Relationships
+
+Since the elastic constants of the matrix $\left\lbrack C \right\rbrack$ in Eq. (11.2-11) are
+functions of temperature, $T$ , the incremental elastic stress components
+are given by
+
+$$\underline{\text{d}\sigma} = \left\lbrack C \right\rbrack \underline{\text{d}\varepsilon}^{e} + \frac{d\left\lbrack C \right\rbrack}{\text{dT}}{\underline{\varepsilon}}^{e} \text{dT} \
+= \left\lbrack C \right\rbrack \left( \underline{ \text{d}\varepsilon^{e} - \frac{ \text{d} \left\lbrack C \right\rbrack^{-1}}{\text{dT}} \underline{\sigma} \text{dT}} \right)$$ [eq 11.2-23]
+
+Using the equation representing the superposition of strains:
+
+$$\underline{\text{d}\varepsilon}^{e} = \underline{\text{d}\varepsilon}^{t} - \underline{\text{d}\varepsilon}^{p} - \underline{\text{d}\varepsilon}^{\theta} - \underline{\text{d}\varepsilon}^{s}$$ [eq 11.2-24]
+
+and replacing $\underline{\text{d}\varepsilon}^{p}$ with equivalent plastic strain increments,
+the change in stress can be expressed in terms of increment of total
+strain as follows
+
+$$\underline{\text{d}\varepsilon} = \left\lbrack C \right\rbrack \left( \underline{\text{d}\varepsilon}^{t} - \underline{W}d{\overline{\varepsilon}}^{p} - \underline{Q}\text{d}T - \underline{\text{d}\varepsilon}^{s} \right)$$ [eq 11.2-25]
+
+where, for convenience, the thermal modulus $\underline{Q}$ has been
+introduced:
+
+$$\underline{Q} = \underline{\alpha} + \frac{\text{d}\left\lbrack C \right\rbrack}{\text{dT}}^{- 1} \underline{\sigma}$$ [eq 11.2-26]
+
+The mechanical model of FPIN2 makes use of Eq. (11.2-25) to calculate
+approximate changes in stress given the estimates of plastic and
+swelling strain increments.
+
+[anchor: element-types]
+
+### 11.2.1.4. Element Types
+
+The actual form of Eq. (11.2-25) depends on the type of fuel element
+considered. Originally, four different types of elements are considered
+in the finite element formulation of FPIN2 that allows analysis of
+cracks in both radial and transverse planes. However, only two types of
+elements are available in the metal fuel version because cracks in
+metallic fuels, if they occur, are predominantly radial. The definitions
+of the two types are as follows:
+
+Type I: The element lies in continuous fuel or cladding. Both the axial
+and tangential crack strains are zero; therefore, the total stain in the
+element is equal to the apparent total strain. The resultant of the
+axial stress is also assumed to be known. [4]
+
+Type II: The element lies in a portion of the fuel where only radial
+cracks are present and the tangential crack strain is non-zero. The
+circumferential stress is constant everywhere in the element and equal
+to the boundary value $\sigma_{\theta} = - p_{\text{g}}$ ( $p_{\text{g}}$ is the
+pressure of the fission gas present in the crack opening.) As in Type I,
+the resultant axial force is assumed to be known.
+
+Table 11.2.1 Source of Calculated Stress and Strain Results for the Element Types
+
+ | 
+
+ | 
+Element Type
+ | 
+ | 
+Equilibrium and Strain-Displacement Equations
+ | 
+ | 
+Crack Strain Definition
+ | 
+ | 
+Stress Boundary Conditions
+ | 
+ | 
+Algorithm Described in Section 11.2.2
+ | 
+ | | 
+
+ | 
+
+ | 
+I
+ | 
+ | 
+Continuous
+ | 
+ | 
+ $\varepsilon_{\text{r}}^{a} , \varepsilon_{\theta}^{a} , \varepsilon_{\text{z}}^{a}$ 
+ | 
+ | 
+ $\varepsilon_{\theta}^{c} = 0$ 
+ | 
+ | 
+—
+ | 
+ | 
+ $\sigma_{\text{r}} , \sigma_{\theta} , \sigma_{\text{z}}$ 
+ | 
+
+ | 
+II
+ | 
+ | 
+Radial cracks
+ | 
+ | 
+ $\varepsilon_{\text{r}}^{a} , \varepsilon_{\theta}^{a} , \varepsilon_{\text{z}}^{a}$ 
+ | 
+ | 
+ $\varepsilon_{\theta}^{c} \neq 0$ 
+ | 
+ | 
+ $\sigma_{\theta} = - p_{\text{g}}$ 
+ | 
+ | 
+ $\sigma_{\text{r}} , \sigma_{\text{z}} , \varepsilon_{\theta}^{c}$ 
+ | 
+
+In each case, solving the finite element equilibrium equations gives the
+radial displacement, $u \left( r \right)$ , from which apparent strain,
+ $\underline{\varepsilon}^{a}$ , can be calculated. The stress and strain components not
+obtained from the equilibrium equations, strain-displacement relations,
+or stress boundary conditions are calculated by an algorithm to separate
+elastic strain from the total strain as described in Section 11.2.2 (see
+Table 11.2.1).
+
+[anchor: relationships-for-stress-increments-pseudo-stress]
+
+### 11.2.1.5. Relationships for Stress Increments: Pseudo-Stress
+
+Since the actual form of Eq. (11.2-25) depends on the type of fuel element
+considered, it can be expressed in following generalized form
+
+$$\underline{\text{d}\sigma} = \left\lbrack C \right\rbrack \underline{\text{d}\varepsilon}^{a} - \underline{\text{d}\sigma}^{\text{ps}}$$ [eq 11.2-27]
+
+where $\underline{\text{d}\sigma}^{\text{ps}}$ is the incremental pseudo-stress. Ad
+described in Section 11.2.4.2, given the estimates of plastic and
+swelling strain increments, this pseudo-stress term is treated as a
+constant within a time step. In other words, Eq. (11.2-27) expresses the
+changes in stress in terms of a known term $\underline{\text{d}\sigma}^{\text{ps}}$ and
+an unknown increment $\underline{\text{d}\varepsilon}^{a}$ . The calculated stress increments
+are then corrected to satisfy the equilibrium and constitutive equations
+to a desired accuracy as described in Section 11.2.4.2.
+
+Existence of radial cracks in the element alters the form of the elastic
+modulus, $\left\lbrack C \right\rbrack$ , and the pseudo-stress vector, $\underline{\text{d}\sigma}^{\text{ps}}$ . As
+shown in Table 11.2.1, for an uncracked element all three components of
+the total apparent strain are to be found from the equilibrium
+equations. Therefore, the incremental stress can be written in the form
+of Eq. (11.2-27) as
+
+$$\underline{\text{d}\sigma} = \left\lbrack C \right\rbrack \underline{\varepsilon}^{a} - \underline{\text{d}\sigma}_{\text{I}}^{\text{ps}}$$ [eq 11.2-28]
+
+where $\left\lbrack C_{\text{I}} \right\rbrack$ and the incremental pseudo-stress are simply
+defined by
+
+$$\left\lbrack C_{\text{I}} \right\rbrack = \left\lbrack C \right\rbrack$$ [eq 11.2-29]
+
+and
+
+$$\underline{\text{d}\sigma}_{\text{I}}^{\text{ps}} = \left\lbrack C \right\rbrack \left( \underline{Q} \text{dT} + \underline{W} \text{d}{\overline{\varepsilon}}^{p} + \underline{\text{d}\varepsilon}^{s} \right)$$ [eq 11.2-30]
+
+For an element with radial cracks (Type II), Table 11.2.1 indicates that
+
+$$\underline{\text{d}\varepsilon}^{c} = \left\{ 0 , d\varepsilon_{\theta}^{c} , 0 \right\}^{T}$$ [eq 11.2-31]
+
+$$\underline{\text{d}\sigma} = \left\{ \text{d}\sigma_{\text{r}} , - \text{dp}_{\text{g}} , \text{d}\sigma_{\text{z}} \right\}^{T}$$ [eq 11.2-32]
+
+By substituting these equations into Eq. (11.2-25) and premultiplying by
+ $\left\lbrack C \right\rbrack^{-1}$ , $\text{d}\varepsilon_{\theta}^{c}$ can be eliminated
+and the equations can be solved for $\text{d}\sigma_{\text{r}}$ and $\text{d}\sigma_{\text{z}}$ .
+The result can be written in the form of Eq. (11.2-28) as
+
+$$\underline{\text{d}\sigma} = \left\lbrack C_{\text{II}} \right\rbrack \underline{\text{d}\varepsilon}^{a} - \underline{\text{d}\sigma}_{\text{II}}^{\text{ps}}$$ [eq 11.2-33]
+
+where for Type II elements
+
+$$\begin{split}\left\lbrack C_{\text{II}} \right\rbrack = \frac{E}{1 - \nu^{2}}\begin{bmatrix}
+1 & 0 & \nu \\
+0 & 0 & 0 \\
+\nu & 0 & 1
+\end{bmatrix}\end{split}$$ [eq 11.2-34]
+
+and
+
+$$\begin{split}\underline{\text{d}\sigma}_{\text{II}}^{\text{ps}} = \frac{E}{1 - \nu^{2}}\begin{bmatrix}
+1 & 0 & \nu \\
+0 & 0 & 0 \\
+\nu & 0 & 1 \\
+\end{bmatrix}\begin{Bmatrix}
+W_{\text{r}}\text{d}{\overline{\varepsilon}}^{p} + Q_{\text{r}} \text{dT} + \text{d}\varepsilon^{s} + \frac{\nu \text{dp}_{\text{g}}}{E} \\
+\frac{\left( 1 - \nu^{2} \right)\text{d}p_{\text{g}}}{E} \\
+W_{\text{z}}\text{d}{\overline{\varepsilon}}^{p} + Q_{\text{z}} \text{dT} + d\varepsilon^{s} + \frac{\nu \text{dp}_{\text{g}}}{E}
+\end{Bmatrix}\end{split}$$ [eq 11.2-35]
+
+The singularity of $\left\lbrack C_{\text{II}} \right\rbrack$ reflects the fact that the radial
+displacements of the inner and outer radii of a cracked element cannot
+be determined uniquely from its exterior loads. This is due to the
+reason that a rigid body radial displacement of an element is a
+possibility. However, when all of the element stiffness matrices for an
+axial segment are assembled together, the resulting global stiffness
+matrix is, in general, non-singular and a unique solution for the
+displacements can be found.
+
+[anchor: algorithm-for-separating-the-components-of-the-total-strain]
+
+## 11.2.2. Algorithm for Separating the Components of the Total Strain
+
+In FPIN2, first the finite element equilibrium equations (described in
+Section 11.2.4.2) are solved to obtain the increments of total apparent
+strain. After separating the elastic contribution through the use of
+algorithm described below, we can then calculate the stresses from
+Eq. (11.2-11). The algorithm, which is based on a method developed by Schreyer
+[11-8], also yields the other components of the total strain. This
+algorithm has been extended in FPIN2 to include crack strains, swelling
+strains, and more general constitutive laws. The algorithm can be broken
+into six steps as follows.
+
+Step 1: At the beginning of a time step, $t_{\text{i}}$ , all quantities
+of interest are assumed to be known. Approximations to the elastic
+strains at the end of time step, $t_{\text{i}+1}$ , are
+calculated by subtracting the thermal strain (using new temperatures),
+estimated plastic strain, and the estimated swelling strain from the
+total strain:
+
+$$\underline{\varepsilon}_{\text{N}}^{e} = \underline{\varepsilon}_{\text{i} + 1}^{t} - \underline{\varepsilon}_{\text{i} + 1}^{\theta} - \underline{\varepsilon}_{\text{N}}^{p} - \varepsilon_{\text{N}}^{s}$$ [eq 11.2-36]
+
+Since the algorithm is iterative, an iteration counter, $N$ , is
+introduced as a subscript. In FPIN2, starting values $\left( N = 1 \right)$ for
+plastic strain are estimated using the values at the beginning of the
+time step and the previous plastic strain rate as follows
+
+$$\underline{\varepsilon}_{1}^{p} = \underline{\varepsilon}_{\text{i}}^{p} + \frac{\text{d}\underline{\varepsilon}_{\text{i}}^{p}}{\text{dt}}\Delta t$$ [eq 11.2-37]
+
+Similarly, an initial estimate for the swelling strain is given by
+
+$$\underline{\varepsilon}_{1}^{s} = \underline{\varepsilon}_{\text{i}}^{s} + \frac{\text{d}\underline{\varepsilon}_{\text{i}}^{s}}{\text{dt}}\Delta t$$ [eq 11.2-38]
+
+Step 2: The generalized Hooke’s law is used to calculate the stresses:
+
+$$\underline{\sigma}_{\text{N}} = \left\lbrack C \right\rbrack \underline{\varepsilon}_{\text{N}}^{e}$$ [eq 11.2-39]
+
+Step 3: The time rate-of-change of the equivalent plastic strain is
+calculated from
+
+$$\frac{\text{d}{\overline{\varepsilon}}_{\text{N}}^{p}}{\text{dt}} = \frac{{\overline{\varepsilon}}_{\text{N}}^{p} - {\overline{\varepsilon}}_{\text{i}}^{p}}{\Delta t}$$ [eq 11.2-40]
+
+Similarly, the rate-of-change of the swelling strain is calculated from
+
+$$\frac{\text{d}\varepsilon_{\text{N}}^{s}}{\text{dt}} = \frac{\varepsilon_{\text{N}}^{s} - \varepsilon_{\text{i}}^{s}}{\Delta t}$$ [eq 11.2-41]
+
+Step 4: Successive evaluations of the plastic flow condition
+ $f_{\text{N}}\left( \sigma_{\text{eN}}, {\overline{\varepsilon}}_{\text{N}}^{p}, \text{d}{\overline{\varepsilon}}_{\text{N}}^{p}/dt, T_{\text{i} + 1} \right)$ 
+and the swelling function
+ $g_{\text{N}}\left( \sigma_{\text{mN}}, \varepsilon_{\text{N}}^{s}, \text{d}\varepsilon_{\text{N}}^{s}/\text{dt}, T_{\text{i} + 1}, \nabla T_{\text{i} + 1}, \rho_{\text{N}} \right)$ 
+are performed using equivalent and mean stresses that are calculated
+from
+
+$$\sigma_{\text{eN}} = \sqrt{\frac{3}{2}\left( S_{\text{rN}}^{2} + S_{\theta\text{N}}^{2} + S_{\text{zN}}^{2} \right)}$$ [eq 11.2-42]
+
+$$\sigma_{\text{mN}} = \frac{\sigma_{\text{rN}} + \sigma_{\theta\text{N}} + \sigma_{\text{zN}}}{3}$$ [eq 11.2-43]
+
+Step 5: The increments in equivalent plastic strain and swelling
+strain are obtained from
+
+$$\Delta{\overline{\varepsilon}}_{\text{N}}^{p} = - \frac{f_{\text{N}}}{\frac{\text{df}_{\text{N}}}{\text{d}{\overline{\varepsilon}}^{p}}}$$ [eq 11.2-44]
+
+$$\Delta\varepsilon_{\text{N}}^{s} = - \frac{g_{\text{N}}}{\frac{\text{dg}_{\text{N}}}{\text{d}\varepsilon^{s}}}$$ [eq 11.2-45]
+
+These expressions represent the correction term in the Newton-Raphson
+method that is applied to find the
+ ${\overline{\varepsilon}}^{p}$ and $\varepsilon^{s}$ that
+satisfy the constitutive equations, Eq. (11.2-14) and Eq. (11.2-16). Experience
+indicates that convergence of the entire algorithm is enhanced if only a
+single Newton-Raphson correction is performed for each $N$ .
+Differentiating the plastic flow condition $f = 0$ with respect to
+ ${\overline{\varepsilon}}^{p}$ and the swelling
+function $g = 0$ with respect to $\varepsilon^{s}$ gives
+
+$$\frac{\text{df}}{\text{d}{\overline{\varepsilon}}^{p}} = - 3G\frac{\partial \text{f}}{\partial\sigma_{\text{e}}} + \frac{\partial \text{f}}{\partial{\overline{\varepsilon}}_{\text{p}}} + \frac{1}{\Delta t}\frac{\partial \text{f}}{\partial\dot{\varepsilon}}_{\text{p}}$$ [eq 11.2-46]
+
+and
+
+$$\frac{\text{dg}}{\text{d}\varepsilon^{s}} = - 3K\frac{\partial \text{g}}{\partial\sigma_{\text{m}}} + \frac{\partial \text{g}}{\partial\varepsilon^{s}} + \frac{1}{\Delta t}\frac{\partial \text{g}}{\partial{\dot{\varepsilon}}^{s}}$$ [eq 11.2-47]
+
+where $G$ is the shear modulus and $K$ is the bulk modulus
+
+$$G = \frac{E}{2\left( 1 + \nu \right)}$$ [eq 11.2-48]
+
+$$K = \frac{E}{3\left( 1 - 2\nu \right)}$$ [eq 11.2-49]
+
+The total derivatives in Eq. (11.2-46) and Eq. (11.2-47) are evaluated for
+fixed total strain at $t_{\text{i}+1}$ (the details of these
+derivations can be found in pp. 23-25 of Ref. 11-2).
+
+Step 6. The last step in the algorithm consists of calculating the new
+equivalent plastic strain:
+
+$${\overline{\varepsilon}}_{\text{N} + 1}^{p} = {\overline{\varepsilon}}_{\text{N}}^{p} + \Delta{\overline{\varepsilon}}_{\text{N}}^{p}$$ [eq 11.2-50]
+
+and the new plastic strain increments by use of the associated flow
+rule:
+
+$$\underline{\Delta \varepsilon}_{\text{N}}^{p} = \frac{3}{2\sigma_{\text{eN}}}\Delta{\overline{\varepsilon}}_{\text{N}}^{p} \left( \underline{sigma}_{\text{N}} - \underline{sigma}_{\text{mN}} \right)$$ [eq 11.2-51]
+
+and from them, the new plastic stains as follows
+
+$${\overline{\varepsilon}}_{\text{N} + 1}^{p} = \underline{\varepsilon}_{\text{N}}^{p} + \underline{\varepsilon}_{\text{N}}^{p}$$ [eq 11.2-52]
+
+Similarly, the new swelling strains are calculated from
+
+$${\overline{\varepsilon}}_{\text{N} + 1}^{s} = \underline{\varepsilon}_{\text{N}}^{s} + \Delta\varepsilon_{\text{N}}^{s}$$ [eq 11.2-53]
+
+It should be emphasized here that the increments in Eq. (11.2-52) and
+11.2-53 are added to the plastic and swelling strains corresponding to
+the last iterate, rather than to the strains corresponding to the
+beginning of the time step. Iteration continues through steps 1-6 until
+these increments, which are Newton-Raphson corrections to the strains,
+are acceptably small.
+
+For a continuous (Type I) element, the total strain is equal to the
+apparent strain calculated from the equilibrium equations. Therefore,
+the total strain vector is known at the end of a time step. For Type II
+elements, existence of radial cracks requires modifications to the
+algorithm to obtain non-zero crack strain component,
+ $\varepsilon_{\theta}^{e}$ . In Step 1, the component of the
+elastic strain not obtainable from Eq. (11.2-36),
+ $\varepsilon_{\theta\text{N}}^{e}$ , is calculated by substituting
+ $-p_{\text{g}}$ for $\sigma_{\theta \text{N}}$ in Eq. (11.2-39) and solving this
+equation for $\varepsilon_{\theta\text{N}}^{e}$ .
+
+When the algorithm is converged, the elastic, plastic, and swelling
+components of the circumferential and/or axial strains are known for
+both element types at the end of the time step. Using these values, the
+total circumferential strain is calculated from
+
+$$\varepsilon_{\theta,\text{i} + 1}^{t} = \varepsilon_{\theta,\text{i} + 1}^{e} + \varepsilon_{\theta,\text{i} + 1}^{p} + \varepsilon_{\theta,\text{i} + 1}^{\theta} + \varepsilon_{\theta,\text{i} + 1}^{s}$$ [eq 11.2-54]
+
+And finally, the crack strain is determined from the known “apparent
+total strain” as follows
+
+$$\varepsilon_{\theta,\text{i} + 1}^{c} = \varepsilon_{\theta,\text{i} + 1}^{t} - \varepsilon_{\theta,\text{i} + 1}^{a}$$ [eq 11.2-55]
+
+[anchor: continuous-cracking-model]
+
+## 11.2.3. Continuous Cracking Model
+
+If an element is uncracked in the $\theta$ plane, it is reasonable to assume
+that cracking will occur if the tensile stress $\sigma_{\theta}$ across that
+plane exceeds some fracture stress $\sigma_{\theta \text{F}}$ . At that point, the
+element type will change to Type II and a non-zero crack strain
+ $\varepsilon_{\theta}^{c}$ will begin to accumulate. If the crack
+is closed during the subsequent deformation, the element type will
+switch back to Type I which does not have cracks. However, consideration
+of the cracking/closure of the entire element at once may introduce
+large unphysical perturbations into the mechanical analysis that cause
+unrealistic results and difficulties with the convergence of the basic
+solution algorithm. This problem is avoided in FPIN2 by using a
+continuous cracking model [11-9].
+
+If the tangential stress in the uncracked part of the element is assumed
+to have reached the fracture stress and the tangential stress across the
+cracked part of the element equals $-p_{\text{g}}$ , the average
+tangential stress for the element is given by
+
+$$\sigma_{\theta} = \sigma_{\theta\text{F}} + \left( \sigma_{\theta\text{F}} + p_{\text{g}} \right)\frac{\varepsilon_{\theta}^{c}}{\varepsilon_{0}^{c}}$$ [eq 11.2-56]
+
+where $\varepsilon_{0}^{c}$ is a positive constant. The crack
+penetration distance is assumed to be proportional to the average crack
+opening strain, $\varepsilon_{\theta}^{c}$ . [5] This continuous
+cracking equation produces a stress across the fracture surface of a
+finite element that varies smoothly from the fracture stress down to the
+gas pressure as the crack strain increases from zero to
+ $\varepsilon_{0}^{c}$ . Once
+ $\varepsilon_{\theta}^{c}$ exceeds $\varepsilon_{0}^{c}$ ,
+it is assumed that the stress across the fracture surface remains equal
+to the gas pressure.
+
+Although a one-dimensional analysis cannot represent the details of the
+two-dimensional stress field at the tips of actual cracks, it has been
+shown that the continuous cracking model used in FPIN2 can determine the
+stable growth of the radial cracks to a reasonable accuracy [11-10].
+Incorporation of Eq. (11.2-56) into the mechanical analysis is
+straightforward, but it leads to somewhat lengthy expressions in
+relating the stresses to the strains for the cracked elements. The net
+result changes some of the equations in the algorithm described in
+Section 11.2.2 and the expressions in the element stiffness matrices as
+discussed Section 11.2.4.2.
+
+[anchor: finite-element-formulation]
+
+## 11.2.4. Finite Element Formulation
+
+In this section, the finite element method that is used to derive a set
+of algebraic equations governing the equilibrium of the fuel and
+cladding is described. The first step in the derivation is the
+development of integral forms of the equilibrium equations or, in other
+words, the virtual work equations.
+
+[anchor: virtual-work-equations]
+
+### 11.2.4.1. Virtual Work Equations
+
+When all shear stresses are set to zero, the equations of equilibrium in
+cylindrical coordinates reduce to
+
+$${\sigma}_{\text{r,r}} + \frac{{\sigma}_{\text{r}} - {\sigma}_{{\theta}}}{r} = \frac{{\sigma}_{{\theta},{\theta}}}{r} = {\sigma}_{\text{z,z}} = 0$$ [eq 11.2-57]
+
+Since the circumferential displacements are either known to be zero or
+can be determined form algorithm described in Section 11.2.2, developing
+the virtual work equations for the circumferential displacements is not
+necessary. By multiplying the equilibrium equation in the $r$ direction by
+an arbitrary function $\phi_{\text{r}}$ , and equation in the $z$ direction
+by $\phi_{\text{z}}$ , and integrating the resulting sum over the ring shaped
+finite element, we get
+
+$$\int_{\text{V}}{\left\lbrack \left( \sigma_{\text{r,r}} + \frac{\sigma_{\text{r}} - \sigma_{\phi}}{r} \right) \phi_{\text{r}} + \sigma_{\text{z,z}} \phi_{\text{z}} \right\rbrack \text{dV} = 0}$$ [eq 11.2-58]
+
+Using the formula for the derivative of a product and applying the
+divergence theorem, Eq. (11.2-58) can be rewritten as
+
+$$\begin{split}\int_{\text{V}}{\left\lbrack \sigma_{\text{r}}\varphi_{\text{r,r}} + \frac{\sigma_{\theta}\varphi_{\text{r}}}{r} + \sigma_{\text{z}}\varphi_{\text{z,z}} \right\rbrack \text{dV} = \int_{\text{V}}{\left\lbrack \frac{1}{r}\left( r\sigma_{\text{r}}\varphi_{\text{r}} \right)_{\text{r}} + \left( \sigma_{\text{z}}\varphi_{\text{z}} \right)_{\text{z}} \right\rbrack\text{dV}}} \\
+= \int_{\text{S}}{\left\lbrack \sigma_{\text{r}}\varphi_{\text{r}}{\hat{i}}_{\text{r}} + \sigma_{\text{z}}\varphi_{\text{z}}{\hat{i}}_{\text{z}} \right\rbrack \cdot \hat{n}\text{ds}}\end{split}$$ [eq 11.2-59]
+
+where $\hat{n}$ is the outward normal to the surface $S$ of volume
+ $V$ , and ${\hat{i}}_{\text{r}}, {\hat{i}}_{\text{z}}$ are unit vectors in the
+ $r$ and $z$ directions. Assuming that $\phi_{\text{z}}$ has the form
+
+$$\phi_{\text{z}} = \psi z$$ [eq 11.2-60]
+
+in which $\psi$ is an arbitrary constant, and also assuming that
+ $\phi_{\text{r}}, \sigma_{\text{r}}, \sigma_{\theta},$ and
+ $\sigma_{\text{z}}$ are all independent of $z$ , Eq. (11.2-59) reduces to
+
+$$\int_{\text{A}}{\left\lbrack \sigma_{\text{r}}\phi_{\text{r,r}} + \frac{\sigma_{\phi}\phi_{\text{r}}}{r} + \sigma_{\text{z}}\psi \right\rbrack \text{dA} = \int_{\text{C}}{\sigma_{\text{r}}\phi_{\text{r}}{\hat{i}}_{\text{r}} \cdot \hat{n} \text{dC} + \psi}}F$$ [eq 11.2-61]
+
+where $A$ is the area of the intersection of the ring shaped finite
+element with the plane $z = 0$ , and $C$ is the curve bounding $A$ . $F$ 
+describes the axial force.
+
+A linear approximation is used for the finite-element displacement
+function, $\phi_{\text{r}}$ , appearing in the virtual work equations.
+For the one-dimensional element in Figure 11.2.2, it is given by
+
+$$\phi_{\text{r}} = u_{1} N_{1} + u_{2} N_{2}$$ [eq 11.2-62]
+
+where $u_{1}$ and $u_{2}$ are the radial displacements of
+nodes 1 and 2, and the shape functions are
+
+$$N_{1} = \frac{b - r}{l}$$ [eq 11.2-63]
+
+and
+
+$$N_{2} = \frac{r - a}{l}$$ [eq 11.2-64]
+
+Substituting Eq. (11.2-62) into the virtual work equation, Eq. (11.2-61),
+and integrating over the area of the element, $A_{\text{e}}$ , we get [6]
+
+$${\int_{\text{A}_{\text{e}}}\left\lbrack B \right\rbrack}^{T} \text{dA} = \left\{ t_{1}, t_{2}, F \right\}^{T}$$ [eq 11.2-65]
+
+where $\left\lbrack B \right\rbrack, t_{1}$ and $t_{2}$ are defined as
+
+$$\begin{split}\left\lbrack B \right\rbrack = \frac{1}{1}\begin{bmatrix}
+ - 1 & 1 & 0 \\
+\left( \frac{b}{r} - 1 \right) & \left( 1 - \frac{a}{r} \right) & 0 \\
+0 & 0 & 1
+\end{bmatrix}\end{split}$$ [eq 11.2-66]
+
+$$\begin{aligned}
+t_{\text{i}} = \int_{\text{C}}{\sigma_{\text{r}} N_{\text{i}}}{\hat{i}}_{\text{r}} \cdot \hat{n}\text{dC} && \left( i=1,2 \right)~.
+\end{aligned}$$ [eq 11.2-67]
+
+Figure 11.2.2 Finite Element Cross Section
+
+[anchor: incremental-form-of-the-virtual-work-equations]
+
+### 11.2.4.2. Incremental Form of the Virtual Work Equations
+
+Eq. (11.2-65) can be viewed as expressing the balance between the external
+forces on the right hand side and the internal forces on the left hand
+side. The external forces are known functions of time. The stress field
+on the other hand must be found to satisfy the Eq. (11.2-65) and the
+constitutive laws for the material. Since the constitutive equations
+are, in general, highly non-linear, an incremental technique is used in
+FPIN2 based on iterations within each increment to calculate the
+stresses.
+
+Assuming that all the stresses at time $t_{\text{i}}$ are known, the
+equilibrium equation, Eq. (11.2-65), can be rewritten at the end of the
+time step, $t_{\text{i}+1}$ , as
+
+$$\underline{\Delta f}^{\text{int}} = \underline{\Delta f}^{\text{ext}}$$ [eq 11.2-68]
+
+where
+
+$$\underline{\Delta f}^{\text{int}} = \underline{f}_{\text{i} + 1}^{\text{int}} - \underline{f}_{\text{i}}^{\text{int}} = \int_{\text{A}_{\text{e}}} \left\lbrack B \right\rbrack^{T} \underline{\Delta \sigma} \text{dA}$$ [eq 11.2-69]
+
+and
+
+$$\underline{\Delta f}^{\text{ext}} = \underline{f}_{\text{i} + 1}^{\text{ext}} - \underline{f}_{\text{i}}^{\text{ext}}$$ [eq 11.2-70]
+
+The problem has now been reduced to finding the stress increments
+ $\underline{\Delta \sigma}$ appearing implicitly in Eq. (11.2-68) through Eq. (11.2-69). These
+stress increments
+
+$$\underline{\Delta \sigma} = \underline{\sigma}_{\text{i} + 1} - \underline{\sigma}_{\text{i}}$$ [eq 11.2-71]
+
+are calculated through an iterative procedure.
+
+As discussed in Section 11.2.1.5, the stress increments are approximated
+by Eq. (11.2-27) that is repeated here
+
+$$\underline{\Delta \sigma} = \left\lbrack C \right\rbrack_{\text{i}} \underline{\Delta \varepsilon}^{a} - \underline{\Delta \sigma}_{\text{i}}^{\text{ps}}$$ [eq 11.2-72]
+
+where the elastic modulus, $\left\lbrack C \right\rbrack_{\text{i}}$ , and pseudo-stress,
+ ${\underline{\Delta \sigma}^{\text{ps}}}_{\text{i}}$ , are evaluated using values at $t_{\text{i}}$ 
+(or at $t_{\text{i}+1}$ if known). The apparent strain
+increment, $\underline{\Delta \varepsilon}^{a}$ , in Eq. (11.2-72) can be expressed in terms of
+displacement increments through the strain-displacement relations, as
+discussed in Section 11.2.1.1. Using a similar representation with the
+virtual work functions, $\phi_{\text{r}}$ and $\phi_{\text{z}}$ , radial
+and axial displacement increments can be written as
+
+$$\Delta u = \Delta u_{1} N_{1} + \Delta u_{2} N_{2}$$ [eq 11.2-73]
+
+$$\Delta w = z\Delta\psi$$ [eq 11.2-74]
+
+Using these in Eq. (11.2-8) leads to
+
+$$\underline{\Delta \varepsilon}^{a} = \left\lbrack B \right\rbrack \underline{\Delta \delta}$$ [eq 11.2-75]
+
+where
+
+$$\underline{\Delta \delta} = \left\{ \Delta u_{1}, \Delta u_{2}, \Delta\psi \right\}^{T}$$ [eq 11.2-76]
+
+After substituting Eq. (11.2-75) into Eq. (11.2-72), and subsequently
+replacing the result in Eq. (11.2-69), we can rewrite the equilibrium
+equation, E. Eq. (11.2-68), in the form
+
+$$\left\lbrack K \right\rbrack_{\text{i}} \underline{\Delta \delta} = \underline{f}^{\text{ext}} + \underline{f}_{\text{i}}^{\text{ps}}$$ [eq 11.2-77]
+
+where
+
+$$\left\lbrack K \right\rbrack_{\text{i}} = \int_{\text{A}_{\text{e}}}{\left\lbrack B \right\rbrack_{\text{i}}^{T} \left\lbrack C \right\rbrack_{\text{i}}} \left\lbrack B \right\rbrack_{\text{i}}\text{dA}$$ [eq 11.2-78]
+
+and
+
+$$\underline{\Delta f}_{\text{i}}^{\text{ps}} = \int_{\text{A}_{\text{e}}}{\left\lbrack B \right\rbrack_{\text{i}}^{T} \underline{\Delta \sigma}_{\text{i}}^{\text{ps}}\text{dA}}$$ [eq 11.2-79]
+
+Here $\left\lbrack K \right\rbrack_{\text{i}}$ is the stiffness matrix evaluated at
+ $t_{\text{i}}$ using the known values. It should be noted that the forms
+of the matrices $\left\lbrack C \right\rbrack$ and $\left\lbrack B \right\rbrack$ in Eq. (11.2-78) and
+ $\underline{\Delta \sigma}^{\text{ps}}$ in Eq. (11.2-70) depend on the type of element
+considered as discussed earlier in Section 11.2.1.5. Explicit formulas
+for the stiffness matrix and load vectors for both element types
+considered are given in Section 11.7.1.
+
+[anchor: iterative-solution-of-the-equilibrium-equations]
+
+### 11.2.4.3. Iterative Solution of the Equilibrium Equations
+
+Eq. (11.2-77) is the incremental form of the virtual work (or equilibrium)
+equation. Since the stiffness matrix $\left\lbrack K \right\rbrack_{\text{i}}$ is known, it
+constitutes a set of linear equations that can be solved for the
+displacement increments, $\underline{\Delta \delta}$ . Eq. (11.2-75) then gives the increment
+in apparent total strain, $\underline{\Delta \varepsilon}$ , and the algorithm described in
+Section 11.2.2 gives the stresses at time $t_{\text{i}+1}$ .
+These stresses, in turn, can be used in Eq. (11.2-69) to calculate the
+internal force vector. However, since the expression for the stress
+increment in Eq. (11.2-72) is only approximate, the equilibrium equation
+Eq. (11.2-68) will not be satisfied in general.
+
+In FPIN2, another iterative procedure is used to ensure that the stress
+estimates satisfy the equilibrium equation to an acceptable degree of
+accuracy. By defining the residual, or the error, in Eq. (11.2-68) as
+follows
+
+$$\underline{r} = \underline{f}_{\text{i} + 1}^{\text{ext}} - \underline{f}_{\text{i} + 1}^{\text{int}}$$ [eq 11.2-80]
+
+The successive evaluations of the nodal variable increments, $\underline{\Delta \delta}$ ,
+are calculated from
+
+$$\left( K \right)_{\text{i}}\underline{\Delta \delta}_{\text{j}} = \underline{\Delta f}^{\text{ext}} + \underline{\Delta f}_{\text{i}}^{\text{ps}} + \underline{r}_{\text{j} - 1}$$ [eq 11.2-81]
+
+where $j$ is the iteration index.
+
+The convergence of this iterative scheme is monitored through the norm
+of the residual vector. If this error is sufficiently small, then the
+equilibrium equations are assumed to be satisfied and the computation is
+advanced to the next time step. Otherwise, the new residual vector
+ $\underline{r}_{\text{j}}$ , is calculated and added to the right hand side of
+Eq. (11.2-81) (the previous residual vector, $\underline{r}_{\text{i} + 1}$ , remains there
+as well). Figure 11.2.3 summarizes this algorithm for iterative solution
+of the equilibrium equations.
+
+Figure 11.2.3 Iterative Solution of Equilibrium Equations
+
+[anchor: large-strain-analysis]
+
+## 11.2.5. Large Strain Analysis
+
+Since fuel pin deformation at high temperatures may involve large
+plastic strains as well as massive local swelling, it is important that
+the formation of the mechanics model allows for analysis of large
+strains. Consideration of large strains has impacts on the equilibrium
+equations derived in Section 11.2.4 and the strain-displacement
+definitions given in Section 11.2.1. Both changes involve
+straightforward modifications of the incremental (small perturbation)
+analysis that has already been derived.
+
+Since the stresses at any time $t_{\text{i}+1}$ must satisfy the
+equilibrium equations Eq. (11.2-57) in the deformed cylindrical
+geometry, the virtual work equations should be applied to the fuel
+element geometry at $t_{\text{i}+1}$ rather than the initial
+geometry as assumed previously. Following through the derivation of the
+finite-element equilibrium equation, Eq. (11.2-65), it is easy to show
+that the only change necessary to accommodate large strains is to
+redefine the geometric variables to refer to the deformed element.
+Furthermore, if the incremental deformation between times $t_{\text{i}}$ 
+and $t_{\text{i}+1}$ is small, negligible error will be incurred
+by replacing the geometric variables at $t_{\text{i}+1}$ by
+these values at $t_{\text{i}}$ . These values are readily available form
+the initial undeformed geometry and the known deformation. From
+Eq. (11.2-73) and Eq. (11.2-74) for instance, we have
+
+$$a = a_{0} + \sum_{\text{i}}{\Delta u_{1}}$$ [eq 11.2-82]
+
+$$b = b_{0} + \sum_{\text{i}}{\Delta u_{2}}$$ [eq 11.2-83]
+
+$$r = r_{0} + \sum_{\text{i}}{\Delta u}$$ [eq 11.2-84]
+
+$$z = z_{0} + \sum_{\text{i}}{\Delta w}$$ [eq 11.2-85]
+
+where the subscript 0 indicates the initial values, and the sums are
+taken over the entire deformation history.
+
+The second change in small-perturbation formulation due to large strains
+is in the strain-displacement definitions. Several large strain measures
+can be defined that satisfy the necessary requirement of objectivity
+[11-11]. A convenient large strain measure for the fuel elements is
+given by the logarithm of the stretches along the principal strain
+directions. Assuming that the principal strain axes do not rotate for
+the deformation of interest and the incremental displacements are small,
+these logarithmic large strain measures can be written as
+
+$$\varepsilon_{\text{r,i} + 1}^{t} = \varepsilon_{\text{r,i}}^{t} + \frac{\partial}{\partial \text{r}_{\text{i}}} \left( \Delta u \right)$$ [eq 11.2-86]
+
+$$\varepsilon_{\theta,\text{i} + 1}^{t} = \varepsilon_{\theta,\text{i}}^{t} + \frac{\Delta u}{r_{\text{i}}}$$ [eq 11.2-87]
+
+$$\varepsilon_{\text{z,i} + 1}^{t} = \varepsilon_{\text{z,i}}^{t} + \frac{\partial}{\partial \text{z}_{\text{i}}} \left( \Delta w \right)$$ [eq 11.2-88]
+
+Comparing Eq. (11.2-86) with Eq. (11.2-5) shows that, in order to use the
+logarithmic large strain measure, the only change necessary in the
+analysis given previously is to use the displacement increments to
+calculate the strain increments and then to determine total strains by
+adding the increments throughout the deformation history.
+
+Footnotes
+
+[4]
+
+If the fuel-cladding gap is closed, this resultant axial force may
+include both fuel and cladding.
+
+[5]
+
+Because of the definition of crack strain in Eq. (11.2-7),
+ ${}^{c}$ will be negative for opening of cracks. The crack
+strain input to and output from FPIN2 is the absolute value of this
+quantity.
+
+[6]
+
+To define $\phi_{r}$ over the entire domain of the integration,
+ $A$ , we must cover the domain with a finite element mesh and
+then sum the contributions at each node from all elements sharing the
+node. For brevity, this finite element assembly process is not
+discussed here and formulation is developed for a single element
+only.
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch11/implementation.html]
+------------------------------------------------------------------------------
+[anchor: metal-fuel-element-models]
+
+# 11.3. Metal Fuel Element Models
+
+Although the FPIN2 code was originally developed for the purpose of
+analyzing oxide fuels, it has been modified for the analysis of metallic
+fuels. The metal fuel version of the code includes numerous improvements
+to the basic mechanical analysis models that reflect the experience
+gained from the in-pile TREAT tests on EBR-II irradiated prototypic fuel
+of the IFR concept. In addition, models for molten cavity formation, the
+large gas plenum, molten fuel extrusion, and fuel-cladding eutectic
+formation are provided to complement the fuel element mechanics
+calculation.
+
+There are many differences between metal and oxide fuels that affect the
+transient response of the fuel elements. The existence of a large
+fission gas plenum in metal-alloy fueled elements plays a major role in
+determining the internal pin pressure during a transient. The sodium
+bond and comparatively large radial fuel-cladding gap requires
+consideration of expelling sodium into the plenum as the fuel expands
+and the gap closes. Metal fuel thermal conductivity is an order of
+magnitude larger than oxide fuel, and that leads to a flatter radial
+temperature profile and a more rapid spreading of the region of molten
+fuel. Since the metal fuel solidus temperature is well below the
+cladding melting temperature, in many cases fuel can be expected to melt
+entirely before the cladding fails. Due to the high fuel thermal
+conductivity, melting usually begins at or near the top of the fuel
+column with the axial profile of the fuel centerline temperature more
+closely following the coolant temperature profile than that for oxide
+fuel. This prevents large cavity pressurization effects in metallic
+fuels. In addition, a low melting temperature eutectic alloy is expected
+to form in metallic fuels between the fuel and cladding at temperatures
+below the anticipated cladding failure. This eutectic formation allows
+the fuel and cladding to slip freely in the axial direction and can lead
+to an accelerated cladding failure at elevated temperatures. Cracking is
+not a significant phenomenon in metallic fuel pins, but metal fuel
+swelling can be important.
+
+The current version of the FPIN2 coupled with SAS4A/SASSYS-1 includes
+various model modifications and additions that address these differences
+between oxide and metal fuels. The following sections contain
+discussions of these additions and modifications made to FPIN2 for the
+analysis of metal-fueled elements. The most significant extension to the
+code is the inclusion of a model for the plenum region above the fuel
+column as discussed in Section 11.3.1. Extrusion of molten fuel into the
+plenum as an additional axial expansion mechanism is discussed in
+Section 11.3.2. Basic mechanical properties of metal-alloy fueled
+elements are outlined in Section 11.3.3. The constitutive equations for
+fuel creep and a non-equilibrium approximation to fuel swelling are
+presented in Section 11.3.4 and Section 11.3.5, respectively. The
+plastic flow behavior of three types of cladding materials commonly used
+in metallic fuel elements of the IFR concept is discussed in Section 11.3.6. Fuel-cladding eutectic formation and its impact on the
+mechanical analysis of fuel elements are summarized in Section 11.3.7.
+And finally, the fuel element failure formulation is outlined in Section 11.3.8.
+
+[anchor: central-cavity-and-plenum-models]
+
+## 11.3.1. Central Cavity and Plenum Models
+
+Internal pin pressure is calculated in FPIN2 using straightforward
+volume accounting models of the central cavity and the gas plenum. The
+radial boundary of the cavity for each axial segment is assumed to be at
+the point where the fuel has reached the solidus temperature. Elements
+inside the cavity boundary are assumed to be in a hydrostatic state of
+stress equal to the cavity pressure and are dropped out of stress-strain
+calculation. These elements occupy a volume in proportion to their
+density and contribute to the volume and mass balance iteration that
+determines the cavity pressure.
+
+Metallic fuel elements lead to relatively low transient induced internal
+pin pressure since (1) fuel porosity easily accommodates the fuel volume
+expansion upon melting, (2) fuel melting begins at or near the top of
+fuel column, and (3) metallic fuels have less restrictive flow path for
+fission gas passage to the plenum. Thus, the large gas plenum is very
+effective in mitigating any large pressure buildup inside the fuel
+elements. The pin plenum model of FPIN2 is based on the following
+assumptions:
+
+The internal pin pressure, $p_{\text{g}}$ , is considered uniform
+throughout the interior of a metallic fuel element.
+
+The plenum region is assumed to be at the uniform temperature. [1]
+
+The thermal expansion of the fill sodium and its expulsion from the
+fuel-cladding gap as the gap closes is accounted for. However, sodium
+compressibility is assumed to be negligible at the expected pressure
+range.
+
+The first level of iteration, or outer loop, in the mechanical analysis
+section of the FPIN2 is the search for the internal pin pressure
+ $p_{\text{g}}$ . According to the calculation sequence, the temperatures
+of the cavity and plenum materials are known at the beginning of a new
+time step before the pin pressure is found. Using these temperatures,
+the following can be calculated:
+
+Cavity boundary changes due to fuel melting,
+
+Mass of the gas in the cavity, including the gas released upon
+melting,
+
+Mass-average temperature of the gas in the cavity,
+
+Volume available from porosity released after fuel melting,
+
+The thermal expansion of the sodium in the plenum.
+
+The algorithm for calculating the plenum and cavity pressures are
+outlined below for the case where the two volumes are connected and
+share a common pressure, $p_{\text{g}}$ . The pin pressure, $p_{\text{g}}$ ,
+is calculated by considering the two relationships between the gas
+volume and pressure that must be satisfied: the ideal gas law, and the
+interaction between pressure and cavity boundary displacements. Pin
+molten-cavity and plenum gases are considered as separate entities with
+individual compositions and temperatures. Since the masses of the gases
+in the cavity, $m_{\text{g}}^{C}$ , and the plenum, $m_{\text{g}}^{P}$ , as
+well as the temperatures of the cavity gas, $T_{\text{g}}^{C}$ , and the
+plenum gas, $T_{\text{g}}^{P}$ , are known, the ideal gas law reduces to
+an inverse relationship between the total gas volume,
+ $V_{\text{g}}^{\text{IGL}}$ , and the pressure as follows
+
+$$V_{\text{g}}^{\text{IGL}} = \frac{m_{\text{g}}^{C} R^{C} T_{\text{g}}^{C} + m_{\text{g}}^{P} R^{P} T_{\text{g}}^{P}}{p_{\text{g}}}$$ [eq 11.3-1]
+
+where $R^{C}$ and $R^{P}$ are the gas constants for cavity
+and plenum gases, respectively. The second relationship involves the
+geometrical calculation of the volume available to the gas that depends
+on displacement of the solid fuel, cladding, and plenum tube. The liquid
+fuel and sodium are assumed to be incompressible. Since the gas in the
+cavity and plenum are considered separately, the total volume has two
+components
+
+$$V_{\text{g}}^{\text{MECH}}\left( p_{\text{g}} \right) = V_{\text{g}}^{C}\left( p_{\text{g}} \right) + V_{\text{g}}^{P}\left( p_{\text{g}} \right)$$ [eq 11.3-2]
+
+where $V_{\text{g}}^{C}$ is the available cavity volume that is
+calculated using the finite element analysis of solid fuel and cladding,
+and $V_{\text{g}}^{P}$ is the volume available for the gas in the plenum.
+A negative value of $V_{\text{g}}^{C}$ means that the molten fuel
+material is extruded upward into the plenum.
+
+The two values for the total volume, $V_{\text{g}}^{\text{IGL}}$ and
+ $V_{\text{g}}^{\text{MECH}}$ , are equal when the correct value of
+ $p_{\text{g}}$ is found. In FPIN2, Newton’s method is used to fine the
+value of $p_{\text{g}}$ such that
+
+$$f\left( p_{\text{g}} \right) = V_{\text{g}}^{\text{IGL}} - V_{\text{g}}^{\text{MECH}} = 0$$ [eq 11.3-3]
+
+The Newton iteration equation
+
+$$p_{\text{g}}^{i + 1} = p_{\text{g}}^{i} - \frac{f\left( p_{\text{g}}^{i} \right)}{f'\left( p_{\text{g}}^{i} \right)}$$ [eq 11.3-4]
+
+requires the derivative of $V_{\text{g}}^{\text{IGL}}$ and
+ $V_{\text{g}}^{\text{MECH}}$ with respect to $p_{\text{g}}$ ( $i$ is the
+iteration counter). The derivative of $V_{\text{g}}^{\text{IGL}}$ is
+easily calculated from the ideal gas law and the derivative of
+ $V_{\text{g}}^{\text{MECH}}$ is found by forming a finite difference
+quotient from two calculations of $V_{\text{g}}^{\text{MECH}}$ at two
+neighboring values of $p_{\text{g}}$ .
+
+The total mass of sodium, $m_{\text{Na}}^{T}$ , and mass of the gas
+in the plenum, $m_{\text{g}}^{P}$ , are obtained from the initial
+conditions. The inventory of sodium within the fuel element consists of
+sodium in the fuel-cladding gap, $m_{\text{Na}}^{G}$ , and in the
+plenum, $m_{\text{Na}}^{P}$ :
+
+$$m_{\text{Na}}^{T} = m_{\text{Na}}^{P} + m_{\text{Na}}^{G}$$ [eq 11.3-5]
+
+where
+
+$$m_{\text{Na}}^{P} = \rho_{\text{Na}}\left( T^{P} \right) \pi r_{\text{P}}^{2} h_{\text{Na}}^{P}$$ [eq 11.3-6]
+
+$$m_{\text{Na}}^{G} = \sum_{\text{j}} \rho_{\text{Na}}\left( T_{\text{j}} \right) \pi \left( r_{\text{ci}}^{2} - r_{\text{fo}}^{2} \right)_{\text{j}} \Delta z_{\text{j}}$$ [eq 11.3-7]
+
+The symbols in Eq. (11.3-6) and Eq. (11.3-7) are defined as follows:
+
+ $\rho_{\text{Na}}$ = sodium density,
+
+ $T^{P}$ = plenum temperature,
+
+ $r_{\text{p}}$ = cladding inner radius in plenum region,
+
+ $h_{\text{NA}}^{P}$ = height of sodium column in plenum,
+
+ $r_{\text{ci}}$ = cladding inner radius for axial segment j,
+
+ $r_{\text{fo}}$ = fuel outer radius for axial segment j,
+
+ $\Delta z_{\text{j}}$ = height of fuel axial segment j.
+
+The mass of the plenum gas is determined by using the ideal gas law:
+
+$$m_{\text{g}}^{P} = \frac{P^{P} \pi r_{\text{P}}^{2}\left( h^{P} - h_{\text{Na}}^{P} \right)}{R^{P}T^{P}}$$ [eq 11.3-8]
+
+where $P^{P}$ is the plenum pressure and $h^{P}$ is initial
+plenum height. The plenum pressure is obtained from a user specified
+reference pressure at a reference temperature as follows
+
+$$P^{P} = P_{\text{ref}}\frac{T^{P}}{T_{\text{ref}}}$$ [eq 11.3-9]
+
+During the transient analysis, the cavity pressure algorithm requires
+the volume in the plenum available to the plenum fission gas and to the
+material extruded from the molten cavity. This value is calculated by
+subtracting the volume of the sodium in the plenum from the total volume
+of the deformed plenum tube. Thus,
+
+$$V_{\text{g}}^{P} = V^{P} - V_{\text{Na}}^{P}$$ [eq 11.3-10]
+
+The total plenum volume, $V^{P}$ , is found by assuming that the
+plenum tube can be treated as a thermoelastic thin shell. The volume of
+sodium in the plenum is found using the equation
+
+$$V_{\text{Na}}^{P} = \frac{m_{\text{Na}}^{T} - m_{\text{Na}}^{G}}{\rho_{\text{Na}}\left( T^{P} \right)}$$ [eq 11.3-11]
+
+[anchor: extrusion-of-molten-fuel-into-the-plenum]
+
+## 11.3.2. Extrusion of Molten Fuel into the Plenum
+
+The procedure in FPIN2 for calculating the behavior of the molten cavity
+materials uses a simple hydrostatic model based on volume accounting. As
+discussed in previous section, a volume and mass balance iteration
+determines the cavity pressure. For transients in which initial fuel
+melting is observed below the fuel-plenum interface, plenum and cavity
+pressure equations are solved separately, leading generally to a cavity
+pressure larger than the plenum pressure. Once melting reaches the top
+axial segment, the two pressures eventually equilibrate to give a common
+pin pressure. The temporary imbalance between the cavity and plenum
+pressures plays an important role in the dynamics of the molten fuel
+extruded into the plenum.
+
+The extrusion of the molten cavity material into the plenum is
+calculated at the completion of the pressure iteration and consists of
+calculating the excess volume of the cavity materials over the volume
+available in the molten cavity. Both the radial and axial dimensions of
+the cavity section for each axial segment are based on the deformed
+geometry. The materials in the cavity include liquid fuel at a
+temperature above the liquidus temperature, solid fuel at a temperature
+between the solidus and liquidus, and the fission gas that is assumed to
+obey the ideal gas law and is released to the cavity in proportion to
+the melt fraction. Open porosity is available to the fission gas volume
+when the fuel reaches the solidus temperature, but closed grain boundary
+porosity is release d in proportion to the metal fraction.
+
+For low-burnup fuel pins, the bond sodium in the fuel-cladding radial
+gap affects the extrusion of molten fuel into the plenum. The metallic
+fuel can melt completely across the fuel radial cross section in an
+axial segment. Although the large gap in fresh metallic fuels is not
+expected to close by the time of 100% fuel melting, the bond sodium in
+the gap is expected to escape into the plenum as the molten fuel slumps
+to fill up the gap due to the large density difference between fuel and
+sodium. This local slumping lessens the fuel extrusion; however, metal
+fuels at as low as 0.35 at.% burnup contain sufficient fission gas to
+result in net upward axial fuel motion [11-12]. Two options are provided
+in FPIN2 to model this behavior. The first option is to assume that the
+fuel does not slump and expel the bond sodium. In this case, the fuel
+outer boundary is assumed to remain at the position it was in at the
+time of 100% melting. The second (default) option allows the molten fuel
+to move out to the cladding, with the bond sodium being expelled into
+the plenum and the gap volume being added to the molten cavity.
+
+To handle the second option, a gap closure model has been added to move
+the molten fuel out to the cladding over several time steps as the bond
+sodium is expelled into the plenum and the gap volume becomes available
+to the molten cavity materials. In order to maintain the stability of
+the numerical calculation, a varying closure rate is coded in FPIN2 in
+which the fraction of the gap closed per time step is specified.
+Somewhat artificial time step dependence of this transition is necessary
+because the temperature drop across the gap may be as large as 30K.
+Since the radial temperature profile across the fuel element is
+relatively flat, an excessively rapid reduction of the gap $\Delta T$ may cause
+computational difficulties such as fuel refreezing during a power rise.
+
+[anchor: basic-metal-fuel-properties]
+
+## 11.3.3. Basic Metal Fuel Properties
+
+Thermal Properties: In the interfaced mode, the SAS-FPIN2 integrated
+model uses SAS4A/SASSYS-1 routines to calculate fuel and cladding thermal
+material properties as discussed in Chapter 10. In the stand-alone mode,
+FPIN2 uses its own built-in correlations for metallic IFR fuel that have
+been developed by the “Metallic Fuel Properties Working Group” [11-12].
+Melting related properties for the metallic fuels such as solidus and
+liquidus temperatures, heat of fusion, and volume change on melting are
+calculated using identical algorithms in FPIN 2 and SAS4A/SASSYS-1.
+
+Elastic Properties: Tensile test data at room temperature for uranium
+and its alloys indicate yielding at very low stresses. The equation used
+in FPIN2 code for the Young’s modulus is as follows
+
+$$E = 0.12 \cdot 10^{6} \left( 1 - 1.2 p \right) \left( 1 - 0.754 \cdot 10^{-3} \left( T - 588 \right) \right)$$ [eq 11.3-12]
+
+where $E$ is Young’s modulus (in Bars), $p$ is fractional porosity, and
+ $T$ is temperature $\left( K \right)$ . This equation gives a value of one-tenth the
+handbook [11-7] value and should more properly be called a tangent
+modulus. However, for the expected monotonic loading of most FPIN2
+calculations, the fuel is treated as a pseudo-elastic-plastic material
+with plastic straining handled as secondary creep and yielding is
+included as part of the “elastic” behavior. In the code, Poisson’s ratio
+is calculated from
+
+$$\nu = 0.27 \left( 1 - 0.8 p \right) \left( 1 + 0.854 \cdot 10^{- 3} \left( T - 588 \right) \right)$$ [eq 11.3-13]
+
+where $\nu$ is Poisson’s ratio, $p$ is fractional porosity, and
+ $T$ is temperature $\left( K \right)$ .
+
+Linear Thermal Expansion: In the metal fuel version of FPIN2, the
+thermal expansion is expressed in terms of handbook linear thermal
+expansion data, $\Delta L/L_{0}$ [11-7]. Using the data rather than the
+coefficient of thermal expansion, $\alpha$ , results in a more accurate
+accounting of the total expansion from room temperature to melting since
+it automatically includes the expansion at solid-to-solid phase
+transitions. The thermal expansion data and phase transition expansions
+have been approximated in the code as three straight line segments with
+breaks at the two solid-to-solid phase change temperature associated
+with the beginning and ending of the transformation to pure $\gamma$ phase
+solid solution. The equations used for the binary fuel are
+
+$$\begin{split} \frac{\Delta L}{L_{0}} = \begin{cases}
+1.695 \cdot 10^{- 5}\left( T - 293 \right) & T < 900 \\
+0.0103 + 7 \cdot 10^{- 5}\left( T - 900 \right) & 900 < T < 1000 \\
+0.0173 + 2.12 \cdot 10^{- 5}\left( T - 1000 \right) & T > 1000
+\end{cases}\end{split}$$ [eq 11.3-14]
+
+And, the equations for the ternary fuel are
+
+$$\begin{split} \frac{\Delta L}{L_{0}} = \begin{cases}
+1.67 \cdot 10^{-5} \left( T - 293 \right) & T < 864 \\
+0.0095 + 6.7 \cdot 10^{- 5}\left( T - 864 \right) & 864 < T < 950 \\
+0.0153 + 2.12 \cdot 10^{- 5}\left( T - 950 \right) & T > 950 \\
+\end{cases}\end{split}$$ [eq 11.3-15]
+
+where and $T$ is the temperature $\left( K \right)$ .
+
+[anchor: secondary-creep-of-metallic-fuels]
+
+## 11.3.4. Secondary Creep of Metallic Fuels
+
+Uranium alloys deform plastically under constant load at elevated
+temperatures. The secondary, or minimum, creep rate is defined as the
+steady-state rate that is attained under these conditions. The equations
+added to FPIN2 for metal fuels are obtained from a review of the data
+and theory for modeling secondary creep of U-Pu-Zr alloys that are of
+interest to the IFR concept [11-13]. Application of creep data to fuel
+pin analysis often requires correlating the data using mathematical
+functions of the governing variables. Such correlations range from
+purely empirical equations to theoretical equations involving
+fundamental physical properties. In FPIN2, and intermediate approach is
+preferred where theoretical models are used to obtain the form of the
+equation, but the parameters are determined form the creep data rather
+than the fundamental properties. Such an approach allows an
+interpolation of the data and gives reasonable confidence in
+often-required extrapolations beyond the database.
+
+The particular form of the secondary creep equation used in FPIN2 is the
+form used to represent creep of UO2 [11-12]. The total plastic
+strain rate, $\dot{\varepsilon}$ , is given by
+
+$$\dot{\varepsilon} = C_{1}\left( \dot{F},d \right)\sigma \exp{\left( - \frac{Q}{RT} \right)} + C_{2}\left( \dot{F} \right) \sigma^{n} \exp{\left( - \frac{Q}{RT} \right)} + C_{3} \left( T \right) \sigma \dot{F}$$ [eq 11.3-16]
+
+where
+
+ $\dot{\varepsilon}$ = secondary creep rate, s-1
+
+ $\sigma$ = equivalent stress, MPa
+
+ $R$ = universal gas constant, (1.987 cal/g-mole-K)
+
+ $T$ = temperature, K
+
+ $Q$ = activation energy, (cal/g-mole)
+
+ $d$ = grain size, µm
+
+ $\dot{F}$ = fission rate, (fissions/cm3-s)
+
+ $C$ = material functions.
+
+In Eq. (11.3-16), the first term represents diffusional creep, the second
+term dislocation creep, and the third fission-induced creep. Here, the
+low temperature deformation mechanisms are neglected such as dislocation
+glide and twinning that may occur in $\alpha$ uranium at temperatures less
+than 675K. On the other hand, the expected dependence of in-reactor
+creep on the fission rate is considered.
+
+Some of the parameters in Eq. (11.3-16) are estimated from knowledge of
+the structure of material and the values that these parameters take for
+similar materials. At low temperatures, it is reasonable to postulate
+that the creep deformation of uranium alloys is dominated by the
+deformation of the $\alpha$ uranium matrix. This is particularly true if the
+other phases present are coarsely dispersed. When the $\alpha$ uranium matrix
+deformation is dominant, the activation energy is expected to be the
+self-diffusion energy in $\alpha$ uranium. The creep activation energy $Q=52000$ 
+cal/g-mole has been determined experimentally for $\alpha$ uranium. It is
+shown that the temperature dependence of creep can be deduced using such
+a single activation energy and that the value of n=4.5 is appropriate in
+the high stress range [11-13]. Using these values for $Q$ and $n$ ,
+ $C_{1}$ and $C_{2}$ in Eq. (11.3-16) are chosen to minimize
+the least squares error between the calculated and measures values of
+ $\log\left( z \right)$ where $z$ is the Zener-Holloman parameter
+
+$$z = \dot{\varepsilon} e^{\frac{Q}{\text{RT}}}$$ [eq 11.3-17]
+
+The result is
+
+$$\begin{split}\begin{aligned}
+&C_{1} = 0.5 \cdot 10^{4} &\ & \text{MPa}^{- 1}\text{s}^{- 1} \\
+&C_{2} = 6.0 &\ & \text{MPa}^{- 1}\text{s}^{- 1}
+\end{aligned}\end{split}$$ [eq 11.3-18]
+
+When the calculated time to 2% strain using these values is compared to
+data from creep tests of U-Pu-Zr alloys, results are found to be in
+acceptable agreement. Examination of experimental data suggests that the
+grain-size dependence of $C_{1}$ can be included as
+
+$$\begin{aligned}
+C_{1} = \left( \frac{160}{d} \right)^{2} 0.5 \cdot 10^{4} && \text{MPa}^{- 1}\text{s}^{- 1}
+\end{aligned}$$ [eq 11.3-19]
+
+for grain sizes near 160 μm.
+
+At temperatures above about 900K, the structure of the U-Pu-Zr alloys no
+longer contains an $\alpha$ uranium matrix. The transformations between 900K
+and 975K are complex and depend strongly on composition. Beyond 975K,
+however, the solid phase consists of a solid solution of uranium,
+plutonium, and zirconium over a wide range of compositions. In FPIN2, it
+is assumed that the creep rate in the intermediate temperature range
+falls between the creep rate of $\alpha$ uranium and solid solution $\gamma$ 
+phase. It is also assumed that creep of uranium alloys is governed by
+dislocation glide in the $\gamma$ regime. The phenomenological creep equation
+is of the form
+
+$$\dot{\varepsilon} = C_{4} \sigma^{3} e^{\left( - \frac{Q_{\gamma}}{RT} \right)}$$ [eq 11.3-20]
+
+where $Q_{\gamma}$ is the creep activation energy in the $\gamma$ phase, and the
+parameter $C_{4}$ is, in general, a function of composition and
+fission rate. Based on tracer diffusion data and/or additional creep
+data, $Q_{\gamma}$ is approximated as the activation energy for creep of
+the pure $\gamma$ uranium solvent
+
+$$\begin{aligned}
+Q_{\gamma} = 28500 && \text{cal/g-mole}
+\end{aligned}$$ [eq 11.3-21]
+
+The constant $C_{4}$ is chosen to fit data at 973K as
+
+$$\begin{aligned}
+ C_{4} = 8.0 \cdot 10^{- 2} && \text{MPa}^{- 3} \text{s}^{- 1}
+ \end{aligned}$$ [eq 11.3-22]
+
+Since the data is somewhat limited and the Eq. (11.3-16) and Eq. (11.3-20) are
+consistent with the creep of alloys with a high percentage of uranium,
+FPIN2 uses these expressions for all metal fuels.
+
+Experience with earlier versions of the FPIN2 reveals that the
+evaluation of Eq. (11.3-16) and Eq. (11.3-20) uses a substantial fraction of
+the computing time. Since the terms involving the exponential function
+depend only on the temperature, in the current version such terms are
+evaluated only at the beginning of the mechanics calculation. Therefore,
+Eq. (11.3-16) is coded in the following form
+
+$$\dot{\varepsilon} = \sigma \left( A + B \sigma^{n - 1} \right)$$ [eq 11.3-23]
+
+where $A$ and $B$ are previously evaluated constants.
+
+The creep equations given above are the same as those given in the
+Metallic Fuels Handbook [11-7]. However, fission-induced creep term is
+not included in the FPIN2 because it does not contribute significantly
+to the fuel stains on the time scale of the transients that the code has
+been designed to analyze.
+
+[anchor: fission-induced-gas-swelling-of-metal-fuels]
+
+## 11.3.5. Fission Induced Gas Swelling of Metal Fuels
+
+Irradiated metal fuels experience rapid, large-scale swelling when
+subjected to overheating. From the safety perspective, this transient
+swelling could provide an inherent, self-limiting, negative reactivity
+feedback mechanism. In FPIN2, a transient swelling model has been
+incorporated to get an estimate for the magnitude of this
+fission-gas-induced swelling. This non-equilibrium model is based on
+diffusive growth of grain boundary bubbles. [2]
+
+The distribution of fission gas retained in the fuel matrix is specified
+as input in FPIN2, and the remainder of the gas is assumed to be in
+solution or in small bubbles within the fuel grains. Fission gas that is
+retained in the fuel during steady-state irradiation provides a source
+for expansion of both solid and liquid fuel during overheating. The
+amount of gas in the pin plenum is also important since the plenum
+pressure is a major contributor to cladding loading and, therefore,
+cladding failure.
+
+The following assumptions are the basis of the transient swelling model
+of FPIN2 for the analysis of the metallic fuels:
+
+All “retained gas” (as measured from experiments on small samples of
+irradiated fuel) is in solution within the fuel or in the form of
+small bubbles within the fuel grains or on the grain boundaries.
+
+A certain fraction of this gas (input parameter) is contained in
+grain boundary bubbles, fixed in number and all of the same initial
+radius (0.1 microns).
+
+The open porosity contains fission gas in equilibrium with the plenum
+pressure.
+
+Only the grain boundary bubbles contribute to the swelling of solid
+fuel.
+
+In order to use this model, a relationship between the swelling strain,
+ $\varepsilon^{s}$ , the mean stress, $\sigma_{m}$ , and the fuel temperature,
+ $T$ , is required as explained in Section 11.2.1.2.3. Studies on
+gas-bubbles growth mechanisms in metallic fuels indicate [11-14] that
+the transient fuel swelling is dominated by diffusive growth of grain
+boundary bubbles that is given by
+
+$$\frac{\text{dr}}{\text{dt}} = \frac{\Omega D_{\text{gb}}w \sin^{3}{\theta}}{2k T r^{2} L \eta} \phi$$ [eq 11.3-24]
+
+where
+
+ $r$ = bubble radius in the grain boundary,
+
+ $D_{\text{gb}}$ = grain boundary diffusion coefficient,
+
+ $w$ = the boundary thickness,
+
+ $\Omega$ = the atomic (or molecular) volume, and
+
+ $kT$ = thermal energy.
+
+The overpressure, $\phi$ , in Eq. (11.3-24) is defined as
+
+$$\phi = p_{\text{g}} + \sigma_{\text{m}} - \frac{2\gamma}{\rho}$$ [eq 11.3-25]
+
+and it represents the excess of gas pressure, $p_{\text{g}}$ , over the
+sum of the mean stress, $\sigma_{\text{m}}$ , and the surface tension
+restraint. This restraint is defined in terms of the specific surface
+free energy, $\gamma$ , and the radius of curvature, $\rho$ . For the
+grain-boundary bubbles,
+
+$$\rho = \frac{r}{\sin{\theta}}$$ [eq 11.3-26]
+
+where $\theta$ is the intersection angle between the bubble surface and the
+grain boundary. In FPIN2, the fuel swelling rate is determined from
+Eq. (11.3-24) for the bubble growth rate and from the assumed bubble density.
+
+The remaining constants in the above equations are geometric constants
+related to the bubble volume and the bubble spacing [11-14]. The gas in
+the bubbles is assumed to satisfy the ideal gas law so that
+
+$$p_{\text{g}} = \frac{mRT}{V_{\text{b}}}$$ [eq 11.3-27]
+
+where $m$ is the fixed mass of the gas per bubble and $V_{\text{b}}$ is
+the volume of the bubbles. The mass of the gas in a bubble is determined
+by using the equilibrium conditions at the pretransient time when the
+bubble radius is assumed to be $r_{\text{o}}$ . Thus
+
+$$m = \frac{V_{\text{bo}}}{RT_{\text{o}}}\left( - \sigma_{\text{mo}} + \frac{2\gamma}{r_{\text{o}}} \right)$$ [eq 11.3-28]
+
+Since all of the grain boundary gas is assumed to reside in the closed
+porosity bubbles, the number density of bubbles, $N$ , is given by
+
+$$N = \frac{F_{\text{g}}}{m}$$ [eq 11.3-29]
+
+where $F_{\text{g}}$ is the grain boundary fission gas density with units
+of g per cm3 of fuel. For this simple model, only the swelling
+of the grain boundary bubbles is considered so that
+
+$$\varepsilon^{s} = \frac{1}{3}\left( \frac{\Delta V}{V_{\text{o}}} \right) = \frac{1}{3} N\left( V_{\text{b}} - V_{\text{bo}} \right)$$ [eq 11.3-30]
+
+These equations, when combined, give the complete specification of the
+transient swelling model in the form
+
+$$g\left( \varepsilon^{s}, \sigma_{\text{m}}, T \right) = 0$$ [eq 11.3-31]
+
+The treatment of this constitutive equation for swelling in finite
+element mechanics is discussed in Section 11.2.2.
+
+[anchor: generalized-plastic-flow-behavior-of-cladding-materials]
+
+## 11.3.6. Generalized Plastic Flow Behavior of Cladding Materials
+
+The tensile properties of the cladding materials (HT9, D9, and Type 316
+stainless steel) are not frequently used in analyses of fuel element
+performance during normal operation, as designs are usually such that
+stresses imposed do not challenge the points where yielding should
+occur. However, under transient conditions at elevated temperatures the
+applied stresses can result in general yielding. This behavior is
+modeled in FPIN2 by using a unified plastic deformation model that
+includes both rate-independent deformation (classical plasticity) and
+rate-dependent deformation (creep). The equations describing the
+generalized plastic flow behavior of Type 316 stainless steel, D9, and
+HT9 cladding are presented in the following sections. The yield strength
+and ultimate strength of the materials can be calculated from the
+plastic flow equations by applying them to the geometry of a tensile
+test.
+
+[anchor: type-316-ss-and-d9-cladding]
+
+### 11.3.6.1. Type 316 SS and D9 Cladding
+
+The deformation behavior of Type 316 stainless steel and D9 cladding can
+be described over a broad range of temperature and strain-rate with the
+set of equations shown below. These equations are used in calculations
+of the strength and deformation at temperatures ranging from room
+temperature to 1675 K under a variety of loading conditions. In this
+formalism, the true equivalent flow stress, $\sigma_{\text{e}}$ , is described
+by the equation
+
+$$\sigma_{\text{e}} = \sigma_{\text{s}} - \left( \sigma_{\text{s}} - \sigma_{\text{l}} \right) \exp\left( - \frac{\hat{\varepsilon}}{\varepsilon^{*}} \right)$$ [eq 11.3-32]
+
+where $\sigma_{\text{l}}$ is yield stress of fully annealed unirradiated
+material, and $\sigma_{\text{s}}$ is the saturation value of the flow stress
+that is asymptotically approached at large values of plastic strain.
+Ongoing true plastic strain is incorporated in the “hardness” parameter,
+ $\hat{\varepsilon}$ (input in the model), as this strain is
+accumulated. The hardness parameter also contains contributions from
+prior cold work, irradiation hardening, and softening caused by
+annealing, all scaled as true plastic strain. Consequently,
+ $\hat{\varepsilon} = 0$ for the fully annealed unirradiated
+material, and $\hat{\varepsilon} = 0.223$ for 20% cold-worked
+material (default value in the code). Finally, the value of the
+parameter $\varepsilon^{*}$ is determined by the initial
+hardening rate $\theta_{\text{l}}$ of fully annealed material
+ $\left( \hat{\varepsilon} = 0 \right)$ which is given by
+
+$$\theta_{\text{l}} = \frac{\sigma_{\text{s}} - \sigma_{\text{l}}}{\varepsilon^{*}}$$ [eq 11.3-33]
+
+The initial hardening rate, $\theta_{\text{l}}$ , is found to be only
+temperature dependent through the shear modulus; so, the rate and
+temperature dependencies of $\varepsilon^{*}$ is obtained from the above
+equation.
+
+The yield stress and saturation flow stress are rate and temperature
+dependent in accordance with the equations
+
+$$\frac{\sigma_{\text{s}}}{G} = \frac{\sigma_{\text{so}}}{G}\left\lbrack 1 - \exp\left( - \left( \frac{{\dot{\varepsilon}}_{\text{p}}}{{\dot{\varepsilon}}_{\text{os}}} \right)^{mK} \right) \right\rbrack^{1/K}$$ [eq 11.3-34]
+
+$$\frac{\sigma_{\text{l}}}{G} = \frac{\sigma_{\text{lo}}}{G}\left\lbrack 1 - \exp\left( - \left( \frac{{\dot{\varepsilon}}_{\text{p}}}{{\dot{\varepsilon}}_{\text{ol}}} \right)^{mK} \right) \right\rbrack^{1/K}$$ [eq 11.3-35]
+
+where $G$ is the temperature dependent shear modulus,
+ ${\dot{\varepsilon}}_{\text{p}}$ is the equivalent plastic strain rate
+(the $\frac{\text{d}{\overline{\varepsilon}}^{p}}{\text{dt}}$ term
+in Eq. (11.3-26)), $m$ and $K$ are constants, and $\sigma_{\text{so}}$ ,
+ $\sigma_{\text{lo}}$ , ${\dot{\varepsilon}}_{\text{os}}$ and
+ ${\dot{\varepsilon}}_{\text{ol}}$ are temperature dependent
+functions. The constant $m$ is the rate sensitivity (the reciprocal of the
+stress-exponent n in a power-law creep equation), and $K$ is a
+non-physical fitting parameter that governs the sharpness of the
+transition between rate-dependent flow and rate-independent flow. At a
+given temperature, in the high strain-rate limit, the equation for the
+saturation stress reduces to
+
+$$\frac{\sigma_{\text{s}}}{G} = \frac{\sigma_{\text{so}}}{G}$$ [eq 11.3-36]
+
+whereas in the low strain-rate limit, it becomes
+
+$$\frac{\sigma_{\text{s}}}{G} = \frac{\sigma_{\text{so}}}{G}\left( \frac{{\dot{\varepsilon}}_{\text{p}}}{{\dot{\varepsilon}}_{\text{os}}} \right)^{m}$$ [eq 11.3-37]
+
+which reflects the typical power-law creep behavior observed for these
+materials at high temperatures and low strain rates. The equation for
+the yield stress behaves similarly. The temperature dependencies of
+ $\sigma_{\text{so}}$ and $\sigma_{\text{lo}}$ are in large part eliminated by
+dividing by $G$ . However, ${\dot{\varepsilon}}_{\text{os}}$ and
+ ${\dot{\varepsilon}}_{\text{ol}}$ reflect a temperature dependence
+of high-temperature creep of the form:
+
+$${\dot{\varepsilon}}_{\text{os}} = {\dot{\varepsilon}}_{\text{oos}} \exp\left( - Q/RT \right)$$ [eq 11.3-38]
+
+$${\dot{\varepsilon}}_{\text{ol}} = {\dot{\varepsilon}}_{\text{ool}} \exp\left( - \frac{Q}{RT} \right)$$ [eq 11.3-39]
+
+where ${\dot{\varepsilon}}_{\text{oos}}$ and
+ ${\dot{\varepsilon}}_{\text{ool}}$ are constants; Q, R, and T are
+the creep activation energy, gas constant, and absolute temperature,
+respectively. The values for the parameters in all of the above
+equations are:
+
+ $G = 92.0 - 4.02 10^{-2} T$ (GPa)
+
+ $\frac{\theta_{\text{l}}}{G} = 3.66 \times 10^{-2}$ 
+
+ $\frac{\sigma_{\text{so}}}{G} = 2.00 \times 10^{-2} - 9.12 \times 10^{-6} T$ 
+
+ $\frac{\sigma_{\text{lo}}}{G} = 2.06 times 10^{-3} + 7.12 \times 10^{-1} T$ 
+
+ $m = \frac{1}{5.35} = 0.187$ 
+
+ $\frac{Q}{R} = 38533$ (K)
+
+ ${\dot{\varepsilon}}_{\text{oos}} = 1.062 \times 10^{14}$ (s-1)
+
+ ${\dot{\varepsilon}}_{\text{ool}} = 3.794 \times 10^{12}$ (s-1)
+
+ $K = 2.0$ 
+
+The combination of the Eq. (11.3-32) and the above strain-rate and
+temperature laws allow one to generate the complete rate and temperature
+dependent true-stress/true-strain curves. The yield stress,
+ $\sigma_{\text{l}}$ , in these equations can be compared to the 0.2% offset
+yield stress. The ultimate strength, while not specifically denoted in
+the equations, can be determined by differentiating the Eq. (11.3-32) in
+accordance with the construction of true stress, $\sigma_{\text{u}}$ , that
+corresponds to the engineering ultimate strength:
+
+$$\frac{\text{d}\sigma}{\text{d}\varepsilon} \bigg\rvert_{\varepsilon_{\text{pu}}} = \theta_{\text{l}} \exp\left( - \frac{\varepsilon_{\text{pu}}}{\varepsilon^{*}} \right) = \sigma_{\text{u}}$$ [eq 11.3-40]
+
+where $\varepsilon_{\text{pu}}$ is the true plastic strain at the
+ultimate strength which corresponds to the uniform elongation. Solving
+the above equation and Eq. (11.3-32) simultaneously gives $\sigma_{\text{u}}$ 
+and $\varepsilon_{\text{pu}}$ .
+
+[anchor: ht9-cladding]
+
+### 11.3.6.2. HT9 Cladding
+
+The deformation behavior of the martensitic-ferritic stainless steel HT9
+cladding can be described over a broad range of temperature and
+strain-rate with the set of equations shown below. These equations are
+incorporated in FPIN2 and used in calculations of strength and ductility
+of this alloy at temperatures ranging from room temperature to 1110 K
+under a variety of loading conditions. The high temperature creep
+behavior is adequately described by an equation of the Dorn power-law
+form:
+
+$$\frac{{\dot{\varepsilon}}_{\text{p}}}{{\dot{\varepsilon}}_{\text{oos}}} = \left( \frac{E}{\sigma_{\text{so}}} \right)^{n} \left( \frac{\sigma_{\text{s}}}{E} \right)^{n} \exp\left( - \frac{Q_{\text{c}}}{\text{kT}} \right)$$ [eq 11.3-41]
+
+In this equation, ${\dot{\varepsilon}}_{\text{p}}$ is the steady-state
+equivalent creep rate normalized by the constant
+ ${\dot{\varepsilon}}_{\text{oos}}$ , $\sigma_{\text{s}}$ is the
+equivalent applied stress in the creep test normalized by the constant
+ $\sigma_{\text{so}}$ , $E$ is the temperature dependent Young’s modulus,
+ $Q_{\text{c}}$ is the creep activation energy, $k$ is Boltzmann’s
+constant, and $T$ is absolute temperature. The temperature dependence of
+ $E$ is expressed as
+
+$$\begin{aligned}
+ E\left( T \right) = 2.12 \cdot 10^{11}\left\lbrack 1.144 - 4.856 \cdot 10^{- 4} T \right\rbrack && \left( \text{Pa} \right)
+ \end{aligned}$$ [eq 11.3-42]
+
+and the remaining parameters in the creep equation are given by
+
+$$\begin{aligned}
+{\dot{\varepsilon}}_{\text{oos}} = 5.1966 \cdot 10^{10} && \left( \text{s}^{- 1} \right)
+\end{aligned}$$
+
+$$\frac{\sigma_{\text{so}}}{E} = 3.956 \cdot 10^{- 3}$$
+
+$$n = 2.263$$
+
+$$\begin{aligned}
+\frac{Q_{\text{c}}}{k} = 36739 && \left( \text{K} \right)
+\end{aligned}$$
+
+The flow-stress/strain-hardening behavior can be described by an
+equation of the type
+
+$$\frac{\sigma_{\text{e}}}{E} = \frac{\sigma_{\text{s}}}{E} - \frac{\sigma_{\text{s}} - \sigma_{\text{l}}}{E} \exp\left( - \frac{{\overline{\varepsilon}}_{\text{p}}}{\varepsilon^{*}} \right)$$ [eq 11.3-43]
+
+where $\sigma_{\text{e}}$ is the equivalent flow stress at some value of true
+equivalent plastic strain ${\overline{\varepsilon}}^{p}$ (defined in
+Eq. (11.3-26)), measured from the reference state of as-heat-treated material
+ $\left( {\overline{\varepsilon}}^{p} = 0 \right)$ . As
+described in Section 11.3.6.1, $\theta_{\text{l}}$ is the yield stress of
+as-heat-treated material, $\varepsilon^{*}$ is a temperature dependent
+parameter extracted from the hardening rate at the ultimate strength,
+and $\sigma_{\text{s}}$ is the saturation stress, or steady-state flow stress,
+approached at a large plastic strain and assumed compatible with the
+stress in the above steady-state creep equation. It has been found that
+assuming that the yield stress $\sigma_{\text{l}} = 0.8 \sigma_{\text{s}}$ 
+throughout allows the generation of flow stress-strain curves that agree
+well with data. The true stress at the ultimate strength (maximum load),
+after differentiating Eq. (11.3-43), is given by
+
+$$\frac{\sigma_{\text{u}}}{E} = \frac{\sigma_{\text{s}} - \sigma_{\text{l}}}{E} \varepsilon^{*} \exp\left( \frac{{- \varepsilon}_{\text{pu}}}{\varepsilon^{*}} \right)$$ [eq 11.3-44]
+
+where $\varepsilon_{\text{pu}}$ is the true strain at the ultimate strength
+corresponding to the uniform elongation. Simultaneously solving this
+equation in conjunction with the flow stress equation evaluated at
+ $\varepsilon_{\text{pu}}$ , the following expression is obtained for the quantity
+ $\varepsilon^{*}$ :
+
+$$\varepsilon^{*}\left( T \right) = 0.12733 - 3.5027 \cdot 10^{- 4} T + 2.9934 \cdot 10^{- 7}T^{2}$$ [eq 11.3-45]
+
+An equation to model the transition between high-rate, low-temperature,
+rate independent flow behavior and creep behavior has the form
+
+$$\frac{\sigma_{\text{s}}}{E} = \frac{\sigma_{\text{so}}}{E}\left\{ 1 - exp\left\lbrack \left( \frac{{\overline{\varepsilon}}_{\text{p}} \exp\left( \frac{Q_{\text{t}}}{kT} \right)}{\varepsilon_{\text{oos}}} \right)^{K/n} \right\rbrack \right\}^{1/K}$$ [eq 11.3-46]
+
+Because of microstructural changes that occur during long-time creep
+testing of HT9, and the effects they have on flow stress, there is not a
+smooth transition between short term tensile behavior and creep
+behavior. However, setting the non-physical fitting parameter as $K =
+0.2$ , and with all the other parameters set as indicated above,
+Eq. (11.3-46) follows the tensile data quite well, and reduces to the
+power-law creep equation at very low strain rates.
+
+For temperatures above the completion of the $\gamma$ transformation
+temperature (1233 K), the flow stress model in FPIN2 assumes that the
+deformation rate for HT9 cladding is the same as that given by the Type
+316 SS and D9 cladding equations in Section 11.3.6.1. A simple mixture
+rule is used to calculate the deformation rates in the $\alpha$ - $\gamma$ transition
+region (1110K-1233K).
+
+[anchor: fuel-cladding-eutectic-formation]
+
+## 11.3.7. Fuel-Cladding Eutectic Formation
+
+An additional complication for metallic fuels is the formation of a low
+melting point eutectic alloy between the fuel and the cladding that can
+contribute to fuel element failure during transient overheating events.
+The eutectic alloy forms due to interdiffusion of fuel and cladding
+constituents at the fuel-cladding interface. It melts at a temperature
+lower than the fuel and cladding solidus temperatures.
+
+[anchor: eutectic-penetration-of-the-cladding]
+
+### 11.3.7.1. Eutectic Penetration of the Cladding
+
+The primary effect of the liquid eutectic alloy formation on fuel
+element failure is thinning of the cladding wall. The liquid does not
+further damage the remaining cladding tendon by mechanisms such as
+liquid metal embrittlement. Experimental data documenting this effect
+comes from constant temperature time-to-failure experiments on
+irradiated EBR-II fuel elements and form out-of-pile dipping tests of
+penetration of iron by molten uranium-iron eutectic alloy. These data
+have recently been reviewed and the following correlation has been
+recommended [11-15]
+
+$$\begin{split} \dot{M} = \begin{cases}
+\begin{aligned}
+0 && T < 1353 \text{ K} \\
+922 + 2.93 \left( T - 1388 \right) - 0.215 \left( T - 1388 \right)^{2} + 0.001134 \left( T - 1388 \right)^{3} && 1355 \text{ K} \leq T \leq 1506 \text{ K} \\
+\exp\left( 22.85 - \frac{27624}{T} \right) && T > 1506 \text{ K}
+\end{aligned}
+\end{cases}\end{split}$$ [eq 11.3-47]
+
+where $\dot{M}$ is the melt rate in μm/s, and $T$ is the
+absolute temperature in Kelvins. The major feature of the data and these
+equations is that the melt rate is very rapid for temperatures above
+1353 K. For typical cladding dimensions, this means that cladding will
+completely melt-through is somewhat less than one second once molten
+fuel reaches 1353K. On the other hand, for the transient rate of concern
+for a typical FPIN2 application, negligible cladding melt-through occurs
+until this “rapid eutectic attack” temperature is reached. [3] The
+Eq. (11.3-47) is used in cladding failure criterion subroutine of FPIN2 to
+calculate wall thinning.
+
+[anchor: eutectic-release-of-cladding-axial-restraint]
+
+### 11.3.7.2. Eutectic Release of Cladding Axial Restraint
+
+When fuel and cladding are in contact, FPIN2 has an option that allows
+that fuel and cladding to either slip freely axially or to be locked
+together. In the latter option, it is assumed that the fuel and cladding
+remain locked, either by metallurgical bonding or by friction, at
+temperatures below the assumed eutectic alloy melting threshold,
+ $T_{\text{th}}$ (an input in the code). At temperatures above
+ $T_{\text{th}}$ , the fuel and cladding are assumed to slip freely because
+of the liquid phase that forms at the fuel cladding interface. This
+discontinuity in the cladding axial constraint model of FPIN2 at the
+assumed eutectic alloy melting temperature causes a sudden drop in
+stress in both fuel and cladding elements as the fuel expands slightly
+in the axial direction and contracts in the radial direction due to
+elastic recovery.
+
+When the fuel-cladding gap is open, the fuel and cladding axial
+displacements are calculated independently. When the fuel and cladding
+are locked together, the increments in axial strain in the fuel are
+assumed to be equal to the increments in axial strain in the cladding.
+This is handled in mechanics calculation by modifying the terms in the
+stiffness matrix. Specifically, the finite-element algorithm is solved
+for the resultant fuel and cladding axial forces by combining the fuel
+and cladding stiffness matrices in a non-iterative procedure. In this
+procedure, the two equations for the axial displacements are replaced by
+a single equation for their joint displacement. The redundant equation
+is then replaced with an identity so that the size of the stiffness
+matrix and all the associated coding remains the same. When the sudden
+release of cladding restraint occurs at eutectic alloy melting point,
+fairly large changes take place in the axial displacements. However,
+experience has shown that, due to the robust procedure used, this
+substantial sudden change in the mechanics causes no computational
+difficulties.
+
+[anchor: fuel-element-failure]
+
+## 11.3.8. Fuel Element Failure
+
+The failure of the cladding due to temperature and pressure transients
+is essentially independent of fuel type except that failure in metal
+fueled elements is augmented by eutectic formation which penetrates and,
+in effect, thins the cladding as discussed in the previous section.
+Also, the loss in cladding stiffness is not considered in calculating
+the continued deformation of the cladding in the oxide fuel version of
+FPIN2. For conditions where simultaneous eutectic erosion and plastic
+deformation are important, oxide fuel version under-predicts the
+permanent cladding strains at the time of failure. Therefore, the FPIN2
+analysis of cladding deformation has been modified to account for this
+eutectic thinning and to determine the permanent cladding strain
+remaining after a transient more accurately.
+
+The technique that has been implemented in the FPIN2 cladding
+deformation model to account for the eutectic attack uses an effective
+ligament thickness ratio to decease the contribution that the material
+stresses in a given element make to the overall balance between internal
+and external forces. Elements that are fully liquid are assumed to have
+a ligament thickness ratio of zero and those that are solid are assumed
+to have ligament ratio of one. An element that has partially liquefied
+then has a ratio equal to the fraction of the element that is still
+solid. In other words, the effect of eutectic formation is included in
+FPIN2 by considering only the thickness of unaffected cladding that is
+available to carry the load. This model has the additional benefit that
+it can easily be modified to account for other damage mechanisms such as
+cavitation and void growth during tertiary creep. In the current version
+of the FPIN2, however, these additional mechanisms are not considered.
+
+For transients with relatively short time scale, the eutectic
+penetration is a factor only if the cladding temperature exceeds the
+“rapid eutectic attack” temperature (1353K) where the penetration rate
+increases by three orders of magnitude. The change in cladding wall
+thickness above 1353K is calculated using Eq. (11.3-47) for Type 316 SS,
+D9, and HT9 cladding. At temperatures below 1353K, the rate of eutectic
+penetration is generally insignificant and assumed to be zero.
+
+Cladding rupture is predicted in the code by using the life fraction
+criteria. The TCD-2 life fraction criterion [11-16] is used for the fuel
+elements with D9 and Type 316 stainless steel cladding; and the HEDL
+transient Dorn parameter correlation [11-17] is used for the fuel
+elements with HT9-cladding. The fuel adjacency effect in the TDC-2
+correlation has been neglected. The life fraction over a time step,
+ $\text{dt}$ , is calculated from the rupture time, $t_{\text{r}}$ , for the
+instantaneous average cladding temperature, $T_{\text{c}}$ , and hoop
+stress, $\sigma_{\text{c}}$ . Life fractions are summed in the usual way so
+that cladding failure is predicted to occur at time $t_{\text{f}}$ when
+
+$$\int_{0}^{t_{\text{f}}}{\frac{1}{t_{\text{r}}\left( \sigma_{\text{c}}, T_{\text{c}} \right)}} \text{dt} = 1$$ [eq 11.3-48]
+
+The location of the failure is the location of first axial cladding
+segment to reach a life fraction of 1.0. The hoop stress in the cladding
+tendon is calculated by the thin-shell equations consistent with the
+methodology used in developing the life fraction correlations. The
+thickness of this tendon is reduced by the amount of eutectic attack.
+
+Footnotes
+
+[1]
+
+In stand-alone FPIN2 calculation, this plenum temperature is assumed
+to be equal to the coolant outlet temperature.
+
+[2]
+
+FPIN2 also provides an equilibrium swelling model as an option.
+
+[3]
+
+The rate at 1000K is about 10-2 µm/s, which would require 10
+hours to completely penetrate the full cladding wall thickness.
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch11/integration.html]
+------------------------------------------------------------------------------
+[anchor: integration-into-sas-and-usage-of-integrated-model]
+
+# 11.4. Integration into SAS4A/SASSYS-1 and Usage of Integrated Model
+
+A general purpose SAS-FPIN2 interface has been designed and most of the
+communication between the two codes is established at this interface
+minimizing the impacts of coupling on both codes. This coupling strategy
+allows for maintaining the stand-alone capability of the two codes while
+assuring that any future improvements to FPIN2 are automatically
+reflected in SAS4A/SASSYS-1.
+
+[anchor: sas-fpin2-coupling-methodology]
+
+## 11.4.1. SAS-FPIN2 Coupling Methodology
+
+Two modes of SAS-FPIN2 coupled operations are provided. In the
+stand-alone mode, FPIN2 reads its own input deck and executes without
+linking to SAS4A/SASSYS-1. This mode is provided primarily for
+verification/debugging purposes, to allow independent development of
+FPIN2, and to allow it to continue its role as a tool for
+thermo-mechanical analysis of individual fuel pins.
+
+In the interfaced mode, FPIN2 replaces the SAS4A/SASSYS-1 metal fuel
+element mechanics module DEFORM-5 and calculates the updated dimensions,
+stresses, and strains at the end of each time step. These FPIN2 results
+are then made available for use in the analysis of accident energetics
+by providing estimates of axial expansion of fuel, time and location of
+cladding failure, and the condition of the fuel element at the time of
+the failure (although the communication between FPIN2 and the SAS4A
+in-pin and ex-pin fuel relocation modules, PINACLE and LEVITATE, is not
+yet established). In the interfaced mode, some of the input necessary to
+run FPIN2 is included in the SAS4A/SASSYS-1 input deck, and the remaining
+is interpreted from corresponding SAS4A/SASSYS-1 variables.
+
+[anchor: stand-alone-fpin2-calculation]
+
+### 11.4.1.1. Stand-alone FPIN2 Calculation
+
+In the stand-alone mode, FPIN2 is run by a call to main FPIN2 driver
+routine, FPMAIN. In this mode, FPIN2 performs complete
+thermal-mechanical calculations for a single fuel element. When the heat
+transfer option to calculate the coolant and structure temperatures is
+invoked, the fuel element is assumed to be surrounded by a circular
+coolant channel and an outer wall in pin-in-a-pipe geometry. The code
+also provides an option in which the cladding outer surface temperature
+may be specified as a function of time to drop the coolant channel and
+structure calculations. This mode is mainly provided for direct
+verification and code debugging purposes.
+
+In the stand-alone mode, FPIN2 input is appended at the end of
+SAS4A/SASSYS-1 input deck after the ENDJOB record. The stand-alone FPIN2
+input deck consists of the following records entered in free format:
+
+Title,
+
+Integer data (including integer debug data),
+
+-1/ End of Integers,
+
+Decimal data (including decimal debug data),
+
+-1/ End of Decimals.
+
+Integer and decimal input data are entered in a form similar to the
+SAS4A/SASSYS-1 input data. Each of the FPIN2 input variables has an
+assigned location number. The first entry in a line of input data is the
+location number of the first member of the set of input data values. The
+second entry is the number of data values that follow. Integer and
+decimal input data fields are initialized to zero before reading in the
+data; therefore, a variable does not have to be read in if it has the
+value of zero. A line of data may continue over several records;
+however, the maximum number of data values in a line is limited with
+2000. The primary unit system for stand-alone FPIN2 input and output is
+CGS with exception of pressure which is specified in Bar. Temperature is
+specified in Kelvin. The full list of FPIN2 input variable for
+stand-alone calculation along with a brief description for each variable
+is provided in Section 11.7.2.
+
+[anchor: interfaced-sas-fpin2-calculation]
+
+### 11.4.1.2. Interfaced SAS-FPIN2 Calculation
+
+The SAS-FPIN2 interface consists mainly of the steady-state and
+transient FPIN2 driver routines. The steady-state driver, FPINIT,
+performs setup of FPIN2 for the interfaced calculation and initializes
+FPIN2 input from SAS4A/SASSYS-1 data. This routine is executed only once
+prior to the transient calculations. The transient FPIN2 driver routine,
+FPDRIV, incorporates the time-advancement scheme and interfaces dynamic
+variables between the two codes.
+
+During the initialization of FPIN2 from SAS4A/SASSYS-1 input, interface
+routine FPINIT looks for inconsistencies in fuel element modeling,
+prints diagnostic messages, and terminates the execution if necessary.
+The main inconsistencies that a user should be aware of are summarized
+below:
+
+A gas plenum below the fuel column is not allowed in FPIN2;
+therefore, the execution is terminated if SAS4A/SASSYS-1 input variable
+IPLUP is non-zero.
+
+If the fuel element contains axial blankets, i.e., MZUB and/or MZLB
+are non-zero, a warning
+message is printed since FPIN2 mechanics calculation is not normally
+performed for the axial segments containing blanket fuel. [1]
+
+An error message is printed and execution is terminated if the number
+of axial segments in fuel exceeds FPIN2’s limit (20),
+
+An error message is printed if SAS4A/SASSYS-1 input variable IPOWRZ
+is non-zero (applicable only when IHTFLG≠0).
+
+Cross-checking of the input data for abnormalities are also performed
+(such as zero pin pressure) and diagnostic messages are printed.
+
+Since FPIN2 has been primarily developed for the transient analysis of
+fuel elements, it lacks models to describe pre-transient irradiation
+features such as fuel restructuring, fission gas retention and
+fuel-cladding gap narrowing. These pre-transient conditions are to be
+provided as input for the metallic fuels as discussed in Section 11.4.3.
+The as-irradiated geometry, fuel elongation, fission product and
+porosity distributions, and the effect of fast neutron fluence on
+cladding are typically obtained from the relevant in-reactor fuel
+performance database at a desired burnup, or from steady-state fuel
+performance codes such as LIFE-METAL [11-18] and STARS [11-6]. FPIN2 has
+the capability to interpret its input from the LIFE-METAL output. This
+capability is also extended to the integrated SAS-FPIN2 model.
+
+Normally, FPIN2 heat transfer is by-passed in the interfaced mode and
+the fuel element temperatures are lined with SAS4A/SASSYS-1 calculated
+fuel, cladding, plenum, and cavity temperatures. To accomplish this
+by-pass, the FPIN2 mechanics/thermal-hydraulics boundary is identified,
+and routines that are used in heat transfer calculation are isolated.
+All the common block variables that are used in the mechanics
+calculation (but altered in one of these heat-transfer routines) are
+linked with their SAS4A/SASSYS-1 counterparts. The FPIN2 results for
+stresses and displacements are in turn made available to SAS4A/SASSYS-1 for the
+estimates of axial expansion of fuel and associated reactivity effects,
+time and location of cladding failure, and the condition of the fuel at
+the time of failure.
+
+In the interfaced mode, setting the input flag, IHTFLG, may also turn on
+FPIN2’s own heat transfer model. The option for including FPIN2 heat
+transfer model is mainly provided for debugging and code verification
+purposes. It requires additional data to be interfaced regarding fuel
+pin heat generation rate and cladding outer surface temperature for each
+axial segment at each time step as the dynamic boundary condition. When
+this option is set, FPIN2 uses its own built-in metallic fuel thermal
+property routines.
+
+In order to establish consistency between SAS4A/SASSYS-1 and FPIN2
+calculations in the interfaced mode, some modifications to the FPIN2
+code were necessary. Major changes to FPIN2 for this integration are
+summarized below:
+
+Generic precision conversions are performed by combining all type
+declaration statements in a file and replacing them in each
+subprogram with an INCLUDE statement referencing this file.
+
+Along the same line, type specific intrinsic functions are converted
+to their generic equivalents.
+
+Various table interpolations for time-dependent boundary conditions
+(pin power and cladding outer surface temperature when IHTFLG=1) are
+bypassed and these variables are linked with their SAS4A/SASSYS-1
+calculated counterparts.
+
+Various calls to built-in FPIN2 material thermal property subprograms
+are also bypassed and the thermal properties that are needed in FPIN2
+mechanics calculation are substituted with their SAS4A/SASSYS-1
+calculated equivalents.
+
+Steady-state and transient pin plenum gas temperature is interfaced
+with the corresponding SAS4A/SASSYS-1 variable.
+
+Constant liquid eutectic alloy melting temperature is converted to a
+variable and listed as an integrated SAS-FPIN2 model input, XEUTHR.
+
+Initial cladding effective inner surface wastage is described as a
+new integrated SAS-FPIN2 model input variable and incorporated into
+FPIN2 by defining it as part of the variable for cladding wall
+thinning due to eutectic penetration.
+
+The constant coolant channel pressure is converted to a dynamic array
+variable and interfaced with its axially varying time-dependent
+SAS4A/SASSYS-1 counterpart.
+
+All these changes are implemented in such a way that they do not affect
+the stand-alone performance of FPIN2.
+
+The radial mesh structure for SAS4A/SASSYS-1, stand-alone FPIN2, and
+interface SAS-FPIN2 calculations are shown in Figure 11.4.1. As presented
+in Chapter 3, the radial mesh structure in SAS4A/SASSYS-1 for fuel
+elements at a given axial segment can be set up based on either equal
+radial difference or equal mass principle. In either case, the boundary
+nodes are the half sixe as shown in Figure 11.4.1. In FPIN2, on the other
+hand, finite elements are initially defined in a mesh based on an equal
+radial difference principle with all elements having the same thickness
+as shown in Figure 11.4.1. In order to avoid extensive remapping of the
+thermal and mechanical variables between two meshes during the
+interfaced calculations, the consistency between the initial mesh
+structures is accomplished by pulling SAS4A/SASSYS-1-calculated mesh
+information into FPIN2 common blocks, and forcing FPIN2 to use the same
+mesh structure in the fuel and cladding (Figure 11.4.1). When FPIN2 heat
+transfer is by-passed, however, this procedure requires substitution of
+mesh-centered temperatures for boundary nodes, namely
+ $T_{\text{f}1}$ , $T_{\text{fNDRF}}$ , $T_{\text{c}1}$ , and
+ $T_{\text{c}3}$ (locations marked with a “*” in Figure 11.4.1),
+that are not calculated in SAS4A/SASSYS-1. In the interfaced mode, these
+temperatures are approximated with a linear interpolation between the
+temperatures of the neighboring nodes.
+
+Figure 11.4.1 Radial Mesh Structure and Temperature for an Axial Segment in (a) FPIN2 Code, (b) SAS4A/SASSYS-1, and (c) Integrated SAS-FPIN2 Model.
+
+Although the fuel element mechanics model of FPIN2 uses an implicit
+solution scheme, the interaction between the SAS4A/SASSYS-1
+thermal-hydraulics and FPIN2 mechanics calculations is explicit. In the
+SAS4A/SASSYS-1 code system, a multi-level time-step hierarchy is used in
+which a main time step is divided into one or more primary-loop, heat
+transfer, and coolant dynamics time steps as described in Chapter 2. The
+control over the length of a computational time step is performed using
+a variety of internal and user-specified restrictions. The FPIN2
+mechanics calculation is performed at the each heat transfer time step
+using newly calculated temperatures. Limitations imposed by stability
+and accuracy requirements assure that heat-transfer time steps are small
+enough to avoid the problem of unstable results between the thermal and
+mechanical calculations due to explicit coupling. The implicit treatment
+in FPIN2 is somewhat inconsistent with the explicit nature of the
+SAS4A/SASSYS-1 code system and it often results in a notable increase in
+computation time. However, the capabilities gained by this coupling are
+often well worth this additional computational cost.
+
+[anchor: subroutine-descriptions-and-flow-charts]
+
+### 11.4.1.3. Subroutine Descriptions and Flow-charts
+
+The list of SAS-FPIN2 interface routines is presented in Table 11.4.1.
+In the stand-alone mode, the FPIN2 main program is called form the
+SAS4A/SASSYS-1 steady-state driver routine SSTHRM and FPIN2 is executed
+without interfacing to SAS4A/SASSYS-1. In the interfaced mode, FPIN2 is
+coupled to the rest of the SAS4A/SASSYS-1 calculations through two main
+driver subroutines, FPINIT and FPDRIV. First the steady-state FPIN2
+driver routine FPINIT is called from SSTHRM for initialization of FPIN2
+for interfaced calculations. A flowchart for the FPINIT subroutine is
+shown in Figure 11.4.2. Then, during the transient calculations,
+SAS4A/SASSYS-1 thermal-hydraulic manager TSTHRM calls for the transient
+interface routine FPDRIV that acts as the FPIN2 transient driver.
+
+Table 11.4.1 SAS-FPIN2 Interface Subroutines
+ | 
+
+ | 
+Subroutine Name
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+FPMAIN
+ | 
+ | 
+In the stand-alone mode, FPIN2 driver (main program)
+ | 
+
+ | 
+FPINIT
+ | 
+ | 
+In the interfaced mode, steady-state FPIN2 initialization routine
+ | 
+
+ | 
+FPDRIV
+ | 
+ | 
+In the interfaced mode, FPIN2 transient driver routine
+ | 
+
+ | 
+SASTMP
+ | 
+ | 
+In the interfaced mode, SAS-FPIN2 thermal-hydraulics interface (when FPIN2 heat transfer module is by-passed)
+ | 
+
+ | 
+FPNOUT
+ | 
+ | 
+In the interfaced mode, output of the FPIN2 results
+ | 
+
+Figure 11.4.2 FPINIT Subroutine Flow Diagram
+
+Subroutine FPDRIV basically includes the section of FPMAIN that is used
+for the time advancement scheme. This time advancement scheme is
+preceded by an upper interface routine, SASTMP that pulls SAS4A/SASSYS-1
+calculated temperatures into FPIN2 common blocks, and is followed by a
+lower interface section that takes FPIN2 updated axial and radial mesh
+information and puts it back into SAS4A/SASSYS-1 common locations. SASTMP
+is also used by steady-state interface routine FPINIT to extract the
+initial temperature distribution from SAS4A/SASSYS-1. A flowchart for the
+subroutine FPDRIV is presented in Figure 11.4.3.
+
+[anchor: input-description-for-interfaced-sas-fpin2-calculation]
+
+## 11.4.2. Input Description for Interfaced SAS-FPIN2 Calculation
+
+Two groups of input variables are identified for interfaced SAS-FPIN2
+calculations. Integrated model variables that describe the mode of the
+interfaced calculation and FPIN2 variables that are not readily provided
+by SAS4A/SASSYS-1 are included in SAS4A/SASSYS-1 common blocks INPCHN (for
+integer variables) and PMATCH (for real variables). The list of these
+“new” variables is provided in Table 11.4.2.
+
+Another category includes input variables that are provided by
+SAS4A/SASSYS-1 calculations and/or are translated from SAS4A/SASSYS-1 input.
+The list of these variables along with SAS4A/SASSYS-1 counterparts is
+presented in Table 11.4.3. The variables in Table 11.4.2 and Table 11.4.3 constitute the full list of input parameters necessary to run
+FPIN2 in the interfaced mode. Further information on some of the input
+parameters related to pre-transient fuel element characterization is
+given in the following section. When interpreting FPIN2 input from
+SAS4A/SASSYS-1 data, dimensional conversions are necessary since the
+principal unit systems for SAS4A/SASSYS-1 and FPIN2 and SI and CGS,
+respectively.
+
+Figure 11.4.3 FPDRIV Subroutine Flow Diagram
+
+Table 11.4.2 Input Variables for Integrated SAS-FPIN2 Model
+
+ | 
+
+ | 
+BLOCK 51 * INPCHN
+ | 
+ | | 
+ | | 
+ | | 
+
+ | 
+
+ | 
+Location
+ | 
+ | 
+Symbol
+ | 
+ | 
+Value
+ | 
+ | 
+Definition/Comments
+ | 
+
+ | 
+285
+ | 
+ | 
+IFPIN2
+ | 
+ | 
+=0
+ | 
+ | 
+Do not use FPIN2 metal fuel model
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Use FPIN2
+ | 
+
+ | 
+(Note: No other data required when IFPIN2=0)
+ | 
+ | | 
+ | | 
+ | | 
+
+ | 
+286
+ | 
+ | 
+IFPI01
+ | 
+ | 
+=0
+ | 
+ | 
+Use FPIN2 in interfaced mode
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Use FPIN2 in standalone mode
+ | 
+
+ | 
+(Note: No other data required when IFPI01=1)
+ | 
+ | | 
+ | | 
+ | | 
+
+ | 
+287
+ | 
+ | 
+IHTFLG
+ | 
+ | 
+=0
+ | 
+ | 
+Bypass FPIN2 heat transfer calculation
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Include FPIN2 heat transfer calculation
+ | 
+
+ | 
+288
+ | 
+ | 
+LHTOPT
+ | 
+ | 
+=0
+ | 
+ | 
+Perform heat transfer calculation including coolant and wall
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Perform heat transfer calculation with input value of cladding outer surface temperatures
+ | 
+
+ | 
+289
+ | 
+ | 
+LCRACK
+ | 
+ | 
+=0
+ | 
+ | 
+No fuel cracking
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Radial fuel cracks included
+ | 
+
+ | 
+290
+ | 
+ | 
+LFPLAS
+ | 
+ | 
+=0
+ | 
+ | 
+Allow creep-plastic strains in fuel
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Suppress creep-plastic strains in fuel
+ | 
+
+ | 
+291
+ | 
+ | 
+LCPLAS
+ | 
+ | 
+=0
+ | 
+ | 
+Allow creep-plastic strains in clad
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Suppress creep-plastic strains in clad
+ | 
+
+ | 
+292
+ | 
+ | 
+LFSWEL
+ | 
+ | 
+=0
+ | 
+ | 
+Allow swelling-hotpressing strains in fuel
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Suppress swelling-hotpressing strains in fuel
+ | 
+
+ | 
+293
+ | 
+ | 
+LCSWEL
+ | 
+ | 
+=0
+ | 
+ | 
+Allow swelling strains in clad
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Suppress swelling strains in clad
+ | 
+
+ | 
+294
+ | 
+ | 
+LLRGST
+ | 
+ | 
+=0
+ | 
+ | 
+Large strain analysis
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Small perturbation analysis
+ | 
+
+ | 
+295
+ | 
+ | 
+LFCSLP
+ | 
+ | 
+=0
+ | 
+ | 
+Fuel-clad locked when gap is closed
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Independent fuel-clad axial displacement
+ | 
+
+ | 
+296
+ | 
+ | 
+LOUTSW
+ | 
+ | 
+=0
+ | 
+ | 
+No detailed printing of results - summary only
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Normal detailed printout under LFREQA, MFREQA, and LFREQB control
+ | 
+
+ | 
+297
+ | 
+ | 
+LFREQA
+ | 
+ | | 
+ | 
+Initial print frequency, number of time steps between normal detailed printout
+ | 
+
+ | 
+298
+ | 
+ | 
+MFREQA
+ | 
+ | | 
+ | 
+Total number of time steps under LFREQA control
+ | 
+
+ | 
+299
+ | 
+ | 
+LFREQB
+ | 
+ | | 
+ | 
+Final print frequency
+ | 
+
+ | 
+300
+ | 
+ | 
+LGRAPH
+ | 
+ | 
+=0
+ | 
+ | 
+Do not write graphics file
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Write a graphics data file
+ | 
+
+ | 
+301
+ | 
+ | 
+LDBOUT
+ | 
+ | 
+=0
+ | 
+ | 
+Do debug output
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Add debug output to regular LOUTSW=2 output
+ | 
+
+ | 
+302
+ | 
+ | 
+LDBSTP
+ | 
+ | 
+=0
+ | 
+ | 
+Program stops when molten cavity freezes
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Ignore this program stop
+ | 
+
+ | 
+303
+ | 
+ | 
+LDBFPL
+ | 
+ | 
+=0
+ | 
+ | 
+Use recommended fuel flow stress Eq. (11.3-16)
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Use simple power law fuel creep: $\dot{\varepsilon} = C_{0}\sigma_{e}^{C_{1}}$ 
+
+(Note: XFPLC0 and XFPLC1 are required)
+
+ | 
+
+ | 
+304
+ | 
+ | 
+LDBFDV
+ | 
+ | 
+=0
+ | 
+ | 
+Use recommended fuel swelling-hotpressing Eq. (11.3-30)
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Use equilibrium swelling model (ANL-IFR-6 and -23)
+ | 
+
+ | | 
+ | | 
+ | 
+=2
+ | 
+ | 
+Use simple power law fuel swelling: $\dot{\varepsilon} = C_{0}\sigma_{m}^{C_{1}}$ 
+
+(Note: XFDVC0 and XFDVC1 are required)
+
+ | 
+
+ | 
+305
+ | 
+ | 
+LDBCPL
+ | 
+ | 
+=0
+ | 
+ | 
+Use recommended clad flow stress
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Ideal plastic flow for clad: $\sigma_{y} = C_{0} + C_{1}{\overline{\varepsilon}}^{p}$ 
+
+(Note: XCIPL0 and XCIPL1 are required)
+
+ | 
+
+ | | 
+ | | 
+ | 
+=2
+ | 
+ | 
+Use high-temperature power-law creep
+ | 
+
+ | | 
+ | | 
+ | 
+=3
+ | 
+ | 
+Use simple power law clad creep: $\dot{\varepsilon} = C_{0}\sigma_{e}^{C_{1}}$ 
+
+(Note: XCIPL0 and XCIPL1 are required)
+
+ | 
+
+ | 
+306
+ | 
+ | 
+LGPRES
+ | 
+ | | 
+ | 
+(Not currently used)
+ | 
+
+ | 
+307
+ | 
+ | 
+LGAPCL
+ | 
+ | 
+=0
+ | 
+ | 
+Use fuel-clad opening/closure model
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Fuel-clad gap always closed
+ | 
+
+ | 
+308
+ | 
+ | 
+LCPROP
+ | 
+ | 
+=0
+ | 
+ | 
+Use material property correlations (when IHTFLG=1)
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Use temperature independent material properties (when IHTFLG=1)
+ | 
+
+ | 
+309
+ | 
+ | 
+LSKIPM
+ | 
+ | 
+=0
+ | 
+ | 
+Perform mechanical calculations
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Bypass mechanical calculations, heat transfer only (when IHTFLG=1)
+ | 
+
+ | 
+310
+ | 
+ | 
+LGCLOS
+ | 
+ | 
+=0
+ | 
+ | 
+Use gap closure routine at 100% fuel melting
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Do not close gap (if open) at 100% fuel melting
+ | 
+
+ | 
+311-334
+ | 
+ | 
+LDBOTA(J)
+ | 
+ | | 
+ | 
+Axial debug print vector (0=no-print, 1=print)
+ | 
+
+ | 
+355-345
+ | 
+ | 
+LDBOTF(I)
+ | 
+ | | 
+ | 
+Fuel radial debug print vector (0=no-print, 1=print)
+ | 
+
+ | 
+346-348
+ | 
+ | 
+LDBOTC (IC)
+ | 
+ | | 
+ | 
+Clad radial debug print vector (0=no-print, 1=print)
+ |
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch11/references.html]
+------------------------------------------------------------------------------
+[anchor: references]
+
+# 11.5. References
+
+11-1. T. H. Hughes, Unpublished information, Argonne National Laboratory,
+1977.
+
+11-2. M. Rossow, T. H. Hughes, and J. M. Kramer, Unpublished information,
+Argonne National Laboratory, 1981.
+
+11-3. T. H. Hughes, Unpublished information, Argonne National Laboratory,
+1985.
+
+11-4. T. H. Hughes and J. M. Kramer, “The FPIN2 Code - An Application of
+the Finite Element Method to the Analysis of the Transient Response of
+Oxide & Metal Fuel Elements,” Proc. Conf. Sci. & Tech. Fast Reactor
+Safety, Guersney, May 1986.
+
+11-5. J. M. Kramer, T. H. Hughes, and E. E. Gruber, Unpublished
+information, Argonne National Laboratory, 1987.
+
+11-6. J. M. Kramer, T. H. Hughes, and E. E. Gruber, “Validation of Models
+for the Analysis of the Transient Behavior of Metallic Fast Reactor
+Fuel,” Proc. Int. Conf. Structural Mechanics in Reactor Technology,
+Anaheim, California, vol C, pp. 65-76, August 1989.
+
+11-7. G. L. Hofman, et al., Unpublished information, Argonne National
+Laboratory, 1985.
+
+11-8. H. L. Schreyer, Unpublished information, Argonne National
+Laboratory, 1980.
+
+11-9. J. M. Kramer, Unpublished information, Argonne National Laboratory,
+1977.
+
+11-10. J. M. Kramer and T. H. Hughes, “Modeling of Fuel Cracking and Fuel
+Plasticity in LMFBR Fuel Pins During Accident Transients,” Proc.
+Seminar in Mathematical/Mechanical Modeling of Reactor Fuel Elements,
+August 1977.
+
+11-11. A. C. Eringen, Nonlinear Theory of Continuous Media, McGraw-Hill,
+New York, 1962.
+
+11-12. J. M. Kramer and T. H. Hughes, Unpublished information, Argonne
+National Laboratory, 1993.
+
+11-13. R. G. Pahl, et al., Unpublished information, Argonne National
+Laboratory, 1986.
+
+11-14. E. E. Gruber and J. M. Kramer, Unpublished information, Argonne
+National Laboratory, 1985.
+
+11-15. T. H. Bauer, G. R. Fenske, and J. M. Kramer, “Cladding Failure
+Margins for Metallic Fuel in the Integral Fast Reactor,” Proc. 9th Int. Conf. Structural Mechanics in Reactor Technology,
+Lausanne, vol. C, pp. 31-38, 1987.
+
+11-16. W. F. Brizes and M. L. Hamilton, Unpublished information, Hanford
+Engineering Development Laboratory, 1982.
+
+11-17. F. R. Shober, Unpublished information, Hanford Engineering
+Development Laboratory, 1986.
+
+11-18. M. C. Billone, Personal Communication (LIFE-METAL seminar Series),
+May 11, 1993.
+
+11-19. W. F. Murphy, et al., “Post-irradiation Examination of U-Pu-Zr Fuel
+Elements Irradiated in EBR-II to 4.5 Atomic Percent Burnup,” ANL-7602,
+Argonne National Laboratory, November 1969.
+
+11-20. J. M. Kramer, Unpublished information, Argonne National Laboratory,
+1978.
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch11/nomenclature.html]
+------------------------------------------------------------------------------
+[anchor: nomenclature]
+
+# 11.6. Nomenclature
+
+ | 
+
+ | 
+Subscript
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+ $\text{l}$ 
+ | 
+ | 
+Fully annealed material
+ | 
+
+ | 
+ $\theta$ 
+ | 
+ | 
+Angular direction in cylindrical coordinates
+ | 
+
+ | 
+ $\theta,\text{o}$ 
+ | 
+ | 
+Initial, reference
+ | 
+
+ | 
+ $\text{c}$ 
+ | 
+ | 
+Cladding
+ | 
+
+ | 
+ $\text{ci}$ 
+ | 
+ | 
+Cladding inner radius
+ | 
+
+ | 
+ $\text{e}$ 
+ | 
+ | 
+Equivalent
+ | 
+
+ | 
+ $\text{f}$ 
+ | 
+ | 
+Fuel
+ | 
+
+ | 
+ $\text{f}$ 
+ | 
+ | 
+Failure
+ | 
+
+ | 
+ $\text{fo}$ 
+ | 
+ | 
+Fuel out radius
+ | 
+
+ | 
+ $\text{g}$ 
+ | 
+ | 
+Gas
+ | 
+
+ | 
+ $\text{gb}$ 
+ | 
+ | 
+Grain boundary
+ | 
+
+ | 
+ $\text{i}$ 
+ | 
+ | 
+Time step index
+ | 
+
+ | 
+ $\text{i}$ 
+ | 
+ | 
+Radial element index
+ | 
+
+ | 
+ $\text{I, II}$ 
+ | 
+ | 
+Element types
+ | 
+
+ | 
+ $\text{j}$ 
+ | 
+ | 
+Axial segment index
+ | 
+
+ | 
+ $\text{m}$ 
+ | 
+ | 
+Mean, average
+ | 
+
+ | 
+ $\text{n}$ 
+ | 
+ | 
+Iteration index
+ | 
+
+ | 
+ $\text{N}$ 
+ | 
+ | 
+Iteration index
+ | 
+
+ | 
+ $\text{Na}$ 
+ | 
+ | 
+Sodium
+ | 
+
+ | 
+ $\text{pu}$ 
+ | 
+ | 
+True plastic (strain)
+ | 
+
+ | 
+ $\text{r}$ 
+ | 
+ | 
+Radial direction in cylindrical coordinates
+ | 
+
+ | 
+ $\text{r}$ 
+ | 
+ | 
+Rupture
+ | 
+
+ | 
+ $\text{s}$ 
+ | 
+ | 
+Saturation
+ | 
+
+ | 
+ $\text{th}$ 
+ | 
+ | 
+Threshold
+ | 
+
+ | 
+ $\text{u}$ 
+ | 
+ | 
+True/ultimate (stress)
+ | 
+
+ | 
+ $\text{z}$ 
+ | 
+ | 
+Axial direction in cylindrical coordinates
+ | 
+
+ | 
+Superscript
+ | 
+ | 
+Description
+ | 
+
+ | 
+ $\theta$ 
+ | 
+ | 
+Thermal (strain)
+ | 
+
+ | 
+ $a$ 
+ | 
+ | 
+Apparent (strain)
+ | 
+
+ | 
+ $c$ 
+ | 
+ | 
+Crack (strain)
+ | 
+
+ | 
+ $C$ 
+ | 
+ | 
+Cavity
+ | 
+
+ | 
+ $e$ 
+ | 
+ | 
+Elastic (strain)
+ | 
+
+ | 
+ $ext$ 
+ | 
+ | 
+External loads
+ | 
+
+ | 
+ $G$ 
+ | 
+ | 
+Fuel-cladding gap
+ | 
+
+ | 
+ $i$ 
+ | 
+ | 
+Iteration counter
+ | 
+
+ | 
+ $int$ 
+ | 
+ | 
+Internal stress field
+ | 
+
+ | 
+ $IGL$ 
+ | 
+ | 
+Ideal gas law
+ | 
+
+ | 
+ $MECH$ 
+ | 
+ | 
+Mechanical analysis
+ | 
+
+ | 
+ $p$ 
+ | 
+ | 
+Plastic (strain)
+ | 
+
+ | 
+ $ps$ 
+ | 
+ | 
+Pseudo (stress)
+ | 
+
+ | 
+ $P$ 
+ | 
+ | 
+Plenum
+ | 
+
+ | 
+ $ref$ 
+ | 
+ | 
+Reference
+ | 
+
+ | 
+ $s$ 
+ | 
+ | 
+Swelling (strain)
+ | 
+
+ | 
+ $t$ 
+ | 
+ | 
+Total (strain)
+ | 
+
+ | 
+ $T$ 
+ | 
+ | 
+Total
+ | 
+
+ | 
+Notation
+ | 
+ | 
+Description
+ | 
+
+ | 
+¯ (overline)
+ | 
+ | 
+Equivalent
+ | 
+
+ | 
+_ (underline)
+ | 
+ | 
+Indicates a vector
+ | 
+
+ | 
+• (dot)
+ | 
+ | 
+Indicates derivative with respect to time
+ | 
+
+ | 
+ˆ (hat)
+ | 
+ | 
+Indicates a unit vector
+ | 
+
+ | 
+[ ]
+ | 
+ | 
+Indicates a matrix
+ | 
+
+ | 
+{}T
+ | 
+ | 
+Transpose of a vector
+ | 
+
+ | 
+ $\nabla$ 
+ | 
+ | 
+Gradient
+ | 
+
+ | 
+Symbol
+ | 
+ | 
+Description
+ | 
+
+ | 
+ $\alpha$ 
+ | 
+ | 
+Thermal expansion coefficient
+ | 
+
+ | 
+ $\delta$ 
+ | 
+ | 
+Nodal displacement
+ | 
+
+ | 
+ $\Delta L/L_{0}$ 
+ | 
+ | 
+Linear thermal expansion
+ | 
+
+ | 
+ $\Delta t$ 
+ | 
+ | 
+Time step size
+ | 
+
+ | 
+ $\varepsilon$ 
+ | 
+ | 
+Strain
+ | 
+
+ | 
+ $\hat{\varepsilon}$ 
+ | 
+ | 
+Cladding hardness parameter
+ | 
+
+ | 
+ $\phi$ 
+ | 
+ | 
+Overpressure in grain boundary bubble growth model
+ | 
+
+ | 
+ $\phi$ 
+ | 
+ | 
+Finite element displacement function
+ | 
+
+ | 
+ $\gamma$ 
+ | 
+ | 
+Specific surface free energy in surface tension restraint term
+ | 
+
+ | 
+ $\nu$ 
+ | 
+ | 
+Poisson’s ratio
+ | 
+
+ | 
+ $\Omega$ 
+ | 
+ | 
+Atomic volume in grain boundary bubble growth model
+ | 
+
+ | 
+ $\psi$ 
+ | 
+ | 
+Constant in finite element displacement function in axial direction
+ | 
+
+ | 
+ $\rho$ 
+ | 
+ | 
+Radius of curvature in surface tension restraint term
+ | 
+
+ | 
+ $\rho$ 
+ | 
+ | 
+Density
+ | 
+
+ | 
+ $\sigma$ 
+ | 
+ | 
+Stress
+ | 
+
+ | 
+ $\theta$ 
+ | 
+ | 
+Intersection angle between the bubble surface and grain boundary
+ | 
+
+ | 
+ $\theta$ 
+ | 
+ | 
+Initial hardening rate
+ | 
+
+ | 
+ $a$ 
+ | 
+ | 
+Finite element inner radius
+ | 
+
+ | 
+ $A$ 
+ | 
+ | 
+Area of intersection between the finite elements
+ | 
+
+ | 
+ $b$ 
+ | 
+ | 
+Finite element outer radius
+ | 
+
+ | 
+ $B$ 
+ | 
+ | 
+Matrix in equilibrium equation
+ | 
+
+ | 
+ $C$ 
+ | 
+ | 
+Curve bounding A
+ | 
+
+ | 
+ $C$ 
+ | 
+ | 
+Matrix in generalized Hooke’s law
+ | 
+
+ | 
+ $C$ 
+ | 
+ | 
+Material functions in secondary creep equation
+ | 
+
+ | 
+ $\text{d}\varepsilon$ 
+ | 
+ | 
+Incremental strain
+ | 
+
+ | 
+ $\text{d}\lambda$ 
+ | 
+ | 
+Proportionality factor for plastic strain increments
+ | 
+
+ | 
+ $\text{d}\sigma$ 
+ | 
+ | 
+Incremental stress
+ | 
+
+ | 
+ $\text{dp}$ 
+ | 
+ | 
+Pressure increment
+ | 
+
+ | 
+ $D$ 
+ | 
+ | 
+Grain size
+ | 
+
+ | 
+ $D$ 
+ | 
+ | 
+Diffusion coefficient in grain boundary bubble growth model
+ | 
+
+ | 
+ $E$ 
+ | 
+ | 
+Young’s modulus
+ | 
+
+ | 
+ $F$ 
+ | 
+ | 
+Constitutive function for plastic strains
+ | 
+
+ | 
+ $F$ 
+ | 
+ | 
+Force
+ | 
+
+ | 
+ $F$ 
+ | 
+ | 
+Axial force
+ | 
+
+ | 
+ $\dot{F}$ 
+ | 
+ | 
+Fission rate
+ | 
+
+ | 
+ $G$ 
+ | 
+ | 
+Constitutive function for swelling strains
+ | 
+
+ | 
+ $G$ 
+ | 
+ | 
+Shear modulus
+ | 
+
+ | 
+ $\hat{i}$ 
+ | 
+ | 
+Unit vector in coordinate directions
+ | 
+
+ | 
+ $K$ 
+ | 
+ | 
+Stiffness matrix
+ | 
+
+ | 
+ $K$ 
+ | 
+ | 
+Bulk modulus
+ | 
+
+ | 
+ $L$ 
+ | 
+ | 
+Finite element radial thickness
+ | 
+
+ | 
+ $M$ 
+ | 
+ | 
+Rate sensitivity parameter in cladding yield and saturation flow stresses
+ | 
+
+ | 
+ $M$ 
+ | 
+ | 
+Mass
+ | 
+
+ | 
+ $\dot{M}$ 
+ | 
+ | 
+Eutectic penetration rate
+ | 
+
+ | 
+ $\hat{n}$ 
+ | 
+ | 
+Outward normal to the finite element surface, S
+ | 
+
+ | 
+ $N$ 
+ | 
+ | 
+Finite element shape function
+ | 
+
+ | 
+ $N$ 
+ | 
+ | 
+Number density of gas bubbles in grain boundary bubble growth model
+ | 
+
+ | 
+ $P$ 
+ | 
+ | 
+Pressure
+ | 
+
+ | 
+ $Q$ 
+ | 
+ | 
+Activation energy in secondary creep equation
+ | 
+
+ | 
+ $Q$ 
+ | 
+ | 
+Thermal modulus
+ | 
+
+ | 
+ $R$ 
+ | 
+ | 
+Residual in iterative solution of equilibrium equations
+ | 
+
+ | 
+ $R$ 
+ | 
+ | 
+Radius
+ | 
+
+ | 
+ $R$ 
+ | 
+ | 
+Gas constant
+ | 
+
+ | 
+ $S$ 
+ | 
+ | 
+Deviatoric stress
+ | 
+
+ | 
+ $S$ 
+ | 
+ | 
+Surface area of finite element
+ | 
+
+ | 
+ $T$ 
+ | 
+ | 
+Time
+ | 
+
+ | 
+ $T$ 
+ | 
+ | 
+Elements of load vector in equilibrium equation expressing external forces
+ | 
+
+ | 
+ $T$ 
+ | 
+ | 
+Temperature
+ | 
+
+ | 
+ $U$ 
+ | 
+ | 
+Displacement in radial coordinate direction
+ | 
+
+ | 
+ $V$ 
+ | 
+ | 
+Displacement in θ coordinate direction
+ | 
+
+ | 
+ $V$ 
+ | 
+ | 
+Volume of finite element
+ | 
+
+ | 
+ $W$ 
+ | 
+ | 
+Grain boundary thickness
+ | 
+
+ | 
+ $W$ 
+ | 
+ | 
+Displacement in axial coordinate direction
+ | 
+
+ | 
+ $W$ 
+ | 
+ | 
+Gradient vector for plastic strain increments
+ | 
+
+ | 
+ $Z$ 
+ | 
+ | 
+Zener-Holloman parameter
+ |
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch11/appendices.html]
+------------------------------------------------------------------------------
+[anchor: appendices]
+
+# 11.7. Appendices
+
+[anchor: explicit-formulas-for-stiffness-matrix-and-load-vector]
+
+## 11.7.1. Explicit Formulas for Stiffness Matrix and Load Vector
+
+The stiffness matrix is defined in Section 11.2.4.2, Eq. (11.2-78).
+
+$$\left\lbrack K \right\rbrack = \int_{\text{A}_{\text{c}}}{\left\lbrack B \right\rbrack^{T} \left\lbrack C \right\rbrack \left\lbrack B \right\rbrack \text{dA}}$$ [eq 11.7-1]
+
+where the form of [B] and [C] matrices depends on the type of fuel
+element considered. Introducing new variables
+
+$$d = \frac{b}{r} - 1$$ [eq 11.7-2]
+
+$$e = 1 - \frac{a}{r}$$ [eq 11.7-3]
+
+the matrix [B] can be written in a compact form as
+
+$$\begin{split} \left\lbrack B \right\rbrack = \frac{1}{l}\begin{bmatrix}
+- 1 & 1 & 0 \\
+d & e & 0 \\
+0 & 0 & 1 \\
+\end{bmatrix}\end{split}$$ [eq 11.7-4]
+
+where $a$ , $b$ , and $l$ are explained in Figure 11.2.2. As noted in
+Section 11.2.4.1, this form of matrix [B] is valid for both continuous
+and cracked elements.
+
+Expanding the matrix triple product in Eq. (11.7-1) and using the
+symmetry of [C] yields
+
+$$\begin{split} \left\lbrack K \right\rbrack = \frac{1}{l^{2}}\int_{A_{c}}^{}\begin{bmatrix}
+\left( C_{11} - 2C_{12}d + C_{22}d^{2} \right) & \left( - C_{11} + C_{12}\left( d - e \right) + C_{22}\text{ed} \right) & \left( - C_{13} + C_{23}d \right)l \\
+\left( - C_{11} + C_{12}\left( d - e \right) + C_{22}\text{ed} \right) & \left( C_{11} - 2C_{12}e + C_{22}e^{2} \right) & \left( - C_{13} + C_{23}e \right)l \\
+\left( - C_{13} + C_{23}d \right)l & \left( C_{13} + C_{23}e \right)l & C_{33}l^{2} \\
+\end{bmatrix} \text{dA}\end{split}$$ [eq 11.7-5]
+
+Inspection of this equation indicates that all elements of $\left\lbrack K \right\rbrack$ can be
+expressed in terms of following six integrals
+
+$$I \equiv \int_{\text{A}_{\text{c}}}{\text{dA} = \pi l \left( a + b \right)}$$ [eq 11.7-6]
+
+$$I_{\text{d}} \equiv \int_{\text{A}_{\text{c}}}{\left( d \right) \text{dA} = \pi l^{2}}$$ [eq 11.7-7]
+
+$$I_{\text{d}2} \equiv \int_{\text{A}_{\text{c}}}{\left( d^{2} \right) \text{dA} = \pi l \left\lbrack \frac{2b^{2}}{l} \ln\left( \frac{b}{a} \right) - 3b + a \right\rbrack}$$ [eq 11.7-8]
+
+$$I_{\text{e}} \equiv \int_{\text{A}_{\text{c}}}{\left( e \right) \text{dA} = \pi l^{2}}$$ [eq 11.7-9]
+
+$$I_{\text{e}2} \equiv \int_{\text{A}_{\text{c}}}{\left( e^{2} \right) \text{dA} = \pi l \left\lbrack b - 3a + \frac{2a^{2}}{l} \ln\left( \frac{b}{a} \right) \right\rbrack}$$ [eq 11.7-10]
+
+$$I_{\text{ed}} \equiv \int_{\text{A}_{\text{c}}}{\left( \text{ed} \right) \text{dA} = \pi l \left\lbrack a + b - \frac{2ab}{l} \ln\left( \frac{b}{a} \right) \right\rbrack}$$ [eq 11.7-11]
+
+The domain of these integrations is shown in Figure 11.2.2. In terms these
+newly defined variables, the stiffness matrix can be rewritten as
+
+$$\begin{split} \left\lbrack K \right\rbrack = \frac{1}{l^{2}}\begin{bmatrix}
+\left( C_{11}I - 2C_{12}I_{\text{d}} + C_{22}I_{\text{d}2} \right) & \left( - C_{11}I + C_{12}\left( I_{\text{d}} - I_{\text{e}} \right) + C_{22} I_{\text{ed}} \right) & \left( - C_{13}I + C_{23}I_{\text{d}} \right)l \\
+\left( - C_{11}I + C_{12}\left( I_{\text{d}} - I_{\text{e}} \right) + C_{22}I_{\text{ed}} \right) & \left( C_{11}I - 2C_{12}I_{\text{e}} + C_{22} I_{\text{e}2} \right) & \left( C_{13}I + C_{23}I_{\text{e}} \right)l \\
+\left( - C_{13}I + C_{23}I_{\text{d}} \right)l & \left( C_{13}I + C_{23}I_{\text{e}} \right)l & C_{33} I\ l^{2}
+\end{bmatrix}\end{split}$$ [eq 11.7-12]
+
+The load vector for a pressure load acting in the radial direction in
+given by Eq. (11.2-67)
+
+$$t_{\text{i}} = \int_{\text{C}} \sigma_{\text{r}} N_{\text{i}} {\hat{i}}_{\text{r}} \cdot \hat{n}\text{dC}$$ [eq 11.7-13]
+
+(i=1,2). The shape functions $N_{1}$ and $N_{2}$ are defined in
+Eq. (11.2-63) and Eq. (11.2-64), respectively. For the case of an element
+bordering the central cavity, the curve $C$ corresponds to the inner
+radius of the element, we have
+
+$$\sigma_{\text{r}} = - p_{\text{cav}}$$ [eq 11.7-14]
+
+$${\hat{i}}_{\text{r}} \cdot \hat{n} = {\hat{i}}_{\text{r}} \cdot \left( - {\hat{i}}_{\text{r}} \right) = - 1$$ [eq 11.7-15]
+
+$$N_{1} = 1$$ [eq 11.7-16]
+
+$$N_{2} = 0$$ [eq 11.7-17]
+
+$$\int_{\text{C}}{\text{dC} = 2 \pi r_{\text{cav}}}$$ [eq 11.7-18]
+
+Hence,
+
+$$t_{1} = 2 \pi p_{\text{cav}} r_{\text{cav}}$$ [eq 11.7-19]
+
+$$t_{2} = 0$$ [eq 11.7-20]
+
+A similar derivation for an element experiencing a pressure
+ $p_{\text{out}}$ directed radially inward shows that
+
+$$t_{1} = 0$$ [eq 11.7-21]
+
+$$t_{2} = 2 \pi p_{\text{cav}} r_{\text{out}}$$ [eq 11.7-22]
+
+where $r_{\text{out}}$ is the outer radius of the element.
+
+[anchor: list-of-input-variables-for-standalone-fpin2-calculation]
+
+## 11.7.2. List of Input Variables for Standalone FPIN2 Calculation
+
+*** Location Numbers for Integer Data ***
+
+(Number in parentheses following value name states maximum value)
+
+Table 11.7.1 COMMON /INPUTI/
+
+ | 
+
+ | 
+Location Number
+ | 
+ | 
+Name
+ | 
+ | 
+Value
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+1
+ | 
+ | 
+IFTYPE
+ | 
+ | 
+=1
+ | 
+ | 
+Uranium - 5% fissium fuel
+ | 
+
+ | | 
+ | | 
+ | 
+=2
+ | 
+ | 
+Uranium - 10% zirconium fuel
+ | 
+
+ | | 
+ | | 
+ | 
+=3
+ | 
+ | 
+Uranium - 15% plutonium - 10% zirconium fuel
+ | 
+
+ | | 
+ | | 
+ | 
+=4
+ | 
+ | 
+User supplied mixture of U-Pu-Zr fuel (input required at loc. numb. 5001+ & 5401+)
+ | 
+
+ | 
+2
+ | 
+ | | 
+ | | 
+ | 
+(Not currently used)
+ | 
+
+ | 
+3
+ | 
+ | 
+ICTYPE
+ | 
+ | 
+=1
+ | 
+ | 
+20% CW type 316 cladding
+ | 
+
+ | | 
+ | | 
+ | 
+=2
+ | 
+ | 
+D9 cladding
+ | 
+
+ | | 
+ | | 
+ | 
+=3
+ | 
+ | 
+HT9 cladding
+ | 
+
+ | 
+4
+ | 
+ | | 
+ | | 
+ | 
+(Not currently used)
+ | 
+
+ | 
+5
+ | 
+ | 
+IDTOPT
+ | 
+ | 
+=0
+ | 
+ | 
+Compute at equally spaced time values (use NDT and DTIME)
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Increments in time are user-supplied (use NDT and TTABLE)
+ | 
+
+ | 
+6
+ | 
+ | 
+IHTOPT
+ | 
+ | 
+=0
+ | 
+ | 
+Perform heat transfer calculation including coolant and wall
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Perform heat transfer calculation with input values of clad outer surface temperature. (Use NCLADT and COMMON /TEMPIN/)
+ | 
+
+ | 
+7-14
+ | 
+ | | 
+ | 
+(8)
+ | 
+ | 
+(Not currently used)
+ | 
+
+ | 
+15
+ | 
+ | 
+ICRACK
+ | 
+ | 
+=0
+ | 
+ | 
+No fuel cracking
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Radial fuel cracks included
+ | 
+
+ | 
+16
+ | 
+ | 
+IFPLAS
+ | 
+ | 
+=0
+ | 
+ | 
+Allow creep-plastic strains in fuel
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Suppress creep-plastic strains in fuel
+ | 
+
+ | 
+17
+ | 
+ | 
+ICPLAS
+ | 
+ | 
+=0
+ | 
+ | 
+Allow creep-plastic strains in clad
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Suppress creep-plastic strain in clad
+ | 
+
+ | 
+18
+ | 
+ | 
+IFSWEL
+ | 
+ | 
+=0
+ | 
+ | 
+Allow swelling-hotpressing strains in fuel
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Suppress swelling-hotpressing strains in fuel
+ | 
+
+ | 
+19
+ | 
+ | 
+ICSWEL
+ | 
+ | 
+=0
+ | 
+ | 
+Allow swelling strains in clad
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Suppress swelling strains in clad
+ | 
+
+ | 
+20
+ | 
+ | 
+IDZ
+ | 
+ | 
+=0
+ | 
+ | 
+Axial segments are of equal height DZ=Z/NDZ
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+User-supplied axial segment heights
+ | 
+
+ | 
+21
+ | 
+ | 
+ILRGST
+ | 
+ | 
+=0
+ | 
+ | 
+Large strain analysis
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Small perturbation analysis
+ | 
+
+ | 
+22
+ | 
+ | 
+IFCSLP
+ | 
+ | 
+=0
+ | 
+ | 
+Fuel-clad locked when gap is closed
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Independent fuel-clad axial displacement
+ | 
+
+ | 
+23
+ | 
+ | | 
+ | | 
+ | 
+(Not currently used)
+ | 
+
+ | 
+24
+ | 
+ | 
+IOUTSW
+ | 
+ | 
+=0
+ | 
+ | 
+No detailed printing of results - summary of results only
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Normal detailed printout under IFREQA, NFREQA, and IFREQB control
+ | 
+
+ | 
+25
+ | 
+ | 
+IFREQA
+ | 
+ | | 
+ | 
+Initial print frequency, number of time steps between normal detailed printout
+ | 
+
+ | 
+26
+ | 
+ | 
+NFREQA
+ | 
+ | | 
+ | 
+Total number of time steps under IFREQA control
+ | 
+
+ | 
+27
+ | 
+ | 
+IFREQB
+ | 
+ | | 
+ | 
+Final print frequency
+ | 
+
+ | 
+28
+ | 
+ | 
+IGRAPH
+ | 
+ | 
+=0
+ | 
+ | 
+Do not write graphics file
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Write datafile FT12F001 for processing by a graphics program
+ | 
+
+ | 
+29-30
+ | 
+ | | 
+ | 
+(2)
+ | 
+ | 
+(Not currently used)
+ | 
+
+ | 
+31
+ | 
+ | 
+NDT
+ | 
+ | | 
+ | 
+No. of time steps or no. of entries in TTABLE. If IDTOPT=0, there is no limitation on NDT. If IDTOPT=1, NDT is limited to 1980.
+ | 
+
+ | 
+32
+ | 
+ | 
+NDZ
+ | 
+ | 
+(20)
+ | 
+ | 
+No. of axial segments
+ | 
+
+ | 
+33
+ | 
+ | 
+NDRF
+ | 
+ | 
+(20)
+ | 
+ | 
+No. of radial elements in cladding (minimum value is 6)
+ | 
+
+ | 
+34
+ | 
+ | 
+NDRC
+ | 
+ | 
+(10)
+ | 
+ | 
+No. of radial elements in cladding (minimum value is 3)
+ | 
+
+ | 
+35-40
+ | 
+ | | 
+ | 
+(6)
+ | 
+ | 
+(Not currently used)
+ | 
+
+ | 
+41
+ | 
+ | 
+NQ
+ | 
+ | 
+(25)
+ | 
+ | 
+No. of values in power vs. time table
+ | 
+
+ | 
+42
+ | 
+ | 
+NCOOLT
+ | 
+ | 
+(25)
+ | 
+ | 
+No. of values in coolant inlet temperature versus time table
+ | 
+
+ | 
+43
+ | 
+ | 
+NCOOLF
+ | 
+ | 
+(25)
+ | 
+ | 
+No. of values in coolant inlet flow versus time table
+ | 
+
+ | 
+44
+ | 
+ | 
+NCLADT
+ | 
+ | 
+(50)
+ | 
+ | 
+No. of values in clad outer surface temperature versus time table
+ | 
+
+ | 
+45-100
+ | 
+ | | 
+ | 
+(56)
+ | 
+ | 
+(Not currently used)
+ | 
+
+ | 
+101-500
+ | 
+ | 
+IETYPI(I,J)
+ | 
+ | 
+(20,20)
+ | 
+ | 
+Fuel element type. Required only when ICRACK=1, default element type is 1 (Loc. Numb. = 100+I+20*(J-1)).
+ | 
+
+*** Location Numbers for Decimal Data ***
+
+(Symbols in parentheses after array variables are maximum storage
+allocation and name of integer variable specifying dimension. Numbers
+within quotation marks are recommended values)
+
+Table 11.7.2 COMMON /CNTLIN/
+
+ | 
+
+ | 
+Location Number
+ | 
+ | 
+Name
+ | 
+ | 
+Value
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+1
+ | 
+ | 
+TZERO
+ | 
+ | | 
+ | 
+Initial time (sec)
+ | 
+
+ | 
+2
+ | 
+ | 
+DTIME
+ | 
+ | 
+=1
+ | 
+ | 
+Computation time step (if IDTOPT=0) (sec)
+ | 
+
+ | 
+3-10
+ | 
+ | | 
+ | 
+(8)
+ | 
+ | 
+(Not currently used)
+ | 
+
+ | 
+11-2000
+ | 
+ | 
+TTABLE
+ | 
+ | 
+(1990 NDT)
+ | 
+ | 
+Computation time steps (if IDTOPT=1) (sec) maximum of 1990 values
+ | 
+
+Table 11.7.3 COMMON /GEOMIN/
+
+ | 
+
+ | 
+Location Number
+ | 
+ | 
+Name
+ | 
+ | 
+Value
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+2001
+ | 
+ | 
+ZFUEL
+ | 
+ | | 
+ | 
+Length of fuel column (cm)
+ | 
+
+ | 
+2002-2010
+ | 
+ | | 
+ | 
+(9)
+ | 
+ | 
+(Not currently used)
+ | 
+
+ | 
+2011-2030
+ | 
+ | 
+DZ
+ | 
+ | 
+(20 NDZ)
+ | 
+ | 
+Height of axial segments (cm) (required only when IDZ=1)
+ | 
+
+ | 
+2031-2050
+ | 
+ | 
+FUELIR
+ | 
+ | 
+(20 NDZ)
+ | 
+ | 
+Inner radius of fuel (cm)
+ | 
+
+ | 
+2051-2070
+ | 
+ | 
+FUELOR
+ | 
+ | 
+(20 NDZ)
+ | 
+ | 
+Outer radius of fuel (cm)
+ | 
+
+ | 
+2071-2090
+ | 
+ | 
+CLADIR
+ | 
+ | 
+(20 NDZ)
+ | 
+ | 
+Inner radius of clad (cm)
+ | 
+
+ | 
+2091-2110
+ | 
+ | 
+CLADOR
+ | 
+ | 
+(20 NDZ)
+ | 
+ | 
+Outer radius of clad (cm)
+ | 
+
+ | 
+(Note: values #2111-2112 not required when IHTOPT=1)
+ | 
+ | | 
+ | | 
+ | | 
+
+ | 
+2111
+ | 
+ | 
+WALLIR
+ | 
+ | | 
+ | 
+Inner radius of outer wall (cm)
+ | 
+
+ | 
+2112
+ | 
+ | 
+WALLOR
+ | 
+ | | 
+ | 
+Outer radius of outer wall (cm)
+ | 
+
+ | 
+2113
+ | 
+ | 
+ZPLENM
+ | 
+ | | 
+ | 
+Total length of plenum (cm)
+ | 
+
+ | 
+2114
+ | 
+ | 
+ZPLNA
+ | 
+ | | 
+ | 
+Length of sodium in plenum (cm)
+ | 
+
+ | 
+2115
+ | 
+ | 
+PLGASR
+ | 
+ | | 
+ | 
+Gas constant for plenum gasses (Bar-cc/gm-K)
+ | 
+
+ | 
+2116
+ | 
+ | 
+PLTREF
+ | 
+ | | 
+ | 
+Temperature at which PINT specified (K). Used to correct PINT to value consistent with initial plenum temperature.
+ | 
+
+ | 
+2117-2200
+ | 
+ | | 
+ | 
+(84)
+ | 
+ | 
+(Not currently used)
+ | 
+
+ | 
+2201-2600
+ | 
+ | 
+FECTI(I,J)
+ | 
+ | 
+(20,20 NDZ)
+ | 
+ | 
+Initial radial crack strain in fuel (required only when ICRACK=1)
+
+(Loc. Numb.=2200+I+20*(J-1))
+
+ | 
+
+ | 
+2601-3000
+ | 
+ | | 
+ | 
+(400)
+ | 
+ | 
+(Not currently used)
+ | 
+
+Table 11.7.4 COMMON /DRIVIN/
+
+ | 
+
+ | 
+Location Number
+ | 
+ | 
+Name
+ | 
+ | 
+Value
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+3001
+ | 
+ | 
+PEXT
+ | 
+ | | 
+ | 
+External pressure. Assumed constant during transient. (Bar)
+ | 
+
+ | 
+3002
+ | 
+ | 
+PINT
+ | 
+ | | 
+ | 
+Initial value of internal pin press. (Bar)
+ | 
+
+ | 
+3003-3004
+ | 
+ | | 
+ | 
+(2)
+ | 
+ | 
+(Not currently used)
+ | 
+
+ | 
+(Note: values 3005-3006 not needed when IHTOPT=1)
+ | 
+ | | 
+ | | 
+ | | 
+
+ | 
+3005
+ | 
+ | 
+TSINK
+ | 
+ | | 
+ | 
+Temperature of outer heat sink (K)
+ | 
+
+ | 
+3006
+ | 
+ | 
+HSINK
+ | 
+ | | 
+ | 
+Heat transfer coefficient-wall to outer heat sink (Watts/cm2-K)
+ | 
+
+ | 
+3007
+ | 
+ | 
+QCONST
+ | 
+ | | 
+ | 
+Energy generation constant. The energy generation rate for fuel radial segment I, axial segment J at time K is calculated as QCONST*QR(I)*QAX(J)*QT(K). The method of dimensioning and normalizing the four factors is arbitrary so long as the product dimension is in Watts/gm.
+ | 
+
+ | 
+3008
+ | 
+ | 
+BURNUP
+ | 
+ | | 
+ | 
+Peak fuel burnup (atom %)
+ | 
+
+ | 
+3009-3010
+ | 
+ | | 
+ | 
+(2)
+ | 
+ | 
+(Not currently used)
+ | 
+
+ | 
+3011-3410
+ | 
+ | 
+QR(I,J)
+ | 
+ | 
+(20,20 NDZ)
+ | 
+ | 
+Radial profile of energy generation rate. Values are required for NDRF radial elements in each axial segment. (See: QCONST for units) (Loc. Numb. = 3010+I+20*(J-1))
+ | 
+
+ | 
+3411-3430
+ | 
+ | 
+QAX
+ | 
+ | 
+(20 NDZ)
+ | 
+ | 
+Axial profile of energy generation rate (see: QCONST)
+ | 
+
+ | 
+3431-3455
+ | 
+ | 
+TQT
+ | 
+ | 
+(25 NQ)
+ | 
+ | 
+Time values in power vs. time table (sec)
+ | 
+
+ | 
+3456-3480
+ | 
+ | 
+QT
+ | 
+ | 
+(25 NQ)
+ | 
+ | 
+Power values in power vs. time table (see: QCONST)
+ | 
+
+ | 
+(Note: values 3481-3580 not needed when IHTOPT=1)
+ | 
+ | | 
+ | | 
+ | | 
+
+ | 
+3481-3505
+ | 
+ | 
+TTIN
+ | 
+ | 
+(25 NCOOLT)
+ | 
+ | 
+Time values in coolant inlet temperature versus time table (sec)
+ | 
+
+ | 
+3506-3530
+ | 
+ | 
+TIN
+ | 
+ | 
+(25 NCOOLT)
+ | 
+ | 
+Coolant inlet temperatures (K)
+ | 
+
+ | 
+3531-3555
+ | 
+ | 
+TCFIN
+ | 
+ | 
+(25 NCOOLF)
+ | 
+ | 
+Time values in coolant inlet flow versus time table (sec)
+ | 
+
+ | 
+3556-3580
+ | 
+ | 
+CFIN
+ | 
+ | 
+(25 NCOOLF)
+ | 
+ | 
+Coolant inlet flow (gm/cm2-sec)
+ | 
+
+ | 
+3581-4000
+ | 
+ | | 
+ | 
+(420)
+ | 
+ | 
+(Not currently used)
+ | 
+
+Table 11.7.5 COMMON /MISCIN/
+
+ | 
+
+ | 
+Location Number
+ | 
+ | 
+Name
+ | 
+ | 
+Value
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+4001
+ | 
+ | 
+GBFRAC
+ | 
+ | | 
+ | 
+Fraction of FISGAS on grain boundaries (default value is 0.1)
+ | 
+
+ | 
+4002-4039
+ | 
+ | | 
+ | 
+(38)
+ | 
+ | 
+(Not currently used)
+ | 
+
+ | 
+4040
+ | 
+ | 
+GASCON
+ | 
+ | | 
+ | 
+Gas constant for central cavity gases (Bars-cc/gm-K)
+ | 
+
+ | 
+4041-4060
+ | 
+ | 
+CLDFLU
+ | 
+ | 
+(20 NDZ)
+ | 
+ | 
+Axial profile of clad fluence used in subroutine CFAIL (1022 n/cm2)
+ | 
+
+ | 
+4061-4080
+ | 
+ | 
+CLDHRD
+ | 
+ | 
+(20 NDZ)
+ | 
+ | 
+Pre-transient hardness parameter used in clad flow stress calculation. (Default value is 0.223, the value appropriate to 20% CW unirradiated stainless steel.)
+ | 
+
+ | 
+4081-4480
+ | 
+ | 
+PORES(I,J)
+ | 
+ | 
+(20,20 NDZ)
+ | 
+ | 
+Dist. of total fuel porosity same radial grid as QR (do not include crack volume input)
+
+(Loc. Numb. = 4080+I+20*(J-1))
+
+ | 
+
+ | 
+4481-4880
+ | 
+ | 
+FISGAS(I,J)
+ | 
+ | 
+(20,20 NDZ)
+ | 
+ | 
+Dist. of fission gas (gm/cc) in fuel closed porosity and in solution on same radial grid as QR (do not include fission gas in open porosity). (Loc. Numb. = 4480+I+20*(J-1))
+ | 
+
+ | 
+4881-5000
+ | 
+ | | 
+ | 
+(120)
+ | 
+ | 
+(Not currently used)
+ | 
+
+ | 
+5001-5400
+ | 
+ | 
+FRACPU(I,J)
+ | 
+ | 
+(20,20 NDZ)
+ | 
+ | 
+Dist. of plutonium (wt. %) in fuel (required when IFTYPE=4) (Loc. Numb. = 5000+I+20*(J-1))
+ | 
+
+ | 
+5401-5800
+ | 
+ | 
+FRACZR(I,J)
+ | 
+ | 
+(20,20 NDZ)
+ | 
+ | 
+Dist. of zirconium (wt. %) in fuel (required when IFTYPE=4) (Loc. Numb. = 5400+I+20*(J-1))
+ | 
+
+ | 
+5801-6000
+ | 
+ | | 
+ | 
+(200)
+ | 
+ | 
+(Not currently used).
+ | 
+
+Table 11.7.6 COMMON /TEMPIN/
+
+ | 
+
+ | 
+Location Number
+ | 
+ | 
+Name
+ | 
+ | 
+Value
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+(Note: values 6001-7050 are only required when IHTOPT=1)
+ | 
+ | | 
+ | | 
+ | | 
+
+ | 
+6001-6050
+ | 
+ | 
+TVALUE
+ | 
+ | 
+(50 NCLADT)
+ | 
+ | 
+Time values for clad surface temperature table (include TZERO) (sec)
+ | 
+
+ | 
+6051-7050
+ | 
+ | 
+TCSURF(J,K)
+ | 
+ | 
+(20 NDZ,50 NCLADT)
+ | 
+ | 
+Clad outer surface temperature for axial segment J at time K (K) (Loc. Numb. = 6050+J+20*(K-1))
+ | 
+
+*** Location Numbers for Debug Data ***
+
+(All debug options default to zero. Therefore, input is required only if
+a debug option is to be used. Debug input is identified with location
+numbers larger than 9000 and it follows same conventions as regular
+input. Integer debug data is read in with regular integer data and
+decimal debug data is read in with regular decimal data.)
+
+Table 11.7.7 COMMON /DEBUGI/ Integer Debug Data
+
+ | 
+
+ | 
+Location Number
+ | 
+ | 
+Name
+ | 
+ | 
+Value
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+9001
+ | 
+ | 
+IDBOUT
+ | 
+ | 
+=0
+ | 
+ | 
+No debug output
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Add debug output to regular IOUTSW=2 output
+ | 
+
+ | 
+9002
+ | 
+ | 
+IDBSTP
+ | 
+ | 
+=0
+ | 
+ | 
+Program stops when molten cavity freezes
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Ignore this program stop
+ | 
+
+ | 
+9003
+ | 
+ | 
+IDBFPL
+ | 
+ | 
+=0
+ | 
+ | 
+Use recommended fuel flow stress Eq. (11.3-16)
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Use simple power law fuel creep: $\dot{\varepsilon} = C_{0}*\sigma_{\text{e}}^{C_{1}}$ (Decimal values 9001 and 9002 are required)
+ | 
+
+ | 
+9004
+ | 
+ | 
+IDBFDV
+ | 
+ | 
+=0
+ | 
+ | 
+Use recommended fuel swelling - hotpressing (fuel swelling option for metal fuel is the simple grain boundary swelling model (ANL-IFR-27) & (ANL/RAS 83-33)
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Use equilibrium swelling model (ANL-IFR-6 and -23)
+ | 
+
+ | | 
+ | | 
+ | 
+=2
+ | 
+ | 
+Use simple power law fuel swelling: $\dot{\varepsilon} = C_{0}*\sigma_{\text{m}}^{C_{1}}$ (Decimal values 9003 & 9004 are required)
+ | 
+
+ | 
+9005
+ | 
+ | 
+IDBCPL
+ | 
+ | 
+=0
+ | 
+ | 
+Use recommended clad flow stress
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Use ideal plastic flow for clad: $\sigma_{\text{y}} = C_{0} + C_{1}{\overline{\varepsilon}}^{p}$ (Decimal values 9005 & 9006 are required)
+ | 
+
+ | | 
+ | | 
+ | 
+=2
+ | 
+ | 
+Use high-temperature power-law creep
+ | 
+
+ | | 
+ | | 
+ | 
+=3
+ | 
+ | 
+Use simple power law clad creep: $\dot{\varepsilon} = C_{0}*\sigma_{\text{e}}^{C_{1}}$ (Decimal values 9005 & 9006 are required)
+ | 
+
+ | 
+9006
+ | 
+ | 
+IGPRES
+ | 
+ | 
+=0
+ | 
+ | 
+Open fuel-clad gap pressure and plenum pressure remain at input values
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+User supplied gap pressure. This option allows FPIN2 to calculate pressure transients in gas pressurized cladding tubes. Plenum pressure is set equal to $p_{\text{gap}}$ .
+ | 
+
+ | 
+9007
+ | 
+ | 
+IGAPCL
+ | 
+ | 
+=0
+ | 
+ | 
+Use fuel-clad opening/closure model
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Fuel-clad gap always closed
+ | 
+
+ | 
+9008
+ | 
+ | 
+ICPROP
+ | 
+ | 
+=0
+ | 
+ | 
+Use material property correlations
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Use temperature independent material properties
+ | 
+
+ | 
+9009
+ | 
+ | 
+ISKIPM
+ | 
+ | 
+=0
+ | 
+ | 
+Perform complete thermal/mechanical calculations
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Bypass mechanical calculation, heat trans. only
+ | 
+
+ | 
+9010
+ | 
+ | 
+IGCLOS
+ | 
+ | 
+=0
+ | 
+ | 
+Use gap closure routine at 100% fuel melting
+ | 
+
+ | | 
+ | | 
+ | 
+=1
+ | 
+ | 
+Do not close gap (if open) at 100% fuel melting
+ | 
+
+ | 
+9011-9050
+ | 
+ | | 
+ | 
+(40)
+ | 
+ | 
+(Not currently used)
+ | 
+
+ | 
+9051
+ | 
+ | 
+NGPRES
+ | 
+ | 
+(25)
+ | 
+ | 
+No. of values in $p_{\text{gap}}$ vs. time table
+ | 
+
+ | 
+9052-9100
+ | 
+ | | 
+ | 
+(49)
+ | 
+ | 
+(Not currently used)
+ | 
+
+ | 
+9101-9120
+ | 
+ | 
+IDBOTA
+ | 
+ | 
+(20 NDZ)
+ | 
+ | 
+Axial debug print vector (0=no prt, 1=prt)
+ | 
+
+ | 
+9121-9140
+ | 
+ | 
+IDBOTF
+ | 
+ | 
+(20)
+ | 
+ | 
+Fuel radial debug print vector
+ | 
+
+ | 
+9141-9150
+ | 
+ | 
+IDBOTC
+ | 
+ | 
+(10)
+ | 
+ | 
+Clad radial debug print vector
+ | 
+
+Table 11.7.8 COMMON /DEBUGD/ Decimal Debug Data
+
+ | 
+
+ | 
+Location Number
+ | 
+ | 
+Name
+ | 
+ | 
+Value
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+9001
+ | 
+ | 
+FPLC0
+ | 
+ | | 
+ | 
+Fuel power law creep constant $C_{0}$ 
+ | 
+
+ | 
+9002
+ | 
+ | 
+FPLC1
+ | 
+ | | 
+ | 
+Fuel power law creep constant $C_{1}$ 
+ | 
+
+ | 
+9003
+ | 
+ | 
+FDVC0
+ | 
+ | | 
+ | 
+Fuel power law swelling constant $C_{0}$ 
+ | 
+
+ | 
+9004
+ | 
+ | 
+FDVC1
+ | 
+ | | 
+ | 
+Fuel power law swelling constant $C_{1}$ 
+ | 
+
+ | 
+9005
+ | 
+ | 
+CIPLC0
+ | 
+ | | 
+ | 
+Clad idealized flow stress constant $C_{0}$ 
+ | 
+
+ | 
+9006
+ | 
+ | 
+CIPLC1
+ | 
+ | | 
+ | 
+Clad idealized flow stress constant $C_{1}$ 
+ | 
+
+ | 
+9007
+ | 
+ | 
+HTERR
+ | 
+ | | 
+ | 
+Relative convergence criterion for heat transfer calculation (ND) “0.0005”
+ | 
+
+ | 
+9008
+ | 
+ | 
+EPSCAV
+ | 
+ | | 
+ | 
+Rel. convergence criterion for cavity pressure (ND) “0.001”
+ | 
+
+ | 
+9009
+ | 
+ | 
+EPSFE
+ | 
+ | | 
+ | 
+Rel. convergence criterion for finite element analysis (ND) “0.0005”
+ | 
+
+ | 
+9010
+ | 
+ | 
+EPTEST
+ | 
+ | | 
+ | 
+Rel. convergence criterion for plastic-creep strains (ND) “0.0005”
+ | 
+
+ | 
+9011
+ | 
+ | 
+EVTEST
+ | 
+ | | 
+ | 
+Rel. convergence criterion for swelling strains (ND) “0.0005”
+ | 
+
+ | 
+9012-9020
+ | 
+ | | 
+ | 
+(9)
+ | 
+ | 
+(Not currently used)
+ | 
+
+ | 
+9021-9045
+ | 
+ | 
+TGPRES
+ | 
+ | 
+(25 NG PRES)
+ | 
+ | 
+Time values in $p_{\text{gap}}$ table
+ | 
+
+ | 
+9046-9070
+ | 
+ | 
+GPRES
+ | 
+ | 
+(25 NGPRES)
+ | 
+ | 
+Fuel-cladding gap pressure in $p_{\text{gap}}$ table
+ |

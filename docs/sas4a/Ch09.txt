@@ -1,0 +1,4626 @@
+==============================================================================
+CHAPTER 9. MFUEL: Metallic Fuel Performance Model
+source: https://sas-doc.nse.anl.gov/latest/Part03/Ch09/Ch09.html   (ANL/NSE-SAS/5.8.1)
+scope: out of scope: MFUEL metallic fuel
+==============================================================================
+[anchor: mfuel-metallic-fuel-performance-model]
+
+# 9. MFUEL: Metallic Fuel Performance Model
+
+9.1. Introduction
+
+9.2. Model Formulation
+
+9.2.1. Fuel Constituent Redistribution
+
+9.2.2. Fuel Clad Chemical Interaction
+
+9.2.3. Fuel Swelling and Fission Gas Release
+
+9.2.4. Plenum Gas Pressure
+
+9.2.5. Fuel Anisotropic Axial Elongation
+
+9.2.6. Fuel Pin Mechanical Analysis
+
+9.2.7. In-Pin Sodium Treatment
+
+9.2.8. Clad Outer Corrosion
+
+9.2.9. CDF-Based Clad Creep Rupture
+
+9.2.10. Mechanistic Clad Creep Rupture
+
+9.2.11. Clad Failure Assessment
+
+9.3. Time Step Controls
+
+9.4. Solution Algorithm and Flow Charts
+
+9.5. Interactions with Other SAS Models
+
+9.6. Input and Output Description
+
+9.7. References
+
+9.8. Appendices
+
+9.8.1. Appendix 9.1: Main Assumptions
+
+9.8.2. Appendix 9.2: Thermodynamics and Kinetics Parameters of Fuel Constituent Redistribution Model
+
+9.8.3. Appendix 9.3: Thermodynamics and Kinetics Parameters of Fuel Clad Chemical Interaction Model
+
+9.8.4. Appendix 9.4: Fuel Swelling and Fission Gas Release Model Parameters
+
+9.8.5. Appendix 9.5: Mechanical Properties
+
+9.8.6. Appendix 9.6: Metallic Fuel Thermal Conductivity Model
+
+9.8.7. Appendix 9.7: MCF Model Parameters
+
+9.8.8. Appendix 9.8: DEFORM-5: Metallic Fuel Cladding Transient Behavior Model
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch09/introduction.html]
+------------------------------------------------------------------------------
+[anchor: introduction]
+
+# 9.1. Introduction
+
+In Version 5.7, a new metallic fuel performance model for pre-transient and
+transient analysis has been introduced.
+The new fuel model is described in the remaining sections of this chapter, the description
+of DEFORM-5, which is considered deprecated, has been moved to Section 9.8.8.
+
+The integrated metallic fuel performance model accounts for the coupled
+nature of the uranium plutonium zirconium metallic fuel phenomena and
+its impact/evolution on/during safety analysis. Given the user-provided
+operating history, initial geometry, fresh fuel composition, mass,
+cladding type, and the calculated fuel pin and coolant temperature
+distribution, MFUEL, the metallic fuel performance model, simulates the
+fuel and cladding behavior as a function of time. The main capabilities
+of MFUEL are prediction of: 1) Fuel pin mechanics, and compositional and
+dimensional changes; 2) Clad failure; and 3) Fuel pin thermal
+resistance. Achieving these high-level goals accurately is strongly
+related to the model performance of individual physical processes taking
+place within the fuel pin during operation. Metal fuels typically
+operate above half of their solidus temperatures during normal as well
+as off-normal conditions. Availability of thermal activation provides
+the driving force for various diffusional processes leading to complex
+phase transformations, micro-structure evolution, significant amount of
+fuel swelling, interconnected porosity formation, excessive amounts of
+fission gas release, and fuel clad chemical interactions. Clad failure
+in fast reactors primarily occurs as a result of creep rupture augmented
+by clad wastage formation. The reaction is driven by thermal creep
+induced dislocation motion, grain boundary cavity nucleation, and growth
+and breakup of grain boundaries. The high-level complexity and limited
+available data requires introducing physics-based modeling approaches to
+gain extrapolation ability and sensitivity with respect to various
+conditions.
+
+As shown in Figure 9.1.1, the MFUEL driver evaluates the different physical
+phenomena, described in Section 9.2 at each time step. At the end of
+each time step, the MFUEL driver updates the fuel pin geometry, fuel pin
+composition, plenum pressure, fuel porosity, bond sodium infiltration,
+and clad failure margin. Each of these quantities has an impact on the
+fuel pin thermal-hydraulics, reactivity feedback, and margin to fuel
+melting.
+
+Figure 9.1.1 MFUEL - Integrated Metal Fuel Models. Processes shown in red
+are handled by other SAS models and processes shown in green are handled
+by the MFUEL driver.
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch09/formulation.html]
+------------------------------------------------------------------------------
+[anchor: model-formulation]
+
+# 9.2. Model Formulation
+
+[anchor: fuel-constituent-redistribution]
+
+## 9.2.1. Fuel Constituent Redistribution
+
+Fuel constituent redistribution is one of the important characteristics
+of metallic fuel. Under a typical temperature gradient, three distinct
+radial regions form in the fuel [9‑1].
+
+A body centered cubic (BCC) single $\gamma$ phase region forms in the central radial region.
+
+An effective dual phase structure forms in the middle radial region. This can approximately be characterized by tetragonal $\beta$ precipitates and BCC $\gamma$ phase regions.
+
+In the outer radial region, an approximate dual phase region forms, characterized by orthorhombic $\alpha$ precipitates and BCC $\delta$ phase regions.
+
+Due to the difference of chemical affinity between the formed phase
+regions and zirconium and uranium atoms, radial migration of uranium and
+zirconium takes place. At equilibrium, zirconium-rich, uranium-depleted
+phases form in the central region, zirconium-depleted, uranium-rich
+phases form in the middle radial region, and a slightly
+zirconium-enriched region forms in the outer region. These structural
+and compositional changes affect fission gas behavior, porosity
+evaluation, fuel sintering behavior, solidus and liquidus temperature,
+fuel thermal conductivity, and radial power distribution.
+
+A one-dimensional diffusion model based on thermo-transport theory is
+adopted to predict the fuel constituent redistribution. Based on
+experimental observations, it is assumed that: U and Zr atoms switch
+places, Pu is immobile, enthalpy of solution is negligible, and kinetic
+reactions terminate when a solubility limit is reached. Eq. (9.2-1) is used
+as the continuity equation for the Zr migration in metallic alloy fuel.
+
+$$\frac{du}{dt} = - \nabla \bullet \left( J_{D} + J_{T} \right)$$ [eq 9.2-1]
+
+where the diffusive transport in single-phase regions is given as:
+
+$$J_{D} = - D\nabla u$$ [eq 9.2-2]
+
+and the thermal transport term is given as follows:
+
+$$J_{T} = - \nabla T\frac{DQ}{RT^{2}}u$$ [eq 9.2-3]
+
+A summation over local phases is implied for thermal transport.
+
+Axial migration is assumed to be negligible. In one-dimensional
+coordinates, Eq. (9.2-1) becomes:
+
+$$\frac{du}{dt} = \nabla \bullet \left\lbrack \left( D\nabla + \nabla T\frac{DQ}{R T^{2}} \right)u \right\rbrack =
+ \frac{1}{r}\frac{d}{dr}\left ( rD\frac{du}{dr} + r\frac{dT}{dr}\frac{DQ}{RT^{2}}u \right)$$ [eq 9.2-4]
+
+where $u$ is the Zr atom fraction, $D$ is the Zr diffusion
+coefficient (m2/s), $Q$ is the heat of transport of a
+local phase (J/mol), $T$ is the temperature (K), $R$ is the
+universal gas constant (J/mol/K), and $r$ is the radial coordinate
+(m).
+
+[anchor: numerical-solution]
+
+### 9.2.1.1. Numerical Solution
+
+Utilizing a finite volume approach and applying the divergence theorem
+to Eq. (9.2-4), the following discretized equation for Zr atom fraction is
+obtained for the single-phase region:
+
+$$\frac{d{\overline{u}}_{i}}{dt}\frac{r_{i + \frac{1}{2}}^{2} - r_{i - \frac{1}{2}}^{2}}{2} =
+ \left\lbrack rD\frac{du}{dr} \right\rbrack_{r_{i - \frac{1}{2}}}^{
+ r_{i + \frac{1}{2}}} + \left\lbrack r\frac{dT}{dr}\frac{DQ}{RT^
+ {2}}u \right\rbrack_{r_{i - \frac{1}{2}}}^{r_{i + \frac{1}{2}}}$$ [eq 9.2-5]
+
+In two-phases regions, Fick’s Law does not apply and the diffusion term
+is neglected:
+
+$$\frac{
+ d{\overline{u}}_{i}}{dt}\frac{r_{i + \frac{1}{2}}^{2} - r_{i -
+ \frac{1}{2}}^{2}}{2} = \left\lbrack r\frac{dT}{dr}\frac{DQ}{RT^
+ {2}}u \right\rbrack_{r_{i - \frac{1}{2}}}^{r_{i + \frac{1}{2}}}$$ [eq 9.2-6]
+
+where $i$ is the radial node, $u$ is the Zr atom fraction,
+ $D$ is the Zr diffusion coefficient (m2/s), $Q$ is
+the heat of transport (J/mol), $T$ is the temperature (K),
+ $R$ is the universal gas constant, (J/mol/K), and $r$ is the
+radial dimension (m).
+
+For initial conditions, a uniform zirconium concentration is assumed
+based on user-defined input.
+
+[anchor: boundary-conditions]
+
+### 9.2.1.2. Boundary Conditions
+
+Assuming no Zr leaves or enters at radial boundaries, the following
+boundary conditions are applied to the fuel inner and outer surfaces:
+
+$$\frac{du}{dr} = 0\ \&\ Q = 0\ at\ r = 0$$ [eq 9.2-7]
+
+$$\frac{du}{dr} = 0\ \&\ Q = 0\ at\ r = R$$ [eq 9.2-8]
+
+where $R$ is the fuel outer surface (m) and $Q$ represents
+the heat of transport (J/mol) for each phase present at the
+corresponding boundary.
+
+In the MFUEL model, Zr diffusion is bounded by the solubility limits of
+the phases present. To simplify the numerical solution while applying
+the solubility limit conditions, the following conditions are enforced:
+
+$$\text{If: } u_{i} \geq u_{sol,\gamma}, u_{i + 1} \geq u_{sol,(\gamma\ or\ \delta)}
+ \text{ Then: } Q_{\beta(i,i + 1)} = 0$$ [eq 9.2-9]
+
+$$\text{If: }u_{i} \geq u_{sol,\gamma},\ u_{i - 1} \geq u_{sol,\gamma}
+ \text{ Then: } Q_{\gamma(i,i - 1)} = 0$$ [eq 9.2-10]
+
+$$\text{If: } u_{i} < u_{sol,\beta}
+ \text{ Then: } {Q_{\gamma(i,i - 1)} = 0}{Q_{\beta(i,i + 1)} = 0}$$ [eq 9.2-11]
+
+$$\text{If: } u_{i} < u_{sol,\alpha}
+ \text{ Then: } {Q_{\delta(i,i + 1)} = 0}{Q_{\alpha(i,i + 1)} = 0}$$ [eq 9.2-12]
+
+where $u_{sol,\alpha}$ , $u_{sol,\beta}$ ,
+ $u_{sol,\delta}$ , $u_{sol,\gamma}$ are the solubility limits
+of $\alpha,\beta,\delta,\gamma$ phases,
+respectively $,\ {\ Q}_{\alpha(i,i + 1)}$ ,
+ $Q_{\beta(i,i + 1)}$ , $Q_{\delta(i,i + 1)}$ are the heat
+transport between cell $i$ and $i + 1$ for $\alpha$ ,
+ $\beta$ , and $\delta$ phases, respectively, and
+ $Q_{\gamma(i,i - 1)}$ is the heat of transport between cell
+ $i$ and $i - 1$ for the $\gamma$ phase.
+
+[anchor: time-step-control]
+
+### 9.2.1.3. Time Step Control
+
+In order to assure numerical convergence, the time step for the fuel
+constituent redistribution model is selected as a function of the fuel
+centerline temperature as given in Eq. (9.2-13).
+
+$$\begin{split}{{\Delta}t}_{Zr} = min\left( \begin{cases}
+50\ s & T_{c} \geq 1050\ K \\
+1000\ s & 900 \leq \ \ T_{c} < 1050\ K \\
+2000\ s & T_{c} < 900\ K \\
+\end{cases} ,{{\Delta}t}_{MFUEL}\ \right)\end{split}$$ [eq 9.2-13]
+
+where ${{\Delta}t}_{MFUEL}$ is the MFUEL’s main time step,
+ ${{\Delta}t}_{Zr}$ is the selected time step for the Zr
+migration model, and $T_{c}$ is the fuel centerline temperature
+(Kelvin). Section 9.3 describes MFUEL’s main time step for steady state
+and transients.
+
+[anchor: fuel-clad-chemical-interaction]
+
+## 9.2.2. Fuel Clad Chemical Interaction
+
+One of the constraints limiting metallic fuel performance is its
+chemical interaction with steel cladding. Its low solidus temperature
+combined with operation above the mid-point temperature of melting
+provides thermal activation for diffusion. During normal operation,
+migration of lanthanides from the fuel to the inner surface of the
+cladding leads to the formation of a brittle layer on this surface
+[9‑2]. In addition, diffusion of iron from the cladding to the fuel and
+formation of low melting temperature phases at the fuel surface occurs
+upon contact between the fuel and cladding. These iron-bearing phases
+may lead to eutectic formation during transients at elevated
+temperatures. Eutectic formation actuates the iron
+dissolution/penetration and can result in a significant amount of clad
+wastage [9‑3]. The lanthanide-rich, brittle layer and eutectic layer
+lead to clad thinning and embrittlement, which can result in creep
+fracture of the cladding.
+
+[anchor: lanthanide-migration]
+
+### 9.2.2.1. Lanthanide Migration
+
+Lanthanides are mostly insoluble within metallic fuels [9‑4]. Hence, it
+is assumed that they can be treated as diffusing in a single-phase
+medium. Having been produced by fission, the model allows lanthanides to
+diffuse under a concentration gradient. Lanthanide atoms that reach the
+unreacted cladding interface are assumed to precipitate in the form of
+ $(Fe,Cr)_{17}{LA}_{2}$ , consistent with experimental observations
+[9‑5].
+
+The continuity equation for lanthanide migration in metallic alloy fuel
+is written as:
+
+$$\frac{du}{dt} = - \nabla \cdot \mathbf{J}_{D} + q_{\text{La}}$$ [eq 9.2-14]
+
+where $u$ is the atom density per unit volume (#/m3),
+ $\mathbf{J}_{D}$ is the diffusive transport current given in Eq. (9.2-2)
+, $q_{\text{La}} = Y_{La}q^{'''}$ is the fission-produced
+lanthanide source term (#/m3/s), $Y_{La}$ is the
+lanthanide yield per Joule, and $q^{'''}$ is the power density,
+W/m3.
+
+In one-dimensional coordinates, the equation becomes as follows:
+
+$$\frac{du}{dt} = D\nabla \cdot \nabla u + q_{\text{La}} = \frac{1}{
+ r}\frac{d}{dr}\left( rD\frac{du}{dr} \right) + Y_{La}q^{'''}$$ [eq 9.2-15]
+
+Initial lanthanide concentration is assumed to be zero for metal alloy
+fuel. Prior to the contact between the fuel and cladding, lanthanides
+are produced within the fuel but assumed to not be trapped in the fuel.
+Upon the formation of the contact between fuel and cladding, it is
+assumed that lanthanides diffuse to the cladding and form
+ $(Fe,Cr)_{17}{LA}_{2}$ phase. At the interface between
+ $(Fe,Cr)_{17}{LA}_{2}$ bearing clad layer and unaffected cladding,
+the boundary condition for the free lanthanide concentration is zero.
+The hard contact between the fuel and cladding initiates when the fuel
+outer surface reaches the inner clad surface where the brittle
+lanthanide layer presents. The brittle layer formed as a result of
+lanthanide diffusion is assumed not to bear any load. Hence, it is
+removed from the available cladding thickness during mechanical
+analysis.
+
+[anchor: id1]
+
+### 9.2.2.2. Numerical Solution
+
+Lanthanide diffusion is solved in the radial direction from fuel
+centerline to the outermost cladding cell in which lanthanides have
+migrated. Before contact is made between the fuel and the cladding,
+there is no lanthanide migration into the cladding. Once contact is
+made, lanthanides begin to diffuse into the inner-most cladding cell.
+Diffusion into subsequent (outward) cells is limited until a solubility
+limit is reached in the current, outermost cell. Once the outermost cell
+reaches saturation, diffusion can progress to the next outward cell.
+Using a finite volume approach and applying the divergence theorem, the
+following discretized equation is obtained for the lanthanide diffusion
+through the fuel and cladding:
+
+$$\left( \frac{d{\overline{u}}_{i}}{dt} - q_{i} \right)\frac{r_{i + \frac{1}{2}}^{2} - r_
+ {i - \frac{1}{2}}^{2}}{2} = \left\lbrack rD\frac{du}{dr}
+ \right\rbrack_{r_{i - \frac{1}{2}}}^{r_{i + \frac{1}{2}}}$$ [eq 9.2-16]
+
+where $i$ is the radial cell, $u$ is the La atom density
+(#/m3), $q_{i}$ is the lanthanide production rate
+(#/m3/s), $D$ is the La diffusion coefficient
+(m2/s), and $r$ is the radial coordinate (m).
+
+The production of lanthanides, $q_{i}$ , can be related to the
+fission power, $P_{i}$ , in a region of the core with Volume,
+ $V_{i}$ . If the yield of lanthanides, $y_{\text{La}}$ , is
+defined per unit energy, the following equation is obtained:
+
+$$q_{i} = y_{\text{La}}\frac{P_{i}}{V_{i}}$$ [eq 9.2-17]
+
+Prior to the pre-transient irradiation, MFUEL assumes there are no
+lanthanides in the fuel.
+
+[anchor: id2]
+
+### 9.2.2.3. Boundary Conditions
+
+$$\left. \ \frac{du}{dr} \right|_{r = 0} = 0$$ [eq 9.2-18]
+
+$$u\left( r = R_{\text{out}} \right) = 0$$ [eq 9.2-19]
+
+where $R_{out}$ is the radial boundary between lanthanide-bearing
+and lanthanide-free cladding cells (m). Note that lanthanides that form
+compounds with the cladding are not counted as free lanthanide atoms, so
+there is a sink at the outer boundary. Once the lanthanide concentration
+at boundary node reaches the solubility limit, the corresponding node is
+assumed not to bear load (wastage) and the boundary node is shifted to
+the next cladding radial node.
+
+[anchor: id3]
+
+### 9.2.2.4. Time Step Control
+
+In order to assure numerical convergence, the time step for the
+lanthanide migration model is selected as a function of the fuel
+centerline temperature as given in Eq. (9.2-20).
+
+$$\begin{split}{{\Delta}t}_{La} = min\left( \begin{cases}
+50\ s & T_{c} \geq 1050\ K \\
+200\ s & 900 \leq \ \ T_{c} < 1050\ K \\
+500\ s & T_{c} < 900\ K \\
+\end{cases} ,{{\Delta}t}_{MFUEL}\ \right)\end{split}$$ [eq 9.2-20]
+
+where ${{\Delta}t}_{MFUEL}$ is the MFUEL main time step,
+ ${{\Delta}t}_{La}$ is the selected time step for the
+lanthanide migration model, and $T_{c}$ is the fuel centerline
+temperature (Kelvin). Section 9.3 describes MFUEL’s main time step for
+steady state and transients.
+
+[anchor: iron-migration]
+
+### 9.2.2.5. Iron Migration
+
+Diffusion of iron into the fuel leads to formation of various complex
+phase structures at the fuel/clad interface. Experiments performed with
+U-10Zr/Fe-12Cr diffusion couples show that the main iron-bearing regions
+can be grouped into eight approximate regions, as given in Table 9.2.1 and
+depicted in Figure 9.2.1 [9‑6]. The maximum iron-bearing phase forms at the
+fuel/clad interface. As iron penetrates towards the fuel inner regions,
+the equilibrium iron concentration drops in each formed phase. In this
+work, each region is represented with its corresponding equilibrium iron
+concentration. Since the phases present are complex and uphill diffusion
+takes place, the diffusion of iron under the chemical potential gradient
+is modeled using regular solution theory. Thermodynamics and kinetics
+parameters is approximated based on available experimental data.
+
+Table 9.2.1 Phase names, numbering, and approximate iron solubility
+ | 
+
+ | 
+Phase
+Number
+ | 
+ | 
+Phases
+ | 
+ | 
+Approximate Iron
+Solubility limit (%)
+ | 
+
+ | 
+
+ | 
+0
+ | 
+ | 
+Fuel
+ | 
+ | 
+0
+ | 
+
+ | 
+1
+ | 
+ | 
+U-Pu-Zr matrix + U-Pu-23Zr-6Fe
+ | 
+ | 
+2.5
+ | 
+
+ | 
+2
+ | 
+ | 
+U-Pu-Zr matrix+ U-Pu-42Zr-33Fe
+ | 
+ | 
+13.2
+ | 
+
+ | 
+3
+ | 
+ | 
+(U,Pu)6Fe + U - 42Zr - 33Fe
+ | 
+ | 
+21.8
+ | 
+
+ | 
+4
+ | 
+ | 
+(U,Pu)6Fe + U - 32Zr - 50 Fe
+ | 
+ | 
+28.6
+ | 
+
+ | 
+5
+ | 
+ | 
+Fe2Zr + (U,Pu)6Fe
+ | 
+ | 
+40.5
+ | 
+
+ | 
+6
+ | 
+ | 
+(U,Pu)Fe2` i
+ | 
+ | 
+66.7
+ | 
+
+ | 
+7
+ | 
+ | 
+Clad
+ | 
+ | 
+0.05 (lower limit)
+ | 
+
+ | 
+8
+ | 
+ | 
+Eutectic
+ | 
+ | 
+50
+ | 
+
+Figure 9.2.1 Phases formed at fuel cladding interface
+
+The continuity equation for iron migration into metallic alloy fuel is
+defined as follows:
+
+$$\frac{du}{dt} = - \nabla \cdot \mathbf{J}_{A}$$ [eq 9.2-21]
+
+where $J_{A}$ , the iron diffusion current (atom fraction*m/s), is
+given as follows:
+
+$$J_{A} = - uM\nabla\mu$$ [eq 9.2-22]
+
+In one-dimensional coordinates, Eq. (9.2-21) becomes:
+
+$$\frac{du}{dt} = \nabla \cdot uM\nabla\mu =
+ \frac{1}{r}\frac{d}{dr}\left( ruM\frac{d\mu}{dr} \right)$$ [eq 9.2-23]
+
+where $u$ is the iron atom fraction, $\mu$ is the chemical
+potential of iron (J/mol), $M = \frac{D}{RT}$ is the mobility, and
+ $D$ is the diffusion coefficient (m2/s), $R$ is the
+universal gas constant (J/mol/K), and $T$ is temperature (K).
+
+The chemical potential is defined for each phase as:
+
+$$\mu = W\left\lbrack (1 - u)^{2} - \left( 1 - C_{\text{sol}} \right)^{2} \right\rbrack$$ [eq 9.2-24]
+
+where $W$ is the interaction parameter (J/mol) and
+ $C_{\text{sol}}$ (atom fraction) is the iron solubility limit.
+
+With multiple (primary and forming) phases present, the chemical
+potential is defined as:
+
+$$\mu = \sum_{m}^{}\mu_{m} = \sum_{m}^{}{f_{m}W_{m}\left\lbrack (1 - u)^{2}
+ - \left( 1 - C_{\text{sol}}^{m} \right)^{2} \right\rbrack}$$ [eq 9.2-25]
+
+where $f_{m}$ is the fraction of phase $m$ present in the
+material.
+
+When the solubility limit of a phase is exceeded, the supersaturation
+drives the growth of the new phase at the expense of the dissolution of
+the existing phase. The rate of phase growth under supersaturation is
+assumed to be temperature-dependent and modeled using the following
+equation:
+
+$$\frac{\partial\eta_{m}}{\partial t} = k_{m0}\exp\left( - \frac{Q_{m}}{RT} \right)$$ [eq 9.2-26]
+
+where $\eta_{m}$ is the phase fraction of phase $m$ ,
+ $k_{m0}$ is the phase growth kinetics constant (1/s),
+ $Q_{m}$ is the activation energy (J/mol), $R$ is the
+universal gas constant, (J/mol/K), and $T$ is the temperature (K).
+
+[anchor: id4]
+
+### 9.2.2.6. Numerical Solution
+
+Iron migration is solved in radial coordinates between the fuel
+centerline and clad outer surface. The chemical interaction starts only
+if there is chemical contact between the fuel and cladding. Diffusion is
+assumed to take place under the chemical potential difference between
+radial cells.
+
+Using a finite volume approach and applying the divergence theorem, the
+following discretized equation is obtained for the iron diffusion
+through fuel and cladding:
+
+$$\frac{d{\overline{u}}_{i}}{dt}\frac{r
+ _{i + \frac{1}{2}}^{2} - r_{i - \frac{1}{2}}^{2}}{2} = \lbrack
+ ruM\nabla\mu\rbrack_{r_{i - \frac{1}{2}}}^{r_{i + \frac{1}{2}}}$$ [eq 9.2-27]
+
+where $i$ is the radial cell, $r$ is the radial location
+(m), $u$ is the iron atom fraction, $\mu$ is the chemical
+potential of iron (J/mol), $M = \frac{D}{RT}$ is the mobility,
+ $D$ is the diffusion coefficient (m2/s), $R$ is the
+universal gas constant (J/mol/K), and $T$ is temperature (K).
+
+Growth of the forming phase at a radial node-i using explicit time
+discretization of Eq. (9.2-26) as follows:
+
+$$\frac{\eta_{mi}^{k} - \eta_{mi}^{
+ k - 1}}{\Delta t} = k_{m0}\exp\left( - \frac{Q_{m}}{RT} \right)$$ [eq 9.2-28]
+
+where $\eta_{mi}^{k}$ and $\eta_{mi}^{k - 1}$ are the phase
+fraction of $m$ th phase for node-i at current and previous time
+steps, respectively, $k_{m0}$ is the phase growth kinetics
+constant (1/s), $Q_{m}$ is the activation energy (J/mol),
+ $R$ is the universal gas constant, (J/mol/K), and $T$ is the
+temperature (K), $\Delta t$ is the time step (s) .
+
+Prior to the pre-transient irradiation, MFUEL assumes that there is no
+iron in the fuel and that the iron content in the cladding is uniform.
+
+[anchor: id5]
+
+### 9.2.2.7. Boundary Conditions
+
+$$\left. \ \frac{d\mu}{dr} \right|_{r = 0} = 0$$ [eq 9.2-29]
+
+$$\left. \ \frac{d\mu}{dr} \right|_{r = R} = 0$$ [eq 9.2-30]
+
+where $R$ is the clad outer surface.
+
+[anchor: id6]
+
+### 9.2.2.8. Time Step Control
+
+In order to assure numerical convergence, the time step for the iron
+migration model is selected as a function of the fuel centerline
+temperature as given in Eq. (9.2-31).
+
+$$\begin{split}{{\Delta}t}_{iron} = min\left( \begin{cases}
+5\ s & T_{c} \geq 950\ K \\
+25\ s & 900 \leq \ \ T_{c} < 950\ K \\
+50\ s & 850 \leq \ \ T_{c} < 900\ K \\
+100\ s & T_{c} < 850\ K \\
+\end{cases},{{\Delta}t}_{MFUEL}\ \right)\end{split}$$ [eq 9.2-31]
+
+where ${{\Delta}t}_{MFUEL}$ is the MFUEL main time step,
+ ${{\Delta}t}_{iron}$ is the selected time step for the iron
+migration model, and $T_{c}$ is the fuel centerline temperature
+(Kelvin). Section 9.3 describes MFUEL’s main time step for steady state
+and transients.
+
+[anchor: eutectic-formation]
+
+### 9.2.2.9. Eutectic Formation
+
+Above the fuel liquefaction temperature, eutectic formation and
+penetration into the cladding takes place via migration of actinides and
+iron at the fuel/cladding interface, resulting in liquefaction of the
+cladding. There are slow and rapid eutectic reactions. Ref. [9‑7]
+experimentally shows that metallic fuel liquefaction at temperatures
+below 1080°C is associated with the $(U,Pu)_{6}Fe$ phase, and the
+solubility limit of plutonium in this phase makes the transition
+plutonium dependent. As a result, the liquefaction for U-10Zr is assumed
+to take place at 715°C. The liquefaction temperature drops to 650°C for
+the U-19Pu-10Zr fuel alloy [9‑7]. Rapid eutectic formation is associated
+with melting of the $(U,Pu)Fe_{2}$ phase above 1080°C [9‑8].
+
+There are two different eutectic formation models incorporated as part
+of this development, an empirical and a mechanistic model. The
+mechanistic model is applicable only to the slow eutectic formation and
+builds on top of the iron migration model. The empirical model covers
+both slow and rapid eutectic formation.
+
+[anchor: mechanistic-eutectic-model]
+
+#### 9.2.2.9.1. Mechanistic Eutectic Model
+
+In the mechanistic model, slow eutectic formation at the fuel/cladding
+interface is activated once a threshold temperature is reached. Beyond
+this temperature, the mechanistic model accounts for actinide diffusion
+and eutectic phase formation by solving Eq. (9.2-23) and Eq. (9.2-26),
+respectively, in addition to iron diffusion. As actinides and iron
+diffuse towards the eutectic interphase, the supersaturation drives the
+eutectic growth towards the cladding.
+
+[anchor: id7]
+
+### 9.2.2.10. Numerical Solution
+
+Actinide migration is solved by a finite volume approach and applying
+the divergence theorem. The following discretized equation is obtained
+for actinide transport from fuel to the fuel-cladding interface:
+
+$$\frac{d{\overline{u}}_{i}}{dt}\frac{r
+ _{i + \frac{1}{2}}^{2} - r_{i - \frac{1}{2}}^{2}}{2} = \lbrack
+ ruM\nabla\mu\rbrack_{r_{i - \frac{1}{2}}}^{r_{i + \frac{1}{2}}}$$ [eq 9.2-32]
+
+where $i$ is the radial cell, $r$ is the radial location
+(m), $u$ is the actinide atom fraction, $\mu$ is the
+chemical potential of actinides, (J/mol), $M = \frac{D}{RT}$ is
+the mobility, and $D$ is the diffusion coefficient,
+(m2/s), $R$ is the universal gas constant (J/mol/K), and
+ $T$ is temperature (K).
+
+When the solubility limit of actinides is exceeded, the supersaturation
+drives the growth of the eutectic phase into the next cell at the
+expense of the dissolution of the cladding. The rate of phase growth
+under supersaturation is assumed constant using Eq. (9.2-28) but with the
+parameters corresponding to the eutectic model.
+
+[anchor: id8]
+
+### 9.2.2.11. Boundary Conditions
+
+$$\left. \ \frac{d\mu}{dr} \right|_{r = 0} = 0$$ [eq 9.2-33]
+
+$$\left. \ \frac{d\mu}{dr} \right|_{r = R} = 0$$ [eq 9.2-34]
+
+where $R$ is the clad outer surface (m).
+
+[anchor: empirical-eutectic-model]
+
+#### 9.2.2.11.1. Empirical Eutectic Model
+
+The empirical model is based on Ref. [9‑8] and given in Eq. (9.2-35).
+This is the only model applicable to rapid eutectic formation,
+however, it also covers the slow eutectic formation range.
+
+$$\begin{split}E_{rate} = S_{Eu} \begin{cases}
+C_{eut}\left(1.1338 \times 10^{-9}\Delta T^{3} - 2.1522 \times 10^{- 7}\Delta T^{2} \right. & \\
+\left. + 2.9265 \times 10^{- 6}\Delta T + 9.22 \times 10^{- 4} \right) & T_{low} < T < T_{high} \\
+\left( \exp\left( 22.847 - \frac{27624}{T} \right) \right) \times 10^{- 6} & \text{else}
+\end{cases}\end{split}$$ [eq 9.2-35]
+
+where $T$ is Fuel Surface Temperature (K),
+ ${\Delta}T = T - T_{peak}$ is the difference in
+temperature from the peak (K), $E_{rate}$ is the eutectic
+formation rate (m/s), $\ C_{eut}$ is a scaling factor which
+has been experimentally shown to depend on Pu content of the fuel,
+ $T_{low} = 1353.15$ is the lowest rapid eutectic formation
+temperature (K), $T_{high} = 1506.15$ is the highest rapid
+eutectic formation temperature (K), $T_{peak} = 1388.15$ is
+the temperature at which peak eutectic formation rate occurs (K),
+and $S_{Eu}$ is the user-defined sensitivity coefficient
+for the formation rate, SCEUR.
+
+Similar to the lanthanide migration model, the eutectic layer is
+assumed not to bear any load in mechanical analysis.
+
+[anchor: id9]
+
+### 9.2.2.12. Time Step Control
+
+Since the eutectic model is active only during the transients, the
+time step for this model is equal to the MFUEL’s main time step.
+
+[anchor: fuel-swelling-and-fission-gas-release]
+
+## 9.2.3. Fuel Swelling and Fission Gas Release
+
+Diffusion of fission gas atoms takes place up to the point where they
+get trapped by a sink such as phase boundaries, grain boundaries,
+dislocations, existing bubbles, or open porosity. The growth of
+bubbles is driven by gas diffusion, bubble coalescence, and operating
+conditions. Post-irradiation examination of high smear density EBR-II
+metal fuels [9‑9] indicates that a threshold gas swelling exists at
+approximately 10% gas swelling. Above the threshold gas swelling,
+fuel fracture and formation of interconnected open porosity network
+begins to take place. At this point, the gas in the fuel matrix or
+inside growing bubbles can be directly released to the plenum via
+interconnected porosity. After the formation of a significant amount
+of open porosity networks, gas swelling tends to saturate. However,
+solid fission product swelling continues. When hard contact (see
+Section 9.2.5) between fuel and cladding occurs, pressure sintering
+of the open porosity takes place to accommodate for solid fission
+product swelling.
+
+Fission gas behavior models are based on the GRSIS algorithm
+developed by KAERI [9‑10] and further improved in the FEAST project
+at MIT [9‑11], [9‑12]. The model takes a similar approach to the
+FEAST code [9‑11], [9‑12] but is extended to account for the
+transient behavior, including fuel temperatures above the solidus
+temperature. A constant atom number bubble-grouping scheme is adopted
+considering morphological variation within the fuel due to formation
+of different phase structures. Bubbles in $\alpha + \delta$ 
+phase structure are treated as ellipsoidal whereas bubbles formed in
+ $\beta + \gamma$ and single $\gamma$ phases are
+spherical. Three groups of closed bubbles (1: small, 2: medium, 3:
+large) and three groups of open porosity bubbles (4-1: connected
+small, 4-2: connected medium, 4-3: connected large) are modeled.
+Based on experimental observations in TREAT tests and furnace tests,
+large bubbles, which are 125 times larger than the medium bubble
+group, only occur at temperatures above the solidus temperature.
+
+Fission gas atoms are generated by fission, and then form (nucleate)
+new bubbles or diffuse into existing bubbles. The bubbles are assumed
+to nucleate uniformly in the metallic fuel matrix due to the fact
+that they nucleate at both the grain boundaries and the phase
+boundaries, which are randomly distributed inside the grain. The
+closed bubbles can grow by trapping the diffusing fission gas atoms
+within the fuel matrix.
+
+Open bubbles (or open pores) are chains of closed bubbles which have
+connected to each other and extend to the external free surface. When
+a closed bubble-i becomes an open porosity, it is transformed into
+bubble-4i. When the fuel matrix swelling due to the closed bubbles
+reaches the threshold value, it is assumed that a certain fraction of
+the bubbles become interconnected and release their gas into the free
+volume (i.e., they become open porosity). Open porosity bubbles are
+assumed not to exist until the threshold gas swelling, 10%, has been
+reached. Once the threshold has been reached, it is assumed that 1%
+of the closed bubbles create the open porosity network and gas
+release begins to take place.
+
+[anchor: governing-equations]
+
+### 9.2.3.1. Governing Equations
+
+The mechanistic model consists of a set of equations for gas atoms in
+the fuel matrix, closed bubbles, open porosity and released gas to
+the interconnected porosity, and constitutive models for several
+reactions such as gas bubble nucleation, gas diffusion coefficients,
+bubble coalescence, etc.
+
+Total fuel swelling is due to gas bubbles, open porosity, and solid
+fission products. The solid fission product swelling rate is set to
+1.5%/ at% burnup. The total swelling is given as follows:
+
+$$S_{0} = {\frac{\Delta V
+ }{V_{0}} = N_{b1}V}_{1} + N_{b2}V_{2} + N_{b3}V_{3} + {N_{b4
+ 1}V}_{1} + {N_{b42}V}_{2} + {N_{b43}V}_{3} + 0.015 \times bu$$ [eq 9.2-36]
+
+where Bu is the burnup (at %), $S_{0}$ is the total fuel
+swelling (-) with respect to initial volume, $V_{0}$ 
+( $m^{3}$ ), $\ N_{bi}$ is the density of closed bubble-i
+in the matrix (bubble/ $m^{3}$ ), $\ N_{b4i}$ is the
+density of porosity of type-i in matrix (bubble/ $m^{3}$ ),
+and $\ V_{i}$ is the volume of bubble-i
+( $m^{3}$ /bubble-i).
+
+The density of gas, closed bubbles, and open bubbles within the
+matrix is determined using:
+
+Gas atom density in fuel matrix:
+
+$$\frac{dC_{g}}{dt} = YF - \left
+ ( J_{g1} + J_{g2} + J_{g3} + J_{g4} \right) - J_{b_{1},nucl}$$ [eq 9.2-37]
+
+Closed bubble density:
+
+$$\begin{split} \rho_{g1}\frac{dN_{b1}}{dt} = \left( J_{b_{1},nucl} + J_{g1} -
+ \left( {ab}_{12} + {ab}_{13} \right) - \left( {gab}_{12} + {gab}_{21} +
+ {gab}_{13} + {gab}_{31} \right) \right. \\ \left.
+ - f_{12}\left( {ab}_{11} +
+ {gab}_{11} \right) - {ab}_{14} - {gab}_{14} \right)\end{split}$$ [eq 9.2-38]
+
+$$\begin{split} \rho_{g2}\frac{dN_{
+ b2}}{dt} = \left( J_{g2} + {ab}_{12} + {gab}_{12} + {gab}_{2
+ 1} + f_{12}\left( {ab}_{11} + {gab}_{11} \right) - \left( {g
+ ab}_{23} + {gab}_{32} \right) - \right. \\ \left.
+ f_{23}\left( {ab}_{22} + {ga
+ b}_{22} \right) - {ab}_{23} - {ab}_{24} - {gab}_{24} \right)\end{split}$$ [eq 9.2-39]
+
+$$\begin{split} \rho_{g3}\frac{dN_
+ {b3}}{dt} = \left( J_{g3} + {ab}_{13} + {ab}_{23} + {gab}_{1
+ 3} + {gab}_{31} + {gab}_{23} + {gab}_{32} + \right. \\ \left.
+ f_{23}\left( {ab
+ }_{22} + {gab}_{22} \right) - {ab}_{34} - {gab}_{34} \right)\end{split}$$ [eq 9.2-40]
+
+Open bubble density:
+
+$$\rho_{g1}\frac{dN_{b41}}{dt}
+ = {(ab}_{14} + {gab}_{14}) + \rho_{g1}\epsilon_{sint}N_{b41}$$ [eq 9.2-41]
+
+$$\rho_{g2}\frac{dN_{b42}}{dt}
+ = ({ab}_{24} + {gab}_{24}) + \rho_{g2}\epsilon_{sint}N_{b42}$$ [eq 9.2-42]
+
+$$\rho_{g3}\frac{dN_{b43}}{dt} =
+ ({ab}_{34} + {gab}_{34}\ ) + \rho_{g3}\epsilon_{sint}N_{b43}$$ [eq 9.2-43]
+
+Total gas release density:
+
+$$\frac{dC_{gr}}{dt} = J_{g4} + {ab}_{14} +
+ {ab}_{24} + {ab}_{34} + {gab}_{14} + {gab}_{24} + {gab}_{34}$$ [eq 9.2-44]
+
+where $\ C_{g}$ is the gas atom concentration in the fuel
+matrix (atoms/ $m^{3}$ ), Y is the fission yield of gas atoms,
+assumed to be 0.25 atoms/fission, F is the fission density with
+respect to the as-fabricated volume (fission/s/ $m^{3}$ ),
+ $J_{gi}$ is the gas diffusion rate to bubble-i
+(atoms/ $m^{3}/s$ ), $J_{b_{1},nucl}$ is the Bubble-1
+nucleation rate (atoms/ $m^{3}/s$ ), ${ab}_{ij}$ is the
+transfer rate of bubble-i into bubble-j by bubble diffusion
+(atoms/ $m^{3}/s$ ), ${gab}_{ij}$ is the transfer rate of
+bubble-i into bubble-j by radial growth of bubble-i
+(atoms/ $m^{3}/s$ ), $\epsilon_{sint}$ is the sintering
+strain rate on the fuel (1/s) $,$ $f_{i,i + 1}$ is the
+transition probability of bubble-i into bubble-(i+1) due to
+collision, and $\ \rho_{gi}$ is the constant atom number per
+bubble-i.
+
+Equilibrium bubble volume is determined based on Van der Waal’s
+equation:
+
+$$\frac{V_{bei}}{\rho_{gi}
+ } = B + \left\lbrack \left( \frac{\lambda\gamma}{kT} \right)
+ \frac{1}{R_{ei}} + \frac{\sigma_{h}}{kT} \right\rbrack^{- 1}$$ [eq 9.2-45]
+
+where:
+
+$$\sigma_{h} = - \frac{\sigma_{r} + \sigma_{\theta} + \sigma_{z}}{3}$$ [eq 9.2-46]
+
+and B is the Van der Waals Parameter ( $85 \times 10^{- 30}$ 
+ $m^{3}/atom$ ), $\gamma = 0.8$ is the surface tension
+(N/m) [9‑13],
+ $R_{i} = \left( \frac{3V_{i}}{4\pi} \right)^{1/3}$ is the
+radius of bubble-i (m), $\sigma_{h}$ is the hydrostatic stress,
+k= 1.3806 $\times 10^{- 23}$ is the Boltzmann constant (J/K),
+and $\lambda$ is the bubble correction factor. For spherical
+bubbles, the value of $\lambda\$ is 2 [9‑14], but is reduced
+to 0.8 for ellipsoidal bubbles.
+
+During pre-transient characterization, bubbles are assumed to be in
+equilibrium, $V_{bi} = \ V_{bei}$ . During the transients,
+non-equilibrium is assumed between the bubbles and the fuel matrix.
+It is assumed that bubble volume changes towards the equilibrium
+volume as a function of fuel creep as follows:
+
+$$\frac{dV_{bi}}{dt} = V_{bi}\epsilon_{cr}\left( V_{bei} \right)$$ [eq 9.2-47]
+
+where $\epsilon_{cr}$ is the fuel creep rate computed using
+pressure difference between matrix and bubble (1/s).
+
+[anchor: id10]
+
+### 9.2.3.2. Numerical Solution
+
+The fuel swelling and fission gas release model is a system of
+ordinary differential equations and is solved using a backwards Euler
+scheme. The system of ordinary differential equations is solved
+independently in every cell of the fuel. Prior to the pre-transient
+irradiation, MFUEL assumes there is no fission gas or porosity in the
+fuel. In order to ensure numerical stability, the time step used in
+this model is selected as a function of fuel temperature as given in
+Eq. (9.2-48). In single $\gamma$ phase, larger diffusion
+coefficient dictates smaller time steps.
+
+$$\begin{split}{\Delta}t_{fisg} = \min\left( \begin{cases}
+200\ s & T < T_{\gamma} \\
+100\ s & T \geq T_{\gamma} \\
+\end{cases} , {\Delta}t_{MFUEL}\ \right)\end{split}$$ [eq 9.2-48]
+
+where ${{\Delta}t}_{MFUEL}$ is the MFUEL coarse time step
+(s), ${{\Delta}t}_{fisg}$ is the selected time step for the
+fuel swelling and fission gas release model (s), T is the fuel
+temperature (K), and $T_{\gamma}$ is the single gamma phase
+transition temperature (K). Section 9.3 describes MFUEL’s main time step
+for steady state and transients.
+
+[anchor: plenum-gas-pressure]
+
+## 9.2.4. Plenum Gas Pressure
+
+The gas pressure in the free space of the fuel rod is computed
+assuming mechanical equilibrium and the ideal gas law. The initial
+fill gas, helium, is treated separately. The gas-filled plenum region
+and fuel’s interconnected open porosity network is the free space
+accommodating the released gas from the fuel and helium gas.
+
+The plenum gas pressure is computed as follows:
+
+$$P_{plegas} = \frac{N_{FGRel}RT_{ave}}{N_{A
+ v}V_{tot}} + P_{0}\frac{T_{ave}}{T_{R}}\frac{V_{R}}{V_{tot}}$$ [eq 9.2-49]
+
+$$V_{tot} = V_{R} + {\Delta}V_{
+ Plth} - {\Delta}V_{Fuexp} + {\Delta}V_{Fupor}
+ + {\Delta}V_{CladInnerExp} - {\Delta}V_{NaExp}$$ [eq 9.2-50]
+
+$$T_{ave} = \frac{{V_{tot}T}_{plenum} + \sum_{j = 1}^{
+ mz}{\sum_{i = 1}^{nt}{T_{fuel}(i,j) \times V_{porg}(i,j)}}}{
+ V_{tot} + \sum_{j = 1}^{mz}{\sum_{i = 1}^{nt}V_{porg}}(i,j)}$$ [eq 9.2-51]
+
+where $P_{plegas}$ is the plenum gas pressure (Pa),
+ $N_{FGRel}$ is the number of fission gas atoms released to the
+free space (-), $N_{Av}$ is Avogadro’s number (-/mol),
+ $R$ is the universal gas constant (J/mol/K), $T_{ave}$ is
+the average temperature of the overall free space (K),
+ $V_{tot}$ is the total available free space (m3),
+ $P_{0}$ is the initial fill-gas pressure (Pa), $T_{R}$ is
+the reference temperature corresponding to the initial fill-gas
+pressure (K), and $V_{R}$ is the reference volume corresponding
+to the initial fill-gas volume (m3).
+
+Note that $V_{tot}$ is determined based on the porosity of the
+fuel, expansion of the fuel and cladding, and relocation of the
+in-pin sodium (m3), where ${\Delta}V_{Plth}$ is
+the plenum region thermal expansion volume compared to as-fabricated
+dimensions (m3), ${\Delta}V_{Fuexp}$ is the
+fuel slug expansion (m3), ${\Delta}V_{Fupor}$ 
+is the gas-filled fuel open porosity volume (m3),
+ ${\Delta}V_{CladInnerExp}$ is the volume change due to
+clad inner radius expansion at fuel region (m3), and
+ ${\Delta}V_{NaExp}$ is the volume change due to in-pin
+sodium expansion (m3). In Eq. (9.2-51), $T_{plenum}$ is
+the plenum gas temperature(K), and $T_{fuel}(i,j)$ and
+ $V_{porg}(i,j)$ are the fuel temperature (K) and gas filled
+porosity volume (m3) at a given radial and axial node (i,j).
+
+Plenum gas pressure is computed at every time step directly by
+solving Eq. (9.2-49), Eq. (9.2-50), and Eq. (9.2-51), giving the plenum pressure at each
+time step.
+
+[anchor: fuel-anisotropic-axial-elongation]
+
+## 9.2.5. Fuel Anisotropic Axial Elongation
+
+Metallic fuels show anisotropic fuel axial elongation behavior. This
+is due to fuel cracking and irradiation growth/grain boundary tearing
+[9‑15]. After the fuel slug comes into soft contact with the
+cladding, further axial growth is restrained. Soft contact takes
+place when cracked fuel comes to radial contact with the cladding,
+whereas hard contact starts when the fuel swelling fills up all the
+cracks. Soft contact also activates the chemical contact between fuel
+and cladding. To incorporate this effect, the effective fuel slug
+radius is defined as follows:
+
+$$r_{eff} = r_{0} + {dr}_{slug} + {dr}_{crack} = r_{slug} + {dr}_{crack}$$ [eq 9.2-52]
+
+where $r_{0}$ is the as-fabricated fuel slug radius (m),
+ ${dr}_{slug}$ is the radial strain increment due to thermal
+expansion, elasticity, creep, and swelling (m), $\ r_{slug}$ 
+is the current radial dimension without cracks/tears (m), and
+ ${dr}_{crack}$ is the radius increment due to cracks and grain
+boundary tearing (m). Note that ${dr}_{crack}$ is not a
+physical boundary. It is only used to find out the contact condition
+between the fuel and cladding.
+
+Fuel/cladding contact condition can be divided into three intervals:
+
+ $r_{eff}$ < $r_{c}$ : No restraint by the cladding (no
+contact)
+
+ $r_{slug}$ < $r_{c}$ < $r_{eff}$ : Axial restraint
+by the cladding (soft contact)
+
+ $r_{slug}$ = $r_{c}$ : Both radial and axial expansion
+restrained by the cladding (hard contact)
+
+where $r_{c}$ is the cladding radius.
+
+ ${dr}_{crack}$ is modeled empirically as a function of the
+as-fabricated gap, plutonium content, and peak linear heat rate to
+fuel diameter ratio (W/m2). The latter is a measure of
+temperature gradient:
+
+$${dr}_{crack} = f_{crack} \times {{\Delta}r}_{gap0}$$ [eq 9.2-53]
+
+where ${{\Delta}r}_{gap0}$ is the as-fabricated gap
+thickness (m) and $f_{crack}$ is the axial anisotropy factor,
+modeled as a function of plutonium content and peak linear heat rate
+to fuel diameter ratio (W/m2) as shown in Figure 9.2.2.
+
+Figure 9.2.2 $f_{crack}$ empirical parameter as a function of Pu
+content and peak linear heat rate to fuel diameter ratio
+
+Fuel axial anisotropy factor is computed only once for each fuel channel
+during the steady state . Using the F parameter computed at peak power
+location within 0.5 at% peak burnup, the anisotropy factor is computed
+using the data presented in Table 9.2.2. The empirical model
+estimates at what fraction of the gap closure the soft contact will
+initiate. This value is assumed constant throughout the pre-transient
+characterization and transient simulations. The model is considered
+applicable for Pu contents between 0 to 26 wt%.
+
+Table 9.2.2 Fuel axial anisotropy factor data used for bilinear interpolation
+ | 
+
+ | 
+F/P
+ | 
+ | 
+0.0
+ | 
+ | 
+0.08
+ | 
+ | 
+0.19
+ | 
+
+ | 
+
+ | 
+700
+ | 
+ | 
+0.55
+ | 
+ | 
+0.60
+ | 
+ | 
+0.62
+ | 
+
+ | 
+900
+ | 
+ | 
+0.55
+ | 
+ | 
+0.60
+ | 
+ | 
+0.90
+ | 
+
+ | 
+1100
+ | 
+ | 
+0.90
+ | 
+ | 
+0.90
+ | 
+ | 
+0.90
+ | 
+
+Where Pu is plutonium weight fraction, and
+ $F = \frac{Peak\ linear\ heat\ rate}{Initial\ Fuel\ slug\ diameter}$ ,
+W/cm2
+
+[anchor: fuel-pin-mechanical-analysis]
+
+## 9.2.6. Fuel Pin Mechanical Analysis
+
+The mechanical analysis model is a 1.5-dimensional axisymmetric reduced
+order model based on assumptions of linear elasticity and incremental
+strain theory. A plane strain approach is applied to compute the axial
+displacements and thin shell theory is assumed to compute the cladding
+stresses. Furthermore, the fuel creep rate is assumed be high enough to
+avoid any significant buildup of stress gradient within the fuel slug.
+
+Up until contact with the cladding, the fuel can freely swell in the
+axial and radial directions. Due to cracking and irradiation
+growth/grain boundary tearing, the fuel first comes to a soft contact
+with the cladding (see Section 9.2.5). During soft contact, the
+interfacial stress between the fuel and cladding is low, yet it is
+assumed to be high enough to limit axial elongation of the fuel. During
+pre-transient characterization, it is assumed that soft contact prevents
+the fuel from expanding axially, but allows the fuel to expand radially
+towards the available free space. In transient analysis, fuel in soft
+contact is assumed to be able to expand radially and axially.
+
+When hard contact exists between the fuel and cladding, interfacial
+stresses build up to limit the fuel movement both axially and radially.
+As a result, the fuel slug becomes fully constrained by the cladding.
+
+When the default model is used (IEUTOPT = 0 or 1),
+in the case of eutectic formation between the fuel and cladding, in the
+absence of hard contact at any axial node above, the soft and liquified
+fuel is allowed to expand primarily in the axial direction in a
+frictionless manner. When IEUTOPT = 2 or 3 options
+are selected, pore sintering upon eutectic formation is allowed. These
+options lead to less aggressive axial expansion.
+
+Each time step, the model computes the axial and radial displacements of
+the fuel and cladding based on the contact status and the strain
+components. Radial displacement is computed as:
+
+$$u_{r}(r) = \epsilon_{\theta}R_{in} + \int_{R_{in}}^{r}{\epsilon_{\theta}dr}$$ [eq 9.2-54]
+
+where $u_{cr}$ is the radial displacement as a function of radial
+position (m), $R_{in}$ is the inner radius of the structure (m),
+and $\epsilon_{\theta}$ is the circumferential strain
+(m $/\Delta$ m).
+
+Axial displacement is computed as:
+
+$$\epsilon_{z} = \frac{\partial u_{z}}{\partial z}$$ [eq 9.2-55]
+
+$${{\Delta}u}_{z}(r) = \epsilon_{z}(r){\Delta}z$$ [eq 9.2-56]
+
+$${\Delta}{\overline{u}}_{z} = \frac{1}{A}\int_{A}^{}{\Delta u}_{z}dA$$ [eq 9.2-57]
+
+$${\overline{u}}_{z}(i) = \sum_{j = 1}^{i}{{{\Delta}\overline{u}}_{z}(j)}$$ [eq 9.2-58]
+
+where ${{\Delta}u}_{z}$ is the radial displacement as a
+function of radial position at a given axial node (m),
+ $\epsilon_{\theta}$ is the axial strain
+(m $/\Delta$ m), ${\Delta}z$ is axial height at
+a given node (m), $A$ is the cross-sectional area
+( $m^{2}$ ), ${\Delta}{\overline{u}}_{z}$ is the
+average axial displacement at a given axial node (m), and
+ ${\overline{u}}_{z}(i)$ is the cumulative axial displacement at
+a given axial node I (m).
+
+Strain is incremented based on the state of swelling, creep, thermal
+expansion, plenum pressure, and coolant pressure. Strain components
+are grouped into elastic and nonelastic contributions. Elastic and
+nonelastic strain components for fuel and cladding are conditional on
+the state of contact between the fuel and cladding. The strain on the
+fuel and cladding is described as:
+
+$$\epsilon_{r} = \epsilon_{er} + \epsilon_{nr}$$ [eq 9.2-59]
+
+$$\epsilon_{\theta} = \epsilon_{e\theta} + \epsilon_{n\theta}$$ [eq 9.2-60]
+
+$$\epsilon_{z} = \epsilon_{ez} + \epsilon_{nz}$$ [eq 9.2-61]
+
+where:
+
+$$\epsilon_{er} = \frac{1}{E}\left\lbrack \sigma_{r} -
+ \nu\left( \sigma_{\theta} + \sigma_{Z} \right) \right\rbrack$$ [eq 9.2-62]
+
+$$\epsilon_{e\theta} = \frac{1}{E}\left\lbrack \sigma_{\theta} -
+ \nu\left( \sigma_{r} + \sigma_{Z} \right) \right\rbrack$$ [eq 9.2-63]
+
+$$\epsilon_{ez} = \frac{1}{E}\left\lbrack \sigma_{z} -
+ \nu\left( \sigma_{r} + \sigma_{\theta} \right) \right\rbrack$$ [eq 9.2-64]
+
+$$\epsilon_{nr} = \alpha(T - T_{0}) + \epsilon_{s} + \epsilon_{r}^{c}$$ [eq 9.2-65]
+
+$$\epsilon_{n\theta} = \alpha(T - T_{0}) + \epsilon_{s} + \epsilon_{\theta}^{c}$$ [eq 9.2-66]
+
+$$\epsilon_{nz} = \alpha(T - T_{0}) + \epsilon_{s} + \epsilon_{z}^{c}$$ [eq 9.2-67]
+
+where $\sigma_{r},\sigma_{\theta},\sigma_{z}$ are the radial,
+azimuthal, and axial stress (Pa),
+ $\epsilon_{r},\epsilon_{\theta},\epsilon_{z}$ are the radial,
+azimuthal, and axial total strain components (m $/\Delta$ m),
+ $\epsilon_{er},\epsilon_{e\theta},\epsilon_{ez}$ are the
+radial, azimuthal, and axial elastic strain components
+(m $/\Delta$ m),
+ $\epsilon_{nr},\epsilon_{n\theta},\epsilon_{nz}$ are the
+radial, azimuthal, and axial non-elastic strain components
+(m $/\Delta$ m), E is the Elastic Modulus (Pa), $\nu$ 
+is the Poisson’s ratio (-), $\alpha$ is the linear thermal
+expansion coefficient (m $/\Delta$ m-K), T is the material
+temperature (K), $T_{0}$ is the reference temperature (K),
+ $\epsilon_{s}$ is the swelling strain (m $/\Delta$ m),
+and
+ $\epsilon_{r}^{c}$ , $\ \epsilon_{\theta}^{c},\ \epsilon_{z}^{c}$ 
+are the radial, azimuthal, and axial creep strain
+(m $/\Delta$ m).
+
+During pre-transient characterization, soft contact conditions are
+assumed to restrict movement in the axial direction. To account for
+this, the axial non-elastic strain components of the fuel are
+transferred to the radial and azimuthal directions as follows:
+
+$$\epsilon_{r} = \epsilon_{er} + \epsilon_{nr} + 0.5\epsilon_{nz}$$ [eq 9.2-68]
+
+$$\epsilon_{\theta} = \epsilon_{e\theta} + \epsilon_{n\theta} + 0.5\epsilon_{nz}$$ [eq 9.2-69]
+
+$$\epsilon_{z} = \epsilon_{ez}$$ [eq 9.2-70]
+
+Similarly, when the fuel and cladding are subject to hard contact
+conditions and all of the fuel slugs above the current elevation have
+formed a eutectic, the default model (IEUTOPT = 0 or 1) assumes that
+strain in the axial direction is dominant. To account for this, the
+radial and azimuthal non-elastic strain components of the fuel are
+transferred to the axial directions as follows:
+
+$$\epsilon_{r} = \epsilon_{er}$$ [eq 9.2-71]
+
+$$\epsilon_{\theta} = \epsilon_{e\theta}$$ [eq 9.2-72]
+
+$$\epsilon_{z} = \epsilon_{ez} + \epsilon_{nz} + \epsilon_{nr} + \epsilon_{n\theta}$$ [eq 9.2-73]
+
+Users may skip this model and use Eq. (9.2-41) through Eq. (9.2-43) if IEUTOPT is set to
+2 or 3.
+
+[anchor: fuel-stress]
+
+### 9.2.6.1. Fuel Stress
+
+Fuel stress is computed using a reduced order model. The reduced
+order model assumes no stress gradient within the fuel or the
+cladding. Prior to hard contact, the fuel stress distribution at a
+given axial location is given as follows:
+
+$$\sigma_{fr} = \sigma_{f\theta} = {- P}_{Plgas}$$ [eq 9.2-74]
+
+$$\sigma_{fz} = {- (P}_{Plgas} + P_{fw})$$ [eq 9.2-75]
+
+where
+ $\sigma_{fr}$ , $\ \sigma_{f\theta}$ , $\ \sigma_{fz}$ 
+are the fuel radial, azimuthal, and axial stress (Pa),
+ $P_{Plgas}$ is the plenum gas (Pa), and $P_{fw}$ axial
+force due to fuel weight on the fuel surface (Pa).
+
+Upon formation of the hard contact between the fuel and cladding, the
+primary mechanism balancing any fuel axial expansion is porosity
+sintering or hot pressing, which is assumed to be isotropic. The
+interfacial stress is computed such that the fuel outer and clad
+inner displacements are aligned as shown in Eq. (9.2-76).
+
+$$u_{fr}|_{outer} \cong u_{cr}|_{inner} \& u_{fz}|_{outer} \cong u_{cz}|_{inner}$$ [eq 9.2-76]
+
+$$\sigma_{fr} = \sigma_{f\theta} = \sigma_{fz} = \sigma_{contact}$$ [eq 9.2-77]
+
+Contact stress is computed in a stepwise manner such that every time
+step its value is allowed to increase or decrease incrementally
+towards the equilibrium value. Default stress step size is 0.1 MPa.
+However, if the expansion or contraction rate requires larger step
+size, the stress step is increased to 1 MPa. This relaxation ensures
+numerical convergence without disrupting the accuracy.
+
+[anchor: clad-stress]
+
+### 9.2.6.2. Clad Stress
+
+Cladding stress is assumed using a thin shell theory based on the
+applied stress at the inner and outer surface. The thin shell theory
+equations used to calculate the cladding principal stress are:
+
+$$\sigma_{cr} = \frac{\sigma_{inner\ R} + \sigma_{outer\ R}}{2}$$ [eq 9.2-78]
+
+$$\sigma_{c\theta} = - \frac{{(\sigma}_{inner\ R} - \sigma_{outer\ R})R_{c}}{\Delta r}$$ [eq 9.2-79]
+
+$$\sigma_{cz} = - \frac{{(\sigma}_{inner\ R} - \sigma_{outer\ R})R_{c}}{2 \times \Delta r}$$ [eq 9.2-80]
+
+where $\sigma_{cr},\sigma_{c\theta},\sigma_{cz}$ is the clad
+radial, hoop, and axial stress (Pa), $\sigma_{inner\ R}$ is the
+contact stress between fuel and cladding (Pa),
+ $\sigma_{outer\ R}$ is the coolant pressure, and
+ $\Delta r$ is the current active clad thickness (m), where the
+clad wastage has been subtracted as it is assumed to not bear any
+load.
+
+[anchor: fuel-swelling-strain]
+
+### 9.2.6.3. Fuel Swelling Strain
+
+Fuel swelling strain is the largest in magnitude compared to other
+strain components (see Section 9.2.3). In order to be compliant with
+the incremental strain theory and the reduced order modeling
+approach, fuel swelling strain is first radially averaged for a given
+time step, and the average radial value is used to determine the
+axial displacements, shown in Eq. (9.2-81):
+
+$$\epsilon_{s} = \frac{\overline{S}}{3}$$ [eq 9.2-81]
+
+$$\overline{S} = \frac{1}{V}\int_{V}^{}{S\ dV} = \frac{1}{V}\int_{V}^{}{\frac{S_{0}}{\left( 1 +
+ S_{0} + 3\alpha(T - T_{R}) \right)}dV}$$ [eq 9.2-82]
+
+where $\epsilon_{s}$ is the average linear swelling strain (-),
+ $\overline{S}$ is the radial average volumetric swelling with
+respect to the current fuel dimensions (-), $S_{0}$ is the
+local fuel swelling with respect to the fresh fuel dimensions (-),
+ $S$ is the local fuel swelling with respect to the current fuel
+dimensions (-), and V is the fuel volume of the axial zone
+(m3).
+
+Following the radial displacement of the nodes using Eq. (9.2-54), the
+radial positions are corrected using the local swelling strain:
+
+$$A_{i}^{c} = A_{i}\frac{1 + S}{1 + \overline{S}}$$ [eq 9.2-83]
+
+$$R_{i} = \sqrt{A_{i,c}\frac{\sum_{j = 1}^{i}A_{j}}{\sum_{j = 1}^{i}A_{j}^{c}} + R_{i - 1}^{2}}$$ [eq 9.2-84]
+
+where $A_{i}$ is the node area (m2), $A_{i}^{c}$ 
+is the corrected node area accounting for difference between average
+and local swelling strain (m2), and $R_{i}$ and
+ $R_{i - 1}$ are the radial location for node-i and node-(i-1),
+respectively (m).
+
+[anchor: clad-swelling-strain]
+
+### 9.2.6.4. Clad Swelling Strain
+
+For a given axial node, clad swelling strain is computed using the
+average clad temperature, neutron flux, and neutron fluence. In order
+to comply with the incremental strain theory approach, the
+incremental swelling strain at a given time step is adjusted to
+reflect the current volume:
+
+$$\epsilon_{s} = \frac{\overline{S_{0}}}{3\left( 1 + \overline{S_{0}} + 3\alpha(T - T_{R}) \right)}$$ [eq 9.2-85]
+
+$$\overline{S_{0}} = \int_{-\infty}^{t} f(T,\phi,\psi) dt$$
+
+where $T$ is the temperature at the clad midwall (K),
+ $\phi$ is the neutron flux (#/cm2-s), $\psi$ is
+the neutron fluence (#/cm2), $\epsilon_{s}$ is the
+linear incremental swelling strain with respect to the current volume
+(-), and $\overline{S_{0}}$ is the volumetric
+swelling strain with respect to the as-fabricated volume (-).
+
+The volumetric swelling rate for SS316, D9, HT9, and 15-15Ti are defined as
+
+SS316
+
+ $f_{SS316}(T,\phi,\psi)$ is defined in Eq. (8.3-65).
+
+D9
+
+$$\begin{split}f_{D9}(T,\phi,\psi) = \begin{cases}
+0.0 & \text{IRATE} = -2 \\
+f_{D9,0}(T,\phi,\psi) & \text{IRATE} = 0 \\
+f_{D9,1}(T,\phi,\psi) & \text{IRATE} = 1 \\
+\end{cases}\end{split}$$ [eq 9.2-86]
+
+$$\begin{split}f_{D9,0}(T,\phi,\psi) = \begin{cases}
+0.002 \phi D_{c} & T < 723\text{ K and } D_{c} \cdot \psi \geq 55 \\
+0.005 \phi D_{c} & T \geq 723\text{ K and } D_{c} \cdot \psi \geq 60 \\
+0 & \text{else}
+\end{cases}\end{split}$$ [eq 9.2-87]
+
+where $D_c$ is the user defined dose to neutron fluence ratio, CDOSECONV [9-31].
+
+$$f_{D9,1}(T,\phi,\psi) = 0.01 \phi \left(\frac{R(T)}{1 + \exp \left(\alpha \left( \tau - \psi \right) \right)} + 0.534\exp\left(-3\psi\right)\right)$$ [eq 9.2-88]
+
+$$R(T) = \exp\left( 0.471 - 0.003B + 0.179B^2 - 0.077B^3 - 1.78B^4 \right)$$
+
+$$B = 0.01 \left(T - 773.15\right)$$
+
+where $\alpha=0.6 \times 10^{22}$ is the curvature parameter (#/cm2), and
+ $\tau=16.1 \times 10^{22}$ is the incubation parameter (#/cm2) [9-22].
+
+HT9
+
+$$\begin{split}f_{HT9}(T,\phi,\psi) = \begin{cases}
+0.0 & \text{IRATE} = -2 \\
+f_{HT9,0}(T,\phi,\psi) & \text{IRATE} = 0 \\
+f_{HT9,1}(T,\phi,\psi) & \text{IRATE} = 1 \\
+\end{cases}\end{split}$$ [eq 9.2-89]
+
+$$\begin{split}f_{HT9,0}(T,\phi,\psi) = \begin{cases}
+0.0 & D_{c} \cdot \psi < 100 \\
+A(T) D_{c} \phi & \text{else}
+\end{cases}\end{split}$$ [eq 9.2-90]
+
+where $A(T)$ is linearly interpolated from the data presented in Table 9.2.3 and $D_c$ is the user defined dose to neutron fluence ratio, CDOSECONV [9-11] [9-34].
+
+Table 9.2.3 Selected reference point for HT9 void swelling rate [9-34]
+ | 
+
+ | 
+Temperature (K)
+ | 
+ | 
+Value
+ | 
+
+ | 
+
+ | 
+0.0
+ | 
+ | 
+ $-1.24782 \times 10^{-4}$ 
+ | 
+
+ | 
+673.0
+ | 
+ | 
+ $1.0 \times 10^{-4}$ 
+ | 
+
+ | 
+723.0
+ | 
+ | 
+ $8.33 \times 10^{-5}$ 
+ | 
+
+ | 
+773.0
+ | 
+ | 
+ $5.0 \times 10^{-5}$ 
+ | 
+
+ | 
+823.0
+ | 
+ | 
+ $2.5 \times 10^{-5}$ 
+ | 
+
+ | 
+873.0
+ | 
+ | 
+ $1.25 \times 10^{-5}$ 
+ | 
+
+ | 
+873.0
+ | 
+ | 
+ $0.0$ 
+ | 
+
+$$f_{HT9,1}(T,\phi,\psi) = 0.01 \phi \left(\frac{R(T)}{1 + \exp \left(\alpha \left( \tau - \psi \right) \right)} + 0.015\exp\left(-0.1\psi\right)\right)$$ [eq 9.2-91]
+
+$$R(T) = 0.085\exp\left(-1\times10^{-4}\left(T - 673.15\right)^2 \right)$$
+
+where $\alpha=0.75 \times 10^{22}$ is the curvature parameter (#/cm2), and
+ $\tau=14.2 \times 10^{22}$ is the incubation parameter (#/cm2) [9-22].
+
+15-15Ti
+
+ $f_{1515Ti}(T,\phi,\psi)$ is defined in Section 8.7.17.3.
+
+User Defined
+
+In addition to using the built-in volumetric swelling rates, users may
+define a custom volumetric swelling rate using iCSwellID.
+
+$$f_{custom}(T,\phi,\psi) = \phi D_c R(T,D_c \cdot \psi)$$ [eq 9.2-92]
+
+where $D_c$ is the user defined dose to neutron fluence ratio, CDOSECONV,
+and $R(T,D_c \cdot \psi)$ is the user-defined function, iCSwellID, with temperature (K)
+and cladding dose (dpa) as the independent variables.
+
+[anchor: fuel-creep-strain]
+
+### 9.2.6.5. Fuel Creep Strain
+
+Metal fuel typically operates with a high creep rate due to its
+porous nature and low fuel solidus temperature. As a result, reduced
+order mechanical analysis models are more appropriate than full
+elastoplastic solutions with Finite Element (FE) or Finite Volume
+(FV) approaches considering computational efficiency versus accuracy.
+MFUEL accounts for the creep strain as the driving force for the pore
+sintering, which is an essential component to drive the fuel and
+cladding displacements, as well as stresses. Therefore, creep terms
+within the fuel, with the exception of hot pressing, are set to zero.
+
+$$\epsilon_{r}^{c} = \epsilon_{\theta}^{c} = \epsilon_{z}^{c} = 0.0$$ [eq 9.2-93]
+
+Hot pressing strain is defined as a function of equivalent creep
+strain [9‑9]. If the average stress on fuel matrix is greater than
+the gas pressure, the sintering strain is non-zero. Otherwise,
+sintering rate is set to zero. Moreover, in order to account for
+fission-driven creep, the minimum fuel temperature used to compute
+the creep rate is set to 800 K. This is consistent with transition
+from thermal to radiation enhanced diffusion at about half of the
+fuel solidus temperature [9‑14]:
+
+$$\epsilon_{sint} = \alpha_{p}\epsilon_{eq}$$ [eq 9.2-94]
+
+$$\begin{split}\epsilon_{eq} = \begin{cases}
+\left( 5 \times 10^{3}\sigma_{hp} + 6\sigma_{hp}^{4.5} \right)e^{- \frac{26170}{T}}, & phase\ \neq Gamma \\
+0.08\sigma_{hp}^{3}e^{- \frac{14350}{T}}, & phase = Gamma \\
+\end{cases}\end{split}$$
+
+$$\begin{split}\sigma_{hp} = \begin{cases}
+0.0, & - \frac{\sigma_{r} + \sigma_{\theta} + \sigma_{z}}{3 \times 10^{6}} \leq P_{plegas}\ \\
+\left| - \frac{\sigma_{r} + \sigma_{\theta} + \sigma_{z}}{3 \times 10^{6}} - \frac{P_{plegas}}{1 \times 10^{6}} \right|, & - \frac{\sigma_{r} + \sigma_{\theta} + \sigma_{z}}{3 \times 10^{6}} > P_{plegas} \\
+\end{cases}\end{split}$$
+
+$$\begin{split}\alpha_{p} = \begin{cases}
+0.0, & V_{4} \leq 0.0\ \\
+\frac{C}{6}\left( \frac{V_{4}}{0.1} \right)^{1.5}, & 0.0 < V_{4} < 0.1 \\
+\frac{C}{6}, & V_{4} > 0.1 \\
+\end{cases}\end{split}$$
+
+$${V_{4} = N_{b41}V}_{1} + {N_{b42}V}_{2} + {N_{b43}V}_{3}$$
+
+where $T$ is the temperature of the fuel (K),
+ $\epsilon_{eq}$ is the equivalent strain rate (-),
+ $\sigma_{r},\sigma_{\theta},\sigma_{z}$ are the principle
+stresses in r, $\theta$ , z directions, respectively (Pa),
+ $V_{4}$ is the open porosity swelling (m3) (see
+Section 9.2.3), $\alpha_{p}$ is the pore compressibility factor
+(-), and C is the empirical constant, set to 10 (-).
+
+If the hydrostatic stress is higher than the fuel porosity sintering
+yield strength, pore sintering is computed using yield conditions
+(Section 9.8.5).
+
+[anchor: clad-creep-strain]
+
+### 9.2.6.6. Clad Creep Strain
+
+Clad creep strain primarily consists of irradiation and thermal
+components. The creep strain in r, $\theta$ , and z direction is
+computed using an equivalent strain and stress:
+
+$$\epsilon_{r}^{c} = \frac{\epsilon_{eq}}{\sigma_{eq}}\left( \sigma_{r} - 0.5
+ \left( \sigma_{\theta} + \sigma_{z} \right) \right)\Delta t$$ [eq 9.2-95]
+
+$$\epsilon_{\theta}^{c} = \frac{\epsilon_{eq}}{\sigma_{eq}}(\sigma_{\theta} -
+0.5\left( \sigma_{r} + \sigma_{z} \right))\Delta t$$
+
+$$\epsilon_{z}^{c} = \frac{\epsilon_{eq}}{\sigma_{eq}}(\sigma_{z}
+- 0.5\left( \sigma_{r} + \sigma_{\theta} \right))\Delta t$$
+
+$$\epsilon_{eq} = g\left(
+T,\phi,\sigma_{eq} \right) + S_{tc} h\left( T,t,\sigma_{eq} \right)$$
+
+$$\sigma_{eq} = \frac{1}{2}\left( \left( \sigma_{r} - \sigma_{\theta}
+\right)^{2} + \left( \sigma_{r} - \sigma_{z} \right)^{2} + \left( \sigma_{\theta} - \sigma_{z} \right)^{2} \right)^{0.5}$$
+
+where $T$ is the temperature at the inner surface of the
+cladding (K), $\phi$ is the neutron flux (#//cm2-s),
+ $\epsilon_{eq}$ is the equivalent creep strain rate (1/s),
+ $\sigma_{eq}$ is the equivalent stress rate (Pa) ,
+ $g\left( T,\phi,\sigma_{eq} \right)$ is an empirical function
+capturing the irradiation creep strain rate, and
+ $h\left( T,t,\sigma_{eq} \right)$ is an empirical function
+capturing the thermal creep strain rate,
+and $S_{tc}$ is a user-defined sensitivity coefficient for thermal creep strain rate, SCCTC.
+
+The empirical functions capturing irradiation creep strain rate for SS316, D9, HT9, and 15-15Ti are defined as
+
+SS316 and D9
+
+$$g_{SS316}\left( T,\phi,\sigma_{eq} \right) = g_{D9}\left( T,\phi,\sigma_{eq} \right) = 0.01 \times A(T) \times \phi \times D_{c} \times \left( \sigma_{eq} \times \ 10^{- 6} \right)$$ [eq 9.2-96]
+
+$$\begin{split}A(T) = \begin{cases}
+2 \times 10^{- 6} & T \leq 723.15\ K \\
+2 \times 10^{- 6} + \frac{\left( 3 \times 10^{- 7} - 2 \times 10^{- 6} \right)}{773.15 - 723. 15}\ (T - 723.15) & 723.15 < T \leq 773.15 \\
+3 \times 10^{- 7} & T > \ 773.15 \\
+\end{cases}\end{split}$$
+
+where $D_c$ is the user defined dose to neutron fluence ratio, CDOSECONV [9-31].
+
+HT9
+
+$$g_{HT9}\left( T,\phi,\sigma_{eq} \right) = 0.01 \left( 1.83\times 10^{-4} + 2.59 \times 10^{14} \exp\left( - \frac{7.3 \times 10^{4}}{RT} \right) \times \phi \times \left( \sigma_{eq} \times 10^{- 6} \right)^{1.3} \right)$$ [eq 9.2-97]
+
+where R is the universal gas constant (cal/mol/K) [9-22].
+
+15-15Ti
+
+$$g_{1515Ti}\left( T,\phi,\sigma_{eq} \right) = 0.75 \times A(T) \times \phi \times D_{c} \times \left( \sigma_{eq} \times \ 10^{- 6} \right)$$ [eq 9.2-98]
+
+where $A(T)$ is linearly interpolated from the data presented in Table 9.2.4 and $D_c$ is the user defined dose to neutron fluence ratio, CDOSECONV [8-40].
+
+Table 9.2.4 Selected reference point for 15-15Ti irradiation creep [8-40]
+ | 
+
+ | 
+Temperature (K)
+ | 
+ | 
+Value
+ | 
+
+ | 
+
+ | 
+673.15
+ | 
+ | 
+ $0.6\times 10^{-6}$ 
+ | 
+
+ | 
+713.15
+ | 
+ | 
+ $3.2\times 10^{-6}$ 
+ | 
+
+ | 
+743.15
+ | 
+ | 
+ $2.3\times 10^{-6}$ 
+ | 
+
+ | 
+773.15
+ | 
+ | 
+ $0.5\times 10^{-6}$ 
+ | 
+
+ | 
+800.15
+ | 
+ | 
+ $1.0\times 10^{-6}$ 
+ | 
+
+ | 
+898.15
+ | 
+ | 
+ $1.0\times 10^{-6}$ 
+ | 
+
+User Defined
+
+In addition to using the built-in irradiation creep rates, users may
+define a custom volumetric swelling rate using iCIrrCreepID.
+
+$$f_{custom}(T,\phi,\psi) = A(T) \times \phi \times D_c \left( \sigma_{eq} \times \ 10^{- 6} \right)$$ [eq 9.2-99]
+
+where $D_c$ is the user defined dose to neutron fluence ratio, CDOSECONV,
+and $A(T)$ is the user-defined function, iCIrrCreepID, with temperature (K)
+as the independent variables.
+
+The empirical functions capturing thermal creep strain rate for SS316, D9, HT9, and 15-15Ti are defined as
+
+SS316 and D9
+
+$$h_{SS316}\left( T, t,\sigma_{eq} \right) = h_{D9}\left( T, t,\sigma_{eq} \right) = \varepsilon_{OS} \times \left(\frac{\sigma_{eq}}{(20000 - 9.12 \times T) \times (92000 - 40.2 \times T)} \right)^{m} \times \exp\left( - \frac{Q_{r}}{T} \right)$$ [eq 9.2-100]
+
+where $\varepsilon_{OS}$ is 38633 (1/s), m is 5.35,
+ $Q_{r}$ is 1.062e+14 K.
+
+HT9
+
+$$h_{HT9}\left( T,t,\sigma_{eq} \right) = (\varepsilon_{pHT9} + \varepsilon_{sHT9} + \varepsilon_{tHT9}) \times 0.01$$ [eq 9.2-101]
+
+$$\begin{split}\varepsilon_{pHT9} = \ \left\lbrack C_{1} \times \ EXP( - \frac{Q_{1}}{RT})\ \times \ (\sigma_{eq} \times \ 10^{- 6})\ + \ C_{2}\ \times \ EXP( - \frac{Q_{2}}{RT})\ \times \ {(\sigma_{eq} \times 10 ^{- 6})}^{4}\ \right. \\ \left. + C_{3}\ \times \ \ EXP( - \frac{Q_{1}}{RT}) \ \times \ {(\sigma_{eq} \times \ 10^{- 6})}^{0.5}\ \right \rbrack \times \ EXP( - C_{4}\ \times \ t)\ \times \ C_{4}\end{split}$$
+
+$$\varepsilon_{sHT9}\ = C_{5}\ \times \ EXP( - \frac{q4}{RT})\ \times \ {(\sigma_{eq} \times \ 10^{- 6})}^{2}\ + \ C_{6}\ \ EXP( - \frac{q5}{RT})\ \times \ {(\sigma_{eq} \times \ 10^{- 6})}^{5}$$
+
+$$\begin{split}\varepsilon_{tHT9}\ = \begin{cases}
+C_{HT9Creep} \times 4 \times \ C_{7}\ \times \ EXP\left( - \frac{Q_{6}}{RT} \right) \times \ \left( \sigma_{eq} \times \ 10^{- 6} \right)^{10} \times \ t^{3} & T \leq 1200\ K \\
+0 & T > 1200\ K
+\end{cases}\end{split}$$
+
+where R is gas constant (cal/mol/K), t is time
+(s) and all remain coefficients are defined in Table 9.2.5 [9-30].
+
+Table 9.2.5 HT9 thermal creep parameters
+
+ | 
+ $C_{1}$ 
+ | 
+ | 
+13.4
+ | 
+
+ | 
+ $C_{2}$ 
+ | 
+ | 
+8.43e-03
+ | 
+
+ | 
+ $C_{3}$ 
+ | 
+ | 
+4.08e+18
+ | 
+
+ | 
+ $C_{4}$ 
+ | 
+ | 
+1.6e-06
+ | 
+
+ | 
+ $C_{5}$ 
+ | 
+ | 
+1.17e+9
+ | 
+
+ | 
+ $C_{6}$ 
+ | 
+ | 
+8.33e+9
+ | 
+
+ | 
+ $C_{7}$ 
+ | 
+ | 
+9.53e+21
+ | 
+
+ | 
+ $Q_{1}$ 
+ | 
+ | 
+15027
+ | 
+
+ | 
+ $Q_{2}$ 
+ | 
+ | 
+26451
+ | 
+
+ | 
+ $Q_{3}$ 
+ | 
+ | 
+89167
+ | 
+
+ | 
+ $Q_{4}$ 
+ | 
+ | 
+83142
+ | 
+
+ | 
+ $Q_{5}$ 
+ | 
+ | 
+108276
+ | 
+
+ | 
+ $Q_{6}$ 
+ | 
+ | 
+282700
+ | 
+
+ | 
+ $C_{HT9Creep}$ 
+ | 
+ | 
+0.15
+ | 
+
+15-15Ti
+
+ $h_{1515Ti}\left( T,t,\sigma_{eq} \right)$ is defined in Section 8.7.17.1.
+
+[anchor: id11]
+
+### 9.2.6.7. Numerical Solution
+
+At each time step, the model updates the contact state between the
+fuel and cladding and contact pressure using previous time step nodal
+positions. Then the model determines the elastic and non-elastic
+strain components in each radial node of the fuel and cladding.
+
+Incremental strain components,
+ ${\Delta\epsilon}_{r,i}^{t}$ ,
+ ${\Delta\epsilon}_{\theta,i}^{t}$ ,
+ ${\Delta\epsilon}_{z,i}^{t}$ , for radial node
+ $i$ are computed as follows:
+
+$${\Delta\epsilon}_{r,i}^{t} = \epsilon_{r,i}^{t} - \epsilon_{r,i}^{t - 1}$$ [eq 9.2-102]
+
+$${\Delta\epsilon}_{\theta,i}^{t} = \epsilon_{\theta,i}^{t} - \epsilon_{\theta,i}^{t - 1}$$ [eq 9.2-103]
+
+$${\Delta\epsilon}_{z,i}^{t} = \epsilon_{z,i}^{t} - \epsilon_{z,i}^{t - 1}$$ [eq 9.2-104]
+
+[anchor: fuel-displacements]
+
+### 9.2.6.8. Fuel displacements
+
+The radial and axial fuel displacements are computed using linear
+elasticity and strain/displacement relationships:
+
+$$u_{r,i}^{t} = \sum_{i^{'} = 1}^{i}{{{\Delta}\epsilon}_{\theta,i^{'}}^{t}(R_{i^{'} + 1}^{t} - R_{i^{'}}^{t})}$$ [eq 9.2-105]
+
+$${\Delta}
+ u_{z,j}^{t} = \frac{1}{A_{f}}\sum_{i = 1}^{NT}{{{\Delta
+ }\epsilon}_{z,i}^{t}{\Delta}z_{j}{\Delta}A_{fi}}$$ [eq 9.2-106]
+
+$${\overline{u}}_{z
+ ,j}^{t} = \sum_{j^{'} = 1}^{j}{{\Delta}u}_{z,j^{'}}^{t}$$ [eq 9.2-107]
+
+where $u_{r,i}^{t}$ is the radial displacement at node
+ $i$ at time $t$ , ${\Delta}u_{z,i}^{t}$ is
+the axial displacement computed using plain strain assumption,
+ ${\Delta}A_{fi}$ is the cross-sectional area of node
+ $i$ , $A_{f}$ is the total fuel cross-sectional area, and
+ $NT$ is the number of radial nodes in the fuel. The cumulative
+value of the axial displacements is computed by Eq. (9.2-58) for axial
+node $j$ .
+
+If the eutectic forms between the fuel and cladding at hard contact
+condition, contact pressure is set to the plenum pressure. As a
+result the constraint keeping the fuel and cladding interface is
+lost. To correct for this, if the fuel boundary exceeds the clad
+boundary, the following correction is applied to the computed radial
+node positions:
+
+$$area\_ ex = \frac{R_{ci}^{2}}{R_{fo}^{2}}$$ [eq 9.2-108]
+
+$$R_{i} = \sqrt{R_{i0}^{2} \times area\_ ex}$$ [eq 9.2-109]
+
+Where $area\_ ex$ is the area fraction that fuel will be
+contracted radially if the conditions are met (m2),
+ $R_{ci}$ and $R_{fo}$ are clad inner and fuel outer
+radius (m). $R_{i0}$ and $R_{i}$ are the fuel radial node
+positions (m) for previous and current time steps, respectively.
+
+[anchor: clad-displacements]
+
+### 9.2.6.9. Clad Displacements
+
+The radial and axial clad displacements are computed using linear
+elasticity and strain/displacement relations:
+
+$$u_{cr,i}^{t} = {{\Delta}\epsilon}_{\theta,NE}^{t}
+ R_{NE}^{t} + \sum_{i^{'} = NE}^{NE + i - 1}{{{\Delta}\epsilon}_{\theta,i^{'}}^{t}(R_{i^{'} + 1}^{t} - R_{i^{'}}^{t})}$$ [eq 9.2-110]
+
+$${\Delta}u_{cz,j}^{t} = \frac{1}{A_{c}}\sum_{i^{'} =
+ NE}^{NE + n - 1}{{{\Delta}\epsilon}_{z,i^{'}}^{t}{\Delta}z_{j}{\Delta}A_{ci^{'}}}$$ [eq 9.2-111]
+
+$${\overline{u}}_{z,j}^{t} = \sum_{j^{'} = 1}^{j}{{\Delta}u}_{z,j^{'}}^{t}$$ [eq 9.2-112]
+
+where $u_{cr,i}^{t}$ is the radial displacement of node
+ $i$ (m) at time $t$ , ${\Delta}u_{cz,j}^{t}$ 
+is the axial displacement (m) computed using plain strain assumption,
+ ${\Delta}A_{ci}$ is the cross-sectional area of node
+ $i$ (m2), $A_{c}$ is the total clad
+cross-sectional area(m2), $R_{NE}^{t}$ is the clad
+inner radius (m) at time $t$ , and $n$ is the number of
+nodes in the cladding. The cumulative value of the axial displacement
+is computed by Eq. (9.2-58) for axial node $j$ .
+
+[anchor: in-pin-sodium-treatment]
+
+## 9.2.7. In-Pin Sodium Treatment
+
+The in-pin sodium bond between the fuel and the cladding will
+relocate during irradiation. As the fuel swells, the bond sodium is
+primarily pushed to the top of the fuel column, reducing the
+available gas volume. In addition, as the interconnected porosity
+forms, bond sodium can infiltrate into some of the open porosity,
+leading to significant changes in fuel thermal conductivity. The
+sodium infiltration primarily takes place at the fuel outer region
+where $\alpha + \zeta + \delta$ phases exist and larger
+lenticular bubbles and cracks form. In $\beta + \zeta + \delta$ 
+phase, bubbles are rather small, hindering sodium infiltration.
+
+The porosity fraction that is filled by sodium is computed using the
+following relations in the $\alpha + \zeta + \delta$ phase
+region for fuel nodes that are radially located beyond 60% of the
+fuel radius:
+
+$$\begin{split}P_{Na,fr} = \begin{cases}
+0.6 & contact \neq hard \\
+\max(0.3,\ 0.6 - 5(B - B_{0})) & contact = hard \\
+\end{cases}\end{split}$$ [eq 9.2-113]
+
+where:
+
+ $P_{Na,fr}$ : Fraction of the fuel porosity that is filled by
+sodium. Minimum allowed value is 0.3 for
+ $\ \alpha + \zeta + \delta$ phase and for the fuel radial
+location that is greater than 60% of the fuel radius
+
+ $B$ : Burnup (atom fraction)
+
+ $B_{0}$ : Burnup at which the fuel and clad hard contact
+initiated (atom fraction)
+
+If the fuel is not $\alpha + \zeta + \delta$ phase or the
+radial location is less than 60% of the fuel radius, it is assumed
+there is no sodium infiltration. This assumption is based on
+experimental data given in Ref. [9‑16].
+
+At each time step during pre-transient characterization, the movement
+of sodium within the pin is updated as a function of phases present
+in the fuel, burnup, and the width of the fuel/cladding gap in an
+explicit manner. This information is used to compute the fuel thermal
+conductivity and plenum pressure. In transient, the sodium
+infiltrated into fuel porosity is not updated and assumed immobile.
+
+[anchor: clad-outer-corrosion]
+
+## 9.2.8. Clad Outer Corrosion
+
+Although stainless steel and sodium coolant have excellent
+compatibility, the minor corrosion that takes place is modeled
+empirically based on Ref. [9‑17] using the following equation:
+
+$$\frac{dr}{dt} = 3.310^{- 6}\exp\left( - \frac{133031.4}{RT} \right)$$ [eq 9.2-114]
+
+where $\frac{dr}{dt}$ is the corrosion rate (m/s), $R$ is
+the universal gas constant (J/mol/K), $T$ is the clad outer
+temperature (K).
+
+The corrosion thickness is solved at each axial node using a backward
+Euler method.
+
+[anchor: cdf-based-clad-creep-rupture]
+
+## 9.2.9. CDF-Based Clad Creep Rupture
+
+Creep-induced nucleation and diffusion growth of the grain boundary
+cavities are the primary failure mechanisms of commercial steels
+being used as the cladding material. The mechanism is called
+“intergranular creep fracture.” The complex phenomenon shows strong
+dependency on the present microstructure. The carbide/sulfide
+particles at the grain boundaries and their precipitation/coarsening
+or dissolution behavior, grain size, dislocation loop density,
+dislocation dynamics, crystallographic orientation, and diffusivity
+are the essential parameters affecting the progression of event.
+Furthermore, history of the operation during normal operation,
+anticipated transients, or accident scenarios could also affect the
+cavity dynamics by large. If excessively thick and brittle phases
+form at the clad inner surface, the stress concentrations may arise
+and present additional components limiting the life of the fuel pin
+and complicating the problem further.
+
+The high complexity of the underlying physics has forced engineers to
+adopt simple empirical models to predict the clad failure, such as
+the Cumulative Damage Fraction (CDF) model. The CDF model uses the
+available clad failure data generated under constant stress and
+constant temperature conditions. Rupture time is predicted by the
+following equation when CDF reaches unity:
+
+$$CDF = \int_{0}^{t_{f}}\frac{dt}{t_{r}\left( \sigma_{\theta},T \right)} < 1$$ [eq 9.2-115]
+
+where $t_{r}$ is the rupture time (hr), $t_{f}$ is the
+final time (hr), $\sigma_{\theta}$ is the hoop stress (Pa), and
+T is the temperature (K). Note that time to rupture correlations are
+derived from constant stress experiments whereas in simulation the
+magnitude of stress may change.
+
+The SS316, D9, and HT9 CDF models are described below. The CDF model for 15-15Ti
+is defined in Section 8.7.17.4.
+
+[anchor: ht9-cdf-model]
+
+### 9.2.9.1. HT9 CDF Model
+
+The HT9 CDF model determines the rupture time based on the
+temperature and stress. At low temperatures, T <= 973.15 K, the
+rupture time is determined using:
+
+$$\begin{split}\log t_{r} = \begin{cases}
+\log t_{rs} & \sigma_{\theta} \leq \sigma_{ss} \\
+\frac{\sigma_{\theta} - \sigma_{ss}}{\sigma_{tr} - \sigma_{ss}}(\log t_{rt} - \log t_{rs}) + \log t_{rs} & \sigma_{ss} < \sigma_{\theta} < \sigma_{tr} \\
+\log t_{rt} & \sigma_{\theta} \geq \sigma_{tr} \\
+\end{cases}\end{split}$$ [eq 9.2-116]
+
+$$\sigma_{ss} = 670.0 - 0.7(T - 273.15)$$ [eq 9.2-117]
+
+$$\sigma_{tr} = 1370.0 - 1.7(T - 273.15)$$ [eq 9.2-118]
+
+When the cladding temperature is between 973.15 K and 1042.15 K, the
+rupture time is determined using:
+
+$$\begin{split}\log t_{r} = \begin{cases}
+\frac{T - 973.15}{T_{ri} - 973.15}(\log t_{rt} - \log t_{rs}) + \log t_{rs} & \sigma_{\theta} \leq \sigma_{tr} \\
+\log t_{rt} & \sigma_{\theta} \geq \sigma_{tr} \\
+\end{cases}\end{split}$$ [eq 9.2-119]
+
+$$T_{ri} = \frac{2000 - \sigma_{\theta}}{2.6} + 273.15$$ [eq 9.2-120]
+
+$$\sigma_{tr} = 2000 - 2.6(T - 273.15)$$ [eq 9.2-121]
+
+At temperatures above 1042.15 K, the rupture time is determined
+using:
+
+$$t_{r} = t_{rt}$$ [eq 9.2-122]
+
+[anchor: steady-state-cdf-model]
+
+#### 9.2.9.1.1. Steady-state CDF model
+
+$$t_{rs} = min(t_{r1},t_{r2})$$ [eq 9.2-123]
+
+$${log(t}_{r1}) = - 32.49 + \frac{57781}{T} - \frac{11800}{T}log(\sigma_{\theta})$$ [eq 9.2-124]
+
+$${log(t}_{r2}) = - 35.173 + \frac{45858}{T} - \frac{5563}{T}\log\left( \sigma_{\theta} \right)$$ [eq 9.2-125]
+
+where $t_{r}$ is the clad rupture time (h), T is the clad
+Temperature (K), and $\sigma_{\theta}$ is the clad Hoop Stress
+(MPa) [9-30].
+
+[anchor: transient-cdf-model]
+
+#### 9.2.9.1.2. Transient CDF Model
+
+$$dx0 = \tanh\left\lbrack 2.0 \times 10^{-2} \times \left( \sigma_{\theta} - 200 \right) \right\rbrack$$ [eq 9.2-126]
+
+$$dx1 = \tanh\left\lbrack \frac{\frac{dT}{dt} - 58}{17} \right\rbrack$$ [eq 9.2-127]
+
+$$dx2 = \left( - 0.5 \times (1 + dx0) \right) \times \left( 0.75 \times (1 + dx1) \right)$$ [eq 9.2-128]
+
+$$ax2 = - 34.8 + dx0 + dx2$$ [eq 9.2-129]
+
+$$bx2 = \frac{12}{1.5 + 0.5 \times dx0}$$ [eq 9.2-130]
+
+$$wx2 = ax2 + bx2 \times \log\left\lbrack \log\frac{\sigma^{*}}{\sigma_{\theta}} \right\rbrack$$ [eq 9.2-131]
+
+$$t_{rt} = e^{wx2} \times e^{\frac{Q}{RT}}$$ [eq 9.2-132]
+
+where $\sigma^{*} = 730$ (MPA), Q = 70107 (Cal/mol), R=1.987
+(Cal/mol/K), $\sigma_{\theta}$ is the clad hoop stress (MPa), T
+is the Temperature (K), $\frac{dT}{dt}$ is the rate of change
+of clad temperature (K/s), and $t_{r}$ is the clad rupture time
+(s), [Section 9.8.8.2.4].
+
+[anchor: ss316-and-d9-steady-state-cdf-model]
+
+### 9.2.9.2. SS316 and D9 Steady-state CDF Model
+
+The SS316 and D9 pre-transient CDF model determines the rupture time based on the temperature
+and stress [9‑33]. The time to rupture is determined using:
+
+$$t_r = \theta\left(\sigma\right) \exp\left(\frac{Q}{RT}\right) f\left(D\right)$$ [eq 9.2-133]
+
+where $\sigma$ is the stress (MPa), T is the temperature (K),
+ $Q=66$ is the activation energy kCal/mole, $R$ is the gas constant
+(cal/mol-K), $\theta(\sigma)$ is the Dorn creep strength, obtained from
+[9-33], $D = D_c \psi_m$ is the cladding dose (dpa),
+ $\psi_m$ is the modified neutron fluence (#/cm2/1.0E22),
+ $\psi$ is the neutron fluence (#/cm2/1.0E22),
+ $f(D)$ 
+is a material-dependent irradiation induced embrittlement factor,
+and $t_{r}$ is the clad rupture time (hr).
+The modeling of the irradiation induced embrittlement is derived from
+cladding void swelling data and the interrelation between void
+swelling and cladding embrittlement based on the creep rupture data
+given in Refs. [8.41], [8.42], and [8.43].
+The irradiation induced embrittlement factor linearly interpolated from the data presented in Table 9.2.6
+ $\psi_m$ is defined as
+
+$$\begin{split}\psi_m = \begin{cases}
+ \psi & \text{Clad = SS316 } \\
+ 0.5 \psi & \text{Clad = D9 } \\
+\end{cases}\end{split}$$
+
+Table 9.2.6 Data points for SS316 and D9 embrittlement factor
+ | 
+
+ | 
+SS316 Dose (dpa)
+ | 
+ | 
+D9 Dose (dpa)
+ | 
+ | 
+Value
+ | 
+
+ | 
+
+ | 
+0
+ | 
+ | 
+0
+ | 
+ | 
+1
+ | 
+
+ | 
+30
+ | 
+ | 
+50
+ | 
+ | 
+1
+ | 
+
+ | 
+50
+ | 
+ | 
+80
+ | 
+ | 
+0.3
+ | 
+
+ | 
+55
+ | 
+ | 
+90
+ | 
+ | 
+0.1
+ | 
+
+ | 
+60
+ | 
+ | 
+100
+ | 
+ | 
+0.01
+ | 
+
+[anchor: ss316-and-d9-transient-cdf-model]
+
+### 9.2.9.3. SS316 and D9 Transient CDF Model
+
+The SS316 and D9 transient CDF model determines the rupture time based on the temperature
+and stress [9‑19]. The time to rupture is determined using:
+
+$$T_{r} = - 0.28 + 1.18\tanh\left\lbrack 0.5\left( 1 - \ln\left( \frac{dT}{dt} \right) \right) \right\rbrack$$ [eq 9.2-134]
+
+$$d_{0} = \tanh\left\lbrack \frac{1000 - T_{irr}}{200} \right\rbrack$$ [eq 9.2-135]
+
+$$d_{1} = \tanh\left\lbrack \frac{\psi_m}{2} \right\rbrack$$ [eq 9.2-136]
+
+$$d_{2} = \tanh\left\lbrack\left( \frac{\min(1,\sigma)}{550} \right)^{10} \right\rbrack$$ [eq 9.2-137]
+
+$$d_{3} = 1 - \tanh\left\lbrack \left( \frac{T_{irr}}{583} - 0.438 \right)^{25} \right\rbrack$$ [eq 9.2-138]
+
+$$d_{4} = \tanh\left\lbrack \frac{\psi_m}{2.5} \right\rbrack$$ [eq 9.2-139]
+
+$$\sigma_{s} = 775 - 387.5\left( 1 - d_{0} \right)\ d_{1} + 125d_{2}d_{3}d_{4}$$ [eq 9.2-140]
+
+$$\ln\left( t_{r} \right) = - 43.6 + 7.312\log\left( \log\left( \frac{\sigma_{s}}{\sigma} \right) \right) - \frac{41399}{T} + T_{r} - 1.73\tanh\lbrack\psi_m\rbrack$$ [eq 9.2-141]
+
+where $\sigma$ is the stress (MPa), T is the temperature (K),
+ $\frac{dT}{dt}$ is the rate of change of clad temperature
+(K/s), $\psi_m$ is the modified neutron fluence (#/cm2/1.0E22),
+ $T_{irr}$ is the temperature of cladding during irradiation
+(K), and $t_{r}$ is the clad rupture time (hr).
+
+[anchor: id12]
+
+### 9.2.9.4. Numerical Solution
+
+It is assumed that at time = 0, the CDF is zero. For each channel and
+axial node, the CDF is computed using:
+
+$${CDF}^{t} = {CDF}^{t - 1} + \frac{{\Delta}t}{t_{r}^{t}(\sigma,T)}$$ [eq 9.2-142]
+
+where ${\Delta}t$ is the time step (s),
+ $t_{r}^{t}$ is the time to rupture at a given stress and
+temperature, $\sigma$ is the stress (Pa), and T is the
+temperature (K).
+
+[anchor: mechanistic-clad-creep-rupture]
+
+## 9.2.10. Mechanistic Clad Creep Rupture
+
+A mechanistic-based and semi-empirical clad failure model has been
+developed for HT9 cladding. The model aims at capturing the cavity
+dynamics; nucleation, growth, and coalescence behavior; cavity
+morphological evolution, and its connection with the rupture
+behavior. The interactions between cavities are modeled similar to a
+previously-developed mechanistic approach for fission gas bubbles
+[9‑10], [9‑11]. The cavity growth is modeled using the assumption and
+equation for the constrained diffusional cavity growth [9‑20],
+[9‑21]. Furthermore, the growth model is extended to account for the
+effect of the heterogeneities such as grain boundary carbides on the
+nucleation and growth behavior. A schematic description of the model
+is shown in Figure 9.2.3. Three different cavity types are allowed
+based on their sizes. The selected radius for each type is 0.05,
+0.25, and 1.25 µm, respectively, based on experimental observations
+[9‑20]. Small cavities nucleate at the grain boundaries proportional
+to the creep rate. The cavity growth under the applied stress occurs
+via creep and grain boundary diffusion. The growth rate of the
+cavities is used to compute the coalescence probabilities and the
+coalescence rate. As a result, the evolution of the cavity density
+and size is predicted. When the cavity areal fraction reaches 30%,
+failure is assumed.
+
+The progression of the mechanistic creep failure (MCF) model is
+quantified using:
+
+$$MCF = \frac{A_{cav}}{A_{cr}} \leq 1.0$$ [eq 9.2-143]
+
+$$A_{cr} = 0.3\pi R_{gb}^{2}$$
+
+$$A_{cav} = \pi\left( R_{c1}^{2}N_{c1} + R_{c2}^{2}N_{c2} + R_{c3}^{2}N_{c3} \right)$$
+
+where $A_{cav}$ is the cavitated grain boundary area
+(m2), $A_{cr}$ is the critical cavitated grain
+boundary area(m2), $R_{gb}$ is the radius of the grain
+boundary, assumed to be 10 microns, $N_{ci}$ is the number of
+type-i cavities, and $R_{ci}$ is the radius of cavity type-i
+( $m$ ).
+
+Figure 9.2.3 Schematic description of the mechanistic creep failure model (MCF)
+
+The number density of the different cavity types is determined using:
+
+$$\frac{dN_{c1}}{dt} = J_{nucl} + J_{c1} - f_{12}\left( gc_{11} + gc_{12} + gc_{13} \right) - f_{13}\left( gc_{13} + gc_{31} \right)$$ [eq 9.2-144]
+
+$$\frac{dN_{c2}}{dt} = J_{c2} + f_{12}\left( gc_{11} + gc_{12} + gc_{13} \right) - f_{23}\left( gc_{22} + gc_{23} + gc_{32} \right)$$ [eq 9.2-145]
+
+$$\frac{dN_{b3}}{dt} = J_{c3} + f_{13}\left( gc_{13} + gc_{31} \right) + f_{23}\left( gc_{22} + gc_{23} + gc_{32} \right)$$ [eq 9.2-146]
+
+where $J_{ci}$ is the cavity surface density rate of change due
+to stress induced cavity growth (1/s), $J_{nucl}$ is the
+nucleation rate of type-1 cavities (1 $/s$ ), ${gc}_{ij}$ 
+is the coalescence and integration rate of cavity-i into cavity-j due
+to growth of cavity-i (1 $/s$ ), and $f_{i,j}$ is the
+transition probability of cavity-i into cavity-j due to coalescences,
+ $\frac{V_{cavi}}{V_{cavj}}$ , $V_{cavi}$ and
+ $V_{cavj}$ are the cavity volume of i and j cavity groups.
+
+The MCF model is a system of ordinary differential equations and is
+solved using a backwards Euler method. The system of ordinary
+differential equations is solved independently for every axial node
+of the fuel pin. Prior to pre-transient irradiation, MFUEL assumes
+that MCF is zero.
+
+[anchor: cavity-nucleation]
+
+### 9.2.10.1. Cavity Nucleation
+
+Nucleation rate of cavities ( $J_{nuc}$ ) is given as a function
+of a rate constant ( $K_{nuc}$ ), creep rate
+( ${\dot{\epsilon}}_{c}$ ), and the grain boundary area
+ $(A_{gb})$ :
+
+$$J_{nuc} = K_{nuc}{\dot{\epsilon}}_{c}A_{gb}$$ [eq 9.2-147]
+
+The nucleation constant depends on the operating stress, temperature,
+and microstructural heterogeneities. An empirical constant, which is
+called “G correction factor” has been derived in this work to account
+for the modeling imperfections associated with the nucleation and growth
+of the cavities and uncertainties in constitutive models. The nucleation
+constant is modeled as a function of the G correction factor. G is a
+tabular function depending on the stress and temperature as described in
+Section 9.8.6.
+
+$$K_{nuc} = 1.0 \times 10^{12}G$$ [eq 9.2-148]
+
+[anchor: cavity-growth]
+
+### 9.2.10.2. Cavity Growth
+
+Rice’s constrained diffusional cavity growth model [9‑20], [9‑21] is
+adopted to compute the rate of change of the cavity size. However, the
+model is extended in several ways. First, continuous nucleation is
+modeled, allowing the spacing between the cavities and cavity density to
+change dynamically, in addition to change in the cavity size. Second,
+multiple sizes of cavity groups are allowed instead of single cavity
+size. These two improvements are much more consistent with the
+experimental observations. Finally, in order for the theoretical model
+to predict the real behavior including the microstructural
+complexities/heterogeneities, a correction factor, called G, is applied
+both to nucleation and growth rate. G correction factor is described in
+Section 9.8.6. The equation for the rate of change of cavity radius is
+given as follows:
+
+$$\frac{dr}{dt} = G\frac{\sigma - (1 - w)\sigma_{0}}{h(\Psi)r^{2}\left\lbrack
+ \frac{q(w)kT}{2\Omega\delta D_{b}} + \frac{q^{'}\sigma}{{\dot{\epsilon}}_{c}\lambda^{2}d} \right\rbrack}$$ [eq 9.2-149]
+
+$$\sigma_{0} = \frac{2\gamma_{s}sin\Psi}{2}$$
+
+r: Cavity radius (m)
+
+ $\sigma$ : Applied stress (Pa)
+
+ $\sigma_{0}$ : Sintering stress (Pa)
+
+d: Grain boundary facet =20 μm
+
+λ: Effective cavity pitch (m)
+
+w: 4r²/λ²
+
+Ω: Atomic volume = 1.18E-29 $m^{3}$ 
+
+ $\delta$ : Grain boundary thickness (m)
+
+Ψ: Tip angle of the cavities
+ $\cos\Psi = \frac{\gamma_{b}}{2\gamma_{s}}$ 
+
+$$q(w) = - 2\ln(w) - (3 - w)(1 - w)$$
+
+$$h(w) = \frac{1}{sin\Psi}\left\lbrack \frac{1}{1 + cos\Psi} - \frac{cos\Psi}{2} \right\rbrack$$
+
+ $\gamma_{b}$ : Grain boundary free energy = 0.85
+ $J/m^{2}$ 
+
+ $\gamma_{s}$ : Surface free energy = 2.1
+ $J/m^{2}$ 
+
+G: Empirical constant to capture heterogeneity effects
+described in Section C.3.5
+
+ $D_{b}$ : Grain boundary diffusion coefficient,
+ $\delta D_{b}$ =
+ $1.1 \times 10^{12}\exp\left( - \frac{1.75 \times 10^{5}}{RT} \right)$ 
+( $m^{2}$ /s)
+
+R: Gas constant = 8.315 J/mol/K
+
+$$q^{'} = \pi^{2}\left( 1 + \frac{3}{n} \right)^{1/2}$$
+
+n: Power law stress exponent in creep relation = 6.6
+
+[anchor: cavity-coalescence]
+
+### 9.2.10.3. Cavity Coalescence
+
+The coalescence probabilities are calculated based on the derivations
+given in Ref. [9‑11], [9‑12]. The coalescence probability of cavity-i
+and cavity-j due to the growth of cavity-i, where i $\neq j$ , is
+given as follows:
+
+$$P_{ij} = \frac{\Delta r_{i}}{0.5l_{j} - r_{i} - r_{j}}$$ [eq 9.2-150]
+
+for i = j, the following relation is used:
+
+$$P_{ij} = 2\frac{\Delta r_{i}}{l_{j} - r_{i} - r_{j}}$$ [eq 9.2-151]
+
+ $P_{ij}$ : Coalescence probability of cavity-i and cavity-j due to
+the growth of the cavity-i
+
+ $\Delta r_{i}$ : Change in radius of cavity group-i at a given time
+step (m)
+
+ $l_{j}$ : Distance between cavities belonging to group-j (m)
+
+ $r_{i}$ : Cavity radius of group-I (m)
+
+ $r_{j}$ : Cavity radius of group-j (m)
+
+The resulting integration rate is the multiplication of the probability
+ ${(P}_{ij})$ and smaller cavity number for i and j,
+Nmin(i,j):
+
+$${gc}_{ij} = P_{ij}N_{\min(i,j)}$$ [eq 9.2-152]
+
+[anchor: clad-failure-assessment]
+
+## 9.2.11. Clad Failure Assessment
+
+Clad failure in metal fuel pins with ferritic/martensitic cladding is
+primarily thermal creep rupture that is augmented by the clad inner
+wastage formation. Thermal creep rupture can be assessed using
+thermal creep strain, CDF or MCF models. For a given SAS channel,
+when the thermal creep hoop strain reaches 1%, CDF or MCF reaches 1,
+the code prints a message indicating a clad failure prediction due to
+corresponding mechanism. While computing the clad stress, the model
+subtracts the clad wastage assuming the corresponding clad thickness
+does not bear any load; however, when the clad wastage is excessively
+high, this approach may not be conservative. As a result, when 50% of
+the clad thickness turns into clad wastage, clad failure is assumed
+due to excessive clad wastage. The deterministic approach assumes
+that all fuel pins corresponding to the SAS channel failed.
+
+These failure assessments cover the majority of the normal operation
+and transient scenarios. In addition, operation with excessive
+irradiation creep or void swelling strain (>2%) could lead to
+irradiation induced embrittlement, fuel assembly distortion, local
+undercooling and blockages. At current implementation, cladding
+failure does not activate the fuel failure relocation models.
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch09/timestep.html]
+------------------------------------------------------------------------------
+[anchor: time-step-controls]
+
+# 9.3. Time Step Controls
+
+The irradiation history is provided by the user for coarse time
+intervals. MFUEL subdivides these time intervals into approximately
+10,000 s substeps and uses it as main time step. As described in
+Section 9.2, individual models may further subdivide the MFUEL’s main
+time step. In transients, the maximum allowed time step in MFUEL is
+0.01 s. If SAS’s heat transfer time step is higher than 0.01 s, MFUEL
+will subdivide it to satisfy the time step requirement.
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch09/algorithm.html]
+------------------------------------------------------------------------------
+[anchor: solution-algorithm-and-flow-charts]
+
+# 9.4. Solution Algorithm and Flow Charts
+
+Figure 9.4.1 and Figure 9.4.2 show the MFUEL solution algorithm for
+pre-transient and transient analyses. MFUEL assumes the fuel pin can
+be modeled using a 1.5-dimensional approximation, therefore axial and
+radial loops are not explicitly shown in the algorithms. In each
+calculation step, MFUEL loops over each axial node independently and
+solves for the radial solution using a first-order approximation.
+
+Pre-transient analysis is performed on a channel-by-channel basis
+during the SAS steady-state calculation. Based on user input, MFUEL
+solves for the changes to a fuel pin from the as-fabricated
+conditions to the start of the SAS transient simulation. As shown in
+Figure 9.4.1, the MFUEL pre-transient analysis loops over the
+user-defined irradiation history using substeps, as appropriate, to
+characterize the changes in the fuel pin. At the end of pre-transient
+characterization, MFUEL advances the fuel pin state to the match the
+user-defined SAS steady-state power and flow. With the new state,
+MFUEL updates the SAS axial and radial channel mesh and prints the
+steady-state solution.
+
+For each substep of the pre-transient analysis, an average value for
+the user-provided power and flow is determined. The average power and
+flow is passed to the SAS thermal-hydraulic solver to determine fuel
+pin temperatures using the fuel pin composition and geometry at the
+start of the substep. Using the average power, the fuel pin burnup is
+incremented, along with the neutron fluence and dose to the cladding.
+Given the fuel temperature, redistribution of the fuel constituents
+is determined. If contact between the fuel and cladding has been
+predicted, iron and lanthanide migration is included. The coolant
+temperature is used to determine the clad and sodium corrosion
+interaction, which in addition to the iron and lanthanide migration,
+is used to determine the thickness of compromised, or wasted,
+cladding at the inner and outer surfaces. Fission gas production,
+migration, and release is simulated to determine the impact on fuel
+swelling. Given the state of swelling and the fuel pin temperatures,
+mechanical analysis is performed to determine the radial and axial
+elongation of the fuel pin and cladding. With the state of the fuel
+pin now known, the Cumulative Damage Fraction (CDF) and Mechanistic
+Clad Failure (MCF) of the clad are evaluated to determine the failure
+probability. The CDF and MCF value, along with the clad dose and
+wastage thickness are then checked to determine if warning or error
+messages need to be printed, providing users with an indication that
+a parameter has exceeded its validated range or clad failure has been
+predicted. Finally, the plenum pressure is updated based on the
+expansion of the fuel and cladding, the amount of fission gas
+released, and the relocation of in-pin sodium.
+
+Figure 9.4.1 MFUEL Pre-transient Solution Algorithm
+
+Similar to the MFUEL pre-transient analysis, the MFUEL transient
+analysis is performed on a channel-by-channel basis. For channels
+that utilize the MFUEL model, fuel pin conditions are updated at the
+end of each SAS heat transfer time step. The MFUEL transient analysis
+advances the state of the fuel pin using substeps, as shown in
+Figure 9.4.2. At the end of each main time step, MFUEL determines the
+reactivity contribution of the channel due to fuel and clad axial
+expansion.
+
+For each sub-step of the transient analysis, the temperature and
+power of the fuel pin at the end of the main time step are used. SAS
+determines the temperature and power using the fuel pin geometry at
+the end of pre-transient and fuel pin composition at the start of
+main time step. Using the power, fuel pin burnup is incremented along
+with the neutron fluence and dose of the cladding. Given the fuel
+temperature, redistribution of the fuel constituents is determined.
+In the case of contact, lanthanide and iron migration are solved for.
+If the surface temperature of the fuel pin is high enough for
+eutectic formation to occur, iron migration is bypassed, and in its
+place the migration of the eutectic is determined. Corrosion due to
+sodium is tracked on the outside of the cladding. This internal and
+external wastage is used to determine the remaining thickness of the
+cladding for mechanical analyses. Fission gas production, migration,
+and release is simulated to determine the impact on fuel swelling.
+Given the state of swelling and the fuel pin temperature, mechanical
+analysis is performed to determine the radial and axial elongation of
+the fuel and cladding. With the state of the fuel pin now known, the
+CDF and MCF of the clad are evaluated to determine the failure
+probability. The CDF and MCF values, along with the clad dose and
+wastage thickness, are then checked to determine if warning or error
+messages need to be printed, providing users with an indication that
+a parameter has exceeded its validated range or clad failure has been
+predicted. Finally, the plenum pressure is updated based on the
+expansion of the fuel and cladding, the amount of fission gas
+released, and the relocation of in-pin sodium.
+
+Figure 9.4.2 MFUEL Transient Solution Algorithm
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch09/interactions.html]
+------------------------------------------------------------------------------
+[anchor: interactions-with-other-sas-models]
+
+# 9.5. Interactions with Other SAS Models
+
+The pre-transient characterization driver of MFUEL_SSInit is called
+from main steady-state driver routine of SAS (SSTHRM). For each fuel
+channel with MFUEL activated, MFUEL_SSInit is called only once. The
+time loop to simulate pre-transient history is handled by MFUEL.
+Steady state thermal-hydraulics routines are called from MFUEL at
+every coarse time step. At the end of pre-transient characterization,
+fuel pin, flow area and axial height are updated to be used for the
+thermalhydraulics and reactivity feedback models during the
+transient. During the transient, at each heat transfer time step,
+MFUEL_TsStep is called explicitly from transient driver of SAS
+(TSTHRM). At each time step, the fuel and clad reactivity feedback is
+computed due to axial height change of fuel and cladding computed by
+MFUEL, respectively. MFUEL calculation directly affects the fuel
+thermal conductivity, coolant flow area, and fuel and clad reactivity
+feedback.
+
+Currently, coupling of MFUEL with coolant boiling (BOIL), pre-failure
+molten fuel in-pin fuel relocation (PINACLE), and post-failure fuel
+dispersal (LEVITATE) models has not been accomplished. Therefore,
+these models cannot be used if MFUEL is activated.
+
+A new class structure is created to support MFUEL data storage and
+fuel performance simulations. Table 9.5.1 describes the high-level
+procedures within the MFUEL class. In order to reduce the complexity
+of the MFUEL class, additional classes are defined for the fuel clad
+chemical interaction and Zr redistribution models, described in
+Table 9.5.2 and Table 9.5.3, respectively.
+
+The new MFUEL model interfaces with the existing SAS models by
+accessing the CHAN data structure and the common blocks. At a high
+level, the MFUEL model accesses the fuel pin temperature and
+geometry. Following pre-transient characterization, the MFUEL model
+updates the fuel pin geometry stored within the CHAN data structure.
+During transient analysis, SAS utilizes the updated fuel pin geometry
+and composition to solve for the fuel pin temperature. The fuel
+composition is stored within the MFUEL data structure and made
+accessible to the SAS material property routines.
+
+Table 9.5.1 MFUEL Class Structure
+
+ | 
+
+ | 
+MFUEL_BaseCH Method
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+Init(ICH)
+ | 
+ | 
+Initializes the memory and MFUEL model variables for channel ICH.
+ | 
+
+ | 
+Release()
+ | 
+ | 
+Releases the MFUEL data objects that were initialized during Init.
+ | 
+
+ | 
+WriteDAT(unit)
+ | 
+ | 
+Writes model specific restart data into unit.
+ | 
+
+ | 
+ReadDAT(unit)
+ | 
+ | 
+Reads model specific restart data from unit.
+ | 
+
+ | 
+SSInit()
+ | 
+ | 
+Simulates the pre-transient metal fuel behavior up to transient initialization. See Figure 9.4.1.
+ | 
+
+ | 
+SSPrint()
+ | 
+ | 
+Prints the MFUEL results and standard channel output at steady state.
+ | 
+
+ | 
+TSStep()
+ | 
+ | 
+Given a transient heat transfer time step, MFUEL computes the metal fuel behavior. See Figure 9.4.2.
+ | 
+
+ | 
+TSPrint()
+ | 
+ | 
+Prints MFUEL transient results.
+ | 
+
+ | 
+FuelThermCond(i, j, T)
+ | 
+ | 
+Computes the irradiated fuel thermal conductivity for node (i,j) at temperature T. Used if IFUELM = 3.
+ | 
+
+ | 
+GetExpansionReactivity(rhoFuel, rhoClad)
+ | 
+ | 
+Compute fuel, rhoFuel, and clad, rhoClad, reactivity change due to axial expansion or contraction.
+ | 
+
+Table 9.5.2 Fuel Clad Chemical Interaction (FCCI) Class Interface
+
+ | 
+
+ | 
+FCCI Method
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+Init()
+ | 
+ | 
+Initializes FCCI model with a refined mesh relative to the SAS frame.
+ | 
+
+ | 
+WriteDAT(unit)
+ | 
+ | 
+Writes model specific restart data to unit.
+ | 
+
+ | 
+ReadDAT(unit)
+ | 
+ | 
+Reads model specific restart data from unit.
+ | 
+
+ | 
+ActivateFCCI()
+ | 
+ | 
+Activates fuel clad chemical interaction (actinide migration) within the LaMigration procedure and sets the boundary radial node between fuel and cladding.
+ | 
+
+ | 
+UpdateGeometry()
+ | 
+ | 
+Update FCCI mesh based on SAS frame. FCCI Mesh is always extended to the inner cladding wall.
+ | 
+
+ | 
+UpdateTemperature()
+ | 
+ | 
+Update FCCI temperatures based on temperatures in SAS frame.
+ | 
+
+ | 
+LaMigration()
+ | 
+ | 
+Computes the migration of lanthanides due to diffusion and clad inner wastage due to lanthanide precipitation.
+ | 
+
+ | 
+FeMigration()
+ | 
+ | 
+Computes the migration of iron, iron phase formation in the fuel and eutectic penetration into the cladding.
+ | 
+
+ | 
+NaCorrosion()
+ | 
+ | 
+Computes the clad outer wastage due to sodium corrosion.
+ | 
+
+ | 
+GetFuelData(fData)
+ | 
+ | 
+Transform data from the FCCI mesh to the SAS mesh.
+ | 
+
+Table 9.5.3 Fuel Constituent Redistribution (FCRD) Class Interface
+
+ | 
+
+ | 
+FCRD Method
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+Init()
+ | 
+ | 
+Initializes FCRD model with a refined mesh relative to the SAS frame.
+ | 
+
+ | 
+WriteDAT()
+ | 
+ | 
+Writes model specific values calculated during steady-state initialization into RESTART.dat.
+ | 
+
+ | 
+ReadDAT()
+ | 
+ | 
+Reads model specific values from RESTART.bin.
+ | 
+
+ | 
+UpdateGeometry()
+ | 
+ | 
+Update FCRD mesh based on SAS frame.
+ | 
+
+ | 
+UpdateTemperature()
+ | 
+ | 
+Update FCRD temperatures based on temperatures in SAS frame.
+ | 
+
+ | 
+ZrMigration()
+ | 
+ | 
+Computes the migration of Zirconium due to concentration and temperature gradient driving force.
+ | 
+
+ | 
+GetFuelData()
+ | 
+ | 
+Get U and Zr atom fraction on the SAS frame.
+ | 
+
+Table 9.5.4 Fuel Swelling (SwellDriver) Class Interface
+
+ | 
+
+ | 
+SwellDriver Method
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+MFUEl_swell()
+ | 
+ | 
+Computes fission gas and gas bubble behavior, swelling and release and solid fission product swelling.
+ | 
+
+ | 
+MFUEL_creep()
+ | 
+ | 
+Computes the creep induced hot pressing (pressure sintering) behavior of the fuel slug and irradiation/thermal creep, void swelling behavior of the cladding.
+ | 
+
+ | 
+PoreYieldStress()
+ | 
+ | 
+Computes the pore sintering yield stress.
+ | 
+
+Table 9.5.5 Fuel Pin Mechanical Analysis (StresDriver) Class Interface
+
+ | 
+
+ | 
+StresDriver Method
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+StresDriver()
+ | 
+ | 
+Driver to call fuel pin mechanical analysis and update the fuel pin and coolant area geometry.
+ | 
+
+ | 
+MFUEL_stress()
+ | 
+ | 
+Given the strain components, it computes the fuel pin stress distribution and radial/axial displacements.
+ | 
+
+ | 
+Contak()
+ | 
+ | 
+Computes the contact stress between fuel and cladding.
+ | 
+
+Table 9.5.6 Other Modules
+
+ | 
+
+ | 
+Method
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+BurnupDriver()
+ | 
+ | 
+Computes fuel burnup (at. fraction).
+ | 
+
+ | 
+ExpanDriver()
+ | 
+ | 
+Compute fuel and cladding incremental thermal expansion strain.
+ | 
+
+ | 
+MCFDriver()
+ | 
+ | 
+Computes mechanistic creep failure margin for the HT9 cladding only.
+ | 
+
+ | 
+CLAD_props
+ | 
+ | 
+Includes functions and subroutines for cladding irradiation, thermal creep, void swelling, thermal expansion, elastic constants, and CDF clad failure margin.
+ | 
+
+ | 
+MFUEL_props
+ | 
+ | 
+Fuel phase transition temperatures, empirical eutectic penetration model, and fuel elastic constants.
+ | 
+
+ | 
+MFUEL_Parameters
+ | 
+ | 
+Includes constant parameters for all models.
+ | 
+
+ | 
+MFUEL_Data
+ | 
+ | 
+Includes the derived data types for all models.
+ |
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch09/inputoutput.html]
+------------------------------------------------------------------------------
+[anchor: input-and-output-description]
+
+# 9.6. Input and Output Description
+
+The user interface for the MFUEL model consists of text input that is
+part of the SAS4A/SASSYS-1 model file and text and binary output that
+is generated during a simulation. Existing input locations are used
+in conjunction with new input options to model the irradiation
+history, fuel specifications, and transient scenario.
+
+Table 9.6.1 summarizes the input data that is utilized by the MFUEL
+model and provides valid input ranges as appropriate. Note that some
+of the existing input definitions have been updated such that they
+can be used by the MFUEL model. MFUEL can be activated by setting
+IFUELO = 2 for a given channel. In addition, IFUELM = 3 activates an
+alternative thermal conductivity correlation recommended for use with
+MFUEL. Since MFUEL simulates the fuel from the beginning of life, all
+fuel pin geometry parameters in SAS input should be set to
+as-fabricated conditions. Fuel porosity needs to be set to zero and
+initial plenum pressure needs to set to as-fabricated gas pressure at
+TR. Initial fuel composition should be provided as input. To model
+the irradiation history, the existing MSTEP, PLIN, and TPLIN inputs
+can be utilized, assuming that the SAS steady-state coolant flow rate
+is the flow rate during irradiation. Users can also use the existing
+TABLE block input format to define power and flow variations during
+pre-transient irradiation as a function of time. This option is
+utilized if MSTEP is set greater than 8, in which case MSTEP must
+correspond to a valid Table ID. A valid MFUEL table contains the
+columns TIME, POWER, and FLOW, APRINT, where the entries for TIME are
+defined in seconds, the entries for POWER are defined relative to
+POWTOT, and the entries for FLOW are defined in kg/s per pin, APRINT
+is used whether to skip (=1) or include (=0) printing of the axial
+distribution data to binary output files for the relevant MFUEL
+parameters.
+
+Example irradiation history input using a TABLE block:
+
+TABLE 101 "T473 Pre-Transient History"
+ TIME POWER FLOW APRINT
+ 0.00000E+00 2.78571E+00 4.95552E-02 0
+ 2.96165E+06 2.78571E+00 4.95552E-02 1
+ 2.96165E+06 2.73810E+00 5.06606E-02 0
+ 5.31213E+06 2.73810E+00 5.06606E-02 0
+ 5.31213E+06 2.83333E+00 5.06813E-02 0
+ 8.10774E+06 2.83333E+00 5.06813E-02 0
+ 8.10774E+06 2.85714E-01 4.81279E-02 0
+ 8.15276E+06 2.85714E-01 4.81279E-02 0
+ 8.15276E+06 2.85714E-01 4.81279E-02 1
+ 8.24237E+06 2.85714E-01 4.81279E-02 0
+ 8.24237E+06 1.96599E+00 5.03524E-02 0
+ 8.59148E+06 1.96599E+00 5.03524E-02 0
+ 8.59148E+06 3.33333E+00 6.50261E-02 0
+ 8.67860E+06 3.33333E+00 6.50261E-02 0
+ 8.67860E+06 2.76190E+00 4.99568E-02 1
+ 9.64807E+07 1.00000E+00 4.85789E-02 1
+ 9.65389E+07 1.00000E+00 4.85789E-02 1
+END
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch09/references.html]
+------------------------------------------------------------------------------
+[anchor: references]
+
+# 9.7. References
+
+9-1. D. L. Porter, C. E. Lahm, R. G. Pahl, “Fuel Constituent Redistribution during the Early Stages of U-Pu-Zr Irradiation,” Metallurgical Transactions A, Vol. 21, pp. 1871-1876, (1990).
+
+9-2. R. G. Pahl, C. E. Lahm, S. L. Hayes, “Performance of HT9 Clad Metallic Fuel at High Temperature,” Journal of Nuclear Materials, Vol. 204, pp. 141-147, (1993).
+
+9-3. A. B. Cohen, H. Tsai, L. A. Neimark, “Fuel/cladding Compatibility in U-19Pu-10Zr/HT9-clad Fuel at Elevated Temperatures,” Journal of Nuclear Materials, Vol. 204, pp. 244-251, (1993).
+
+9-4. R. D. Mariani et al., “Lanthanides in Metallic Fuels: Their Behavior and Methods for Their Control,” Journal of Nuclear Materials, Vol. 419, pp. 263-271, (2011).
+
+9-5. K. Inagaki, T. Ogata, “Reaction of Lanthanide Elements with Fe-Cr Alloys,” Journal of Nuclear Materials, Vol. 441, pp. 574-578, (2013).
+
+9-6. K. Nakamura, T. Ogata, M. Kurata, A. Itoh, M. Akabori, “Reaction of U-Zr Alloy with Fe and Fe-Cr Alloy,” Journal of Nuclear Materials, Vol. 275, pp. 246-254, (1999).
+
+9-7. K. Nakamura, T. Ogata, M. Kurata, T. Yokoo, M. A. Mignanelli, “Reactions of Uranium-Plutonium Alloys with Iron,” Journal of Nuclear Science and Technology, Vol. 38, No. 2, pp. 112-119, (2001).
+
+9-8. T. H. Bauer, G. R. Fenske, J. M. Kramer, “Cladding Failure Margins for Metallic Fuel in the Integral Fast Reactor,” SMIRT Intl. Conf. on Structural Mechanics in Reactor Tech., CONF-870812-22, Switzerland, (1987).
+
+9-9. T. Ogata, T. Yokoo, “Development and Validation of ALFUS: An Irradiation Behavior Analysis Code for Metallic Fast Reactor Fuels,” Nuclear Technology, Vol. 128, pp. 113-123, (1999).
+
+9-10. C. B. Lee, D. H. Kim, Y. H. Jung, “Fission Gas Release and Swelling Model of Metallic Fast Reactor Fuel,” Journal of Nuclear Materials, Vol. 288, pp.29-42, (2001).
+
+9-11. A. Karahan, “Modeling of Thermo-Mechanical and Irradiation Behavior of Metallic and Oxide Fuels for Sodium Fast Reactors,” Ph. D. Thesis, The Department of Nuclear Science and Engineering, Massachusetts Institute of Technology, Cambridge, MA, (2009).
+
+9-12. A. Karahan, N. C. Andrews, “Extended Fuel Swelling Models and Ultra High Burn-up Fuel Behavior of U-Pu-Zr Metallic Fuel Using FEAST-METAL,” Nuclear Engineering and Design, Vol. 258, pp. 26-34, (2013).
+
+9-13. Y. Tsuoi, T. Ogata, M. Kinoshita, H. Saito, “Mechanistic Model of Fission Gas Behavior in Metallic Fuel,” Journal of Nuclear Materials, Vol. 188, pp. 312-318, (1992).
+
+9-14. D. R. Olander, “Fundamental Aspects of Nuclear Reactor Fuel Elements,” Report # TID-26711-P1, United States of America, (1976).
+
+9-15. G. L. HOFMAN et al., “Swelling Behavior of U-Pu-Zr Fuel,” Metall. Trans. Vol 21A, p. 517, (1990).
+
+9-16. T. H. Bauer, J. W. Holland, “In-Pile Measurement of Thermal Conductivity of Irradiated Metal Fuel,” Nuclear Technology, Vol. 110, pp. 407-421, (1995).
+
+9-17. R. P. Anantatmula et al. “Sodium Compatibility of HT-9 and Fe-9Cr-1Mo Steels,” HEDL-SA-2801FP, (1985).
+
+9-19. J. M. Kramer, R. J. DiMelfi, “An Evaluation of Transient Fuel Pin Cladding Failure Criteria for Application to Inherently Safe LMFBRs,” ANL/RAS 84-6, Reactor Analysis and Safety Division, Argonne National Laboratory, (1984).
+
+9-20. G. Eggeler, et al., “Microstructural Study of Creep Rupture in a 12% Chromium Ferritic Steel,” Acta Metall., Vol. 37, No. 1, pp. 49-60, (1989).
+
+9-21. J. R. Rice, “Constraints on the Diffusive Cavitation of Isolated Grain Boundary Facets in Creeping Polycrystals,” Acta Metall., Vol. 29, pp. 675-681, (1981).
+
+9-22. G. L. Hofman et al., “Metallic Fuels Handbook,” ANL-NSE-3, Argonne National Laboratory, (2019).
+
+9-23. L. Leibowitz, R. A. Blomquist, “Thermal Conductivity and Thermal Expansion of Stainless Steels D9 and HT9,” International Journal of Thermophysics, Vol. 9, No. 5, (1988).
+
+9-24. S. M. McDeavitt, A. A. Solomon, “Hot-isostatic Pressing of U-10Zr by a coupled Grain Boundary Diffusion and Creep Cavitation Mechanism,” Journal of Nuclear Materials, Vol. 228, pp. 184-200, (1996).
+
+9-25. T. H. Bauer et al., “First Overpower Tests of Metallic IFR Fuel in TREAT: Data and Analysis from Tests M5, M6, and M7,” ANL-IFR-124, Reactor Analysis and Safety Division, Argonne National Laboratory, (1989)
+
+9-26. J. M. Kramer, Y. Y. Liu, M. C. Billone, and H. C. Tsai, “Modeling the Behavior of Metallic Fast Reactor Fuels during Extended Transients,” Journal of Nuclear Materials, Vol. 204, pp. 203-211, (1993).
+
+9-27. Kim, Y. S, et al., “Modeling of Constituent Redistribution in U-Pu-Zr Metal Fuel,” Journal of Nuclear Materials, Vol. 359, pp. 17-28, (2006).
+
+9-28. T. Kobayashi et al., “Development of the SESAME Metallic Fuel Performance Code,” Nuclear Technology, Vol. 89, pp. 183-193, (1990).
+
+9-29. L. Leibowitz, R. A. Blomquist, “Thermal Conductivity and Thermal Expansion of Stainless Steels D9 and HT9,” International Journal of Thermophysics, Vol. 9, No. 5, (1988).
+
+9-30. L. L. Briggs, et al., “Safety Analysis and Technical Basis for Establishing an Interim Burnup Limit for Mark-V and Mark-VA Fueled Subassemblies in EBR-II, ” ANL-NSE-1, Argonne National Laboratory, (2018).
+
+9-31. B. J. Makenas, “Swelling of 316 Stainless Steel and D9 Cladding in FFTF,” CONF860605—45, (1986).
+
+9-32. M. C. Billone et al., “Status of the Fuel Element modeling Codes for Metallic Fuels,” Proc. Int. Conf. Reliable Fuels for Liquid Metal Reactors, American Nuclear Society, Tucson, Arizona, (1986).
+
+9-33. J. Lovell, B. A. Chin, E. R. Gilbert, “In-Reactor Creep Rupture of 20% cold-worked AISI316 Stainless Steel,” Journal of Materials Science, Issue 16, pp. 870-876, (1981)
+
+9-34. D. Porter et al., “HT9 swelling in high burnup fast reactor fuel pin components,” Journal of Nuclear Materials, Issue 519, pp. 205-216, (2019)
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch09/appendices.html]
+------------------------------------------------------------------------------
+[anchor: appendices]
+
+# 9.8. Appendices
+
+9.8.1. Appendix 9.1: Main Assumptions
+
+9.8.2. Appendix 9.2: Thermodynamics and Kinetics Parameters of Fuel Constituent Redistribution Model
+
+9.8.3. Appendix 9.3: Thermodynamics and Kinetics Parameters of Fuel Clad Chemical Interaction Model
+
+9.8.4. Appendix 9.4: Fuel Swelling and Fission Gas Release Model Parameters
+
+9.8.5. Appendix 9.5: Mechanical Properties
+
+9.8.6. Appendix 9.6: Metallic Fuel Thermal Conductivity Model
+
+9.8.7. Appendix 9.7: MCF Model Parameters
+
+9.8.8. Appendix 9.8: DEFORM-5: Metallic Fuel Cladding Transient Behavior Model
+
+9.8.8.1. Introduction
+
+9.8.8.2. Model Formulation
+
+9.8.8.3. Solution Techniques and Code Implementation
+
+9.8.8.4. References
+
+9.8.8.5. Nomenclature
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch09/assumptions.html]
+------------------------------------------------------------------------------
+[anchor: appendix-9-1-main-assumptions]
+
+# 9.8.1. Appendix 9.1: Main Assumptions
+
+The main assumptions associated with the MFUEL models are given as
+follows:
+
+Fuel Constituent Redistribution
+
+Phase changes are assumed to occur rapidly compared with migration of
+alloy constituents.
+
+When a non-zero diffusion current is computed, U and Zr atoms switch
+places and Pu is immobile.
+
+Enthalpy of solution is negligible.
+
+Kinetic reactions terminate and equilibrium is assumed when a
+solubility limit is reached.
+
+Axial Zr migration is assumed to be negligible.
+
+Fuel Clad Chemical Interaction
+
+Lanthanides can collectively be treated as diffusion in a
+single-phase medium due to their low solubility in metal fuel.
+
+Lanthanide diffusion into the cladding does not start until
+fuel-cladding soft contact.
+
+The brittle layer from lanthanide interaction does not bear any load.
+
+Eutectic formation of cladding is assumed to occur at any fuel
+cladding contact condition if the fuel surface temperature exceeds
+the eutectic temperature.
+
+The eutectic interaction layer in the cladding does not bear any
+load.
+
+Slow eutectic threshold temperatures vary as a function Pu content
+(e.g., 715 °C for U-10Zr) and is set to 1080 °C as constant for the
+rapid eutectic formation.
+
+Fission Gas Behavior and Fuel Swelling
+
+Fission gas bubbles and interconnected porosity are modeled in six
+discrete groups.
+
+Bubbles are divided in to three groups based on constant atom number
+per bubble to model the observed bubble size distribution, bubble
+size evolution and their interactions.
+
+Bubbles nucleate uniformly in fuel matrix. It is assumed that phase
+boundaries are effective nucleation sites which are distributed
+uniformly.
+
+Gas swelling threshold for interconnected open porosity initiation is
+10%.
+
+Fission yield of assumed to be 0.25 gas atoms/fission.
+
+Equilibrium bubble volume is assumed to behave based on the Van Der
+Waals EOS.
+
+The bubble shape correction factor is assumed to be different for
+spherical and ellipsoidal bubbles. $\alpha + \zeta + \delta$ 
+phase forms ellipsoidal bubbles whereas single $\gamma$ and
+ $\beta + \zeta + \gamma$ phases form spherical bubbles.
+
+Nonequilibrium bubble behavior depends on the phases present,
+hydrostatic stress, bubble pressure, and fuel creep.
+
+Plenum Pressure
+
+Plenum gas pressure is assumed to behave as an ideal gas assuming
+there is mechanical equilibrium between open porosity and plenum
+volume.
+
+Plenum gas volume accounts for the upper plenum and interconnected
+porosity in the fuel
+
+Mechanical Analysis
+
+Plane strain is assumed for the computation of axial displacements,
+i.e., the area-averaged axial displacements are used to determine the
+axial displacement of a fuel axial node.
+
+Thin shell theory is assumed to compute cladding stresses. It is
+assumed that shear stresses are negligible in both the fuel and
+cladding.
+
+Fuel creep is assumed to be sufficiently high to avoid fuel stress
+gradients.
+
+All strain components are accounted for while computing the Fuel Clad
+Mechanical Interaction. Mostly fuel porosity sintering is the
+dominating balancing strain, which is assumed to be isotropic.
+
+When cracked fuel contacts with the cladding, it is assumed that
+axial growth is constrained by the cladding during the steady state.
+
+When the fuel is fully swollen, hard contact initiates such that fuel
+expansion can take place at the expense of porosity sintering which
+is assumed to be isotropic.
+
+Once eutectic forms between fuel and cladding, fuel clad mechanical
+interaction is assumed to be negligible. Note that at eutectic
+temperatures, fuel is fully single gamma phase which is very soft and
+porous.
+
+Upon eutectic formation, the default model assumes aggregated axial
+expansion without pore sintering consistent with experimental
+observation. Also a conservative option is provided for the users to
+allow for limited pore sintering in radial direction.
+
+Axial pressure due to fuel mass is accounted for.
+
+It is assumed that fuel swelling strain is isotropic. However, it is
+assumed that axial cracking in the fuel can lead to anisotropic fuel
+axial growth.
+
+It is assumed pore sintering/hot pressing occurs only to the open
+porosity bubble populations and is isotropic.
+
+It is assumed that cladding creep strain depends on the Von Mises or
+deviatoric stress.
+
+In-Pin Sodium
+
+It is assumed that sodium does not infiltrate beyond 60% of the fuel
+radius, and only in the $\alpha + \zeta + \delta$ phase region. For fuel nodes beyond
+60% of the fuel radius, it is assumed that sodium infiltration fills
+30-60% of the available/open porosity, depending on the burnup level.
+
+Corrosion due to Clad/Sodium Coolant Interactions
+
+It is assumed that sodium corrosion has a constant corrosion rate for
+a given temperature (no time/depth dependence).
+
+Clad Failure Models
+
+In mechanistic clad creep rupture model, the grain boundary cavities
+are divided in to three groups based on their sizes to model the
+observed behavior, interaction between cavities, and
+growth/coalescence behavior.
+
+It is assumed that, for the mechanistic clad creep rupture models,
+when the cavitated grain boundary area reaches 30%, failure occurs.
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch09/fuel_param.html]
+------------------------------------------------------------------------------
+[anchor: appendix-9-2-thermodynamics-and-kinetics-parameters-of-fuel-constituent-redistribution-model]
+
+# 9.8.2. Appendix 9.2: Thermodynamics and Kinetics Parameters of Fuel Constituent Redistribution Model
+
+Diffusion constant and activation energy, heat of transport, and solubility limits for the phases present are given in Table 9.8.1, Table 9.8.2, Table 9.8.3, Table 9.8.4, respectively.
+Eq. (9.8-1) and Eq. (9.8-2) are used to predict the phase transition temperatures.
+Ref. [9-11] and [9-27] has been utilized to obtain most of the diffusion constants, diffusion activation energies and heat of transport values.
+Similar to Ref. [9-11] and [9-27], diffusion constants and heat of transport values are used as fitting parameters.
+Some of those parameters differs from the corresponding references.
+Phase transition Equations (Eq. (9.8-1) and Eq. (9.8-2)) are modeled as given in Ref. [9-11].
+
+Table 9.8.1 Zirconium diffusion constant (m $^2$ /s)
+ | 
+
+ | 
+Phase
+ | 
+ | 
+Pu < 7 at%
+ | 
+ | 
+Pu $\geq$ 7 at %
+ | 
+
+ | 
+
+ | 
+ $\alpha$ 
+ | 
+ | 
+2.0e-07
+ | 
+ | 
+4.0e-06
+ | 
+
+ | 
+ $\delta$ 
+ | 
+ | 
+2.0e-07
+ | 
+ | 
+4.0e-06
+ | 
+
+ | 
+ $\beta$ 
+ | 
+ | 
+5.7e-06
+ | 
+ | 
+7.0e-04
+ | 
+
+ | 
+ $\gamma$ 
+ | 
+ | 
+ $0.4 \times 10^{-5.1-8.05C_{Zr}+9.13C_{Zr}^2}$ 
+ | 
+ | 
+ $10^{-5.1-8.05C_{Zr}+9.13C_{Zr}^2}$ 
+ | 
+
+Table 9.8.2 Zirconium activation energy $Q_0$ (kJ/mol)
+ | 
+
+ | 
+Phase
+ | 
+ | 
+Pu < 7 at%
+ | 
+ | 
+Pu $\geq$ 7 at %
+ | 
+
+ | 
+
+ | 
+ $\alpha$ 
+ | 
+ | 
+170.0
+ | 
+ | 
+170.0
+ | 
+
+ | 
+ $\delta$ 
+ | 
+ | 
+150.0
+ | 
+ | 
+150.0
+ | 
+
+ | 
+ $\beta$ 
+ | 
+ | 
+180.0
+ | 
+ | 
+180.0
+ | 
+
+ | 
+ $\gamma$ 
+ | 
+ | 
+ $128 - 107 C_{Zr} + 174 C_{Zr}^2$ 
+ | 
+ | 
+ $128 - 107 C_{Zr} + 174 C_{Zr}^2$ 
+ | 
+
+Table 9.8.3 $Q_h$ - Heat of Transport (kJ/mol)
+ | 
+
+ | 
+Phase
+ | 
+ | 
+Pu < 7 at%
+ | 
+ | 
+Pu $\geq$ 7 at %
+ | 
+
+ | 
+
+ | 
+ $\alpha$ 
+ | 
+ | 
+0
+ | 
+ | 
+150
+ | 
+
+ | 
+ $\delta$ 
+ | 
+ | 
+0
+ | 
+ | 
+150
+ | 
+
+ | 
+ $\beta$ 
+ | 
+ | 
+0
+ | 
+ | 
+650
+ | 
+
+ | 
+ $\gamma$ 
+ | 
+ | 
+-80
+ | 
+ | 
+-200
+ | 
+
+Table 9.8.4 Zr Solubility Limit
+ | 
+
+ | 
+Phase
+ | 
+ | 
+Zr Solubility limit (at %)
+ | 
+
+ | 
+
+ | 
+ $\alpha$ 
+ | 
+ | 
+5
+ | 
+
+ | 
+ $\delta$ 
+ | 
+ | 
+40
+ | 
+
+ | 
+ $\beta$ 
+ | 
+ | 
+5
+ | 
+
+$$T_{\alpha + \delta \leftarrow \beta +\gamma} = \frac{a_{Pu}}{0.164} \left( 868.15 - 935.15 \right) + 935.15$$ [eq 9.8-1]
+
+$$T_{\beta +\gamma \leftarrow \gamma } = \frac{a_{Pu}}{0.164} \left( 923.15 - 965.15 \right) + 965.15$$ [eq 9.8-2]
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch09/clad_param.html]
+------------------------------------------------------------------------------
+[anchor: appendix-9-3-thermodynamics-and-kinetics-parameters-of-fuel-clad-chemical-interaction-model]
+
+# 9.8.3. Appendix 9.3: Thermodynamics and Kinetics Parameters of Fuel Clad Chemical Interaction Model
+
+Lanthanide Migration
+
+The solubility limit of lanthanides in metallic fuel is assumed to be zero [9‑4].
+The lanthanide diffusion coefficient is given in Eq. (9.8-4), where $S_{Dla}$ is the user defined sensitivity coefficient, SCDLA.
+Below 800 K, the temperature is set to 800 K in order to account for the irradiation-induced diffusivity.
+Ref. [9‑5] is used to assess the solubility limit of lanthanides.
+Thermodynamic and kinetics parameters related the lanthanide diffusion and precipitation model are given in Table 9.8.5.
+Note that solubility limit of D9 cladding is reduced significantly compared to the HT9 cladding in order to account for excessive clad wastage behavior observed in experiments.
+Diffusion constant and diffusion activation energy is used as fitting factors.
+
+$$\begin{split} D_{la} = \begin{cases}
+ S_{Dla} D_0 exp\left( - \frac{Q_0}{RT} \right) & T \ge 750 \text{ K} \\
+ S_{Dla} D_0 exp\left( - \frac{Q_0}{750R} \right) & T \leq 750 \text{ K} \\
+ \end{cases}\end{split}$$ [eq 9.8-3]
+
+Table 9.8.5 Diffusion coefficient, heat of transport, and Lanthanide yield for Lanthanide migration
+
+ | 
+ $D_{0}$ (m $^2$ /s)
+ | 
+ | 
+10000.0
+ | 
+
+ | 
+ $Q_{0}$ (kJ/mol)
+ | 
+ | 
+300.0
+ | 
+
+ | 
+ $Y_{la}$ (#/J)
+ | 
+ | 
+ $15.29E+09$ 
+ | 
+
+ | 
+Solubility in HT9 (atom/ $m^{3}$ )
+ | 
+ | 
+ $6.4E+27$ 
+ | 
+
+ | 
+Solubility in D9 (atom/ $m^{3}$ )
+ | 
+ | 
+ $0.5E+27$ 
+ | 
+
+ | 
+Solubility in SS316 (atom/ $m^{3}$ )
+ | 
+ | 
+ $0.5E+27$ 
+ | 
+
+ | 
+Solubility in 15-15Ti (atom/ $m^{3}$ )
+ | 
+ | 
+ $0.5E+27$ 
+ | 
+
+Iron and Actinide Migration
+
+The iron and actinide diffusion coefficients are calculated using the
+relationships given in Eq. (9.8-4) and Eq. (9.8-5), respectively,
+where $S_{Dac}$ is the user defined sensitivity coefficient, SCDAC.
+Table 9.8.6 and Table 9.8.8
+gives the diffusion constant and activation energy
+values. Table 9.8.9 and Table 9.8.10 gives the thermodynamics and kinetics parameters used
+in iron and actinide diffusion and eutectic formation. The experimental
+observartions in Ref. [9‑6] is used to extract thermodynamics and
+kinetics parameters.
+
+$$D_{Fe} = D_{0Fe} exp \left( - \frac{Q_{0Fe}}{RT} \right)$$ [eq 9.8-4]
+
+$$D_{Ac} = S_{Dac} D_{0Ac} exp \left( - \frac{Q_{0Ac}}{RT} \right)$$ [eq 9.8-5]
+
+Table 9.8.6 Diffusion constant and activation energy for iron diffusion in metal fuel
+ | 
+
+ | 
+Parameter
+ | 
+ | 
+T < $T_{\beta + \gamma }$ 
+ | 
+ | 
+T $\geq T_{\beta + \gamma }$ 
+ | 
+
+ | 
+
+ | 
+ $D_{0Fe}$ (m $^2$ /s)
+ | 
+ | 
+0.225E-04
+ | 
+ | 
+1.0E-04
+ | 
+
+ | 
+ $Q_{0Fe}$ (kJ/mol)
+ | 
+ | 
+220
+ | 
+ | 
+220
+ | 
+
+Table 9.8.7 Diffusion constant and activation energy for iron diffusion in cladding
+
+ | 
+ $D_{0Fe}$ (m $^2$ /s)
+ | 
+ | 
+8.5E-04
+ | 
+
+ | 
+ $Q_{0Fe}$ (kJ/mol)
+ | 
+ | 
+251
+ | 
+
+Table 9.8.8 Diffusion constant and activation energy for Actinides and eutectic
+ | 
+
+ | 
+Parameter
+ | 
+ | 
+T < 1074.15 K
+ | 
+ | 
+1074.15 K $\leq$ T $\leq$ 1094.15 K
+ | 
+ | 
+T $\geq$ 1094.15 K
+ | 
+
+ | 
+
+ | 
+ $D_{0Ac}$ (m $^2$ /s)
+ | 
+ | 
+2.2E-08
+ | 
+ | 
+ $2.2E-08 + 3.3E-08 \frac{T-1075.15}{20}$ 
+ | 
+ | 
+5.5E-08
+ | 
+
+ | 
+ $Q_{0Ac}$ (kJ/mol)
+ | 
+ | 
+120
+ | 
+ | 
+120
+ | 
+ | 
+120
+ | 
+
+Table 9.8.9 Thermodynamics and kinetics parameters for iron, actinide diffusion, and eutectic formation
+ | 
+
+ | 
+Phase Structure
+ | 
+ | 
+Interaction Parameter
+
+(J/mol)
+
+ | 
+ | 
+Iron Solubility
+
+Limit (%)
+
+ | 
+ | 
+Phase growth activation
+
+energy (kJ/mol)
+
+ | 
+
+ | 
+
+ | 
+(U,Pu)Fe2
+ | 
+ | 
+-3000
+ | 
+ | 
+66.7
+ | 
+ | 
+220
+ | 
+
+ | 
+Fe2Zr + (U,Pu)6Fe
+ | 
+ | 
+-1200
+ | 
+ | 
+40.5
+ | 
+ | 
+220
+ | 
+
+ | 
+(U,Pu)6Fe + U-32Zr-50Fe
+ | 
+ | 
+-750
+ | 
+ | 
+28.6
+ | 
+ | 
+220
+ | 
+
+ | 
+(U,Pu)6Fe + U-42Zr-33Fe
+ | 
+ | 
+-650
+ | 
+ | 
+21.8
+ | 
+ | 
+220
+ | 
+
+ | 
+U-Zr matrix + U-42Zr-33Fe
+ | 
+ | 
+-500
+ | 
+ | 
+13.2
+ | 
+ | 
+220
+ | 
+
+ | 
+U-Zr matrix + U-23Zr-6Fe
+ | 
+ | 
+-800
+ | 
+ | 
+2.5
+ | 
+ | 
+220
+ | 
+
+ | 
+(U,Pu)Zr
+ | 
+ | 
+-800
+ | 
+ | 
+0.0
+ | 
+ | 
+220
+ | 
+
+ | 
+Clad
+ | 
+ | 
+-600
+ | 
+ | 
+0.05
+ | 
+ | 
+220
+ | 
+
+ | 
+Eutectic
+ | 
+ | 
+-1600
+ | 
+ | 
+0.5
+ | 
+ | 
+220
+ | 
+
+Table 9.8.10 Phase growth constansts (1/s) for iron, actinide diffusion, and eutectic formation
+ | 
+
+ | 
+Phase Structure
+ | 
+ | 
+T $\le T_{\beta + \gamma}$ 
+ | 
+ | 
+T $\geq T_{\beta + \gamma}$ 
+ | 
+
+ | 
+
+ | 
+(U,Pu)Fe2
+ | 
+ | 
+1.69E+05
+ | 
+ | 
+7.5E+05
+ | 
+
+ | 
+Fe2Zr + (U,Pu)6Fe
+ | 
+ | 
+3.38E+05
+ | 
+ | 
+1.5E+56
+ | 
+
+ | 
+(U,Pu)6Fe + U-32Zr-50Fe
+ | 
+ | 
+1.7E+06
+ | 
+ | 
+7.5E+06
+ | 
+
+ | 
+(U,Pu)6Fe + U-42Zr-33Fe
+ | 
+ | 
+2.81E+06
+ | 
+ | 
+1.25E+07
+ | 
+
+ | 
+U-Zr matrix + U-42Zr-33Fe
+ | 
+ | 
+3.94E+06
+ | 
+ | 
+1.75E+07
+ | 
+
+ | 
+U-Zr matrix + U-23Zr-6Fe
+ | 
+ | 
+5.63E+07
+ | 
+ | 
+1.5E+08
+ | 
+
+ | 
+(U,Pu)Zr
+ | 
+ | 
+0.0
+ | 
+ | 
+0.0
+ | 
+
+ | 
+Clad
+ | 
+ | 
+0.0
+ | 
+ | 
+0.0
+ | 
+
+ | 
+Eutectic
+ | 
+ | 
+2.81E+09
+ | 
+ | 
+1.25E+10
+ |
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch09/swell_param.html]
+------------------------------------------------------------------------------
+[anchor: appendix-9-4-fuel-swelling-and-fission-gas-release-model-parameters]
+
+# 9.8.4. Appendix 9.4: Fuel Swelling and Fission Gas Release Model Parameters
+
+This section provides material properties and the constitutive models
+used in fuel swelling and fission gas release model. Table 9.8.11 and Table 9.8.12
+summarize the parameters. Ref. [9‑10] and Ref. [9‑11] have been
+utilized to derive the constitutive models. Fission gas diffusion
+constants are the main fitting constants.
+
+Fission Gas Diffusion Coefficient
+
+The thermal bulk and surface fission gas diffusion coefficients,
+ $D_{fg_b}$ and $D_{fg_s}$ , are dependent on the phase
+and irradiation conditions:
+
+$$\begin{split}D_{fg\_ b} = \begin{cases}
+10^{- 4}\exp\left( - \frac{52,000} {RT} \right) + 10^{- 4}\exp\left( - \frac{52,000} {RT_f} \right) F_{r} & T < T_{\gamma} \\
+10^{- 8}\exp\left( - \frac{28,500}{RT} \right) + 10^{- 4}\exp\left( - \frac{52,000} {RT_f} \right) F_{r} & else \\
+\end{cases}\end{split}$$ [eq 9.8-6]
+
+$$\begin{split}D_{fg\_ s} = \begin{cases}
+10^{- 1}\exp\left( - \frac{52,000} {RT} \right) + 10^{- 1}\exp\left( - \frac{52,000} {RT_f} \right)F_{r} & T < T_{\gamma} \\
+10^{- 5}exp\left( - \frac{28,500}{RT} \right) + 10^{- 1}\exp\left( - \frac{52,000} {RT_f} \right)F_{r} & else \\
+\end{cases}\end{split}$$ [eq 9.8-7]
+
+where $D_{fg\_ b}$ and $D_{fg\_ s}$ are the bulk and
+surface fission gas diffusion coefficients (m2/s),
+respectively, R is the gas constant, 1.987 cal/mol/K, T is the
+temperature in Kelvin,
+ $T_f = 743.15$ is the temperature used to evaluate fission induced gas diffusion coefficient in Kelvin,
+and $T_{\gamma}$ is the phase transition
+temperature, and $F_{r}$ is the fission density rate
+(fission/m3/s).
+
+Bubble Nucleation
+
+Bubble-1 nucleation rate is given as a function of matrix gas
+concentration and bubble-1 gas atom number as follows:
+
+$$J_{b1,nucl} = {k_{b1nuc}C}_{g}\rho_{g1}$$ [eq 9.8-8]
+
+Where $k_{b1nuc}$ is $10^{- 20}$ (bub-1/s),
+ $C_{g}$ is the matrix gas atom density (atom/m3), and
+ $\rho_{g1}$ is the constant atom number per bubble.
+
+Gas Diffusion into the Bubbles
+
+Diffusion of gas atoms into the bubbles can be calculated using the
+following equation:
+
+$$J_{gi} = {k_{gi}C}_{g}N_{bi}A_{open}A_{ellipsoidal}$$ [eq 9.8-9]
+
+$$k_{gi} = {E_{gbi}4\pi r}_{bi}D_{g}$$ [eq 9.8-10]
+
+where $J_{gi}$ is the atomic flux into bubble-i by diffusion,
+ $k_{gi}$ is the gas diffusion constant to bubble-i
+(m3/s), $E_{gbi}$ is the empirical bias factor,
+currently set to 1, $r_{bi}$ is the radius of bubble-i (m),
+ $D_{g}$ is the diffusion coefficient of gas atom
+(m2/s), $A_{open}$ is area correction for the open
+porosity network (the value is unity for the diffusion into closed
+bubbles), and $\ A_{ellipsoidal}$ is the area correction for
+the ellipsoidal bubbles (the value is unity for spherical bubbles and
+pores).
+
+Integration rate via Bubble Diffusion
+
+The integration rate of bubble-i into bubble-j due to collision
+between bubble-i and j is given as follows:
+
+$${ab}_{ij} = {k_{ij}N}_{bi}N_{bj}\rho_{gi}$$ [eq 9.8-11]
+
+$$k_{ij} = 4\pi \left( r_{bi} + r_{bj} \right)\left( D_{bi} + D_{bj} \right)$$ [eq 9.8-12]
+
+$$D_{bi} = \frac{3a_{0}^{4}}{2\pi r_{bi}^{4}}D_{s}$$ [eq 9.8-13]
+
+The integration rate of bubble-i into bubble-j due to collision
+between two bubble-i is given as follows:
+
+$${ab}_{ii} = 2k_{ii}N_{bi}^{2}\rho_{gi}$$ [eq 9.8-14]
+
+$$k_{ii} = 16\pi r_{bi}D_{bi}$$ [eq 9.8-15]
+
+The transition probability of bubble-i into
+bubble-i+1, $\ f_{i,i + 1}$ , can be obtained by:
+
+$$f_{i,i + 1} = \frac{2\rho_{gi}}{\rho_{gi + 1}}$$ [eq 9.8-16]
+
+where $D_{bi}$ is the bubble-i diffusion coefficient
+(m2/s), $D_{s}$ is the surface diffusion coefficient
+(m2/s), $\ r_{bi}$ and $r_{bj}$ are the radius of
+bubble-i and bubble-j (m), respectively, and
+ $a_{0}^{2} = 9 \times 10^{- 20}$ m2.
+
+Integration rate via Bubble Growth
+
+$${gab}_{ij} = P_{ij}\rho_{gi}N_{bi}$$ [eq 9.8-17]
+
+For collision between closed bubbles:
+
+$$\begin{split}P_{ij} = \begin{cases}
+ \frac{2{{\Delta}r}_{bi}}{{0.5l}_{j} - r_{bi} - r_{bi}} & i = j \\
+ \frac{{{\Delta}r}_{bi}}{0.5l_{j} - r_{bi} - r_{bj}} & i \neq j \\
+ \end{cases}\end{split}$$ [eq 9.8-18]
+
+For collision between closed bubble and open pores:
+
+$$P_{ij} = \frac{{{\Delta}r}_{bi}}{l_{j}f_{p}}$$ [eq 9.8-19]
+
+Where $P_{ij}$ is the probability of bubble-I colliding with
+bubble-j due to radial growth of bubble-i,
+ ${{\Delta}r}_{bi}$ is the radial growth of bubble-i with
+in a time step (m), $\ r_{bi}$ and $r_{bj}$ are the
+radius of bubble-i and bubble-j (m), respectively, $l_{j}$ 
+approximate distance between bubble-js, and $f_{p}$ is an
+empirical fitting factor.
+
+Table 9.8.11 Fission gas atom density $\rho_{g}$ (atom)
+
+ | 
+Small Bubble
+ | 
+ | 
+0.75E+08
+ | 
+
+ | 
+Medium Bubble
+ | 
+ | 
+0.2E+12
+ | 
+
+ | 
+Large Bubble
+ | 
+ | 
+0.25E+14
+ | 
+
+Table 9.8.12 Fuel swelling and fission gas release parameters
+
+ | 
+Y (atoms/fission)
+ | 
+ | 
+0.25
+ | 
+
+ | 
+ $k_{b1nuc}$ (bubble*atom/s)
+ | 
+ | 
+1.0E-20
+ | 
+
+ | 
+Threshold gas swelling (%)
+ | 
+ | 
+10
+ | 
+
+ | 
+ $A_{open}$ 
+ | 
+ | 
+0.1
+ | 
+
+ | 
+ $A_{ellipsoidal}$ 
+ | 
+ | 
+1.4
+ | 
+
+ | 
+ $f_{p}$ 
+ | 
+ | 
+0.7
+ |
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch09/mecpro.html]
+------------------------------------------------------------------------------
+[anchor: appendix-9-5-mechanical-properties]
+
+# 9.8.5. Appendix 9.5: Mechanical Properties
+
+The elastic and thermal expansion properties for metal fuel [9-22] [9-28], SS316, D9, HT9 and 15-15Ti cladding [8-17] [9-29], with temperature defined in Kelvin, are
+
+Elastic Modulus (Pa)
+
+$$\begin{split} E = \begin{cases}
+ \left( 56 + 0.1158 \left( 865 - T \right) \right) 10^{9} & \text{phase = } \alpha + \delta \\
+ \left( 56 + 0.2158 \left( 865 - T \right) \right) 10^{9} & \text{phase = } \beta + \gamma \text{ or } \gamma \\
+ \end{cases}\end{split}$$ [eq 9.8-20]
+
+$$\begin{split} E = \begin{cases}
+ E_c(T_f) \times 6.894757 \times 10^{9} & \text{Clad = SS316 or 15-15Ti } \\
+ \left( 2.137E+05 - 102.74 \left(T - 273.15\right) \right) 10^{6} & \text{Clad = D9 } \\
+ \left( 2.137E+05 - 102.74 \left(T - 273.15\right) \right) 10^{6} & \text{Clad = HT9 } \\
+ \end{cases}\end{split}$$ [eq 9.8-21]
+
+where $T$ is the temperature in Kelvin, $T_f$ is the temperature in Fahrenheit,
+and $E_c(T_f)$ is defined in Eq. (8.7-22).
+
+Poisson’s Ratio (-)
+
+$$\begin{split} \nu = \begin{cases}
+ 0.3 & \text{phase = } \alpha + \delta \\
+ 0.3 & \text{phase = } \beta + \gamma \text{ or } \gamma \\
+ \end{cases}\end{split}$$ [eq 9.8-22]
+
+$$\begin{split} \nu = \begin{cases}
+ 0.3 & \text{Clad = SS316 } \\
+ 0.3 & \text{Clad = D9 } \\
+ 0.3 & \text{Clad = HT9 } \\
+ 0.3 & \text{Clad = 15-15Ti } \\
+ \end{cases}\end{split}$$ [eq 9.8-23]
+
+Thermal Expansion Coefficient ( $m/\Delta m$ )
+
+The composition-dependent thermal expansion coefficient for metallic fuel is determined by interpolating between alloy/component data in the Metallic Fuels Handbook [9-22].
+
+The cladding thermal expansion strain is with temperature defined in Kelvin, and $T_0=293.15$ K, is
+
+$$\begin{split} \alpha \left(T - T_0 \right) = \begin{cases}
+ \alpha_m(T_f) \left(T_f - 70 \right) 10^{-6} & \text{Clad = SS316 or 15-15Ti} \\
+ \left(-0.4247 + 1.282\times10^{-3} T \right. \\ \left. + 7.362\times10^{-7} T^2 - 2.069\times10^{-10} T^3 \right)10^{-2} & \text{Clad = D9 } \\
+ \left(-0.2191 + 5.678\times10^{-4} T \right. \\ \left. + 8.111\times10^{-7} T^2 - 2.576\times10^{-10} T^3 \right)10^{-2} & \text{Clad = HT9 } \\
+ \end{cases}\end{split}$$ [eq 9.8-24]
+
+where $T$ is the temperature in Kelvin, $T_f$ is the temperature in Fahrenheit, $T_0 = 293.15$ is a reference temperature in Kelvin,
+and $\alpha_m(T_f)$ is defined in Eq. (8.7-21).
+
+Fuel Pore Sintering Yield Stress
+
+Experimental data, although limited, shows evidence of pore sintering
+due to the softness of metallic fuel at elevated temperatures [9‑24].
+Prior to eutectic formation, any fuel expansion, caused by thermal
+expansion or fission product swelling, is balanced by pore sintering and
+fuel clad mechanical interaction. This balance is also evident in
+high-level experiments such as TREAT M-Series [9‑25] and Whole Pin
+Furnace tests [9‑26].
+
+In order to account for the impact of pore sintering at elevated
+temperatures, a pore yield strength model, which is a function of creep
+rate and pore compressibility factor, is developed based on a reference
+data point in Ref. [9‑24] and expert judgement. The selected reference
+point for pore yield strength is given in Table 9.8.13.
+
+Table 9.8.13 Selected reference point for pore sintering yield stress
+ | 
+
+ | 
+Reference Parameters
+ | 
+ | 
+Reference Values
+ | 
+
+ | 
+
+ | 
+Temperature
+ | 
+ | 
+973.15 K
+ | 
+
+ | 
+Hydrostatic Stress
+ | 
+ | 
+2.5 MPa
+ | 
+
+ | 
+Pore Compressibility factor
+ | 
+ | 
+C/6
+ | 
+
+ | 
+C - Fitting Factor
+ | 
+ | 
+6
+ | 
+
+Given temperature, hydrostatic stress, and fuel porosity, the model
+computes the pore compressibility factor ( $\alpha_{p}$ ), then
+solves the following equation to compute the pore yield
+strength( $\sigma_{f})$ :
+
+$$\epsilon_{f}(\sigma_{f})\alpha_{pf} = \epsilon_{ref}(\sigma_{ref})\alpha_{pref}$$ [eq 9.8-25]
+
+where $\epsilon_{f}$ is the fuel equivalent creep rate (1/s)
+given the current temperature and hydrostatic stress,
+ $\alpha_{pf}$ is the current fuel porosity compressibility
+factor (See Eq. (9.2-94)), $\epsilon_{ref}$ is the equivalent creep
+rate (1/s) computed using the parameters in Table 1,
+ $\alpha_{pref}$ is the pore compressibility factor given in
+Table 1, and $\ \sigma_{f}$ and $\sigma_{ref}$ are the
+fuel pore yield strength (MPa) and reference stress (MPa),
+respectively. The assumed upper limits for pore yield strength are
+for porous fuel with more than 10% fuel porosity and low porosity
+fuel with less than 10% fuel porosity are 50 MPa and 80 MPa,
+respectively.
+
+Yield Strength (Pa)
+
+The cladding yield strength is defined in Section 8.7.10. The yield strength for SS316 is utilized for all four cladding types.
+
+Ultimate Tensile Strength (Pa)
+
+The cladding ultimate tensile strength is defined in Section 8.7.9. The ultimate tensile strength for SS316 is utilized for all four cladding types.
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch09/therm_conductivity.html]
+------------------------------------------------------------------------------
+[anchor: appendix-9-6-metallic-fuel-thermal-conductivity-model]
+
+# 9.8.6. Appendix 9.6: Metallic Fuel Thermal Conductivity Model
+
+The metallic fuel thermal conductivity equation given in Ref. [9‑32] for
+the unirradiated U-Pu-Zr fuel is utilized. It is given as follows:
+
+$$\begin{split}k_{0s} = a + bT + cT^{2} \\
+a = 17.5\left( \frac{1 - 2.23w_{Zr}}{1 + 1.61w_{Zr}} - 2.62w_{Pu} \right) \\
+b = 1.54 \times 10^{- 2}\left( \frac{1 + 0.061w_{Zr}}{1 + 1.61W_{Zr}} + 0.9w_{Pu} \right) \\
+c = 9.38 \times 10^{- 6}\left( 1 - 2.7w_{Pu} \right) \\\end{split}$$ [eq 9.8-26]
+
+where $k_{0s}$ is unirradiated solid metallic fuel thermal conductivity (W/m-K), T is temperature (K),
+a,b, and c are constants, $w_{Pu}$ , $w_{Zr}$ are the Plutonium and Zirconium weight fractions in fuel alloy
+
+Irradiated Metal Fuel Thermal conductivity
+
+Irradiated metallic fuel thermal conductivity is developed in this study
+in parallel with development and validation of MFUEL metallic fuel
+performance models of SAS.
+
+$$k_{irr} = X_{Na}X_{p}k_{0}$$ [eq 9.8-27]
+
+where $k_{irr}$ effective thermal conductivity of irradiated fuel ( W/m-K),
+ $X_{Na}$ is the thermal conductivity enhancement factor due to sodium
+infiltration into the fuel porosity, only applicable in outer
+ $\left( (\alpha + \zeta) + \delta \right)$ phase region Ref.[9‑16],
+ $X_{p}$ is the thermal conductivity correction factor due to fission gas porosity,
+ $P_{tot} = P_{g} + P_{Na}$ ,
+ $P_{tot},P_{g},P_{Na}$ are the total, gas filled, and sodium filled porosity.
+
+$$X_{p} = \left( 1 - P_{g} \right)^{1.5}$$ [eq 9.8-28]
+
+$$X_{Na} = 1 - 3\frac{1 - \left( \frac{k_{Na}}{0s} \right)}{1.163 + 1.837\left( \frac{ k_{Na}}{k_{0s}} \right)}\frac{P_{Na}}{1 - P_{g}}$$ [eq 9.8-29]
+
+where $k_{Na}$ is the sodium thermal conductivity (W/m-K)
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch09/mcf_param.html]
+------------------------------------------------------------------------------
+[anchor: appendix-9-7-mcf-model-parameters]
+
+# 9.8.7. Appendix 9.7: MCF Model Parameters
+
+Nucleation and growth constants (fitting factors) for Mechanistic Creep Failure (MCF) model is given in tabular form in Table 9.8.14.
+
+Table 9.8.14 MCF model nucleation and growth fitting constants
+
+ | 
+Stress (MPa)
+
+Temp. (K)
+
+ | 
+ | 
+50
+ | 
+ | 
+75
+ | 
+ | 
+100
+ | 
+ | 
+125
+ | 
+ | 
+150
+ | 
+ | 
+200
+ | 
+ | 
+250
+ | 
+ | 
+300
+ | 
+ | 
+350
+ | 
+ | 
+500
+ | 
+
+ | 
+773.15
+ | 
+ | 
+-2.00
+ | 
+ | 
+-2.25
+ | 
+ | 
+-2.50
+ | 
+ | 
+-2.40
+ | 
+ | 
+-2.23
+ | 
+ | 
+-2.00
+ | 
+ | 
+-2.00
+ | 
+ | 
+-2.00
+ | 
+ | 
+-0.30
+ | 
+ | 
+3.40
+ | 
+
+ | 
+873.15
+ | 
+ | 
+-2.00
+ | 
+ | 
+-2.25
+ | 
+ | 
+-2.50
+ | 
+ | 
+-2.40
+ | 
+ | 
+-2.10
+ | 
+ | 
+-2.30
+ | 
+ | 
+-0.10
+ | 
+ | 
+1.15
+ | 
+ | 
+1.80
+ | 
+ | 
+1.95
+ | 
+
+ | 
+973.15
+ | 
+ | 
+-0.80
+ | 
+ | 
+-0.55
+ | 
+ | 
+-0.73
+ | 
+ | 
+-0.65
+ | 
+ | 
+-0.40
+ | 
+ | 
+0.45
+ | 
+ | 
+0.45
+ | 
+ | 
+0.65
+ | 
+ | 
+1.00
+ | 
+ | 
+2.50
+ | 
+
+ | 
+1073.15
+ | 
+ | 
+0.65
+ | 
+ | 
+0.92
+ | 
+ | 
+-0.60
+ | 
+ | 
+0.80
+ | 
+ | 
+0.20
+ | 
+ | 
+0.30
+ | 
+ | 
+0.75
+ | 
+ | 
+1.00
+ | 
+ | 
+1.50
+ | 
+ | 
+2.50
+ | 
+
+ | 
+1173.15
+ | 
+ | 
+0.10
+ | 
+ | 
+0.70
+ | 
+ | 
+-0.50
+ | 
+ | 
+-0.10
+ | 
+ | 
+0.00
+ | 
+ | 
+1.00
+ | 
+ | 
+1.00
+ | 
+ | 
+1.00
+ | 
+ | 
+1.50
+ | 
+ | 
+3.00
+ | 
+
+ | 
+1273.15
+ | 
+ | 
+0.15
+ | 
+ | 
+0.80
+ | 
+ | 
+0.00
+ | 
+ | 
+0.00
+ | 
+ | 
+0.65
+ | 
+ | 
+1.00
+ | 
+ | 
+1.20
+ | 
+ | 
+1.20
+ | 
+ | 
+1.50
+ | 
+ | 
+3.00
+ | 
+
+ | 
+1373.15
+ | 
+ | 
+0.10
+ | 
+ | 
+1.75
+ | 
+ | 
+0.20
+ | 
+ | 
+0.00
+ | 
+ | 
+0.70
+ | 
+ | 
+1.20
+ | 
+ | 
+1.20
+ | 
+ | 
+1.20
+ | 
+ | 
+1.50
+ | 
+ | 
+3.00
+ |
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch09/deform5.html]
+------------------------------------------------------------------------------
+[anchor: appendix-9-8-deform-5-metallic-fuel-cladding-transient-behavior-model]
+
+# 9.8.8. Appendix 9.8: DEFORM-5: Metallic Fuel Cladding Transient Behavior Model
+
+9.8.8.1. Introduction
+
+9.8.8.2. Model Formulation
+
+9.8.8.2.1. Fission Gas
+
+9.8.8.2.2. Fuel/Cladding Eutectic Alloy Formation
+
+9.8.8.2.3. Clad Strain
+
+9.8.8.2.4. Cladding Failure
+
+9.8.8.3. Solution Techniques and Code Implementation
+
+9.8.8.3.1. Initialization
+
+9.8.8.3.2. Fuel/Cladding Eutectic Alloy Formation
+
+9.8.8.3.3. Fission Gas
+
+9.8.8.3.4. Cladding Strain
+
+9.8.8.3.5. Cladding Failure
+
+9.8.8.3.6. Printed Output
+
+9.8.8.4. References
+
+9.8.8.5. Nomenclature

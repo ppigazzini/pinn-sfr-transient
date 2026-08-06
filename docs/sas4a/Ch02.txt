@@ -1,0 +1,20336 @@
+==============================================================================
+CHAPTER 2. SAS4A/SASSYS-1 User’s Guide
+source: https://sas-doc.nse.anl.gov/latest/Part01/Ch02/Ch02.html   (ANL/NSE-SAS/5.8.1)
+scope: input-deck reference; source of realistic parameter values
+==============================================================================
+[anchor: sas-user-s-guide]
+
+# 2. SAS4A/SASSYS-1 User’s Guide
+
+2.1. Introduction
+
+2.2. Modeling Concepts and Code Structure
+
+2.2.1. Code Structure Basis
+
+2.2.2. Standard Input Data Reading
+
+2.2.3. Steady-State Calculation
+
+2.2.4. Transient Calculation
+
+2.3. Data Management
+
+2.4. Supported Platforms
+
+2.5. Input and Output Files
+
+2.5.1. SAS Input File
+
+2.5.2. SAS Output Files
+
+2.5.3. Auxiliary Input and Output Files
+
+2.6. Standard Input Description
+
+2.6.1. Input Format
+
+2.6.2. Input Data Records Descriptions
+
+2.7. Input Data Blocks
+
+2.7.1. Block 1 — INPCOM — Channel-Independent Options and Integer Input
+
+2.7.2. Block 3 — INPMR4 — PRIMAR-4 Integer Input
+
+2.7.3. Block 5 — INCONT — Control System Input
+
+2.7.4. Block 6 — IINBOP — Balance-of-Plant Integer Input
+
+2.7.5. Block 11 — OPCIN — Channel-Independent Floating-Point Input
+
+2.7.6. Block 12 — POWINA — Power, Decay-Heat, and Reactivity Input
+
+2.7.7. Block 13 — PMATCM — Fuel and Cladding Properties
+
+2.7.8. Block 14 — PRIMIN — Primary Loop Input Data
+
+2.7.9. Block 15 — FINBOP — Balance-of-Plant Floating-Point Input
+
+2.7.10. Block 18 — PMR4IN — PRIMAR-4 Floating-Point Input
+
+2.7.11. Block 51 — INPCHN — Channel-Dependent Options and Integer Input
+
+2.7.12. Block 61 — GEOMIN — Channel-Dependent Geometry Data
+
+2.7.13. Block 62 — POWINC — Channel-Dependent Power and Reactivity Input
+
+2.7.14. Block 63 — PMATCH — Channel-Dependent Properties Input
+
+2.7.15. Block 64 — COOLIN — Channel-Dependent Coolant Input
+
+2.7.16. Block 65 — FUELIN — Channel-Dependent Fuel Input
+
+2.8. Example Problems
+
+2.8.1. Protected Transient Overpower Example Problem
+
+2.8.2. Unprotected Transient Overpower Example Problem
+
+2.9. References
+
+2.10. Index of Input Variables
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch02/introduction.html]
+------------------------------------------------------------------------------
+[anchor: introduction]
+
+# 2.1. Introduction
+
+This chapter contains information that will aid the user in
+understanding the program architecture of the SAS4A/SASSYS-1 computer
+code, and the relationship between its modeling concepts and the program
+logic and data flow. The code structure is described in terms of modules
+and subroutines, as are the data management features employed to
+communicate input and calculated data among modules. The contents and
+organization of input and output files are described, and
+results from simplified example problems are included and illustrated.
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch02/concepts.html]
+------------------------------------------------------------------------------
+[anchor: modeling-concepts-and-code-structure]
+
+# 2.2. Modeling Concepts and Code Structure
+
+[anchor: code-structure-basis]
+
+## 2.2.1. Code Structure Basis
+
+The code structure of SAS4A/SASSYS-1 is constructed to reflect the
+physical modeling assumptions employed. In the core models, the basic
+geometric modeling element is a fuel pin, its cladding, and the
+associated coolant and structure, with the structure field representing
+wire wraps, grid plates, and/or hex cans. In the SAS4A/SASSYS-1
+terminology, the term “channel” is used to denote collectively this
+basic element of fuel, cladding, coolant, and structure. In a single-pin
+model, a single average channel is used to represent the average of many
+pins in the reactor, and multiple channels are used to extend the model
+to all the pins in the reactor. In a multiple-pin model, each channel
+represents one or more pins in a subassembly, and multiple-pin
+subassembly models are joined with single-pin subassembly models to
+cover the whole reactor core. A single SAS4A/SASSYS-1 channel may
+therefore represent either one pin, or a large number of pins in many
+subassemblies. In either case, the elementary unit from a code structure
+and data management stand-point is an individual channel.
+
+The code structure of SAS4A/SASSYS-1 is also the result of the
+programming language employed and the functional requirements of the
+phenomenological models. The programming language used for
+SAS4A/SASSYS-1 is ANSI FORTRAN, and the organization of the code follows
+the FORTRAN convention of a MAIN program with a number of subroutines
+and functions. For the purpose of this discussion, the subroutines and
+functions of SAS4A/SASSYS-1 are grouped according to purpose into one of
+the sixteen modules listed in Table 2.2.1. These modules are aligned in
+a one-to-one fashion with the phenomenological models of SAS4A/SASSYS-1,
+each of which is described by a chapter in this report. (The D3IF module
+is not documented in this report.)
+
+Table 2.2.1 SAS4A/SASSYS-1 Modules
+
+ | 
+
+ | 
+Module
+ | 
+ | 
+Purpose
+ | 
+
+ | 
+
+ | 
+ROOT
+ | 
+ | 
+Logic path control, data management, and material properties services.
+ | 
+
+ | 
+TSCL0
+ | 
+ | 
+Single phase liquid coolant thermal/hydraulics and fuel element heat transfer.
+ | 
+
+ | 
+TSPK
+ | 
+ | 
+Reactor point kinetics and first order perturbation theory reactivity feedbacks.
+ | 
+
+ | 
+PRIMAR‑4
+ | 
+ | 
+Primary and secondary coolant loops and components thermal/hydraulics and heat transfer.
+ | 
+
+ | 
+CNTLSYS
+ | 
+ | 
+Reactor and plant control and protection systems simulation.
+ | 
+
+ | 
+BOP
+ | 
+ | 
+Balance‑of‑plant systems and components thermal/hydraulics and heat transfer.
+ | 
+
+ | 
+DEFORM‑4
+ | 
+ | 
+Oxide fuel/cladding fuel element mechanics.
+ | 
+
+ | 
+MFUEL
+ | 
+ | 
+Metallic fuel/cladding fuel performance model.
+ | 
+
+ | 
+SSCOMP
+ | 
+ | 
+Metallic‑fuel material properties.
+ | 
+
+ | 
+FPIN2
+ | 
+ | 
+Metallic fuel/cladding fuel element mechanics.
+ | 
+
+ | 
+TSBOIL
+ | 
+ | 
+Two‑phase (boiling) coolant thermal/hydraulics and fuel element heat transfer.
+ | 
+
+ | 
+CLAP
+ | 
+ | 
+Molten cladding relocation and heat transfer.
+ | 
+
+ | 
+PLUTO2
+ | 
+ | 
+Post‑cladding‑failure oxide fuel/liquid coolant interactions with fuel/coolant thermal/hydraulics.
+ | 
+
+ | 
+PINACLE
+ | 
+ | 
+Molten metallic fuel relocation and heat transfer prior to cladding failure.
+ | 
+
+ | 
+LEVITATE
+ | 
+ | 
+Post‑cladding‑failure oxide and metallic fuel relocation with fuel/cladding heat transfer.
+ | 
+
+ | 
+D3IF
+ | 
+ | 
+Interface to DIF3D-K for TSPK input data generation or DIF3D‑K space/time neutronics.
+ | 
+
+The SAS4A/SASSYS-1 MAIN program calls three subroutines in a module that
+perform 1) data management initialization, 2) code execution, and 3)
+data management termination. A flowchart for the MAIN program is shown
+in Figure 2.2.1. Figure 2.2.2 is a flow diagram for INPDRV, the input
+driver routine. Figure 2.2.3 and Figure 2.2.6 present flow diagrams for
+SSTHRM and TSTHRM, the steady-state and transient driver subroutines.
+The contents of the channel loop in TSTHRM are shown in Figure 2.2.9.
+
+[anchor: standard-input-data-reading]
+
+## 2.2.2. Standard Input Data Reading
+
+INPDRV calls subroutine READIN, which reads card images from the ASCII
+input file (see Section 2.5). A complete description of
+the contents of the input file is contained in Section 2.7. If
+called for, READIN will call subroutine RESTAR to read a binary restart
+file (RESTART.bin). Subroutine READIN prints input data card images as
+they are read. Once all input has been read, subroutine DATOUT prints a
+copy of the final input deck as card images. If control system input has
+been provided, subroutine CTLIN3 will perform checking of the input
+data. Subroutine PMCHEK performs a similar function for input material
+property data. If specified, subroutine INPEDT will print a formatted
+version of the input data blocks. Subroutine SSIN01 initializes a number
+of constants used in the calculations and subroutine PRECAL prepares
+correlations of metallic fuel material properties (density, specific
+heat, and thermal conductivity) based on the Integral Fast Reactor
+Handbook [2‑1, 2‑2], if specified.
+
+Figure 2.2.1 MAIN Program Flow Diagram
+
+Figure 2.2.2 INPDRV Subroutine Flow Diagram
+
+Figure 2.2.3 SSTHRM Subroutine Flow Diagram Part 1
+
+Figure 2.2.4 SSTHRM Subroutine Flow Diagram Part 2
+
+Figure 2.2.5 SSTHRM Subroutine Flow Diagram Part 3
+
+Figure 2.2.6 TSTHRM Subroutine Flow Diagram Part 1
+
+Figure 2.2.7 TSTHRM Subroutine Flow Diagram Part 2
+
+Figure 2.2.8 TSTHRM Subroutine Flow Diagram Part 3
+
+Figure 2.2.9 Flow Diagram for the Channel Loop in TSTHRM Part 1
+
+Figure 2.2.10 Flow Diagram for the Channel Loop in TSTHRM Part 2
+
+Figure 2.2.11 Flow Diagram for the Channel Loop in TSTHRM Part 3
+
+A developmental interface to the DIF3D neutron diffusion theory code
+[2‑3] is provided for by a call to subroutine DATEDT. When fully
+operational, DATEDT will manage the calculation of the reactor power
+distribution, reactivity feedback, and point kinetics data for the TSPK
+module. (Future plans call for implementation of the DIF3D-K space-time
+neutronics code [2‑4] in SAS4A/SASSYS-1). Finally, INPDRV calls CRVSUP
+to supervise the fitting of various input data tables to correlations.
+
+[anchor: steady-state-calculation]
+
+## 2.2.3. Steady-State Calculation
+
+Figure 2.2.3 presents a flow diagram for the steady-state
+(pre-transient) driver subroutine, SSTHRM. SSTHRM begins by making calls
+to SSPINT, which initializes data for the multiple-plenum option in
+PRIMAR‑4, to PNORM, which normalizes the reactor power distribution to
+the specified condition, and to SSPK, which initializes data for the
+point kinetics solution module, TSPK. Within a loop over all channels,
+SSTHRM performs optional initializations for applications of EBR-II
+thermal/hydraulic uncertainty factors and the multiple-plenum option.
+Next, an optional path to a single-channel, stand-alone execution of the
+FPIN2 computer code [2‑5] is provided. Subroutine SSINCH performs
+channel-dependent data initialization, and subroutines SSFUEL, and MFUEL_SSInit manage the
+pre-transient thermal, hydraulic, and mechanics calculation for oxide
+(DEFORM‑4) and metallic (MFUEL) fuels, respectively.
+Should the fuel performance option not be elected, SSTHRM calls a) subroutine SHAPE to set
+the axial channel power distribution, b) subroutine SSCOOL to calculate
+the coolant, structure, and reflector temperatures, c) subroutine SSHTR
+to calculate the fuel and cladding temperatures, d) subroutine SSPRNT to
+print the steady-state temperature, geometry, and neutronics results,
+and e) subroutine NODEPR for an optional diagnostic print of the
+fuel/cladding temperature calculation. Once all temperatures have been
+determined, an option is available to apply hot channel factors. If the
+FPIN2 model is specified for the current channel, subroutine FPINIT
+provides the interface to the SAS4A/SASSYS-1 temperature calculation.
+Subroutine SSPLOT provides an entry for the writing of
+channel-dependent, steady-state results for subsequent plotting. The
+final action in the channel loop is optional initialization of data for
+the multiple-plenum model. Following the channel loop, a summary of the
+reactor power and flow data for all channels is printed, and the
+optional subassembly-to-subassembly input data is checked for
+consistency. If the multiple-pin subassembly model has been invoked,
+subroutine SSNULL performs a constant power and flow transient
+calculation to bring the participating channels to an equilibrium
+temperature condition. If the multiple-plena PRIMAR‑4 option is used,
+steady-state plena conditions are then set by a call to subroutine
+SSTOUT. PRIMAR‑4 default values are set in a call to SSPRIM, and the
+optional primary loop, secondary loop, and balance-of-plant steady-state
+conditions are set by a call to subroutine SSPRM4. Finally, SSTHRM calls
+subroutine RESTAR to write a restart file RESTART.dat defining the
+steady-state condition.
+
+[anchor: transient-calculation]
+
+## 2.2.4. Transient Calculation
+
+The flow diagram for subroutine TSTHRM, the transient calculation driver
+routine, is given in Figure 2.2.6. If the problem is beginning from a
+restart file, subroutine REINIT is called to perform necessary restart
+initialization. Next, subroutine INGRFN is called to initialize
+transient driving conditions from the shared memory segment for the
+simulator option.
+
+The transient problem time domain is divided into time steps as depicted
+in Figure 2.2.12. Reactivity feedbacks and solutions to the point
+kinetics equations are obtained on the main time steps. The primary
+loop, secondary loop, and balance-of-plant thermal/hydraulics solutions
+are obtained on the primary loop time step, which is a sub-step of the
+main time step. Recalculations of the core channel temperatures are
+carried out on the heat transfer time steps, and solutions of the
+channel hydraulics equations are obtained on the coolant time steps. The
+heat transfer time step is a sub-step of the main time step, and the
+coolant time step is a sub-step of the primary loop time step. A coolant
+time step may not span the end of a heat transfer time step. Heat
+transfer and coolant time steps may vary from channel to channel for
+single-pin modeling, or from subassembly to subassembly for multiple-pin
+or sub-channel modeling. The time step accounting algorithm maintains
+consistency among the time step levels while adjusting the various step
+lengths to preserve power, reactivity, and temperature change limits as
+set by default or in the input to preserve accuracy.
+
+Figure 2.2.12 SAS4A/SASSYS-1 Time Step Hierarchy
+
+Before the first transient main time step, subroutine TSINIT is called
+to perform initialization. Each main time step begins with a call to
+subroutine DTMFND to set the time step length, and subroutine FEEDBK is
+called to initialize the reactivity feedback calculation. For the power
+vs. time option, subroutine POWING is called to set the reactor power
+variation over the time step; for the reactivity vs. time option,
+subroutine POINEX extrapolates the reactivity and subroutine TSPK
+calculates the reactor power. If the subassembly-to-subassembly heat
+transfer option has been specified, subroutine CHCHFL is called to
+calculate the channel-to-channel heat fluxes. The primary loop time
+step, a substep of the main time step, begins with a call to subroutine
+DTPFND, which sets the primary loop time step length. Subroutine PRIMAR
+supervises the thermal/hydraulic calculations for the primary and
+secondary loops and the balance-of-plant, setting temperature and flow
+boundary conditions for the core. Subroutine LBPLOT provides optional
+writing of selected balance-of-plant plotting data on the last primary
+loop time step in a main time step, and subroutine FEEDBK then retrieves
+PRIMAR‑4-calculated data for calculation of reactivity feedbacks. At
+this point, a loop over channels is begun. Optional multiple-plena
+conditions are set, as is the channel decay heat or power curve. At this
+point, if the current channel is one of the pins in the multiple-pin
+subassembly model, but not the first channel, then a skip is made around
+the subsequent channel thermal/hydraulics driver subroutines (i.e.
+TSCL0, TSBOIL, LEVDRV, and PLUDRV), since this channel’s thermal
+hydraulics solution has already been obtained within the multiple-pin
+model. (At present, the multiple-pin model is limited to single-phase
+coolant flow, but may be extended to coolant boiling and pin disruption
+modeling in the future). On the other hand, if this is a single-pin
+channel or the lead multiple-pin channel, subroutine DTCFND is called to
+set the coolant time step length (a subset of the primary loop time step
+and variable from one channel to another in the single-pin model and
+from one subassembly to another in the multiple-pin model). The channel
+coolant hydraulics solution is obtained on the coolant time step. TSTHRM
+then calls one of the channel thermal/hydraulics driver subroutines
+(TSCL0, TSBOIL, LEVDRV, or PLUDRV), depending on the thermal/hydraulics
+conditions in the channel. One of these driver subroutines then advances
+the channel calculation to the end of the current coolant time step,
+checking the current time along the way to determine whether a
+recalculation of the pin temperatures is necessary.
+
+At this point in subroutine TSTHRM, a check is made to determine if the
+current coolant time step has ended on a heat transfer time step. If
+not, the calculation proceeds to the next coolant time step. If the end
+of the heat transfer has been reached, newly-determined channel
+temperatures are available, and this triggers tests on the need for fuel
+element mechanics (DEFORM‑4, MFUEL, DEFORM‑5, FPIN2) or in-pin fuel relocation
+(PINACLE) calculations. But first, a test is made to determine whether
+the input has specified the approach of a fission-gas-plenum cladding
+failure time, and subsequent gas release into the coolant channel. Next,
+a check is made to determine whether this channel has experienced
+cladding failure; if so, subsequent tests for fuel pin mechanics or
+in-pin fuel relocation are skipped. If cladding failure has not
+occurred, the PINACLE module is invoked if conditions are met for in-pin
+fuel relocation, and subroutine FAILUR is called to check for cladding
+failure. If one of the fuel pin mechanics options has been specified, it
+is executed at this point. This brings the calculation to the bottom of
+the primary loop and main time step branches.
+
+At the end of a primary loop time step, a check is made to determine
+whether the end of the main time step has been reached. If not, another
+primary loop time step will be made to advance the calculation. However,
+if the end of the main time step has been reached, a series of tests are
+made to check for the writing of plotting file data (subroutines PNPICO,
+LEPICO, and TSPLOT), to sum a channel’s contribution to the net
+reactivity (subroutine FEEDBK), and to print channel conditions
+(subroutines TSPRNT and OUTPT5). A test is made to determine whether all
+channels have been advanced to the end of the primary loop time step; if
+not, the next channel is calculated, but if so, a test is made on the
+current time to check for the end of the main time step. If the end of
+the main time step has not been reached, subsequent primary loop time
+steps are made until the end of the main time step is found. Then,
+subroutine FEEDBK is called to total the net reactivity, and for the
+reactivity vs. time option, subroutines TSPK and RHOEND are called to
+solve the point kinetics equations over the main time step. If
+specified, the reactor power and reactivity data are added to the
+plotting file (entry TSPLT2), and subroutine PKPAGE is called to print
+the power and reactivity summary page on a time step interval set by
+input. Subroutine PSHORT produces a short-form power and reactivity
+print on each time step, followed by tests for problem termination on
+the basis of computing time limit, maximum number of time steps, maximum
+problem time, or minimum fuel motion reactivity. If a termination
+condition is found, a test is made to produce the major channel prints
+(subroutine TSPRNT) in the event they were not made on the current time
+step. If a termination condition is not found, the calculation continues
+following checks for a) the writing of restart file from subroutine
+RESTAR, b) the optional transfer of data to and from the shared memory
+segment in conjunction with the simulator option, and c) the optional
+print of a computing time summary. At termination, the restart file is
+written automatically and the final computing time summary is printed,
+followed by the return to program MAIN, where a summary of all
+subroutines entered in the calculation is printed and execution halts.
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch02/data.html]
+------------------------------------------------------------------------------
+[anchor: data-management]
+
+# 2.3. Data Management
+
+In order to minimize memory requirements and enhance computational
+performance, the SAS4A/SASSYS-1 data management scheme maintains a
+framework for optional data storage. Accordingly, users have the ability
+to control data allocation for specific modules via the storage
+allocation record. These storage flags affect the creation of
+module-specific data structures that are utilized for management of
+dynamically allocated memory and common block data.
+
+Flag IADEFC on the storage allocation record affects channel-specific
+data allocation for DEFORM-4, DEFORM-5, and FPIN2 data, meaning
+allocation of these data structures is necessary if any of these modules
+are to be utilized. Flag IAPLUC controls allocation of memory for data
+related to PINACLE, LEVITATE, or PLUTO2; similar to IADEFC, allocation
+using IAPLUC is necessary if any the related modules are utilized during
+a simulation. It should be noted that problems that initiate either
+PINACLE, LEVITATE, or PLUTO2 must have either DEFORM‑4 or DEFORM‑5 also
+running, but the DEFORM modules may operate without PINACLE, LEVITATE,
+or PLUTO2.
+
+Two additional storage areas are allocated for the control system module
+(CNTLSYS) and the balance-of-plant module (BOP). These areas need not be
+allocated if the corresponding module is not to be executed. Allocation
+of the CNTLSYS storage is controlled with variable IACNTL on the storage
+allocation record, and the BOP module storage area allocation option is
+controlled with variable IALBOP in the same record.
+
+If the optional SAS4A/SASSYS-1 interface to the DIF3D code is used, the
+DIF3D modules allocates two storage areas under the control of the
+BPOINTR package. These storage areas are used only on the DIF3D side of
+the interface.
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch02/platforms.html]
+------------------------------------------------------------------------------
+[anchor: supported-platforms]
+
+# 2.4. Supported Platforms
+
+Currently, SAS4A/SASSYS-1 is supported on 64-bit macOS, Linux, and Windows
+platforms with the x86_64 architecture.
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch02/iofiles.html]
+------------------------------------------------------------------------------
+[anchor: input-and-output-files]
+
+# 2.5. Input and Output Files
+
+[anchor: sas-input-file]
+
+## 2.5.1. SAS Input File
+
+In the past, SAS4A/SASSYS-1 input was limited to 80-column,
+fixed-formatted card images. This is still the basic format used by most
+SAS input files. However, Version 5.3 introduces the option to use
+free-formatted input of any length for integer and floating-point input
+blocks. A full description of the contents of the input file is
+contained in Section 2.7.
+
+In all SAS input files, the first three (non-comment) records of the input file are
+required. The first two records each contain 72 columns of problem title
+data that will appear at the top of each page of the output
+file. Columns 73‑80 of the first card image must contain, left adjusted,
+the major and minor version number of the SAS code being executed. The third
+record is the storage allocation card, which provides SAS
+information needed to allocate the various data containers used for input processing. If the DIF3D
+interface option is invoked, an additional storage allocation card
+(fourth record) is required.
+
+If the current execution is to be restarted from a prior execution, the
+input file must contain a RESTART directive to invoke the reading
+of a restart file from RESTART.bin (see Section 2.5.3). The reading of
+the restart file takes place at the point the restart record is
+encountered on the input file. Input blocks loaded before the
+restart record will be over-written by the restart file data, and input
+blocks following the restart record will modify or replace data read
+from the restart file.
+
+The input data blocks for SAS are described in Section 2.7.
+Each input data block begins with a block identifier record and ends
+with a block delimiter record. The block identifier record contains the
+block name and number, and two integers denoting the relevant current
+channel and the type of background data fill to be supplied before data
+reading begins. (The background may be “zeros” or the same block entered
+previously for this or another channel.) The block delimiter record
+accepts either a negative integer one (“-1” right adjusted) entered in
+the first I6 field of the record, or a left adjusted “END” statement.
+
+Within the body of a SAS input file, INCLUDE directives may be used to
+read additional input data from external files. Any number of nested
+INCLUDE directives may be used, but circular references are not allowed.
+Support for INCLUDE directives was added in Version 5.3.
+
+Reading of input is terminated by an ENDJOB directive. Any records following the
+ENDJOB record are ignored.
+
+[anchor: sas-output-files]
+
+## 2.5.2. SAS Output Files
+
+SAS4A/SASSYS-1 prints ascii output as 133-column, formatted, printed
+line images. Listings of example output files can be found in
+the example problems output listings provided with the code
+distribution.
+
+The ascii output file is occasionally divided by logical page breaks.
+(A fixed page size of 60 lines is no longer maintained.) Each logical
+page break is headed with the two title records that begin the input
+deck. The title lines also contain code version identification, the page
+number, job and user identification, the execution date, and the clock
+time. Pages containing channel-dependent information will have the
+channel number printed in the upper left-hand corner.
+
+The ascii output file begins with a print of information from the
+header, including primary and secondary titles and memory allocation
+flags. During input processing, each record from the input file
+is recorded to the file SAS.log. An optional compiled version of the
+input may be written to INPUT.dat (see IPDECK). An optional, formatted
+and annotated print of the input data is available, followed by a
+tabular print of coolant material properties. This is followed by
+printer plots of curves formed by the tabular fitting procedure.
+
+The steady-state results are printed next, beginning with prints of
+channel-dependent data. The prints vary depending on the computational
+modules invoked, but usually contain node-wise masses, porosities, and
+temperatures, as well as radial and axial pin geometry. Also printed are
+nodal powers and reactivity feedback coefficients. Following the
+channel-dependent prints, steady-state results from the primary loop
+(PRIMAR‑4), control system, and balance-of-plant may appear, if those
+modules are employed.
+
+A short print of time, power, and reactivity is produced on each main
+transient time step. The exact form of this print varies depending on
+whether the default reactivity feedback routines are employed or the
+EBR-II feedback routines are used. On specified main time steps, long
+prints of the current channel conditions (geometry, pressure,
+temperature, etc.) are produced. In addition, each module may produce
+intermittent transient prints of calculated results. These prints are
+controlled by input data. Extensive diagnostic prints may also be
+triggered through input for most of the computational modules.
+
+SAS4A/SASSYS-1 also prints binary output files.
+These files and their contents are summarized in the following sections.
+
+[anchor: channel-dat]
+
+### 2.5.2.1. CHANNEL.dat
+
+CHANNEL.dat is output if requested by the user (ICLCMP).
+At a user-defined frequency, see MSTPL1, channel-dependent and core wide data is written
+to the CHANNEL.dat file.
+The CHANNEL.dat file is an unstructured binary file.
+Converter utilities are provided as part of the distribution package.
+The converter utilities translate the binary data into a CSV or XML format.
+
+Each time data is written to the binary file a row is created for each channel that contains
+the data presented in Table 2.5.1.
+Following the channel-dependent entries is an additional row containing the
+core-wide data, presented in Table 2.5.2, is written.
+
+Data that has a corresponding CSV column number is converted by the CHANNELtoCSV tool distributed with the code.
+
+Table 2.5.1 Channel-Dependent Contents of CHANNEL.dat
+ | 
+
+ | 
+Binary Index
+ | 
+ | 
+CSV Column
+ | 
+ | 
+Data Type
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+1
+ | 
+ | | 
+ | 
+Integer
+ | 
+ | 
+Time step number
+ | 
+
+ | 
+2
+ | 
+ | 
+Appears in CSV file name
+ | 
+ | 
+Integer
+ | 
+ | 
+Channel number
+ | 
+
+ | 
+3
+ | 
+ | | 
+ | 
+Integer
+ | 
+ | 
+KMAX
+ | 
+
+ | 
+4
+ | 
+ | 
+2
+ | 
+ | 
+Double
+ | 
+ | 
+ZFuel - Fuel elevation at JCLN or Peak (m)
+ | 
+
+ | 
+5
+ | 
+ | 
+3
+ | 
+ | 
+Double
+ | 
+ | 
+ZClad - Clad elevation at JNEN or Peak (m)
+ | 
+
+ | 
+6
+ | 
+ | 
+4
+ | 
+ | 
+Double
+ | 
+ | 
+ZCool - Coolant elevation at JNCN or Peak (m)
+ | 
+
+ | 
+7
+ | 
+ | 
+5
+ | 
+ | 
+Double
+ | 
+ | 
+ZStruct - Structure elevation at JNSN, if specified (m)
+ | 
+
+ | 
+8
+ | 
+ | 
+6
+ | 
+ | 
+Double
+ | 
+ | 
+Fuel elevation at JRPRO, if specified (m)
+ | 
+
+ | 
+9
+ | 
+ | 
+7
+ | 
+ | 
+Double
+ | 
+ | 
+Average coolant temperature at ZCool (K or C)
+ | 
+
+ | 
+10
+ | 
+ | 
+8
+ | 
+ | 
+Double
+ | 
+ | 
+Clad temperature at ZClad (K or C)
+ | 
+
+ | 
+11
+ | 
+ | 
+9
+ | 
+ | 
+Double
+ | 
+ | 
+Fuel temperature at ZFuel (K or C)
+ | 
+
+ | 
+12
+ | 
+ | 
+10
+ | 
+ | 
+Double
+ | 
+ | 
+Coolant saturation temperature at ZCool (K or C)
+ | 
+
+ | 
+13
+ | 
+ | 
+11
+ | 
+ | 
+Double
+ | 
+ | 
+Fuel melt fraction (-)
+ | 
+
+ | 
+14
+ | 
+ | 
+12
+ | 
+ | 
+Double
+ | 
+ | 
+Clad midpoint temperature at ZClad (K or C)
+ | 
+
+ | 
+15
+ | 
+ | 
+13
+ | 
+ | 
+Double
+ | 
+ | 
+Clad melt? (No - 0.0, Yes - 1.0)
+ | 
+
+ | 
+16
+ | 
+ | 
+14
+ | 
+ | 
+Double
+ | 
+ | 
+Coolant temperature at ZCool (K or C)
+ | 
+
+ | 
+17
+ | 
+ | 
+15
+ | 
+ | 
+Double
+ | 
+ | 
+Inner structure temperature at ZStruct (K or C)
+ | 
+
+ | 
+18
+ | 
+ | 
+16
+ | 
+ | 
+Double
+ | 
+ | 
+Channel outlet flowrate (kg/s per pin)
+ | 
+
+ | 
+19
+ | 
+ | 
+17
+ | 
+ | 
+Double
+ | 
+ | 
+Channel inlet flowrate (kg/s per pin)
+ | 
+
+ | 
+20
+ | 
+ | 
+18
+ | 
+ | 
+Double
+ | 
+ | 
+Channel outlet temperature (K or C)
+ | 
+
+ | 
+21
+ | 
+ | 
+19
+ | 
+ | 
+Double
+ | 
+ | 
+Channel inlet temperature (K or C)
+ | 
+
+ | 
+22-25
+ | 
+ | | 
+ | 
+Double(4)
+ | 
+ | 
+Reserved
+ | 
+
+ | 
+26
+ | 
+ | | 
+ | 
+Integer
+ | 
+ | 
+Reserved
+ | 
+
+ | 
+27
+ | 
+ | | 
+ | 
+Double
+ | 
+ | 
+Reserved
+ | 
+
+ | 
+28-29
+ | 
+ | | 
+ | 
+Integer(2)
+ | 
+ | 
+Reserved
+ | 
+
+ | 
+Remaining
+ | 
+ | | 
+ | 
+Double(3*KMAX)
+ | 
+ | 
+Reserved
+ | 
+
+Table 2.5.2 Core-Wide Contents of CHANNEL.dat
+ | 
+
+ | 
+Binary Index
+ | 
+ | 
+CSV Column
+ | 
+ | 
+Data Type
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+1
+ | 
+ | 
+1
+ | 
+ | 
+Integer
+ | 
+ | 
+Time step number (-)
+ | 
+
+ | 
+2
+ | 
+ | 
+2
+ | 
+ | 
+Integer
+ | 
+ | 
+Power option, IPOWER (-)
+ | 
+
+ | 
+3
+ | 
+ | 
+3
+ | 
+ | 
+Double
+ | 
+ | 
+Time (s). Note the CSV converter copies the time entry into column one of each channel specific file.
+ | 
+
+ | 
+4
+ | 
+ | 
+4
+ | 
+ | 
+Double
+ | 
+ | 
+Time step size (s)
+ | 
+
+ | 
+5
+ | 
+ | 
+5
+ | 
+ | 
+Double
+ | 
+ | 
+Normalized total power (-)
+ | 
+
+ | 
+6
+ | 
+ | 
+6
+ | 
+ | 
+Double
+ | 
+ | 
+Reactor period (s)
+ | 
+
+ | 
+7
+ | 
+ | 
+7
+ | 
+ | 
+Double
+ | 
+ | 
+Integrated normalized total power (-)
+ | 
+
+ | 
+8
+ | 
+ | 
+8
+ | 
+ | 
+Double
+ | 
+ | 
+Normalized decay power (-)
+ | 
+
+ | 
+9
+ | 
+ | 
+9
+ | 
+ | 
+Double
+ | 
+ | 
+Net reactivity ($)
+ | 
+
+ | 
+10
+ | 
+ | 
+10
+ | 
+ | 
+Double
+ | 
+ | 
+Programmed reactivity ($)
+ | 
+
+ | 
+11
+ | 
+ | 
+11
+ | 
+ | 
+Double
+ | 
+ | 
+Doppler reactivity ($)
+ | 
+
+ | 
+12
+ | 
+ | 
+12
+ | 
+ | 
+Double
+ | 
+ | 
+Axial expansion reactivity ($)
+ | 
+
+ | 
+13
+ | 
+ | 
+13
+ | 
+ | 
+Double
+ | 
+ | 
+Radial expansion reactivity ($)
+ | 
+
+ | 
+14
+ | 
+ | 
+14
+ | 
+ | 
+Double
+ | 
+ | 
+CRDL expansion reactivity ($)
+ | 
+
+ | 
+15
+ | 
+ | 
+15
+ | 
+ | 
+Double
+ | 
+ | 
+Coolant void reactivity ($)
+ | 
+
+ | 
+16
+ | 
+ | 
+16
+ | 
+ | 
+Double
+ | 
+ | 
+Fuel relocation reactivity ($)
+ | 
+
+ | 
+17
+ | 
+ | 
+17
+ | 
+ | 
+Double
+ | 
+ | 
+Clad relocation reactivity ($)
+ | 
+
+ | 
+Remaining
+ | 
+ | | 
+ | 
+Double(3* NCHAN + 1)
+ | 
+ | 
+Reserved
+ | 
+
+[anchor: primar4-dat]
+
+### 2.5.2.2. PRIMAR4.dat
+
+PRIMAR4.dat is output if requested by the user (NBINOT > 0). Data is written to PRIMAR4.dat at
+a frequency specified by the user (INULLT, IBINST).
+The PRIMAR4.dat file is an unstructured binary file.
+Converter utilities are provided as part of the distribution package.
+The converter utilities translate the binary data into a CSV or XML format and print the formatted data to the standard output.
+
+Each time data is written to PRIMAR4.dat, a row is created that contains the values shown in Table 2.5.3.
+For non-restart cases, the first row in the PRIMAR4.dat file has the IBINOT information appended to the row.
+In this case, at binary index 5 + NCols NBINOT is written as an Integer.
+In columns (6 + NCols) - (5 + NCols + NBINOT) a transpose of the IBINOT information is written as an Integer.
+This information is not included in the binary file for restart cases and is therefore not utilized by the converter utility.
+
+Table 2.5.3 Initial Contents of PRIMAR4.dat
+ | 
+
+ | 
+Binary Index
+ | 
+ | 
+CSV Column
+ | 
+ | 
+Data Type
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+1
+ | 
+ | 
+1
+ | 
+ | 
+Integer
+ | 
+ | 
+Time step number
+ | 
+
+ | 
+2
+ | 
+ | 
+2
+ | 
+ | 
+Integer
+ | 
+ | 
+PRIMAR-4 time step number
+ | 
+
+ | 
+3
+ | 
+ | 
+3
+ | 
+ | 
+Integer
+ | 
+ | 
+NCols - Total number of output columns
+ | 
+
+ | 
+4
+ | 
+ | 
+4
+ | 
+ | 
+Double
+ | 
+ | 
+Time (s)
+ | 
+
+ | 
+5 - (4 + NCols)
+ | 
+ | 
+5 - (4 + NCols)
+ | 
+ | 
+Double(NCols)
+ | 
+ | 
+Output data requested in IBINOT
+ | 
+
+[anchor: control-dat]
+
+### 2.5.2.3. CONTROL.dat
+
+CONTROL.dat is output when the control system is in use and the user requests the data is printed.
+Users can define the frequency of CONTROL.dat print using the J1 parameter for signal 999.
+The CONTROL.dat file is an unstructured binary file.
+Converter utilities are provided as part of the distribution package.
+The converter utilities translate the binary data into a CSV or XML format and print the formatted data to the standard output.
+
+CONTROL.dat contains a header section which defines the number of signals contained within the file and a description of the signals.
+The format of the header section is described in Table 2.5.4.
+Each time data is written to CONTROL.dat, i, two rows are created that contain the values shown in Table 2.5.5.
+
+Table 2.5.4 Initial Contents of CONTROL.dat
+ | 
+
+ | 
+Binary Entry
+ | 
+ | 
+Binary Index
+ | 
+ | 
+Data Type
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+1
+ | 
+ | 
+1
+ | 
+ | 
+Integer
+ | 
+ | 
+NSigs - total number of signals
+ | 
+
+ | 
+2
+ | 
+ | 
+1 - (NSigs - 1)
+ | 
+ | 
+Integer(NSigs)
+ | 
+ | 
+Signal Number
+ | 
+
+ | 
+3
+ | 
+ | 
+1 - (NSigs - 1)
+ | 
+ | 
+Integer(NSigs)
+ | 
+ | 
+Signal Type Id
+ | 
+
+ | 
+4
+ | 
+ | 
+1 - (NSigs - 1)
+ | 
+ | 
+Character(32*NSigs)
+ | 
+ | 
+Signal Type Description
+ | 
+
+Table 2.5.5 Main Contents of CONTROL.dat
+ | 
+
+ | 
+Binary Entry
+ | 
+ | 
+Binary Index
+ | 
+ | 
+CSV Column
+ | 
+ | 
+Data Type
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+i
+ | 
+ | 
+1
+ | 
+ | 
+1
+ | 
+ | 
+Integer
+ | 
+ | 
+PRIMAR-4 time step number (-)
+ | 
+
+ | 
+i
+ | 
+ | 
+2
+ | 
+ | 
+2
+ | 
+ | 
+Double
+ | 
+ | 
+Time at the beginning of the time step (s)
+ | 
+
+ | 
+i + 1
+ | 
+ | 
+1 - (NSigs - 1)
+ | 
+ | 
+3 - (2 + NSigs)
+ | 
+ | 
+Double(NSigs)
+ | 
+ | 
+Signal values
+ | 
+
+[anchor: stratcv-dat]
+
+### 2.5.2.4. STRATCV.dat
+
+STRATCV.dat is output when the stratified volume model is active and the user requests the data is printed.
+Users can define the frequency of STRATCV.dat print using the IFT16 parameter.
+The STRATCV.dat file is an unstructured binary file.
+Converter utilities are provided as part of the distribution package.
+The converter utilities translate the binary data into a CSV or XML format.
+
+Each time data is written to STRATCV.dat, i, several rows are created that contain the values shown in Table 2.5.6 and Table 2.5.7.
+If users define a negative value for IFT16, additional debug information is included in the binary file, this information is presented in Table 2.5.8.
+Table 2.5.7, and Table 2.5.8 if debug information is requested, is written to the binary file for each stratified volume, j.
+
+Table 2.5.6 Contents of STRATCV.dat
+ | 
+
+ | 
+Binary Entry
+ | 
+ | 
+Binary Index
+ | 
+ | 
+CSV Column
+ | 
+ | 
+Data Type
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+i
+ | 
+ | 
+1
+ | 
+ | | 
+ | 
+Integer
+ | 
+ | 
+Print frequency, IFT16 (-)
+ | 
+
+ | 
+i
+ | 
+ | 
+2
+ | 
+ | | 
+ | 
+Integer
+ | 
+ | 
+NSTRCV - Number of stratified CVs (-)
+ | 
+
+ | 
+i
+ | 
+ | 
+3
+ | 
+ | 
+1
+ | 
+ | 
+Integer
+ | 
+ | 
+PRIMAR-4 time step number (-)
+ | 
+
+ | 
+i
+ | 
+ | 
+4
+ | 
+ | 
+2
+ | 
+ | 
+Double
+ | 
+ | 
+Time (s)
+ | 
+
+ | 
+i + 1
+ | 
+ | | 
+ | | 
+ | 
+Multi-line entry for each CV
+ | 
+ | 
+see Table 2.5.7
+ | 
+
+Table 2.5.7 Contents of STRATCV.dat for a given stratified volume
+ | 
+
+ | 
+Binary Entry
+ | 
+ | 
+Binary Index
+ | 
+ | 
+CSV Column
+ | 
+ | 
+Data Type
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+j
+ | 
+ | 
+1
+ | 
+ | 
+Appears in CSV file name
+ | 
+ | 
+Integer
+ | 
+ | 
+ICVSTR - Stratified CV number
+ | 
+
+ | 
+j
+ | 
+ | 
+2
+ | 
+ | 
+3
+ | 
+ | 
+Integer
+ | 
+ | 
+NL4 - Number of layers
+ | 
+
+ | 
+j
+ | 
+ | 
+3
+ | 
+ | 
+4
+ | 
+ | 
+Integer
+ | 
+ | 
+ISTAG4 - Stage number
+ | 
+
+ | 
+j + 1
+ | 
+ | 
+1
+ | 
+ | 
+5
+ | 
+ | 
+Double
+ | 
+ | 
+ZLAYR4(1) - Bottom elevation of first layer (m)
+ | 
+
+ | 
+j + 1
+ | 
+ | 
+2
+ | 
+ | 
+6
+ | 
+ | 
+Double
+ | 
+ | 
+TSTCV4(1) - Temperature of first layer (K)
+ | 
+
+ | 
+j + 1
+ | 
+ | 
+3
+ | 
+ | 
+7
+ | 
+ | 
+Double
+ | 
+ | 
+XLSTM4(1) - Mass of first layer (kg)
+ | 
+
+ | 
+j + 2
+ | 
+ | 
+1
+ | 
+ | 
+8
+ | 
+ | 
+Double
+ | 
+ | 
+ZLAYR4(2) - Bottom elevation of the second layer (m)
+ | 
+
+ | 
+j + 2
+ | 
+ | 
+2
+ | 
+ | 
+9
+ | 
+ | 
+Double
+ | 
+ | 
+TSTCV4(2) - Temperature of second layer (K)
+ | 
+
+ | 
+j + 2
+ | 
+ | 
+3
+ | 
+ | 
+10
+ | 
+ | 
+Double
+ | 
+ | 
+XLSTM4(2) - Mass of second layer (kg)
+ | 
+
+ | 
+j + 3
+ | 
+ | 
+1
+ | 
+ | 
+11
+ | 
+ | 
+Double
+ | 
+ | 
+ZLAYR4(3) - Bottom elevation of third layer (m)
+ | 
+
+ | 
+j + 3
+ | 
+ | 
+2
+ | 
+ | 
+12
+ | 
+ | 
+Double
+ | 
+ | 
+TSTCV4(3) - Temperature of third layer (K)
+ | 
+
+ | 
+j + 3
+ | 
+ | 
+3
+ | 
+ | 
+13
+ | 
+ | 
+Double
+ | 
+ | 
+XLSTM4(3) - Mass of third layer (kg)
+ | 
+
+ | 
+j + 4
+ | 
+ | 
+1
+ | 
+ | 
+14
+ | 
+ | 
+Double
+ | 
+ | 
+ZLAYR4(1+NL4) - Upper elevation of the last layer (m)
+ | 
+
+Table 2.5.8 Optional debug contents of STRATCV.dat for a given stratified volume
+ | 
+
+ | 
+Binary Entry
+ | 
+ | 
+Binary Index
+ | 
+ | 
+CSV Column
+ | 
+ | 
+Data Type
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+j + 5
+ | 
+ | 
+1
+ | 
+ | 
+15
+ | 
+ | 
+Double
+ | 
+ | 
+WPLUME - Flow rate into plume (kg/s)
+ | 
+
+ | 
+j + 5
+ | 
+ | 
+2
+ | 
+ | 
+16
+ | 
+ | 
+Double
+ | 
+ | 
+TPLUME - Temperature of plume (K)
+ | 
+
+ | 
+j + 5
+ | 
+ | 
+3
+ | 
+ | 
+17
+ | 
+ | 
+Double
+ | 
+ | 
+Z0 - Plume established height (m)
+ | 
+
+ | 
+j + 5
+ | 
+ | 
+4
+ | 
+ | 
+18
+ | 
+ | 
+Double
+ | 
+ | 
+V0 - Plume exit velocity (m/s)
+ | 
+
+ | 
+j + 5
+ | 
+ | 
+5
+ | 
+ | 
+19
+ | 
+ | 
+Double
+ | 
+ | 
+VJ - Plume velocity at interface (m/s)
+ | 
+
+ | 
+j + 5
+ | 
+ | 
+6
+ | 
+ | 
+20
+ | 
+ | 
+Double
+ | 
+ | 
+FR - Froude number (-)
+ | 
+
+ | 
+j + 5
+ | 
+ | 
+7
+ | 
+ | 
+21
+ | 
+ | 
+Double
+ | 
+ | 
+HJET - Jet height (m)
+ | 
+
+ | 
+j + 5
+ | 
+ | 
+8
+ | 
+ | 
+22
+ | 
+ | 
+Double
+ | 
+ | 
+WENTR - Flow entrainment rate (kg/s)
+ | 
+
+[anchor: mfuel-binary-files]
+
+### 2.5.2.5. MFUEL Binary Files
+
+As described in Section 9.6, when the MFUEL model is activated, a pre-transient
+and a transient binary file are created which contain the peak values of relevant parameters at the end of a main MFUEL time step.
+Two unique binary files are created for each channel, one for the pre-transient results and one for the transient results.
+A converter utility is provided as part of the distribution package.
+The converter utility translates the binary data into a CSV.
+
+The MFUEL Peak value file contains a header section which defines the channel number, axial and radial meshing, the number of data columns and the time unit.
+The format of the header section is described in Table 2.5.9.
+Each time data is written to a peak axial file, i, a row is created that contains the values shown in Table 2.5.10.
+
+MFUEL also outputs a pre-transient binary file including axial distributions of relevant parameters.
+Users can control the frequency at which the axial data is written during pre-transient characterization using the
+table-based MSTEP input.
+A unique binary file is created for each channel that uses MFUEL.
+A converter utility is provided as part of the distribution package.
+The converter utility translates the binary data into a multiple CSV files.
+
+The axial-dependent MFUEL file contains a header section which defines the channel number, the number of included time steps, the axial meshing, and the number of data columns.
+The format of the header section is described in Table 2.5.11.
+Each time data is written to the axial-dependent file, i, MZ rows are created that contain the values shown in Table 2.5.12.
+
+Table 2.5.9 Initial Contents of the Peak Value MFUEL Files
+ | 
+
+ | 
+Binary Entry
+ | 
+ | 
+Binary Index
+ | 
+ | 
+Data Type
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+1
+ | 
+ | 
+1
+ | 
+ | 
+Integer
+ | 
+ | 
+iChan - channel number
+ | 
+
+ | 
+1
+ | 
+ | 
+2
+ | 
+ | 
+Integer
+ | 
+ | 
+MZ - number of axial fuel nodes
+ | 
+
+ | 
+1
+ | 
+ | 
+3
+ | 
+ | 
+Integer
+ | 
+ | 
+NEP - number of radial nodes
+ | 
+
+ | 
+1
+ | 
+ | 
+4
+ | 
+ | 
+Integer
+ | 
+ | 
+nCol - number of data columns
+ | 
+
+ | 
+1
+ | 
+ | 
+5
+ | 
+ | 
+Character(3)
+ | 
+ | 
+Unit of time, sec - seconds, or day - days
+ | 
+
+Table 2.5.10 Contents of MFUEL Peak Channel Files
+ | 
+
+ | 
+Binary Entry
+ | 
+ | 
+Binary/CSV Index
+ | 
+ | 
+Data Type
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+i
+ | 
+ | 
+1
+ | 
+ | 
+Double
+ | 
+ | 
+Time (days for steady state file, seconds for transient file)
+ | 
+
+ | 
+i
+ | 
+ | 
+2
+ | 
+ | 
+Double
+ | 
+ | 
+Maximum burnup (at%)
+ | 
+
+ | 
+i
+ | 
+ | 
+3
+ | 
+ | 
+Double
+ | 
+ | 
+Maximum linear heat rate (kW/m)
+ | 
+
+ | 
+i
+ | 
+ | 
+4
+ | 
+ | 
+Double
+ | 
+ | 
+Maximum fuel temperature (K)
+ | 
+
+ | 
+i
+ | 
+ | 
+5
+ | 
+ | 
+Double
+ | 
+ | 
+Maximum clad inner temperature (K)
+ | 
+
+ | 
+i
+ | 
+ | 
+6
+ | 
+ | 
+Double
+ | 
+ | 
+Maximum clad hoop stress (MPa)
+ | 
+
+ | 
+i
+ | 
+ | 
+7
+ | 
+ | 
+Double
+ | 
+ | 
+Maximum fuel permanent axial expansion (%)
+ | 
+
+ | 
+i
+ | 
+ | 
+8
+ | 
+ | 
+Double
+ | 
+ | 
+Maximum fuel total axial expansion (%)
+ | 
+
+ | 
+i
+ | 
+ | 
+9
+ | 
+ | 
+Double
+ | 
+ | 
+Maximum clad permanent axial expansion (%)
+ | 
+
+ | 
+i
+ | 
+ | 
+10
+ | 
+ | 
+Double
+ | 
+ | 
+Maximum clad total axial expansion (%)
+ | 
+
+ | 
+i
+ | 
+ | 
+11
+ | 
+ | 
+Double
+ | 
+ | 
+Maximum fission gas release (%)
+ | 
+
+ | 
+i
+ | 
+ | 
+12
+ | 
+ | 
+Double
+ | 
+ | 
+Maximum plenum pressure (MPa)
+ | 
+
+ | 
+i
+ | 
+ | 
+13
+ | 
+ | 
+Double
+ | 
+ | 
+Maximum total clad hoop strain (%)
+ | 
+
+ | 
+i
+ | 
+ | 
+14
+ | 
+ | 
+Double
+ | 
+ | 
+Maximum total creep hoop strain (%)
+ | 
+
+ | 
+i
+ | 
+ | 
+15
+ | 
+ | 
+Double
+ | 
+ | 
+Maximum thermal creep hoop strain (%)
+ | 
+
+ | 
+i
+ | 
+ | 
+16
+ | 
+ | 
+Double
+ | 
+ | 
+Maximum irradiation creep hoop strain (%)
+ | 
+
+ | 
+i
+ | 
+ | 
+17
+ | 
+ | 
+Double
+ | 
+ | 
+Maximum volumetric swelling (%)
+ | 
+
+ | 
+i
+ | 
+ | 
+18
+ | 
+ | 
+Double
+ | 
+ | 
+Maximum total clad wastage (microns)
+ | 
+
+ | 
+i
+ | 
+ | 
+19
+ | 
+ | 
+Double
+ | 
+ | 
+Maximum lanthanide wastage (microns)
+ | 
+
+ | 
+i
+ | 
+ | 
+20
+ | 
+ | 
+Double
+ | 
+ | 
+Maximum eutectic wastage (microns)
+ | 
+
+ | 
+i
+ | 
+ | 
+21
+ | 
+ | 
+Double
+ | 
+ | 
+Maximum Na corrosion thickness (microns)
+ | 
+
+ | 
+i
+ | 
+ | 
+22
+ | 
+ | 
+Double
+ | 
+ | 
+Maximum CDF (-)
+ | 
+
+ | 
+i
+ | 
+ | 
+23
+ | 
+ | 
+Double
+ | 
+ | 
+Maximum MCF (-)
+ | 
+
+ | 
+i
+ | 
+ | 
+24
+ | 
+ | 
+Double
+ | 
+ | 
+Maximum neutron fluence (n/cm 2)
+ | 
+
+ | 
+i
+ | 
+ | 
+25
+ | 
+ | 
+Double
+ | 
+ | 
+Maximum clad dose (dpa)
+ | 
+
+Table 2.5.11 Initial Contents of the MFUEL Axial Files
+ | 
+
+ | 
+Binary Entry
+ | 
+ | 
+Binary Index
+ | 
+ | 
+Data Type
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+1
+ | 
+ | 
+1
+ | 
+ | 
+Integer
+ | 
+ | 
+iChan - channel number
+ | 
+
+ | 
+1
+ | 
+ | 
+2
+ | 
+ | 
+Integer
+ | 
+ | 
+nSteps - number of time steps included in the file
+ | 
+
+ | 
+1
+ | 
+ | 
+3
+ | 
+ | 
+Integer
+ | 
+ | 
+MZ - number of axial nodes
+ | 
+
+ | 
+1
+ | 
+ | 
+4
+ | 
+ | 
+Integer
+ | 
+ | 
+nCol - number of data columns
+ | 
+
+Table 2.5.12 Contents of MFUEL Axial Files
+ | 
+
+ | 
+Binary Index
+ | 
+ | 
+Data Type
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+1
+ | 
+ | 
+Double
+ | 
+ | 
+Axial location (m)
+ | 
+
+ | 
+2
+ | 
+ | 
+Double
+ | 
+ | 
+Relative axial location (-)
+ | 
+
+ | 
+3
+ | 
+ | 
+Double
+ | 
+ | 
+Cold cladding strain (%)
+ | 
+
+ | 
+4
+ | 
+ | 
+Double
+ | 
+ | 
+Clad inner wastage (microns)
+ | 
+
+ | 
+5
+ | 
+ | 
+Double
+ | 
+ | 
+Clad inner temperature (C)
+ | 
+
+ | 
+6
+ | 
+ | 
+Double
+ | 
+ | 
+Clad hoop stress (MPa)
+ | 
+
+ | 
+7
+ | 
+ | 
+Double
+ | 
+ | 
+Fuel outer radius (m)
+ | 
+
+[anchor: auxiliary-input-and-output-files]
+
+## 2.5.3. Auxiliary Input and Output Files
+
+The input and output files used in SAS4A/SASSYS-1 are listed in Table 2.5.13.
+
+Table 2.5.13 SAS4A/SASSYS-1 Assigned External Files
+ | 
+
+ | 
+File
+ | 
+ | 
+Type
+ | 
+ | 
+Assigned Use
+ | 
+ | 
+Subroutine
+ | 
+
+ | 
+
+ | 
+stdin
+ | 
+ | 
+Formatted
+ | 
+ | 
+Input Data Records
+ | 
+ | 
+READIN
+ | 
+
+ | 
+stdout
+ | 
+ | 
+Formatted
+ | 
+ | 
+Printed Output
+ | 
+ | 
+READIN
+ | 
+
+ | | 
+ | | 
+ | | 
+ | 
+DATOUT
+ | 
+
+ | | 
+ | | 
+ | | 
+ | 
+SSPRNT
+ | 
+
+ | | 
+ | | 
+ | | 
+ | 
+TSPRNT
+ | 
+
+ | | 
+ | | 
+ | | 
+ | 
+PSHORT
+ | 
+
+ | | 
+ | | 
+ | | 
+ | 
+PKPAGE
+ | 
+
+ | 
+INPUT.dat
+ | 
+ | 
+Formatted
+ | 
+ | 
+Edited Input Data Records
+ | 
+ | 
+DATOUT
+ | 
+
+ | 
+8
+ | 
+ | 
+Formatted
+ | 
+ | 
+Scratch BOP Input Data
+ | 
+ | 
+READIN
+ | 
+
+ | | 
+ | | 
+ | | 
+ | 
+RENUM
+ | 
+
+ | 
+SAS.log
+ | 
+ | 
+Formatted
+ | 
+ | 
+Printed Output
+ | 
+ | | 
+
+ | 
+CHANNEL.dat
+ | 
+ | 
+Binary
+ | 
+ | 
+Main Time Step Plotting
+ | 
+ | 
+TSPLOT
+ | 
+
+ | 
+12
+ | 
+ | 
+Binary
+ | 
+ | 
+PLUTO2/LEVITATE Data for Plotting
+ | 
+ | 
+PLOUT
+ | 
+
+ | 
+13
+ | 
+ | 
+Binary
+ | 
+ | 
+PLUTO2/LEVITATE Data for Plotting
+ | 
+ | 
+PLOUT
+ | 
+
+ | 
+14
+ | 
+ | 
+Binary
+ | 
+ | 
+PLUTO2/LEVITATE Data for Plotting
+ | 
+ | 
+PLOUT
+ | 
+
+ | 
+PRIMAR4.dat
+ | 
+ | 
+Binary
+ | 
+ | 
+PRIMAR‑4 Data for Plotting
+ | 
+ | 
+SSPRPL
+ | 
+
+ | | 
+ | | 
+ | | 
+ | 
+TSPRPL
+ | 
+
+ | 
+CONTROL.dat
+ | 
+ | 
+Binary
+ | 
+ | 
+Control System Signal Data
+ | 
+ | 
+CNTL_Data
+ | 
+
+ | 
+16
+ | 
+ | 
+Formatted
+ | 
+ | 
+PINACLE/LEVITATE Data for Plotting
+ | 
+ | 
+SSPLOT
+ | 
+
+ | | 
+ | | 
+ | | 
+ | 
+PNPICO
+ | 
+
+ | | 
+ | | 
+ | | 
+ | 
+LEPICO
+ | 
+
+ | 
+RESTART.dat
+ | 
+ | 
+Binary
+ | 
+ | 
+Output Restart File
+ | 
+ | 
+RESTAR
+ | 
+
+ | 
+RESTART.bin
+ | 
+ | 
+Binary
+ | 
+ | 
+Input Restart File
+ | 
+ | 
+RESTAR
+ | 
+
+ | 
+20
+ | 
+ | 
+Binary
+ | 
+ | 
+TSBOIL Data for Plotting
+ | 
+ | 
+TSCMP0
+ | 
+
+ | | 
+ | | 
+ | | 
+ | 
+TSCMP1
+ | 
+
+ | 
+21
+ | 
+ | 
+Binary
+ | 
+ | 
+DEFORM‑5 Plotting
+ | 
+ | 
+DFORM5
+ | 
+
+ | 
+22
+ | 
+ | 
+Binary
+ | 
+ | 
+EBR2 Reactivity Plotting
+ | 
+ | 
+EBR2
+ | 
+
+ | 
+23
+ | 
+ | 
+Binary
+ | 
+ | 
+FPIN2 Data for Plotting
+ | 
+ | 
+FPNOUT
+ | 
+
+ | 
+24
+ | 
+ | 
+Binary
+ | 
+ | 
+EBR-II Mark-V Safety Case Scratch Plotting Data File
+ | 
+ | 
+TSPLOT
+ | 
+
+ | 
+26
+ | 
+ | 
+Binary
+ | 
+ | 
+BOP Data for Plotting
+ | 
+ | 
+LBPLOT
+ | 
+
+ | 
+27
+ | 
+ | 
+Binary
+ | 
+ | 
+Steam Generator Data for Plotting
+ | 
+ | 
+INIT, TSBOP
+ | 
+
+ | 
+28
+ | 
+ | 
+Binary
+ | 
+ | 
+BOP Data for Plotting
+ | 
+ | 
+INITS, TSBOP
+ | 
+
+ | 
+29
+ | 
+ | 
+Binary
+ | 
+ | 
+BOP Data for Plotting
+ | 
+ | 
+PLTBOP
+ | 
+
+ | 
+MaxTemps.txt
+ | 
+ | 
+Formatted
+ | 
+ | 
+Summary of Maximum Temperatures in the Core
+ | 
+ | 
+PRTMXT
+ | 
+
+ | 
+MFUELss_ICH.dat
+ | 
+ | 
+Binary
+ | 
+ | 
+Summary of the MFUEL pre-transient irradiation predictions. Unique file for each channel using MFUEL is created.
+ | 
+ | 
+MFUEL_SSInit
+ | 
+
+ | 
+MFUELss_ICH-axial.dat
+ | 
+ | 
+Binary
+ | 
+ | 
+Axial summary of select MFUEL pre-transient irradiation predictions. Unique file for each channel using MFUEL is created.
+ | 
+ | 
+MFUEL_SSInit
+ | 
+
+ | 
+MFUELts_ICH.dat
+ | 
+ | 
+Binary
+ | 
+ | 
+Summary of the MFUEL transient predictions. Unique file for each channel using MFUEL is created.
+ | 
+ | 
+MFUEL_SSInit
+ |
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch02/input.html]
+------------------------------------------------------------------------------
+[anchor: standard-input-description]
+
+# 2.6. Standard Input Description
+
+SAS input data is read from a simple text file that is provided on the
+command line. The input file is normally provided via input
+redirection:
+
+$ sas.x < model.inp > model.out
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch02/blocks.html]
+------------------------------------------------------------------------------
+[anchor: input-data-blocks]
+
+# 2.7. Input Data Blocks
+
+2.7.1. Block 1 — INPCOM — Channel-Independent Options and Integer Input
+
+2.7.2. Block 3 — INPMR4 — PRIMAR-4 Integer Input
+
+2.7.3. Block 5 — INCONT — Control System Input
+
+2.7.4. Block 6 — IINBOP — Balance-of-Plant Integer Input
+
+2.7.5. Block 11 — OPCIN — Channel-Independent Floating-Point Input
+
+2.7.6. Block 12 — POWINA — Power, Decay-Heat, and Reactivity Input
+
+2.7.7. Block 13 — PMATCM — Fuel and Cladding Properties
+
+2.7.8. Block 14 — PRIMIN — Primary Loop Input Data
+
+2.7.9. Block 15 — FINBOP — Balance-of-Plant Floating-Point Input
+
+2.7.10. Block 18 — PMR4IN — PRIMAR-4 Floating-Point Input
+
+2.7.11. Block 51 — INPCHN — Channel-Dependent Options and Integer Input
+
+2.7.12. Block 61 — GEOMIN — Channel-Dependent Geometry Data
+
+2.7.13. Block 62 — POWINC — Channel-Dependent Power and Reactivity Input
+
+2.7.14. Block 63 — PMATCH — Channel-Dependent Properties Input
+
+2.7.15. Block 64 — COOLIN — Channel-Dependent Coolant Input
+
+2.7.16. Block 65 — FUELIN — Channel-Dependent Fuel Input
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch02/examples.html]
+------------------------------------------------------------------------------
+[anchor: example-problems]
+
+# 2.8. Example Problems
+
+[anchor: protected-transient-overpower-example-problem]
+
+## 2.8.1. Protected Transient Overpower Example Problem
+
+The protected transient overpower example problem, which is distributed
+with SAS4A/SASSYS-1 releases as “exam1”, is an analysis of a protected
+reactivity insertion event in the EBR‑II reactor. The basic
+SAS4A/SASSYS-1 input deck for this example problem was taken from Ref.
+2‑6. This input deck is the standard EBR‑II SAS4A/SASSYS-1 model for the
+primary and secondary coolant loops. The core model in this deck is for
+a generic Mark‑III reactor, and does not correspond to an actual or
+planned loading. The standard EBR‑II plant protection system model
+documented in Ref. 2‑7 was added to the input deck to provide scram
+functions, and an external, programmed reactivity insertion of 0.01
+$/second to a maximum of 0.15 $ was assumed to drive the transient
+beginning from the steady‑state conditions.
+
+The input reactivity insertion raises the reactor power to 115% of
+nominal. At this power level, the plant protection system begins a
+reactor scram sequence by inserting a total of ‑3.7 $ of reactivity over
+0.45 seconds, sharply reducing the power. Six seconds following the
+scram signal, a manual trip of both primary coolant pumps is assumed,
+followed six seconds later by a manual trip of the secondary pump. (The
+primary pump trip is not standard EBR-II operating practice, but is
+assumed here for the purpose of demonstrating SAS4A/SASSYS-1). The
+auxiliary pump continues to operate throughout the sequence.
+
+The reactor power history and the flow history in channel 3, a
+high‑power driver subassembly, are plotted in Figure 2.8.1. The power
+reduction begins at ten seconds, and the core flow reduction begins at
+approximately sixteen seconds. Over the next two minutes, the power
+drops to the decay heat level, and the flow seeks an equilibrium at the
+level provided by the auxiliary pump and natural circulation.
+
+The peak fuel, cladding, and coolant temperature histories in channel 3
+are plotted in Figure 2.8.2, along with the coolant saturation
+temperature. The fuel, cladding, and coolant temperatures rise with the
+power until the reactor scram. Temperatures then drop with the falling
+power, until the primary pumps are tripped and the flow reduction causes
+the temperatures to rise. The coolant saturation temperature falls as
+the coolant pressure drops during the coast-down of the two primary
+pumps. As the coolant temperature rises, the increased buoyancy causes
+the reactor coolant flow to increase slightly, until at about 45 seconds
+into the transient, a local temperature maximum occurs, at a level near
+the initial peak cladding temperature. From this time forward,
+temperatures slowly fall as the coolant flow adjusts to the combination
+of forced and natural circulation at decreasing decay heat power.
+
+Figure 2.8.1 SAS4A/SASSYS-1 Reactor Power and Flow Histories
+
+Figure 2.8.2 SAS4A/SASSYS-1 Temperature Histories in the High Temperature Driver Subassembly
+
+[anchor: unprotected-transient-overpower-example-problem]
+
+## 2.8.2. Unprotected Transient Overpower Example Problem
+
+The unprotected transient overpower example problem, which is
+distributed with SAS4A/SASSYS-1 releases as “exam2”, is an analysis of
+an unprotected (without scram) transient overpower (TOP) accident in a
+metal-fueled 3500 MWt pool-type reactor. This reactor has been analyzed
+previously for accident initiators that included unprotected
+loss-of-flow (LOF) and loss-of-heat-sink (LOHS) sequences as well as the
+transient overpower sequence [2-8]. However, the TOP sequence analyzed
+previously corresponded to removal of one control rod. For this
+analysis, the ramp reactivity addition rate was set to 0.10 $/s, and no
+limit was placed on the total reactivity added. This ramp rate results
+in an initial reactor power rise that approximately corresponds to the
+8-second period employed in the TREAT M-Series tests [2-9], and the
+unlimited insertion assures that fuel melting and cladding failure will
+occur. Therefore, the whole-core sequence demonstrates 1) molten metal
+fuel behavior at conditions similar to those of the TREAT M-Series
+tests, 2) the ability of the SAS4A/SASSYS-1 metal fuel relocation
+modules, PINACLE and LEVITATE, to reproduce metal fuel performance
+observed in TREAT, and 3) the reactor safety implications of TREAT fuel
+relocation observations.
+
+The TOP sequence assumed here is an unlimited 0.1 $/s reactivity ramp
+addition with failure of the plant protection and safety systems. It is
+also assumed that since no scram takes place, the reactor coolant pumps
+continue to operate. The reactor power history calculated by
+SAS4A/SASSYS-1 for this sequence is shown in Figure 2.8.3, and the
+corresponding net and component feedback reactivities are shown in
+Figure 2.8.4.
+
+As shown in Figure 2.8.3, the reactor power rises initially in response
+to the ramp reactivity insertion, which is labeled as “Program” in
+Figure 2.8.4. The initial power ascension approximates the TREAT
+M-Series 8-second period. At about 7 seconds into the transient,
+conditions for in-pin fuel relocation are satisfied, and the PINACLE
+model begins execution to describe the expulsion of fuel within the
+cladding from the core into the fission gas plenum region, first for a
+few subassemblies and for more of the core as time goes on. This fuel
+relocation provides a negative reactivity effect that reduces the power
+temporarily, countering the input ramp reactivity.
+
+Figure 2.8.3 SAS4A/SASSYS-1 Example Problem Reactor Power History
+
+Figure 2.8.4 SAS4A/SASSYS-1 Example Problem Reactivity History
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch02/references.html]
+------------------------------------------------------------------------------
+[anchor: references]
+
+# 2.9. References
+
+2-1. G. L. Hofman, et al., Unpublished information, Argonne National Laboratory, 1985.
+
+2-2. IFR Properties Evaluation Working Group, “Handbook of Properties of
+Metallic Fuels,” Argonne National Laboratory, Idaho Falls, Idaho, June,
+1988.
+
+2-3. K. L. Derstine, Unpublished information, Argonne National Laboratory, 1984.
+
+2-4. T. A. Taiwo and H. S. Khalil, “The DIF3D Nodal Kinetics Capability
+in Hex‑Z Geometry ‑ Formulation and Preliminary Tests,” Proceedings of
+the International Topical Meeting Advances in Mathematics, Computations,
+and Reactor Physics, American Nuclear Society, Pittsburgh, Pennsylvania,
+April 28 ‑ May 2, 1991.
+
+2-5. T. H. Hughes and J. M. Kramer, “The FPIN2 Code ‑ An Application of
+the Finite Element Method to the Analysis of the Transient Response of
+Oxide and Metal Fuel Elements,” Conference on the Science and Technology
+of Fast Reactor Safety, British Nuclear Energy Society, Guernsey, May 12
+‑ 16, 1986.
+
+2-6. J. P. Herzog, Unpublished information, Argonne National Laboratory, 1993.
+
+2-7. J. Y. Ku and T. C. Hung, Unpublished information, Argonne National
+Laboratory, 1992
+
+2-8. R. A. Wigeland, R. B. Turski, and R. K. Lo, Unpublished
+information, Argonne National Laboratory, 1990.
+
+2-9. T. H. Bauer, “Behavior of Modern Metallic Fuel in TREAT Transient
+Overpower Tests,” Nucl. Tech., vol. 92, p. 325, December, 1990.
+
+2-10. “Function Parser for C++ v4.5.1,”
+http://warp.povusers.org/FunctionParser
+
+2-11. “Function Parser for C++ v4.5.1: Documentation,”
+http://warp.povusers.org/FunctionParser/fparser.html#functionsyntax
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch02/index.html]
+------------------------------------------------------------------------------
+[anchor: index-of-input-variables]
+
+# 2.10. Index of Input Variables
+
+ | 
+
+ | 
+Input
+ | 
+ | 
+Block
+ | 
+ | 
+Location
+ | 
+
+ | 
+
+ | 
+AARIRV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4410
+ | 
+
+ | 
+AARORV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4413
+ | 
+
+ | 
+ABC
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1085
+ | 
+
+ | 
+ABCPU
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1203
+ | 
+
+ | 
+AC
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1081
+ | 
+
+ | 
+ACCHE
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1104
+ | 
+
+ | 
+ACCXE
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1105
+ | 
+
+ | 
+ACCZ
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+1-7
+ | 
+
+ | 
+ACLPEL
+ | 
+ | 
+POWINA
+ | 
+ | 
+448
+ | 
+
+ | 
+ACLPRC
+ | 
+ | 
+POWINA
+ | 
+ | 
+421
+ | 
+
+ | 
+ACRDEX
+ | 
+ | 
+POWINA
+ | 
+ | 
+73
+ | 
+
+ | 
+ADJKTOL
+ | 
+ | 
+OPCIN
+ | 
+ | 
+155
+ | 
+
+ | 
+ADOP
+ | 
+ | 
+POWINC
+ | 
+ | 
+62
+ | 
+
+ | 
+AE
+ | 
+ | 
+FUELIN
+ | 
+ | 
+4
+ | 
+
+ | 
+AFFLAM
+ | 
+ | 
+COOLIN
+ | 
+ | 
+180
+ | 
+
+ | 
+AFLAM
+ | 
+ | 
+COOLIN
+ | 
+ | 
+8
+ | 
+
+ | 
+AFLAMV
+ | 
+ | 
+COOLIN
+ | 
+ | 
+194
+ | 
+
+ | 
+AFR
+ | 
+ | 
+COOLIN
+ | 
+ | 
+1
+ | 
+
+ | 
+AFRF
+ | 
+ | 
+COOLIN
+ | 
+ | 
+175
+ | 
+
+ | 
+AFRLRV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4539
+ | 
+
+ | 
+AFRTRV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4538
+ | 
+
+ | 
+AFRV
+ | 
+ | 
+COOLIN
+ | 
+ | 
+168
+ | 
+
+ | 
+AGSRLS
+ | 
+ | 
+COOLIN
+ | 
+ | 
+181
+ | 
+
+ | 
+AHBPAR
+ | 
+ | 
+PMATCH
+ | 
+ | 
+2
+ | 
+
+ | 
+AHT
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3821-3824
+ | 
+
+ | 
+AHX
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3841-3844
+ | 
+
+ | 
+AIRAR2
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4420-4425
+ | 
+
+ | 
+AIRARV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4414-4419
+ | 
+
+ | 
+AIRAUN
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4545
+ | 
+
+ | 
+AIRTMP
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3933
+ | 
+
+ | 
+AKCOND
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1224
+ | 
+
+ | 
+AKD
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1272
+ | 
+
+ | 
+ALATRL
+ | 
+ | 
+COOLIN
+ | 
+ | 
+205-208
+ | 
+
+ | 
+ALFSS
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1115
+ | 
+
+ | 
+ALPHAP
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1499-1536
+ | 
+
+ | 
+ALPHAT
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1537-1574
+ | 
+
+ | 
+ALPHCR
+ | 
+ | 
+FUELIN
+ | 
+ | 
+13
+ | 
+
+ | 
+AM
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1119
+ | 
+
+ | 
+AMELT
+ | 
+ | 
+FUELIN
+ | 
+ | 
+16
+ | 
+
+ | 
+AMOTTK
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2223-2462
+ | 
+
+ | 
+AMOTTK
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2223-2462
+ | 
+
+ | 
+AMOTTK
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2223-2462
+ | 
+
+ | 
+AMOTTK
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2223-2462
+ | 
+
+ | 
+AMOTTK
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2223-2462
+ | 
+
+ | 
+AMOTTK
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2223-2462
+ | 
+
+ | 
+AMOTTK
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2223-2462
+ | 
+
+ | 
+ANA
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3943
+ | 
+
+ | 
+ANA
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4003
+ | 
+
+ | 
+ANA
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4063
+ | 
+
+ | 
+ANA
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4123
+ | 
+
+ | 
+APG
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1088
+ | 
+
+ | 
+APMPHD
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1983-2222
+ | 
+
+ | 
+APMPHD
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1983-2222
+ | 
+
+ | 
+APMPHD
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1983-2222
+ | 
+
+ | 
+APMPHD
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1983-2222
+ | 
+
+ | 
+APMPHD
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1983-2222
+ | 
+
+ | 
+APMPHD
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1983-2222
+ | 
+
+ | 
+APMPHD
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1983-2222
+ | 
+
+ | 
+APORE
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1083
+ | 
+
+ | 
+APROPI
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1335-1394
+ | 
+
+ | 
+AR
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3845-3848
+ | 
+
+ | 
+AREACR
+ | 
+ | 
+POWINA
+ | 
+ | 
+446
+ | 
+
+ | 
+AREAEL
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+442-581
+ | 
+
+ | 
+AREAIN
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1613-1650
+ | 
+
+ | 
+AREAPC
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+166
+ | 
+
+ | 
+AREASG
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1721-1748
+ | 
+
+ | 
+ASCRAM
+ | 
+ | 
+OPCIN
+ | 
+ | 
+23
+ | 
+
+ | 
+ASI
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3849-3852
+ | 
+
+ | 
+ASRALU
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1280
+ | 
+
+ | 
+ASTWL
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+5027-5035
+ | 
+
+ | 
+AVISC
+ | 
+ | 
+FUELIN
+ | 
+ | 
+20
+ | 
+
+ | 
+AWALL
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2616-2653
+ | 
+
+ | 
+AXHI
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+8-31
+ | 
+
+ | 
+AXMX
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1165
+ | 
+
+ | 
+AZEROX
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1100
+ | 
+
+ | 
+BCRDEX
+ | 
+ | 
+POWINA
+ | 
+ | 
+74
+ | 
+
+ | 
+BDOP
+ | 
+ | 
+POWINC
+ | 
+ | 
+63
+ | 
+
+ | 
+BENDNM
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+862-1001
+ | 
+
+ | 
+BETADK
+ | 
+ | 
+POWINA
+ | 
+ | 
+260-289
+ | 
+
+ | 
+BETADN
+ | 
+ | 
+POWINA
+ | 
+ | 
+4-9
+ | 
+
+ | 
+BETAHT
+ | 
+ | 
+POWINA
+ | 
+ | 
+320-324
+ | 
+
+ | 
+BETSS
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1116
+ | 
+
+ | 
+BFR
+ | 
+ | 
+COOLIN
+ | 
+ | 
+2
+ | 
+
+ | 
+BFRF
+ | 
+ | 
+COOLIN
+ | 
+ | 
+176
+ | 
+
+ | 
+BFRTRV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4542
+ | 
+
+ | 
+BFRV
+ | 
+ | 
+COOLIN
+ | 
+ | 
+169
+ | 
+
+ | 
+BHBPAR
+ | 
+ | 
+PMATCH
+ | 
+ | 
+3
+ | 
+
+ | 
+BNDLOD
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1142
+ | 
+
+ | 
+BNDMM1
+ | 
+ | 
+POWINA
+ | 
+ | 
+414
+ | 
+
+ | 
+BNDMM2
+ | 
+ | 
+POWINA
+ | 
+ | 
+415
+ | 
+
+ | 
+BONDNA
+ | 
+ | 
+PMATCH
+ | 
+ | 
+71
+ | 
+
+ | 
+BTAPNA
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2464-2501
+ | 
+
+ | 
+BTATNA
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2502-2539
+ | 
+
+ | 
+BURNFU
+ | 
+ | 
+FUELIN
+ | 
+ | 
+54
+ | 
+
+ | 
+C1
+ | 
+ | 
+COOLIN
+ | 
+ | 
+3
+ | 
+
+ | 
+C1BY
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2694
+ | 
+
+ | 
+C1BY2
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4300
+ | 
+
+ | 
+C1BY3
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4303
+ | 
+
+ | 
+C1BY4
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4306
+ | 
+
+ | 
+C1IHX
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3653
+ | 
+
+ | 
+C1IHXT
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4309
+ | 
+
+ | 
+C1PIPE
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3650
+ | 
+
+ | 
+C1RV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4405
+ | 
+
+ | 
+C1TRAN
+ | 
+ | 
+COOLIN
+ | 
+ | 
+10
+ | 
+
+ | 
+C1VIPR
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1155
+ | 
+
+ | 
+C2
+ | 
+ | 
+COOLIN
+ | 
+ | 
+4
+ | 
+
+ | 
+C2BY
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2695
+ | 
+
+ | 
+C2BY2
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4301
+ | 
+
+ | 
+C2BY3
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4304
+ | 
+
+ | 
+C2BY4
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4307
+ | 
+
+ | 
+C2IHX
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3654
+ | 
+
+ | 
+C2IHXT
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4310
+ | 
+
+ | 
+C2PIPE
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3651
+ | 
+
+ | 
+C2RV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4406
+ | 
+
+ | 
+C2TRAN
+ | 
+ | 
+COOLIN
+ | 
+ | 
+11
+ | 
+
+ | 
+C2VIPR
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1156
+ | 
+
+ | 
+C3
+ | 
+ | 
+COOLIN
+ | 
+ | 
+5
+ | 
+
+ | 
+C3BY
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2696
+ | 
+
+ | 
+C3BY2
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4302
+ | 
+
+ | 
+C3BY3
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4305
+ | 
+
+ | 
+C3BY4
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4308
+ | 
+
+ | 
+C3IHX
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3655
+ | 
+
+ | 
+C3IHXT
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4311
+ | 
+
+ | 
+C3PIPE
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3652
+ | 
+
+ | 
+C3RV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4407
+ | 
+
+ | 
+C3TRAN
+ | 
+ | 
+COOLIN
+ | 
+ | 
+12
+ | 
+
+ | 
+C4IHX
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3656
+ | 
+
+ | 
+C4IHXT
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4312
+ | 
+
+ | 
+C4RV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+5325
+ | 
+
+ | 
+CB2TC
+ | 
+ | 
+POWINA
+ | 
+ | 
+454
+ | 
+
+ | 
+CDCL
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1195
+ | 
+
+ | 
+CDFMEAN
+ | 
+ | 
+PMATCH
+ | 
+ | 
+151
+ | 
+
+ | 
+CDFSIGMA
+ | 
+ | 
+PMATCH
+ | 
+ | 
+152
+ | 
+
+ | 
+CDFU
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1140
+ | 
+
+ | 
+CDNL
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1142
+ | 
+
+ | 
+CDOSECONV
+ | 
+ | 
+PMATCH
+ | 
+ | 
+149
+ | 
+
+ | 
+CDVG
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1144
+ | 
+
+ | 
+CE
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1070-1072
+ | 
+
+ | 
+CFCOFV
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1153
+ | 
+
+ | 
+CFFURH
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1154
+ | 
+
+ | 
+CFLAT
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+167
+ | 
+
+ | 
+CFNACN
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1146
+ | 
+
+ | 
+CFNAEV
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1147
+ | 
+
+ | 
+CHBPAR
+ | 
+ | 
+PMATCH
+ | 
+ | 
+4
+ | 
+
+ | 
+CIA1
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1131
+ | 
+
+ | 
+CIA2
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1132
+ | 
+
+ | 
+CIA3
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1133
+ | 
+
+ | 
+CIA4
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1134
+ | 
+
+ | 
+CIA5
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1135
+ | 
+
+ | 
+CIA6
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1136
+ | 
+
+ | 
+CIANDI
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1208
+ | 
+
+ | 
+CIANIN
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1174
+ | 
+
+ | 
+CIBBDI
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1207
+ | 
+
+ | 
+CIBBIN
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1126
+ | 
+
+ | 
+CIETFU
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1143
+ | 
+
+ | 
+CIFN
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1137
+ | 
+
+ | 
+CIFRFU
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1128
+ | 
+
+ | 
+CIFUFZ
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1172
+ | 
+
+ | 
+CIFUMO
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1129
+ | 
+
+ | 
+CIHCFU
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1186
+ | 
+
+ | 
+CINAF0
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1125
+ | 
+
+ | 
+CINAPN
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1286
+ | 
+
+ | 
+CIPINJ
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1276
+ | 
+
+ | 
+CIPNTP
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1295
+ | 
+
+ | 
+CIREFU
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1127
+ | 
+
+ | 
+CIRTFS
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1170
+ | 
+
+ | 
+CISP
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1171
+ | 
+
+ | 
+CIVIMT
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1209
+ | 
+
+ | 
+CIVOID
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1130
+ | 
+
+ | 
+CKD
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1273
+ | 
+
+ | 
+CKVFLO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4619-4678
+ | 
+
+ | 
+CKVORF
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4559-4618
+ | 
+
+ | 
+CLADEX
+ | 
+ | 
+PMATCH
+ | 
+ | 
+74
+ | 
+
+ | 
+CLADFR
+ | 
+ | 
+FUELIN
+ | 
+ | 
+10
+ | 
+
+ | 
+CLADRA
+ | 
+ | 
+POWINC
+ | 
+ | 
+160-207
+ | 
+
+ | 
+CLDREX
+ | 
+ | 
+PMATCH
+ | 
+ | 
+78
+ | 
+
+ | 
+CLSTHR
+ | 
+ | 
+FUELIN
+ | 
+ | 
+17
+ | 
+
+ | 
+CMFU
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1188
+ | 
+
+ | 
+CMNL
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1141
+ | 
+
+ | 
+CMWALL
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2654-2691
+ | 
+
+ | 
+CNU
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1117
+ | 
+
+ | 
+COCOR
+ | 
+ | 
+PMATCH
+ | 
+ | 
+150
+ | 
+
+ | 
+COEFDL
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1200
+ | 
+
+ | 
+COEFDL
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1201
+ | 
+
+ | 
+COEFDS
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1
+ | 
+
+ | 
+COEFDS
+ | 
+ | 
+PMATCM
+ | 
+ | 
+2
+ | 
+
+ | 
+COEFDS
+ | 
+ | 
+PMATCM
+ | 
+ | 
+3
+ | 
+
+ | 
+COEFK
+ | 
+ | 
+PMATCM
+ | 
+ | 
+4-10
+ | 
+
+ | 
+COILP0
+ | 
+ | 
+POWINC
+ | 
+ | 
+375
+ | 
+
+ | 
+COILP1
+ | 
+ | 
+POWINC
+ | 
+ | 
+376
+ | 
+
+ | 
+COILP2
+ | 
+ | 
+POWINC
+ | 
+ | 
+377
+ | 
+
+ | 
+COLFAC
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1298
+ | 
+
+ | 
+CONDCR
+ | 
+ | 
+POWINA
+ | 
+ | 
+442
+ | 
+
+ | 
+COOLDN
+ | 
+ | 
+PMATCH
+ | 
+ | 
+36
+ | 
+
+ | 
+CoolHeatTableID
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1475
+ | 
+
+ | 
+CPC
+ | 
+ | 
+FUELIN
+ | 
+ | 
+21
+ | 
+
+ | 
+CPC0
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4680
+ | 
+
+ | 
+CPC1
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4681
+ | 
+
+ | 
+CPC2
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4682
+ | 
+
+ | 
+CPC3
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4683
+ | 
+
+ | 
+CPC4
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4684
+ | 
+
+ | 
+CPCL
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1196
+ | 
+
+ | 
+CPCLRH
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1197
+ | 
+
+ | 
+CPCM
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1287
+ | 
+
+ | 
+CPCPMP
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4468-4497
+ | 
+
+ | 
+CPCTAB
+ | 
+ | 
+PMATCM
+ | 
+ | 
+819-878
+ | 
+
+ | 
+CPCTEM
+ | 
+ | 
+PMATCM
+ | 
+ | 
+879-898
+ | 
+
+ | 
+CPFTAB
+ | 
+ | 
+PMATCM
+ | 
+ | 
+606-765
+ | 
+
+ | 
+CPFTEM
+ | 
+ | 
+PMATCM
+ | 
+ | 
+766-785
+ | 
+
+ | 
+CPFU
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1139
+ | 
+
+ | 
+CPINAC
+ | 
+ | 
+FUELIN
+ | 
+ | 
+23
+ | 
+
+ | 
+CPMO
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1288
+ | 
+
+ | 
+CPSE
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1212
+ | 
+
+ | 
+CRDEXP
+ | 
+ | 
+POWINA
+ | 
+ | 
+72
+ | 
+
+ | 
+CRDHA
+ | 
+ | 
+POWINA
+ | 
+ | 
+76
+ | 
+
+ | 
+CRDLEN
+ | 
+ | 
+POWINA
+ | 
+ | 
+71
+ | 
+
+ | 
+CRDMC
+ | 
+ | 
+POWINA
+ | 
+ | 
+75
+ | 
+
+ | 
+CRMCI
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4516-4521
+ | 
+
+ | 
+CRMCO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4522-4527
+ | 
+
+ | 
+CROETB
+ | 
+ | 
+PMATCM
+ | 
+ | 
+990-1049
+ | 
+
+ | 
+CROETM
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1050-1069
+ | 
+
+ | 
+CRSAC
+ | 
+ | 
+POWINA
+ | 
+ | 
+426
+ | 
+
+ | 
+CTLFNC
+ | 
+ | 
+INCONT
+ | 
+ | 
+4001-6000
+ | 
+
+ | 
+CTLSIG
+ | 
+ | 
+INCONT
+ | 
+ | 
+6001-8000
+ | 
+
+ | 
+CTLTAB
+ | 
+ | 
+INCONT
+ | 
+ | 
+1-2000
+ | 
+
+ | 
+CTLTIM
+ | 
+ | 
+INCONT
+ | 
+ | 
+2001-4000
+ | 
+
+ | 
+CUCM
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1291
+ | 
+
+ | 
+CUMO
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1292
+ | 
+
+ | 
+CUTOFF
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3963
+ | 
+
+ | 
+CUTOFF
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4023
+ | 
+
+ | 
+CUTOFF
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4083
+ | 
+
+ | 
+CUTOFF
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4143
+ | 
+
+ | 
+CVGMLT
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1749-1804
+ | 
+
+ | 
+CVHE
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1097
+ | 
+
+ | 
+CVLMLT
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+82-161
+ | 
+
+ | 
+CVXE
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1096
+ | 
+
+ | 
+CZCM
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1289
+ | 
+
+ | 
+CZERO
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1106
+ | 
+
+ | 
+CZMO
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1290
+ | 
+
+ | 
+DABY
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2737-2744
+ | 
+
+ | 
+DBBY
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2745-2752
+ | 
+
+ | 
+DDBY
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2753-2760
+ | 
+
+ | 
+DDX
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1122
+ | 
+
+ | 
+DDX2
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1123
+ | 
+
+ | 
+DECCON
+ | 
+ | 
+POWINA
+ | 
+ | 
+10-15
+ | 
+
+ | 
+DEL
+ | 
+ | 
+PMATCH
+ | 
+ | 
+25
+ | 
+
+ | 
+DELPUM
+ | 
+ | 
+OPCIN
+ | 
+ | 
+151
+ | 
+
+ | 
+DELSCR
+ | 
+ | 
+OPCIN
+ | 
+ | 
+150
+ | 
+
+ | 
+DENA
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3942
+ | 
+
+ | 
+DENA
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4002
+ | 
+
+ | 
+DENA
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4062
+ | 
+
+ | 
+DENA
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4122
+ | 
+
+ | 
+DENS
+ | 
+ | 
+FUELIN
+ | 
+ | 
+3
+ | 
+
+ | 
+DENSS
+ | 
+ | 
+PMATCH
+ | 
+ | 
+35
+ | 
+
+ | 
+DEW
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3940
+ | 
+
+ | 
+DEW
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4000
+ | 
+
+ | 
+DEW
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4060
+ | 
+
+ | 
+DEW
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4120
+ | 
+
+ | 
+DFLTCS
+ | 
+ | 
+POWINA
+ | 
+ | 
+419
+ | 
+
+ | 
+DFLTSS
+ | 
+ | 
+POWINA
+ | 
+ | 
+420
+ | 
+
+ | 
+DFUELI
+ | 
+ | 
+FUELIN
+ | 
+ | 
+205-300
+ | 
+
+ | 
+DFUELX
+ | 
+ | 
+FUELIN
+ | 
+ | 
+31-51
+ | 
+
+ | 
+DGO
+ | 
+ | 
+PMATCH
+ | 
+ | 
+26
+ | 
+
+ | 
+DHAIRV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4409
+ | 
+
+ | 
+DHAORV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4412
+ | 
+
+ | 
+DHELEM
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+582-721
+ | 
+
+ | 
+DHPMP
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4288-4299
+ | 
+
+ | 
+DHSEGG
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1805-1832
+ | 
+
+ | 
+DHZ
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+32-38
+ | 
+
+ | 
+DKANSI
+ | 
+ | 
+POWINA
+ | 
+ | 
+801-880
+ | 
+
+ | 
+DKBET2
+ | 
+ | 
+POWINA
+ | 
+ | 
+511-630
+ | 
+
+ | 
+DKFRAC
+ | 
+ | 
+POWINA
+ | 
+ | 
+751-800
+ | 
+
+ | 
+DKLAM
+ | 
+ | 
+POWINA
+ | 
+ | 
+290-319
+ | 
+
+ | 
+DKLAM2
+ | 
+ | 
+POWINA
+ | 
+ | 
+631-750
+ | 
+
+ | 
+DMP4I1
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3454
+ | 
+
+ | 
+DMP4IN
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+5328-5500
+ | 
+
+ | 
+DNA
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3941
+ | 
+
+ | 
+DNA
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4001
+ | 
+
+ | 
+DNA
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4061
+ | 
+
+ | 
+DNA
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4121
+ | 
+
+ | 
+DPFCLD
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3962
+ | 
+
+ | 
+DPFCLD
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4022
+ | 
+
+ | 
+DPFCLD
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4082
+ | 
+
+ | 
+DPFCLD
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4142
+ | 
+
+ | 
+DPFHOT
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3965
+ | 
+
+ | 
+DPFHOT
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4025
+ | 
+
+ | 
+DPFHOT
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4085
+ | 
+
+ | 
+DPFHOT
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4145
+ | 
+
+ | 
+DPGRV0
+ | 
+ | 
+PRIMIN
+ | 
+ | 
+86
+ | 
+
+ | 
+DPINMX
+ | 
+ | 
+OPCIN
+ | 
+ | 
+19
+ | 
+
+ | 
+DPLTLM
+ | 
+ | 
+COOLIN
+ | 
+ | 
+213
+ | 
+
+ | 
+DPRSTY
+ | 
+ | 
+PMATCH
+ | 
+ | 
+10
+ | 
+
+ | 
+DPUO
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1205
+ | 
+
+ | 
+DPWMAX
+ | 
+ | 
+OPCIN
+ | 
+ | 
+22
+ | 
+
+ | 
+DRCOLL
+ | 
+ | 
+POWINA
+ | 
+ | 
+425
+ | 
+
+ | 
+DRFI
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+189-195
+ | 
+
+ | 
+DRFO
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+169-175
+ | 
+
+ | 
+DSHDRC
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3544-3547
+ | 
+
+ | 
+DSHIHX
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3540-3543
+ | 
+
+ | 
+DSTIZ
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+39-45
+ | 
+
+ | 
+DSTOZ
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+46-52
+ | 
+
+ | 
+DT0
+ | 
+ | 
+OPCIN
+ | 
+ | 
+5
+ | 
+
+ | 
+DTACCL
+ | 
+ | 
+COOLIN
+ | 
+ | 
+178
+ | 
+
+ | 
+DTCLAD
+ | 
+ | 
+OPCIN
+ | 
+ | 
+11
+ | 
+
+ | 
+DTCMIN
+ | 
+ | 
+COOLIN
+ | 
+ | 
+171
+ | 
+
+ | 
+DTDISR
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1230
+ | 
+
+ | 
+DTEVPF
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3441-3444
+ | 
+
+ | 
+DTFAL1
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1269
+ | 
+
+ | 
+DTFAL2
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1270
+ | 
+
+ | 
+DTFAL3
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1271
+ | 
+
+ | 
+DTFUEL
+ | 
+ | 
+OPCIN
+ | 
+ | 
+10
+ | 
+
+ | 
+DTIHX
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4284-4287
+ | 
+
+ | 
+DTINMX
+ | 
+ | 
+OPCIN
+ | 
+ | 
+20
+ | 
+
+ | 
+DTLMAX
+ | 
+ | 
+COOLIN
+ | 
+ | 
+69
+ | 
+
+ | 
+DTMIN
+ | 
+ | 
+OPCIN
+ | 
+ | 
+95-104
+ | 
+
+ | 
+DTMMAX
+ | 
+ | 
+OPCIN
+ | 
+ | 
+94
+ | 
+
+ | 
+DTMMXB
+ | 
+ | 
+OPCIN
+ | 
+ | 
+21
+ | 
+
+ | 
+DTMPTB
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2937-3104
+ | 
+
+ | 
+DTMXB
+ | 
+ | 
+OPCIN
+ | 
+ | 
+6
+ | 
+
+ | 
+DTNUL1
+ | 
+ | 
+COOLIN
+ | 
+ | 
+215
+ | 
+
+ | 
+DTNULL
+ | 
+ | 
+OPCIN
+ | 
+ | 
+88
+ | 
+
+ | 
+DTP0
+ | 
+ | 
+OPCIN
+ | 
+ | 
+13
+ | 
+
+ | 
+DTPBOI
+ | 
+ | 
+OPCIN
+ | 
+ | 
+15
+ | 
+
+ | 
+DTPFCI
+ | 
+ | 
+OPCIN
+ | 
+ | 
+17
+ | 
+
+ | 
+DTPICL
+ | 
+ | 
+OPCIN
+ | 
+ | 
+93
+ | 
+
+ | 
+DTPICP
+ | 
+ | 
+OPCIN
+ | 
+ | 
+92
+ | 
+
+ | 
+DTPLEV
+ | 
+ | 
+OPCIN
+ | 
+ | 
+16
+ | 
+
+ | 
+DTPLIN
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1164
+ | 
+
+ | 
+DTPLP
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1168
+ | 
+
+ | 
+DTPMAX
+ | 
+ | 
+OPCIN
+ | 
+ | 
+14
+ | 
+
+ | 
+DTPNIN
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1277
+ | 
+
+ | 
+DTPNP
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1279
+ | 
+
+ | 
+DTS
+ | 
+ | 
+COOLIN
+ | 
+ | 
+165
+ | 
+
+ | 
+DTSI
+ | 
+ | 
+COOLIN
+ | 
+ | 
+164
+ | 
+
+ | 
+DTSIHX
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+5192-5195
+ | 
+
+ | 
+DTSSCP
+ | 
+ | 
+OPCIN
+ | 
+ | 
+26
+ | 
+
+ | 
+DTSWCH
+ | 
+ | 
+COOLIN
+ | 
+ | 
+163
+ | 
+
+ | 
+DTUDRC
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3552-3555
+ | 
+
+ | 
+DTUIHX
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3548-3551
+ | 
+
+ | 
+DTVMAX
+ | 
+ | 
+COOLIN
+ | 
+ | 
+70
+ | 
+
+ | 
+DUM
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3992-3993
+ | 
+
+ | 
+DUM
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4052-4053
+ | 
+
+ | 
+DUM
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4112-4113
+ | 
+
+ | 
+DUM
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4172-4173
+ | 
+
+ | 
+DUM000
+ | 
+ | 
+COOLIN
+ | 
+ | 
+13-46
+ | 
+
+ | 
+DUM002
+ | 
+ | 
+POWINC
+ | 
+ | 
+3
+ | 
+
+ | 
+DUMCOO
+ | 
+ | 
+COOLIN
+ | 
+ | 
+221-300
+ | 
+
+ | 
+DUMGEO
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+285-350
+ | 
+
+ | 
+DUMPCH
+ | 
+ | 
+PMATCH
+ | 
+ | 
+153-200
+ | 
+
+ | 
+DUMPMC
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1395-1725
+ | 
+
+ | 
+DUMPNA
+ | 
+ | 
+POWINA
+ | 
+ | 
+969-1000
+ | 
+
+ | 
+DUMPRI
+ | 
+ | 
+PRIMIN
+ | 
+ | 
+97-150
+ | 
+
+ | 
+DWMAX
+ | 
+ | 
+COOLIN
+ | 
+ | 
+6
+ | 
+
+ | 
+DXMAPR
+ | 
+ | 
+OPCIN
+ | 
+ | 
+28-87
+ | 
+
+ | 
+DZBCGL
+ | 
+ | 
+PRIMIN
+ | 
+ | 
+90
+ | 
+
+ | 
+DZBCGU
+ | 
+ | 
+PRIMIN
+ | 
+ | 
+91
+ | 
+
+ | 
+DZEMFM
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+275-284
+ | 
+
+ | 
+DZIAB
+ | 
+ | 
+COOLIN
+ | 
+ | 
+65
+ | 
+
+ | 
+DZIAT
+ | 
+ | 
+COOLIN
+ | 
+ | 
+66
+ | 
+
+ | 
+DZIMAX
+ | 
+ | 
+COOLIN
+ | 
+ | 
+71
+ | 
+
+ | 
+DZPLIN
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1152
+ | 
+
+ | 
+DZSHPX
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3455-3515
+ | 
+
+ | 
+EFFIN
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+5304-5307
+ | 
+
+ | 
+EGBBLY
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1161
+ | 
+
+ | 
+EGFUSO
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1151
+ | 
+
+ | 
+EGMN
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1178
+ | 
+
+ | 
+EGSELQ
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1211
+ | 
+
+ | 
+EGSESO
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1210
+ | 
+
+ | 
+EL
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3939
+ | 
+
+ | 
+EL
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3999
+ | 
+
+ | 
+EL
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4059
+ | 
+
+ | 
+EL
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4119
+ | 
+
+ | 
+ELDRUM
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3961
+ | 
+
+ | 
+ELDRUM
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4021
+ | 
+
+ | 
+ELDRUM
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4081
+ | 
+
+ | 
+ELDRUM
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4141
+ | 
+
+ | 
+EllLossCoefTableID
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1442
+ | 
+
+ | 
+ELS
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3956
+ | 
+
+ | 
+ELS
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4016
+ | 
+
+ | 
+ELS
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4076
+ | 
+
+ | 
+ELS
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4136
+ | 
+
+ | 
+EMF
+ | 
+ | 
+PMATCH
+ | 
+ | 
+64
+ | 
+
+ | 
+EMNA
+ | 
+ | 
+PMATCH
+ | 
+ | 
+66
+ | 
+
+ | 
+EMS
+ | 
+ | 
+PMATCH
+ | 
+ | 
+65
+ | 
+
+ | 
+EMSC
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1109
+ | 
+
+ | 
+EMSF
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1108
+ | 
+
+ | 
+ENPF
+ | 
+ | 
+PMATCM
+ | 
+ | 
+602
+ | 
+
+ | 
+EPCH
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1166
+ | 
+
+ | 
+EPSCAV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1971-1982
+ | 
+
+ | 
+EPSCAV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1971-1982
+ | 
+
+ | 
+EPSCOM
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1294
+ | 
+
+ | 
+EPSCPL
+ | 
+ | 
+INCONT
+ | 
+ | 
+8002
+ | 
+
+ | 
+EPSCS
+ | 
+ | 
+INCONT
+ | 
+ | 
+8001
+ | 
+
+ | 
+EPSF
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4282
+ | 
+
+ | 
+EPSFC
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4283
+ | 
+
+ | 
+EPSFLW
+ | 
+ | 
+COOLIN
+ | 
+ | 
+216
+ | 
+
+ | 
+EPSFS
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4534
+ | 
+
+ | 
+EPSFSI
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4553-4558
+ | 
+
+ | 
+EPSGAM
+ | 
+ | 
+OPCIN
+ | 
+ | 
+4
+ | 
+
+ | 
+EPSGV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4264-4269
+ | 
+
+ | 
+EPSGVO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4547-4552
+ | 
+
+ | 
+EPSMS
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1293
+ | 
+
+ | 
+EPSOW
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4546
+ | 
+
+ | 
+EPSPOW
+ | 
+ | 
+OPCIN
+ | 
+ | 
+3
+ | 
+
+ | 
+EPSPRS
+ | 
+ | 
+COOLIN
+ | 
+ | 
+218
+ | 
+
+ | 
+EPSREA
+ | 
+ | 
+OPCIN
+ | 
+ | 
+2
+ | 
+
+ | 
+EPSRV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4258-4263
+ | 
+
+ | 
+EPSSCP
+ | 
+ | 
+OPCIN
+ | 
+ | 
+27
+ | 
+
+ | 
+EPSSFP
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1226
+ | 
+
+ | 
+EPSTEM
+ | 
+ | 
+OPCIN
+ | 
+ | 
+1
+ | 
+
+ | 
+EPSTMP
+ | 
+ | 
+COOLIN
+ | 
+ | 
+217
+ | 
+
+ | 
+EPSTST
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+5186-5188
+ | 
+
+ | 
+ET
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1103
+ | 
+
+ | 
+EXKTB
+ | 
+ | 
+PMATCM
+ | 
+ | 
+11-70
+ | 
+
+ | 
+EXKTM
+ | 
+ | 
+PMATCM
+ | 
+ | 
+71-90
+ | 
+
+ | 
+EXPCFF
+ | 
+ | 
+PMATCH
+ | 
+ | 
+79
+ | 
+
+ | 
+EXPCOF
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1263
+ | 
+
+ | 
+EXPFPS
+ | 
+ | 
+FUELIN
+ | 
+ | 
+15
+ | 
+
+ | 
+EXSOTB
+ | 
+ | 
+POWINA
+ | 
+ | 
+471-490
+ | 
+
+ | 
+EXSOTM
+ | 
+ | 
+POWINA
+ | 
+ | 
+491-510
+ | 
+
+ | 
+FAXIAL
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1258
+ | 
+
+ | 
+FCDTCB
+ | 
+ | 
+POWINA
+ | 
+ | 
+453
+ | 
+
+ | 
+FCDTR1
+ | 
+ | 
+POWINA
+ | 
+ | 
+422
+ | 
+
+ | 
+FCDTR2
+ | 
+ | 
+POWINA
+ | 
+ | 
+423
+ | 
+
+ | 
+FCDTRF
+ | 
+ | 
+POWINA
+ | 
+ | 
+424
+ | 
+
+ | 
+FCLDWK
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1259
+ | 
+
+ | 
+FCLOP
+ | 
+ | 
+PMATCH
+ | 
+ | 
+68
+ | 
+
+ | 
+FCR
+ | 
+ | 
+POWINA
+ | 
+ | 
+468
+ | 
+
+ | 
+FDPTO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3967
+ | 
+
+ | 
+FDPTO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4027
+ | 
+
+ | 
+FDPTO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4087
+ | 
+
+ | 
+FDPTO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4147
+ | 
+
+ | 
+FFLAT
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+168
+ | 
+
+ | 
+FGCOND
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1223
+ | 
+
+ | 
+FGFI
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1275
+ | 
+
+ | 
+FGMIN
+ | 
+ | 
+PMATCH
+ | 
+ | 
+60
+ | 
+
+ | 
+FGMM
+ | 
+ | 
+PMATCM
+ | 
+ | 
+600
+ | 
+
+ | 
+FGPORX
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1220
+ | 
+
+ | 
+FGSPRD
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1219
+ | 
+
+ | 
+FHTCLD
+ | 
+ | 
+POWINC
+ | 
+ | 
+367
+ | 
+
+ | 
+FHTFUL
+ | 
+ | 
+POWINC
+ | 
+ | 
+371
+ | 
+
+ | 
+FIFNGB
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1148
+ | 
+
+ | 
+FINTHK
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+5308-5311
+ | 
+
+ | 
+FINVNT
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+5324
+ | 
+
+ | 
+FIRLIM
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1266
+ | 
+
+ | 
+FLODTM
+ | 
+ | 
+COOLIN
+ | 
+ | 
+195
+ | 
+
+ | 
+FLOEXP
+ | 
+ | 
+POWINA
+ | 
+ | 
+447
+ | 
+
+ | 
+FLOSSL
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2-41
+ | 
+
+ | 
+FLOWBU
+ | 
+ | 
+POWINC
+ | 
+ | 
+267
+ | 
+
+ | 
+FLSHRD
+ | 
+ | 
+POWINA
+ | 
+ | 
+445
+ | 
+
+ | 
+FLSWCH
+ | 
+ | 
+COOLIN
+ | 
+ | 
+192
+ | 
+
+ | 
+FLTPOW
+ | 
+ | 
+POWINC
+ | 
+ | 
+61
+ | 
+
+ | 
+FMELTD
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1260
+ | 
+
+ | 
+FMELTM
+ | 
+ | 
+FUELIN
+ | 
+ | 
+2
+ | 
+
+ | 
+FNARME
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1176
+ | 
+
+ | 
+FNDISR
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1229
+ | 
+
+ | 
+FNFUAN
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1138
+ | 
+
+ | 
+FNHTFU
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1181
+ | 
+
+ | 
+FNMELT
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1169
+ | 
+
+ | 
+FNSROS
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1214
+ | 
+
+ | 
+FNU
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1118
+ | 
+
+ | 
+FPDAYS
+ | 
+ | 
+POWINC
+ | 
+ | 
+1
+ | 
+
+ | 
+FPINAC
+ | 
+ | 
+FUELIN
+ | 
+ | 
+22
+ | 
+
+ | 
+FPKNG
+ | 
+ | 
+POWINC
+ | 
+ | 
+373
+ | 
+
+ | 
+FPORNA
+ | 
+ | 
+PMATCH
+ | 
+ | 
+93-103
+ | 
+
+ | 
+FPRSTY
+ | 
+ | 
+FUELIN
+ | 
+ | 
+28
+ | 
+
+ | 
+FPS0
+ | 
+ | 
+FUELIN
+ | 
+ | 
+14
+ | 
+
+ | 
+FRACP
+ | 
+ | 
+COOLIN
+ | 
+ | 
+78-80
+ | 
+
+ | 
+FRACPD
+ | 
+ | 
+FUELIN
+ | 
+ | 
+18
+ | 
+
+ | 
+FRFLOW
+ | 
+ | 
+POWINA
+ | 
+ | 
+70
+ | 
+
+ | 
+FRMRSE
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1213
+ | 
+
+ | 
+FRPR
+ | 
+ | 
+POWINA
+ | 
+ | 
+69
+ | 
+
+ | 
+FRUPT
+ | 
+ | 
+COOLIN
+ | 
+ | 
+81-83
+ | 
+
+ | 
+FSMCI
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4504-4509
+ | 
+
+ | 
+FSMCO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4510-4515
+ | 
+
+ | 
+FSPEC
+ | 
+ | 
+FUELIN
+ | 
+ | 
+1
+ | 
+
+ | 
+FSTRAN
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1261
+ | 
+
+ | 
+FTMPCH
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1262
+ | 
+
+ | 
+FUELEX
+ | 
+ | 
+PMATCH
+ | 
+ | 
+73
+ | 
+
+ | 
+FUELRA
+ | 
+ | 
+POWINC
+ | 
+ | 
+208-255
+ | 
+
+ | 
+FULREX
+ | 
+ | 
+PMATCH
+ | 
+ | 
+77
+ | 
+
+ | 
+FUNCOL
+ | 
+ | 
+POWINC
+ | 
+ | 
+372
+ | 
+
+ | 
+FUNFLM
+ | 
+ | 
+POWINC
+ | 
+ | 
+370
+ | 
+
+ | 
+FUNKCL
+ | 
+ | 
+POWINC
+ | 
+ | 
+368
+ | 
+
+ | 
+FUNKFU
+ | 
+ | 
+POWINC
+ | 
+ | 
+369
+ | 
+
+ | 
+FUNPOW
+ | 
+ | 
+POWINC
+ | 
+ | 
+374
+ | 
+
+ | 
+FUSLDT
+ | 
+ | 
+FUELIN
+ | 
+ | 
+52
+ | 
+
+ | 
+FUSLMA
+ | 
+ | 
+FUELIN
+ | 
+ | 
+53
+ | 
+
+ | 
+FVAPM
+ | 
+ | 
+COOLIN
+ | 
+ | 
+174
+ | 
+
+ | 
+FWPROF
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3974-3979
+ | 
+
+ | 
+FWPROF
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4034-4039
+ | 
+
+ | 
+FWPROF
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4094-4099
+ | 
+
+ | 
+FWPROF
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4154-4159
+ | 
+
+ | 
+FWTIME
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3968-3973
+ | 
+
+ | 
+FWTIME
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4028-4033
+ | 
+
+ | 
+FWTIME
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4088-4093
+ | 
+
+ | 
+FWTIME
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4148-4153
+ | 
+
+ | 
+G2PRDR
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1002-1141
+ | 
+
+ | 
+GAMDBY
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2881-2904
+ | 
+
+ | 
+GAMGAS
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1299
+ | 
+
+ | 
+GAMGS
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1101
+ | 
+
+ | 
+GAMGSC
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1689
+ | 
+
+ | 
+GAMMA
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1087
+ | 
+
+ | 
+GAMNBY
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2857-2880
+ | 
+
+ | 
+GAMSS
+ | 
+ | 
+POWINC
+ | 
+ | 
+2
+ | 
+
+ | 
+GAMTNC
+ | 
+ | 
+POWINC
+ | 
+ | 
+4
+ | 
+
+ | 
+GAMTNE
+ | 
+ | 
+POWINC
+ | 
+ | 
+5
+ | 
+
+ | 
+GASKOR
+ | 
+ | 
+COOLIN
+ | 
+ | 
+182
+ | 
+
+ | 
+GASMW
+ | 
+ | 
+COOLIN
+ | 
+ | 
+184
+ | 
+
+ | 
+GASRTM
+ | 
+ | 
+FUELIN
+ | 
+ | 
+199
+ | 
+
+ | 
+GATPF
+ | 
+ | 
+PMATCM
+ | 
+ | 
+601
+ | 
+
+ | 
+GENTIM
+ | 
+ | 
+POWINA
+ | 
+ | 
+2
+ | 
+
+ | 
+GK
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1090
+ | 
+
+ | 
+GK1
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1092
+ | 
+
+ | 
+GMULTF
+ | 
+ | 
+FUELIN
+ | 
+ | 
+12
+ | 
+
+ | 
+GRAINK
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1094
+ | 
+
+ | 
+GRAINQ
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1095
+ | 
+
+ | 
+GRAVITY
+ | 
+ | 
+OPCIN
+ | 
+ | 
+154
+ | 
+
+ | 
+GRAVTY
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2463
+ | 
+
+ | 
+GSCRAM
+ | 
+ | 
+OPCIN
+ | 
+ | 
+25
+ | 
+
+ | 
+GVMC
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4498-4503
+ | 
+
+ | 
+GWO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3952-3953
+ | 
+
+ | 
+GWO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4012-4013
+ | 
+
+ | 
+GWO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4072-4073
+ | 
+
+ | 
+GWO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4132-4133
+ | 
+
+ | 
+HABYBY
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4184-4215
+ | 
+
+ | 
+HACHCH
+ | 
+ | 
+PMATCH
+ | 
+ | 
+82-89
+ | 
+
+ | 
+HACIFM
+ | 
+ | 
+PMATCH
+ | 
+ | 
+143
+ | 
+
+ | 
+HACOFM
+ | 
+ | 
+PMATCH
+ | 
+ | 
+144
+ | 
+
+ | 
+HAELHT
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4216-4245
+ | 
+
+ | 
+HAFMOP
+ | 
+ | 
+PMATCH
+ | 
+ | 
+145
+ | 
+
+ | 
+HAGPFM
+ | 
+ | 
+PMATCH
+ | 
+ | 
+146
+ | 
+
+ | 
+HARDNS
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1102
+ | 
+
+ | 
+HAUIS
+ | 
+ | 
+POWINA
+ | 
+ | 
+406
+ | 
+
+ | 
+HBMAX
+ | 
+ | 
+PMATCH
+ | 
+ | 
+5
+ | 
+
+ | 
+HBMIN
+ | 
+ | 
+PMATCH
+ | 
+ | 
+6
+ | 
+
+ | 
+HBPAR
+ | 
+ | 
+PMATCH
+ | 
+ | 
+7
+ | 
+
+ | 
+HCCLMI
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1187
+ | 
+
+ | 
+HCFFMI
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1179
+ | 
+
+ | 
+HCFUBB
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1180
+ | 
+
+ | 
+HCOND
+ | 
+ | 
+COOLIN
+ | 
+ | 
+72
+ | 
+
+ | 
+HCONRV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4462-4467
+ | 
+
+ | 
+HCSTW2
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+5018-5026
+ | 
+
+ | 
+HCSTWL
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+5009-5017
+ | 
+
+ | 
+HEADR
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1911-1922
+ | 
+
+ | 
+HEADR
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1911-1922
+ | 
+
+ | 
+HEADR
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1911-1922
+ | 
+
+ | 
+HEADR
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1911-1922
+ | 
+
+ | 
+HEADR
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1911-1922
+ | 
+
+ | 
+HEBOIL
+ | 
+ | 
+COOLIN
+ | 
+ | 
+185
+ | 
+
+ | 
+HECOND
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1222
+ | 
+
+ | 
+HEMASX
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1227
+ | 
+
+ | 
+HEMM
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1225
+ | 
+
+ | 
+HFBO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3950
+ | 
+
+ | 
+HFBO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4010
+ | 
+
+ | 
+HFBO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4070
+ | 
+
+ | 
+HFBO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4130
+ | 
+
+ | 
+HFIDRC
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3600-3603
+ | 
+
+ | 
+HFIIHX
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3596-3599
+ | 
+
+ | 
+HFILM
+ | 
+ | 
+POWINA
+ | 
+ | 
+444
+ | 
+
+ | 
+HFMELT
+ | 
+ | 
+FUELIN
+ | 
+ | 
+30
+ | 
+
+ | 
+HFPDRC
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3592-3595
+ | 
+
+ | 
+HFPIHX
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3588-3591
+ | 
+
+ | 
+HFSRV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4456-4461
+ | 
+
+ | 
+HFW
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3934
+ | 
+
+ | 
+HFW
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3994
+ | 
+
+ | 
+HFW
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4054
+ | 
+
+ | 
+HFW
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4114
+ | 
+
+ | 
+HGASRV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4444-4449
+ | 
+
+ | 
+HINVWL
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+5036-5107
+ | 
+
+ | 
+HITB
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3817-3820
+ | 
+
+ | 
+HMELT
+ | 
+ | 
+PMATCH
+ | 
+ | 
+67
+ | 
+
+ | 
+HOTB
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3813-3816
+ | 
+
+ | 
+HSCO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3949
+ | 
+
+ | 
+HSCO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4009
+ | 
+
+ | 
+HSCO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4069
+ | 
+
+ | 
+HSCO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4129
+ | 
+
+ | 
+HSHO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3951
+ | 
+
+ | 
+HSHO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4011
+ | 
+
+ | 
+HSHO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4071
+ | 
+
+ | 
+HSHO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4131
+ | 
+
+ | 
+HSNK
+ | 
+ | 
+PMATCH
+ | 
+ | 
+8
+ | 
+
+ | 
+HTCLGV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+5327
+ | 
+
+ | 
+HTCPCR
+ | 
+ | 
+POWINA
+ | 
+ | 
+441
+ | 
+
+ | 
+HWALL
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2578-2615
+ | 
+
+ | 
+HWSHO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3957
+ | 
+
+ | 
+HWSHO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4017
+ | 
+
+ | 
+HWSHO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4077
+ | 
+
+ | 
+HWSHO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4137
+ | 
+
+ | 
+IADHX
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1390-1393
+ | 
+
+ | 
+IAREXT
+ | 
+ | 
+INPCOM
+ | 
+ | 
+40
+ | 
+
+ | 
+IAXCON
+ | 
+ | 
+INPCHN
+ | 
+ | 
+284
+ | 
+
+ | 
+IAXEXP
+ | 
+ | 
+INPCHN
+ | 
+ | 
+181
+ | 
+
+ | 
+IAXTHF
+ | 
+ | 
+INPCHN
+ | 
+ | 
+124
+ | 
+
+ | 
+IB3DM2
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1144-1152
+ | 
+
+ | 
+IBGO
+ | 
+ | 
+INPCHN
+ | 
+ | 
+79
+ | 
+
+ | 
+IBINOT
+ | 
+ | 
+INPMR4
+ | 
+ | 
+893-971
+ | 
+
+ | 
+IBINST
+ | 
+ | 
+INPMR4
+ | 
+ | 
+892
+ | 
+
+ | 
+IBL3D2
+ | 
+ | 
+INPMR4
+ | 
+ | 
+498-506
+ | 
+
+ | 
+IBL3DM
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1479-1600
+ | 
+
+ | 
+IBLPRN
+ | 
+ | 
+INPCHN
+ | 
+ | 
+119
+ | 
+
+ | 
+IBLPRT
+ | 
+ | 
+INPCOM
+ | 
+ | 
+14
+ | 
+
+ | 
+IBNEW
+ | 
+ | 
+INPCHN
+ | 
+ | 
+81
+ | 
+
+ | 
+IBOP
+ | 
+ | 
+INPCOM
+ | 
+ | 
+70
+ | 
+
+ | 
+IBOPLT
+ | 
+ | 
+INPCOM
+ | 
+ | 
+90
+ | 
+
+ | 
+IBOWTP
+ | 
+ | 
+INPCOM
+ | 
+ | 
+102
+ | 
+
+ | 
+IBSTOP
+ | 
+ | 
+INPCHN
+ | 
+ | 
+80
+ | 
+
+ | 
+IBUBND
+ | 
+ | 
+INPCHN
+ | 
+ | 
+277
+ | 
+
+ | 
+IBUGPL
+ | 
+ | 
+INPCHN
+ | 
+ | 
+75
+ | 
+
+ | 
+IBUGPN
+ | 
+ | 
+INPCHN
+ | 
+ | 
+188
+ | 
+
+ | 
+IBYBY
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1020-1051
+ | 
+
+ | 
+ICCVFS
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1154
+ | 
+
+ | 
+ICFDCV
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1407-1410
+ | 
+
+ | 
+ICFDDBG
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1412
+ | 
+
+ | 
+ICFINE
+ | 
+ | 
+INPCHN
+ | 
+ | 
+76
+ | 
+
+ | 
+ICHCH
+ | 
+ | 
+INPCHN
+ | 
+ | 
+206-213
+ | 
+
+ | 
+ICHCHT
+ | 
+ | 
+INPCOM
+ | 
+ | 
+79
+ | 
+
+ | 
+ICHUIS
+ | 
+ | 
+INPCHN
+ | 
+ | 
+362
+ | 
+
+ | 
+ICHUNK
+ | 
+ | 
+INPCOM
+ | 
+ | 
+47
+ | 
+
+ | 
+iCIrrCreepID
+ | 
+ | 
+INPCHN
+ | 
+ | 
+235
+ | 
+
+ | 
+ICLAD1
+ | 
+ | 
+INPCOM
+ | 
+ | 
+4
+ | 
+
+ | 
+ICLADB
+ | 
+ | 
+INPCHN
+ | 
+ | 
+85
+ | 
+
+ | 
+ICLADK
+ | 
+ | 
+INPCHN
+ | 
+ | 
+185
+ | 
+
+ | 
+ICLADV
+ | 
+ | 
+INPCHN
+ | 
+ | 
+17
+ | 
+
+ | 
+ICLCMP
+ | 
+ | 
+INPCOM
+ | 
+ | 
+24
+ | 
+
+ | 
+ICLPRP
+ | 
+ | 
+INPCOM
+ | 
+ | 
+118
+ | 
+
+ | 
+ICPDBG
+ | 
+ | 
+INPMR4
+ | 
+ | 
+498
+ | 
+
+ | 
+ICRDDB
+ | 
+ | 
+INPCOM
+ | 
+ | 
+71
+ | 
+
+ | 
+ICREXP
+ | 
+ | 
+INPCOM
+ | 
+ | 
+31
+ | 
+
+ | 
+ICRNOD
+ | 
+ | 
+INPCOM
+ | 
+ | 
+75-77
+ | 
+
+ | 
+ICRTMP
+ | 
+ | 
+INPCOM
+ | 
+ | 
+72-74
+ | 
+
+ | 
+iCSwellID
+ | 
+ | 
+INPCHN
+ | 
+ | 
+234
+ | 
+
+ | 
+ICTYPE
+ | 
+ | 
+INPCHN
+ | 
+ | 
+225
+ | 
+
+ | 
+ICV2WL
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1353-1361
+ | 
+
+ | 
+ICVNAK
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1378
+ | 
+
+ | 
+ICVSSI
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1380-1389
+ | 
+
+ | 
+ICVSTR
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1314-1316
+ | 
+
+ | 
+ID2O
+ | 
+ | 
+INPCOM
+ | 
+ | 
+67
+ | 
+
+ | 
+IDBDKH
+ | 
+ | 
+INPCOM
+ | 
+ | 
+85
+ | 
+
+ | 
+IDBFLG
+ | 
+ | 
+INPCHN
+ | 
+ | 
+98-107
+ | 
+
+ | 
+IDBGBL
+ | 
+ | 
+INPCHN
+ | 
+ | 
+120
+ | 
+
+ | 
+IDBHTH
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1142
+ | 
+
+ | 
+IDBLST
+ | 
+ | 
+INPCHN
+ | 
+ | 
+121
+ | 
+
+ | 
+IDBP4N
+ | 
+ | 
+INPMR4
+ | 
+ | 
+508
+ | 
+
+ | 
+IDBPR4
+ | 
+ | 
+INPMR4
+ | 
+ | 
+507
+ | 
+
+ | 
+IDBPWI
+ | 
+ | 
+INPCOM
+ | 
+ | 
+35
+ | 
+
+ | 
+IDBRV
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1290
+ | 
+
+ | 
+IDBRVS
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1291
+ | 
+
+ | 
+IDBSTP
+ | 
+ | 
+INPCHN
+ | 
+ | 
+108-117
+ | 
+
+ | 
+IDBSTR
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1362
+ | 
+
+ | 
+IDBUG0
+ | 
+ | 
+INPCOM
+ | 
+ | 
+2
+ | 
+
+ | 
+IDBUGF
+ | 
+ | 
+INPCHN
+ | 
+ | 
+50
+ | 
+
+ | 
+IDBUGV
+ | 
+ | 
+INPCHN
+ | 
+ | 
+1
+ | 
+
+ | 
+IDCLDE
+ | 
+ | 
+INPCHN
+ | 
+ | 
+127
+ | 
+
+ | 
+IDCLGO
+ | 
+ | 
+INPCHN
+ | 
+ | 
+125
+ | 
+
+ | 
+IDCLSP
+ | 
+ | 
+INPCHN
+ | 
+ | 
+126
+ | 
+
+ | 
+IDEFOPT
+ | 
+ | 
+INPCHN
+ | 
+ | 
+497
+ | 
+
+ | 
+IDEFSTFAL
+ | 
+ | 
+INPCHN
+ | 
+ | 
+498
+ | 
+
+ | 
+IDKCRV
+ | 
+ | 
+INPCHN
+ | 
+ | 
+203
+ | 
+
+ | 
+IDKTYP
+ | 
+ | 
+INPMR4
+ | 
+ | 
+822-829
+ | 
+
+ | 
+IDM51
+ | 
+ | 
+INPCHN
+ | 
+ | 
+198-202
+ | 
+
+ | 
+IDMICH
+ | 
+ | 
+INPCHN
+ | 
+ | 
+499
+ | 
+
+ | 
+IDMICH
+ | 
+ | 
+INPCHN
+ | 
+ | 
+546-600
+ | 
+
+ | 
+IDNFLW
+ | 
+ | 
+INPCOM
+ | 
+ | 
+68
+ | 
+
+ | 
+IDRCLC
+ | 
+ | 
+INPMR4
+ | 
+ | 
+493-496
+ | 
+
+ | 
+IDRVACSKin
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1440
+ | 
+
+ | 
+IDRVACSTin
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1439
+ | 
+
+ | 
+IDRY
+ | 
+ | 
+INPCHN
+ | 
+ | 
+224
+ | 
+
+ | 
+IDSSC
+ | 
+ | 
+INPCHN
+ | 
+ | 
+223
+ | 
+
+ | 
+IELANE
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1244-1273
+ | 
+
+ | 
+IELBYP
+ | 
+ | 
+INPMR4
+ | 
+ | 
+830-837
+ | 
+
+ | 
+IELDHX
+ | 
+ | 
+INPMR4
+ | 
+ | 
+992-995
+ | 
+
+ | 
+IELDRP
+ | 
+ | 
+INPMR4
+ | 
+ | 
+477-480
+ | 
+
+ | 
+IELDRS
+ | 
+ | 
+INPMR4
+ | 
+ | 
+485-488
+ | 
+
+ | 
+IELHT
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1052-1081
+ | 
+
+ | 
+IELHT2
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1082-1111
+ | 
+
+ | 
+IELIHX
+ | 
+ | 
+INPMR4
+ | 
+ | 
+473-476
+ | 
+
+ | 
+IELLCK
+ | 
+ | 
+INPMR4
+ | 
+ | 
+876-881
+ | 
+
+ | 
+IELPMP
+ | 
+ | 
+INPMR4
+ | 
+ | 
+406-417
+ | 
+
+ | 
+IELRVC
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1276-1281
+ | 
+
+ | 
+IELSGN
+ | 
+ | 
+INPMR4
+ | 
+ | 
+840-851
+ | 
+
+ | 
+IELTPW
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1367-1376
+ | 
+
+ | 
+IELVLV
+ | 
+ | 
+INPMR4
+ | 
+ | 
+974-981
+ | 
+
+ | 
+IEMGEM
+ | 
+ | 
+INPCOM
+ | 
+ | 
+104
+ | 
+
+ | 
+IEMPMP
+ | 
+ | 
+INPMR4
+ | 
+ | 
+418-429
+ | 
+
+ | 
+IEQMAS
+ | 
+ | 
+INPCHN
+ | 
+ | 
+118
+ | 
+
+ | 
+IERSTP
+ | 
+ | 
+INPCHN
+ | 
+ | 
+2
+ | 
+
+ | 
+IEUTOPT
+ | 
+ | 
+INPCHN
+ | 
+ | 
+197
+ | 
+
+ | 
+IEVAP
+ | 
+ | 
+INPMR4
+ | 
+ | 
+864-875
+ | 
+
+ | 
+IEXPFB
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1009-1018
+ | 
+
+ | 
+IFAE
+ | 
+ | 
+INPCHN
+ | 
+ | 
+184
+ | 
+
+ | 
+IFAIL
+ | 
+ | 
+INPCHN
+ | 
+ | 
+87
+ | 
+
+ | 
+IFCDHX
+ | 
+ | 
+INPMR4
+ | 
+ | 
+996-999
+ | 
+
+ | 
+IFILM
+ | 
+ | 
+INPCHN
+ | 
+ | 
+128
+ | 
+
+ | 
+IFIT
+ | 
+ | 
+INPCOM
+ | 
+ | 
+95-100
+ | 
+
+ | 
+IFLOOD
+ | 
+ | 
+INPCHN
+ | 
+ | 
+494
+ | 
+
+ | 
+IFLOW
+ | 
+ | 
+INPCOM
+ | 
+ | 
+20
+ | 
+
+ | 
+IFMIOP
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1311
+ | 
+
+ | 
+IFPI01
+ | 
+ | 
+INPCHN
+ | 
+ | 
+286
+ | 
+
+ | 
+IFPIN2
+ | 
+ | 
+INPCHN
+ | 
+ | 
+285
+ | 
+
+ | 
+IFRFAC
+ | 
+ | 
+INPCHN
+ | 
+ | 
+186
+ | 
+
+ | 
+IFSTEL
+ | 
+ | 
+INPMR4
+ | 
+ | 
+613-712
+ | 
+
+ | 
+IFSTWL
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1323-1325
+ | 
+
+ | 
+IFT16
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1365
+ | 
+
+ | 
+IFT19
+ | 
+ | 
+INPCOM
+ | 
+ | 
+57
+ | 
+
+ | 
+IFT1TM
+ | 
+ | 
+INPCOM
+ | 
+ | 
+119
+ | 
+
+ | 
+IFT24
+ | 
+ | 
+INPCHN
+ | 
+ | 
+495
+ | 
+
+ | 
+IFUEL1
+ | 
+ | 
+INPCOM
+ | 
+ | 
+3
+ | 
+
+ | 
+IFUELB
+ | 
+ | 
+INPCHN
+ | 
+ | 
+16
+ | 
+
+ | 
+IFUELC
+ | 
+ | 
+INPCHN
+ | 
+ | 
+193
+ | 
+
+ | 
+IFUELI
+ | 
+ | 
+INPCHN
+ | 
+ | 
+132-155
+ | 
+
+ | 
+IFUELM
+ | 
+ | 
+INPCHN
+ | 
+ | 
+192
+ | 
+
+ | 
+IFUELO
+ | 
+ | 
+INPCHN
+ | 
+ | 
+191
+ | 
+
+ | 
+IFUELV
+ | 
+ | 
+INPCHN
+ | 
+ | 
+15
+ | 
+
+ | 
+IFUOPT
+ | 
+ | 
+INPCHN
+ | 
+ | 
+180
+ | 
+
+ | 
+IFWC
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1000-1003
+ | 
+
+ | 
+IGASRL
+ | 
+ | 
+INPCHN
+ | 
+ | 
+278
+ | 
+
+ | 
+IGHC
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1004-1007
+ | 
+
+ | 
+IGRLTM
+ | 
+ | 
+INPCHN
+ | 
+ | 
+279
+ | 
+
+ | 
+IGSPRS
+ | 
+ | 
+INPCHN
+ | 
+ | 
+282
+ | 
+
+ | 
+IHEALC
+ | 
+ | 
+INPCHN
+ | 
+ | 
+123
+ | 
+
+ | 
+IHEX
+ | 
+ | 
+INPCHN
+ | 
+ | 
+29
+ | 
+
+ | 
+IHGAP
+ | 
+ | 
+INPCHN
+ | 
+ | 
+24
+ | 
+
+ | 
+IHTBYB
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1193-1200
+ | 
+
+ | 
+IHTBYD
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1201-1208
+ | 
+
+ | 
+IHTFLG
+ | 
+ | 
+INPCHN
+ | 
+ | 
+287
+ | 
+
+ | 
+IHTPRS
+ | 
+ | 
+INPCHN
+ | 
+ | 
+96
+ | 
+
+ | 
+IHXBYP
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1172-1181
+ | 
+
+ | 
+IHXCLC
+ | 
+ | 
+INPMR4
+ | 
+ | 
+489-492
+ | 
+
+ | 
+iHXZID
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1443-1446
+ | 
+
+ | 
+ILAG
+ | 
+ | 
+INPCHN
+ | 
+ | 
+34
+ | 
+
+ | 
+ILATF
+ | 
+ | 
+INPCHN
+ | 
+ | 
+496
+ | 
+
+ | 
+ILGVHT
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1477
+ | 
+
+ | 
+ILIHXS
+ | 
+ | 
+INPMR4
+ | 
+ | 
+481-484
+ | 
+
+ | 
+ILRPMP
+ | 
+ | 
+INPMR4
+ | 
+ | 
+430-469
+ | 
+
+ | 
+ILSTEL
+ | 
+ | 
+INPMR4
+ | 
+ | 
+713-812
+ | 
+
+ | 
+ILUBLK
+ | 
+ | 
+INPCOM
+ | 
+ | 
+48
+ | 
+
+ | 
+iMassFractionTable
+ | 
+ | 
+INPCHN
+ | 
+ | 
+544
+ | 
+
+ | 
+IMCVTY
+ | 
+ | 
+INPCOM
+ | 
+ | 
+34
+ | 
+
+ | 
+IMELTV
+ | 
+ | 
+INPCOM
+ | 
+ | 
+28
+ | 
+
+ | 
+IMETAL
+ | 
+ | 
+INPCHN
+ | 
+ | 
+189
+ | 
+
+ | 
+IMKVPL
+ | 
+ | 
+INPCHN
+ | 
+ | 
+490
+ | 
+
+ | 
+IMOMEN
+ | 
+ | 
+INPCHN
+ | 
+ | 
+182
+ | 
+
+ | 
+INAKDR
+ | 
+ | 
+INPMR4
+ | 
+ | 
+509
+ | 
+
+ | 
+INAPN
+ | 
+ | 
+INPCOM
+ | 
+ | 
+49
+ | 
+
+ | 
+INAS3D
+ | 
+ | 
+INPCOM
+ | 
+ | 
+29
+ | 
+
+ | 
+INDFAL
+ | 
+ | 
+INPCHN
+ | 
+ | 
+283
+ | 
+
+ | 
+INEDIT
+ | 
+ | 
+INPCOM
+ | 
+ | 
+25
+ | 
+
+ | 
+INPDU2
+ | 
+ | 
+INPCOM
+ | 
+ | 
+121-250
+ | 
+
+ | 
+INRAEJ
+ | 
+ | 
+INPCOM
+ | 
+ | 
+44
+ | 
+
+ | 
+INULLT
+ | 
+ | 
+INPMR4
+ | 
+ | 
+972
+ | 
+
+ | 
+IOPCHC
+ | 
+ | 
+INPCHN
+ | 
+ | 
+226-233
+ | 
+
+ | 
+IOPPL
+ | 
+ | 
+INPCHN
+ | 
+ | 
+276
+ | 
+
+ | 
+IP4PRT
+ | 
+ | 
+INPMR4
+ | 
+ | 
+890
+ | 
+
+ | 
+IPBDEN
+ | 
+ | 
+INPCOM
+ | 
+ | 
+106
+ | 
+
+ | 
+IPGO
+ | 
+ | 
+INPCHN
+ | 
+ | 
+82
+ | 
+
+ | 
+iPHXPRP
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1415-1422
+ | 
+
+ | 
+iPHXTID
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1423-1430
+ | 
+
+ | 
+iPHXWID
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1431-1438
+ | 
+
+ | 
+IPIC
+ | 
+ | 
+INPCOM
+ | 
+ | 
+101
+ | 
+
+ | 
+IPINFG
+ | 
+ | 
+INPCHN
+ | 
+ | 
+486
+ | 
+
+ | 
+IPINRE
+ | 
+ | 
+INPCHN
+ | 
+ | 
+487
+ | 
+
+ | 
+IPIPTM
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1310
+ | 
+
+ | 
+IPL2A
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1019
+ | 
+
+ | 
+IPLOT
+ | 
+ | 
+INPCHN
+ | 
+ | 
+78
+ | 
+
+ | 
+IPLTSG
+ | 
+ | 
+INPCOM
+ | 
+ | 
+69
+ | 
+
+ | 
+IPLUP
+ | 
+ | 
+INPCOM
+ | 
+ | 
+5
+ | 
+
+ | 
+IPMDFT
+ | 
+ | 
+INPMR4
+ | 
+ | 
+990
+ | 
+
+ | 
+IPMPBY
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1183-1192
+ | 
+
+ | 
+IPNEW
+ | 
+ | 
+INPCHN
+ | 
+ | 
+84
+ | 
+
+ | 
+IPNGO
+ | 
+ | 
+INPCHN
+ | 
+ | 
+194
+ | 
+
+ | 
+IPNNEW
+ | 
+ | 
+INPCHN
+ | 
+ | 
+196
+ | 
+
+ | 
+IPNPLT
+ | 
+ | 
+INPCHN
+ | 
+ | 
+190
+ | 
+
+ | 
+IPNSTP
+ | 
+ | 
+INPCHN
+ | 
+ | 
+195
+ | 
+
+ | 
+IPO
+ | 
+ | 
+INPCOM
+ | 
+ | 
+12
+ | 
+
+ | 
+IPOBOI
+ | 
+ | 
+INPCOM
+ | 
+ | 
+13
+ | 
+
+ | 
+IPORC
+ | 
+ | 
+INPCHN
+ | 
+ | 
+222
+ | 
+
+ | 
+IPORFG
+ | 
+ | 
+INPCHN
+ | 
+ | 
+488
+ | 
+
+ | 
+IPOWER
+ | 
+ | 
+INPCOM
+ | 
+ | 
+8
+ | 
+
+ | 
+IPOWOP
+ | 
+ | 
+INPCOM
+ | 
+ | 
+9
+ | 
+
+ | 
+IPOWRZ
+ | 
+ | 
+INPCHN
+ | 
+ | 
+364
+ | 
+
+ | 
+IPRADJ
+ | 
+ | 
+INPMR4
+ | 
+ | 
+497
+ | 
+
+ | 
+IPRD
+ | 
+ | 
+INPCHN
+ | 
+ | 
+97
+ | 
+
+ | 
+IPRINT
+ | 
+ | 
+INPCHN
+ | 
+ | 
+77
+ | 
+
+ | 
+IPRION
+ | 
+ | 
+INPCOM
+ | 
+ | 
+27
+ | 
+
+ | 
+IPROPT
+ | 
+ | 
+INPCOM
+ | 
+ | 
+6
+ | 
+
+ | 
+IPRSKP
+ | 
+ | 
+INPCHN
+ | 
+ | 
+274
+ | 
+
+ | 
+IPRSNL
+ | 
+ | 
+INPCOM
+ | 
+ | 
+88
+ | 
+
+ | 
+IPRSS1
+ | 
+ | 
+INPCHN
+ | 
+ | 
+489
+ | 
+
+ | 
+IPSIG
+ | 
+ | 
+INPCHN
+ | 
+ | 
+95
+ | 
+
+ | 
+IPSIZE
+ | 
+ | 
+INPCHN
+ | 
+ | 
+74
+ | 
+
+ | 
+IPSTOP
+ | 
+ | 
+INPCHN
+ | 
+ | 
+83
+ | 
+
+ | 
+IRAD
+ | 
+ | 
+INPCHN
+ | 
+ | 
+33
+ | 
+
+ | 
+IRADEX
+ | 
+ | 
+INPCOM
+ | 
+ | 
+36
+ | 
+
+ | 
+IRAPEN
+ | 
+ | 
+INPCHN
+ | 
+ | 
+280
+ | 
+
+ | 
+IRATE
+ | 
+ | 
+INPCHN
+ | 
+ | 
+23
+ | 
+
+ | 
+IRDEXP
+ | 
+ | 
+INPCHN
+ | 
+ | 
+187
+ | 
+
+ | 
+IREACT
+ | 
+ | 
+INPCOM
+ | 
+ | 
+58
+ | 
+
+ | 
+iReactivityTable
+ | 
+ | 
+INPCHN
+ | 
+ | 
+543
+ | 
+
+ | 
+IREACZ
+ | 
+ | 
+INPCHN
+ | 
+ | 
+365
+ | 
+
+ | 
+IRELAX
+ | 
+ | 
+INPCHN
+ | 
+ | 
+30
+ | 
+
+ | 
+IRHOK
+ | 
+ | 
+INPCHN
+ | 
+ | 
+3
+ | 
+
+ | 
+IROPT
+ | 
+ | 
+INPCOM
+ | 
+ | 
+65
+ | 
+
+ | 
+IROR
+ | 
+ | 
+INPCHN
+ | 
+ | 
+45
+ | 
+
+ | 
+IRVHTS
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1478
+ | 
+
+ | 
+IRVOPT
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1275
+ | 
+
+ | 
+ISCH
+ | 
+ | 
+INPCOM
+ | 
+ | 
+115
+ | 
+
+ | 
+ISGCLC
+ | 
+ | 
+INPMR4
+ | 
+ | 
+852-863
+ | 
+
+ | 
+ISGLNK
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1377
+ | 
+
+ | 
+iSGZID
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1451-1462
+ | 
+
+ | 
+ISIMPG
+ | 
+ | 
+INPCOM
+ | 
+ | 
+91
+ | 
+
+ | 
+ISKDOT
+ | 
+ | 
+INPCOM
+ | 
+ | 
+116
+ | 
+
+ | 
+ISLREA
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1293-1300
+ | 
+
+ | 
+ISNKRP
+ | 
+ | 
+INPMR4
+ | 
+ | 
+511
+ | 
+
+ | 
+ISRCRP
+ | 
+ | 
+INPMR4
+ | 
+ | 
+510
+ | 
+
+ | 
+ISSADX
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1402-1405
+ | 
+
+ | 
+ISSCPC
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1288
+ | 
+
+ | 
+ISSFU2
+ | 
+ | 
+INPCHN
+ | 
+ | 
+122
+ | 
+
+ | 
+ISSFUE
+ | 
+ | 
+INPCHN
+ | 
+ | 
+32
+ | 
+
+ | 
+ISSIHX
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1155-1158
+ | 
+
+ | 
+ISSNUL
+ | 
+ | 
+INPCOM
+ | 
+ | 
+87
+ | 
+
+ | 
+ISSPMP
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1159-1170
+ | 
+
+ | 
+ISST15
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1289
+ | 
+
+ | 
+ISSTP
+ | 
+ | 
+INPMR4
+ | 
+ | 
+838
+ | 
+
+ | 
+ISTDBS
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1363
+ | 
+
+ | 
+ISTGTB
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1394-1397
+ | 
+
+ | 
+ISTHTH
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1143
+ | 
+
+ | 
+ISTRVT
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1317-1319
+ | 
+
+ | 
+ISTSTP
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1364
+ | 
+
+ | 
+ISUBAS
+ | 
+ | 
+INPCHN
+ | 
+ | 
+89
+ | 
+
+ | 
+ITABVV
+ | 
+ | 
+INPMR4
+ | 
+ | 
+982-989
+ | 
+
+ | 
+ITARGE
+ | 
+ | 
+INPCOM
+ | 
+ | 
+103
+ | 
+
+ | 
+ITAU
+ | 
+ | 
+INPCHN
+ | 
+ | 
+22
+ | 
+
+ | 
+ITHPEN
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1312
+ | 
+
+ | 
+ITKEL
+ | 
+ | 
+INPCOM
+ | 
+ | 
+7
+ | 
+
+ | 
+ITP20
+ | 
+ | 
+INPCHN
+ | 
+ | 
+204
+ | 
+
+ | 
+ITREAT
+ | 
+ | 
+INPCHN
+ | 
+ | 
+275
+ | 
+
+ | 
+ITYP24
+ | 
+ | 
+INPCHN
+ | 
+ | 
+522-541
+ | 
+
+ | 
+ITYPCV
+ | 
+ | 
+INPMR4
+ | 
+ | 
+11-48
+ | 
+
+ | 
+ITYPEL
+ | 
+ | 
+INPMR4
+ | 
+ | 
+49-188
+ | 
+
+ | 
+IUM883
+ | 
+ | 
+INPMR4
+ | 
+ | 
+882-889
+ | 
+
+ | 
+IVIS3D
+ | 
+ | 
+INPCOM
+ | 
+ | 
+120
+ | 
+
+ | 
+IWLHRZ
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1326-1334
+ | 
+
+ | 
+IXSTPC
+ | 
+ | 
+INPCOM
+ | 
+ | 
+32
+ | 
+
+ | 
+IXSTPF
+ | 
+ | 
+INPCOM
+ | 
+ | 
+33
+ | 
+
+ | 
+IYLD
+ | 
+ | 
+INPCOM
+ | 
+ | 
+26
+ | 
+
+ | 
+IZNC
+ | 
+ | 
+INPCHN
+ | 
+ | 
+366-389
+ | 
+
+ | 
+IZNM
+ | 
+ | 
+INPCHN
+ | 
+ | 
+390-413
+ | 
+
+ | 
+JCFT24
+ | 
+ | 
+INPCHN
+ | 
+ | 
+502-521
+ | 
+
+ | 
+JCHMPN
+ | 
+ | 
+INPCHN
+ | 
+ | 
+215-218
+ | 
+
+ | 
+JCLN
+ | 
+ | 
+INPCHN
+ | 
+ | 
+90
+ | 
+
+ | 
+JCRIND
+ | 
+ | 
+INPCOM
+ | 
+ | 
+66
+ | 
+
+ | 
+JCVG
+ | 
+ | 
+INPMR4
+ | 
+ | 
+269-324
+ | 
+
+ | 
+JCVL
+ | 
+ | 
+INPMR4
+ | 
+ | 
+189-268
+ | 
+
+ | 
+JFAIL
+ | 
+ | 
+INPCHN
+ | 
+ | 
+88
+ | 
+
+ | 
+JFSELL
+ | 
+ | 
+INPMR4
+ | 
+ | 
+365-404
+ | 
+
+ | 
+JJMLTP
+ | 
+ | 
+INPCHN
+ | 
+ | 
+214
+ | 
+
+ | 
+JNCN
+ | 
+ | 
+INPCHN
+ | 
+ | 
+92
+ | 
+
+ | 
+JNEN
+ | 
+ | 
+INPCHN
+ | 
+ | 
+91
+ | 
+
+ | 
+JNSN
+ | 
+ | 
+INPCHN
+ | 
+ | 
+93
+ | 
+
+ | 
+JPRNT1
+ | 
+ | 
+INPCHN
+ | 
+ | 
+46
+ | 
+
+ | 
+JPRNT2
+ | 
+ | 
+INPCHN
+ | 
+ | 
+47
+ | 
+
+ | 
+JREEXT
+ | 
+ | 
+INPCOM
+ | 
+ | 
+56
+ | 
+
+ | 
+JRPRO
+ | 
+ | 
+INPCHN
+ | 
+ | 
+94
+ | 
+
+ | 
+JRUPT
+ | 
+ | 
+INPCHN
+ | 
+ | 
+36
+ | 
+
+ | 
+JSTRDX
+ | 
+ | 
+INPCHN
+ | 
+ | 
+183
+ | 
+
+ | 
+KCHUIS
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1209-1242
+ | 
+
+ | 
+KDEBUG
+ | 
+ | 
+INPCOM
+ | 
+ | 
+82
+ | 
+
+ | 
+KDENBU
+ | 
+ | 
+INPCOM
+ | 
+ | 
+94
+ | 
+
+ | 
+KEBRS1
+ | 
+ | 
+INPCOM
+ | 
+ | 
+83
+ | 
+
+ | 
+KEBRS2
+ | 
+ | 
+INPCOM
+ | 
+ | 
+84
+ | 
+
+ | 
+KFAILP
+ | 
+ | 
+INPCOM
+ | 
+ | 
+37
+ | 
+
+ | 
+KFIRR
+ | 
+ | 
+INPCOM
+ | 
+ | 
+93
+ | 
+
+ | 
+KHDBK
+ | 
+ | 
+INPCOM
+ | 
+ | 
+92
+ | 
+
+ | 
+KKSBRI
+ | 
+ | 
+INPCHN
+ | 
+ | 
+69
+ | 
+
+ | 
+KKSBTP
+ | 
+ | 
+INPCHN
+ | 
+ | 
+68
+ | 
+
+ | 
+KPROPI
+ | 
+ | 
+INPCOM
+ | 
+ | 
+114
+ | 
+
+ | 
+KQSCRA
+ | 
+ | 
+INPCOM
+ | 
+ | 
+113
+ | 
+
+ | 
+KSWIRL
+ | 
+ | 
+INPCHN
+ | 
+ | 
+220
+ | 
+
+ | 
+KTING
+ | 
+ | 
+INPCHN
+ | 
+ | 
+19
+ | 
+
+ | 
+KTRANC
+ | 
+ | 
+INPCHN
+ | 
+ | 
+236-249
+ | 
+
+ | 
+KTRANM
+ | 
+ | 
+INPCHN
+ | 
+ | 
+250-273
+ | 
+
+ | 
+KTREAT
+ | 
+ | 
+INPCOM
+ | 
+ | 
+112
+ | 
+
+ | 
+KZEMFM
+ | 
+ | 
+INPCHN
+ | 
+ | 
+492
+ | 
+
+ | 
+LBYP
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1301
+ | 
+
+ | 
+LCHTYP
+ | 
+ | 
+INPCHN
+ | 
+ | 
+281
+ | 
+
+ | 
+LCPLAS
+ | 
+ | 
+INPCHN
+ | 
+ | 
+291
+ | 
+
+ | 
+LCPROP
+ | 
+ | 
+INPCHN
+ | 
+ | 
+308
+ | 
+
+ | 
+LCRACK
+ | 
+ | 
+INPCHN
+ | 
+ | 
+289
+ | 
+
+ | 
+LCSWEL
+ | 
+ | 
+INPCHN
+ | 
+ | 
+293
+ | 
+
+ | 
+LDBCPL
+ | 
+ | 
+INPCHN
+ | 
+ | 
+305
+ | 
+
+ | 
+LDBFDV
+ | 
+ | 
+INPCHN
+ | 
+ | 
+304
+ | 
+
+ | 
+LDBFPL
+ | 
+ | 
+INPCHN
+ | 
+ | 
+303
+ | 
+
+ | 
+LDBOTA
+ | 
+ | 
+INPCHN
+ | 
+ | 
+311-334
+ | 
+
+ | 
+LDBOTC
+ | 
+ | 
+INPCHN
+ | 
+ | 
+346-348
+ | 
+
+ | 
+LDBOTF
+ | 
+ | 
+INPCHN
+ | 
+ | 
+335-345
+ | 
+
+ | 
+LDBOUT
+ | 
+ | 
+INPCHN
+ | 
+ | 
+301
+ | 
+
+ | 
+LDBSTP
+ | 
+ | 
+INPCHN
+ | 
+ | 
+302
+ | 
+
+ | 
+LDETL
+ | 
+ | 
+INPCHN
+ | 
+ | 
+500
+ | 
+
+ | 
+LELBYP
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1302-1309
+ | 
+
+ | 
+LFCSLP
+ | 
+ | 
+INPCHN
+ | 
+ | 
+295
+ | 
+
+ | 
+LFPLAS
+ | 
+ | 
+INPCHN
+ | 
+ | 
+290
+ | 
+
+ | 
+LFREQA
+ | 
+ | 
+INPCHN
+ | 
+ | 
+297
+ | 
+
+ | 
+LFREQB
+ | 
+ | 
+INPCHN
+ | 
+ | 
+299
+ | 
+
+ | 
+LFSWEL
+ | 
+ | 
+INPCHN
+ | 
+ | 
+292
+ | 
+
+ | 
+LGAPCL
+ | 
+ | 
+INPCHN
+ | 
+ | 
+307
+ | 
+
+ | 
+LGCLOS
+ | 
+ | 
+INPCHN
+ | 
+ | 
+310
+ | 
+
+ | 
+LGPRES
+ | 
+ | 
+INPCHN
+ | 
+ | 
+306
+ | 
+
+ | 
+LGRAPH
+ | 
+ | 
+INPCHN
+ | 
+ | 
+300
+ | 
+
+ | 
+LHTOPT
+ | 
+ | 
+INPCHN
+ | 
+ | 
+288
+ | 
+
+ | 
+LLRGST
+ | 
+ | 
+INPCHN
+ | 
+ | 
+294
+ | 
+
+ | 
+LOUTSW
+ | 
+ | 
+INPCHN
+ | 
+ | 
+296
+ | 
+
+ | 
+LQSLTP
+ | 
+ | 
+INPCHN
+ | 
+ | 
+363
+ | 
+
+ | 
+LSKIPM
+ | 
+ | 
+INPCHN
+ | 
+ | 
+309
+ | 
+
+ | 
+MAXSTP
+ | 
+ | 
+INPCOM
+ | 
+ | 
+11
+ | 
+
+ | 
+MFAIL
+ | 
+ | 
+INPCHN
+ | 
+ | 
+86
+ | 
+
+ | 
+MFREQA
+ | 
+ | 
+INPCHN
+ | 
+ | 
+298
+ | 
+
+ | 
+MFTZN
+ | 
+ | 
+INPCHN
+ | 
+ | 
+414-485
+ | 
+
+ | 
+MODEEX
+ | 
+ | 
+INPCOM
+ | 
+ | 
+55
+ | 
+
+ | 
+MPL1
+ | 
+ | 
+INPCHN
+ | 
+ | 
+59
+ | 
+
+ | 
+MPL2
+ | 
+ | 
+INPCHN
+ | 
+ | 
+60
+ | 
+
+ | 
+MPL3
+ | 
+ | 
+INPCHN
+ | 
+ | 
+61
+ | 
+
+ | 
+MPL4
+ | 
+ | 
+INPCHN
+ | 
+ | 
+62
+ | 
+
+ | 
+MPL5
+ | 
+ | 
+INPCHN
+ | 
+ | 
+63
+ | 
+
+ | 
+MPL6
+ | 
+ | 
+INPCHN
+ | 
+ | 
+64
+ | 
+
+ | 
+MPL7
+ | 
+ | 
+INPCHN
+ | 
+ | 
+65
+ | 
+
+ | 
+MPL8
+ | 
+ | 
+INPCHN
+ | 
+ | 
+66
+ | 
+
+ | 
+MPL9
+ | 
+ | 
+INPCHN
+ | 
+ | 
+67
+ | 
+
+ | 
+MSTEP
+ | 
+ | 
+INPCHN
+ | 
+ | 
+21
+ | 
+
+ | 
+MSTPL1
+ | 
+ | 
+INPCOM
+ | 
+ | 
+109
+ | 
+
+ | 
+MSTPL2
+ | 
+ | 
+INPCOM
+ | 
+ | 
+110
+ | 
+
+ | 
+MSTPL3
+ | 
+ | 
+INPCOM
+ | 
+ | 
+111
+ | 
+
+ | 
+MSTPLA
+ | 
+ | 
+INPCOM
+ | 
+ | 
+107
+ | 
+
+ | 
+MSTPLB
+ | 
+ | 
+INPCOM
+ | 
+ | 
+108
+ | 
+
+ | 
+MTACLP
+ | 
+ | 
+INPCOM
+ | 
+ | 
+53
+ | 
+
+ | 
+MTCB
+ | 
+ | 
+INPCOM
+ | 
+ | 
+81
+ | 
+
+ | 
+MTGRD
+ | 
+ | 
+INPCOM
+ | 
+ | 
+52
+ | 
+
+ | 
+MTREAT
+ | 
+ | 
+INPCHN
+ | 
+ | 
+493
+ | 
+
+ | 
+MTRFAC
+ | 
+ | 
+INPCOM
+ | 
+ | 
+63
+ | 
+
+ | 
+MTRFT
+ | 
+ | 
+INPCOM
+ | 
+ | 
+64
+ | 
+
+ | 
+MTRRAC
+ | 
+ | 
+INPCOM
+ | 
+ | 
+61
+ | 
+
+ | 
+MTRRT
+ | 
+ | 
+INPCOM
+ | 
+ | 
+62
+ | 
+
+ | 
+MTTLP
+ | 
+ | 
+INPCOM
+ | 
+ | 
+54
+ | 
+
+ | 
+MULSTR
+ | 
+ | 
+INPCOM
+ | 
+ | 
+23
+ | 
+
+ | 
+MZCHCH
+ | 
+ | 
+INPCHN
+ | 
+ | 
+491
+ | 
+
+ | 
+MZLB
+ | 
+ | 
+INPCHN
+ | 
+ | 
+28
+ | 
+
+ | 
+MZUB
+ | 
+ | 
+INPCHN
+ | 
+ | 
+27
+ | 
+
+ | 
+NANEL
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1243
+ | 
+
+ | 
+NANRVC
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1282-1287
+ | 
+
+ | 
+NAXOP
+ | 
+ | 
+INPCHN
+ | 
+ | 
+20
+ | 
+
+ | 
+NBINOT
+ | 
+ | 
+INPMR4
+ | 
+ | 
+891
+ | 
+
+ | 
+NBYP
+ | 
+ | 
+INPMR4
+ | 
+ | 
+813
+ | 
+
+ | 
+NCCV
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1153
+ | 
+
+ | 
+NCFDCV
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1406
+ | 
+
+ | 
+NCHAN
+ | 
+ | 
+INPCOM
+ | 
+ | 
+1
+ | 
+
+ | 
+NCHCH
+ | 
+ | 
+INPCHN
+ | 
+ | 
+205
+ | 
+
+ | 
+NCKV
+ | 
+ | 
+INPMR4
+ | 
+ | 
+472
+ | 
+
+ | 
+NCLADM
+ | 
+ | 
+INPCOM
+ | 
+ | 
+30
+ | 
+
+ | 
+NCPLEV
+ | 
+ | 
+INPCOM
+ | 
+ | 
+38
+ | 
+
+ | 
+NCVD
+ | 
+ | 
+INPMR4
+ | 
+ | 
+3
+ | 
+
+ | 
+NCVP
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1
+ | 
+
+ | 
+NCVS
+ | 
+ | 
+INPMR4
+ | 
+ | 
+2
+ | 
+
+ | 
+NCVSSI
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1379
+ | 
+
+ | 
+NDELAY
+ | 
+ | 
+INPCOM
+ | 
+ | 
+16
+ | 
+
+ | 
+NDHX
+ | 
+ | 
+INPMR4
+ | 
+ | 
+991
+ | 
+
+ | 
+NDKGRP
+ | 
+ | 
+INPCOM
+ | 
+ | 
+17
+ | 
+
+ | 
+NDRACS
+ | 
+ | 
+INPMR4
+ | 
+ | 
+471
+ | 
+
+ | 
+NELEMT
+ | 
+ | 
+INPMR4
+ | 
+ | 
+10
+ | 
+
+ | 
+NELHTN
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1112-1141
+ | 
+
+ | 
+NELML
+ | 
+ | 
+INPMR4
+ | 
+ | 
+325-364
+ | 
+
+ | 
+NEXPFB
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1008
+ | 
+
+ | 
+NEXSO
+ | 
+ | 
+INPCOM
+ | 
+ | 
+105
+ | 
+
+ | 
+NFT24
+ | 
+ | 
+INPCHN
+ | 
+ | 
+501
+ | 
+
+ | 
+NFUELD
+ | 
+ | 
+INPCOM
+ | 
+ | 
+39
+ | 
+
+ | 
+NGRAIN
+ | 
+ | 
+INPCHN
+ | 
+ | 
+31
+ | 
+
+ | 
+NGRDSP
+ | 
+ | 
+INPCHN
+ | 
+ | 
+18
+ | 
+
+ | 
+NIHX
+ | 
+ | 
+INPMR4
+ | 
+ | 
+470
+ | 
+
+ | 
+NIHXBY
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1171
+ | 
+
+ | 
+NLINMX
+ | 
+ | 
+INPCOM
+ | 
+ | 
+117
+ | 
+
+ | 
+NLNDWL
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1344-1352
+ | 
+
+ | 
+NNBUG1
+ | 
+ | 
+INPCHN
+ | 
+ | 
+48
+ | 
+
+ | 
+NNBUG2
+ | 
+ | 
+INPCHN
+ | 
+ | 
+49
+ | 
+
+ | 
+NODSUM
+ | 
+ | 
+INPCHN
+ | 
+ | 
+156-179
+ | 
+
+ | 
+NOEQLE
+ | 
+ | 
+INPCOM
+ | 
+ | 
+80
+ | 
+
+ | 
+NOEQPN
+ | 
+ | 
+INPCOM
+ | 
+ | 
+50
+ | 
+
+ | 
+NOFDBK
+ | 
+ | 
+INPCOM
+ | 
+ | 
+89
+ | 
+
+ | 
+NONE
+ | 
+ | 
+INPCHN
+ | 
+ | 
+349-360
+ | 
+
+ | 
+NONE
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1447-1462
+ | 
+
+ | 
+NONE
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1463-1474
+ | 
+
+ | 
+NONE
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1899-1910
+ | 
+
+ | 
+NONE
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1923-1982
+ | 
+
+ | 
+NONE
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1899-1910
+ | 
+
+ | 
+NONE
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1923-1934
+ | 
+
+ | 
+NONE
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1959-1982
+ | 
+
+ | 
+NONE
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1899-1982
+ | 
+
+ | 
+NONEU0
+ | 
+ | 
+INPCOM
+ | 
+ | 
+21
+ | 
+
+ | 
+NOREAC
+ | 
+ | 
+INPCOM
+ | 
+ | 
+41
+ | 
+
+ | 
+NOSTRN
+ | 
+ | 
+INPCHN
+ | 
+ | 
+35
+ | 
+
+ | 
+NPDKST
+ | 
+ | 
+INPCOM
+ | 
+ | 
+46
+ | 
+
+ | 
+NPIN
+ | 
+ | 
+INPCHN
+ | 
+ | 
+25
+ | 
+
+ | 
+NPK
+ | 
+ | 
+INPCOM
+ | 
+ | 
+10
+ | 
+
+ | 
+NPLIN
+ | 
+ | 
+INPCHN
+ | 
+ | 
+37-44
+ | 
+
+ | 
+NPLN
+ | 
+ | 
+INPCHN
+ | 
+ | 
+4
+ | 
+
+ | 
+NPMPBY
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1182
+ | 
+
+ | 
+NPOWDK
+ | 
+ | 
+INPCOM
+ | 
+ | 
+45
+ | 
+
+ | 
+NPREAT
+ | 
+ | 
+INPCOM
+ | 
+ | 
+18
+ | 
+
+ | 
+NPRES
+ | 
+ | 
+INPCOM
+ | 
+ | 
+19
+ | 
+
+ | 
+NPUMP
+ | 
+ | 
+INPMR4
+ | 
+ | 
+405
+ | 
+
+ | 
+NREFB
+ | 
+ | 
+INPCHN
+ | 
+ | 
+5
+ | 
+
+ | 
+NREFT
+ | 
+ | 
+INPCHN
+ | 
+ | 
+6
+ | 
+
+ | 
+NROW
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1398-1401
+ | 
+
+ | 
+NRPI
+ | 
+ | 
+INPCHN
+ | 
+ | 
+70
+ | 
+
+ | 
+NRPI1
+ | 
+ | 
+INPCHN
+ | 
+ | 
+71
+ | 
+
+ | 
+NRPI2
+ | 
+ | 
+INPCHN
+ | 
+ | 
+72
+ | 
+
+ | 
+NRPI3
+ | 
+ | 
+INPCHN
+ | 
+ | 
+73
+ | 
+
+ | 
+NRREAC
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1292
+ | 
+
+ | 
+NRRNGS
+ | 
+ | 
+INPCOM
+ | 
+ | 
+60
+ | 
+
+ | 
+NSCRVC
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1274
+ | 
+
+ | 
+NSEGCR
+ | 
+ | 
+INPCOM
+ | 
+ | 
+78
+ | 
+
+ | 
+NSEGGD
+ | 
+ | 
+INPMR4
+ | 
+ | 
+9
+ | 
+
+ | 
+NSEGGP
+ | 
+ | 
+INPMR4
+ | 
+ | 
+7
+ | 
+
+ | 
+NSEGGS
+ | 
+ | 
+INPMR4
+ | 
+ | 
+8
+ | 
+
+ | 
+NSEGLD
+ | 
+ | 
+INPMR4
+ | 
+ | 
+6
+ | 
+
+ | 
+NSEGLP
+ | 
+ | 
+INPMR4
+ | 
+ | 
+4
+ | 
+
+ | 
+NSEGLS
+ | 
+ | 
+INPMR4
+ | 
+ | 
+5
+ | 
+
+ | 
+NSEGMP
+ | 
+ | 
+INPCHN
+ | 
+ | 
+361
+ | 
+
+ | 
+NSGN
+ | 
+ | 
+INPMR4
+ | 
+ | 
+839
+ | 
+
+ | 
+NSKIP
+ | 
+ | 
+INPCHN
+ | 
+ | 
+51-58
+ | 
+
+ | 
+NSLEEX
+ | 
+ | 
+INPCOM
+ | 
+ | 
+42
+ | 
+
+ | 
+NSRMTB
+ | 
+ | 
+INPCOM
+ | 
+ | 
+43
+ | 
+
+ | 
+NSTEP
+ | 
+ | 
+INPCOM
+ | 
+ | 
+15
+ | 
+
+ | 
+NSTRCV
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1313
+ | 
+
+ | 
+NSUBAS
+ | 
+ | 
+INPCHN
+ | 
+ | 
+26
+ | 
+
+ | 
+NSUBTC
+ | 
+ | 
+INPCOM
+ | 
+ | 
+51
+ | 
+
+ | 
+NSUBTR
+ | 
+ | 
+INPCOM
+ | 
+ | 
+59
+ | 
+
+ | 
+NT
+ | 
+ | 
+INPCHN
+ | 
+ | 
+14
+ | 
+
+ | 
+NT0TAB
+ | 
+ | 
+INPCOM
+ | 
+ | 
+22
+ | 
+
+ | 
+NTGPT
+ | 
+ | 
+INPMR4
+ | 
+ | 
+512
+ | 
+
+ | 
+NTHKPW
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1366
+ | 
+
+ | 
+NTLWBY
+ | 
+ | 
+INPMR4
+ | 
+ | 
+814-821
+ | 
+
+ | 
+NTNODE
+ | 
+ | 
+INPMR4
+ | 
+ | 
+513-612
+ | 
+
+ | 
+NULLCFD
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1411
+ | 
+
+ | 
+NULLD3
+ | 
+ | 
+INPCOM
+ | 
+ | 
+86
+ | 
+
+ | 
+NULPT1
+ | 
+ | 
+INPCHN
+ | 
+ | 
+542
+ | 
+
+ | 
+NULST1
+ | 
+ | 
+INPCHN
+ | 
+ | 
+221
+ | 
+
+ | 
+NUMKLT
+ | 
+ | 
+INPCHN
+ | 
+ | 
+219
+ | 
+
+ | 
+NUMWAL
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1320-1322
+ | 
+
+ | 
+NVALVE
+ | 
+ | 
+INPMR4
+ | 
+ | 
+973
+ | 
+
+ | 
+NVNDWL
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1335-1343
+ | 
+
+ | 
+NZNODE
+ | 
+ | 
+INPCHN
+ | 
+ | 
+7-13
+ | 
+
+ | 
+NZONF
+ | 
+ | 
+INPCHN
+ | 
+ | 
+129-131
+ | 
+
+ | 
+OLDBDK
+ | 
+ | 
+POWINA
+ | 
+ | 
+16-21
+ | 
+
+ | 
+OLDBDT
+ | 
+ | 
+POWINA
+ | 
+ | 
+28
+ | 
+
+ | 
+OLDDKL
+ | 
+ | 
+POWINA
+ | 
+ | 
+22-27
+ | 
+
+ | 
+OPCDUM
+ | 
+ | 
+OPCIN
+ | 
+ | 
+153
+ | 
+
+ | 
+OPCDUM
+ | 
+ | 
+OPCIN
+ | 
+ | 
+156-250
+ | 
+
+ | 
+ORFIN
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4540
+ | 
+
+ | 
+P0GAS
+ | 
+ | 
+PMATCH
+ | 
+ | 
+27
+ | 
+
+ | 
+PCFAIL
+ | 
+ | 
+FUELIN
+ | 
+ | 
+19
+ | 
+
+ | 
+PCVSSI
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+5294-5303
+ | 
+
+ | 
+PD
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3958
+ | 
+
+ | 
+PD
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4018
+ | 
+
+ | 
+PD
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4078
+ | 
+
+ | 
+PD
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4138
+ | 
+
+ | 
+PDEC
+ | 
+ | 
+PRIMIN
+ | 
+ | 
+2
+ | 
+
+ | 
+PDEC1
+ | 
+ | 
+PRIMIN
+ | 
+ | 
+3
+ | 
+
+ | 
+PDEC2
+ | 
+ | 
+PRIMIN
+ | 
+ | 
+4
+ | 
+
+ | 
+PERABY
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2921-2928
+ | 
+
+ | 
+PERDBY
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2929-2936
+ | 
+
+ | 
+PERFS
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4276-4281
+ | 
+
+ | 
+PERFSI
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4432-4437
+ | 
+
+ | 
+PERFSO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4438-4443
+ | 
+
+ | 
+PERGV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4270-4275
+ | 
+
+ | 
+PERGVO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4426-4431
+ | 
+
+ | 
+PERPTD
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3528-3531
+ | 
+
+ | 
+PERPTX
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3524-3527
+ | 
+
+ | 
+PERSPD
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3520-3523
+ | 
+
+ | 
+PERSPX
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3516-3519
+ | 
+
+ | 
+PERTID
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3536-3539
+ | 
+
+ | 
+PERTIX
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3532-3535
+ | 
+
+ | 
+PERVAC
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4252-4257
+ | 
+
+ | 
+PERWL2
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4373-4402
+ | 
+
+ | 
+PFIS
+ | 
+ | 
+COOLIN
+ | 
+ | 
+105-124
+ | 
+
+ | 
+PGRMIN
+ | 
+ | 
+COOLIN
+ | 
+ | 
+183
+ | 
+
+ | 
+PHPROF
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3986-3991
+ | 
+
+ | 
+PHPROF
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4046-4051
+ | 
+
+ | 
+PHPROF
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4106-4111
+ | 
+
+ | 
+PHPROF
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4166-4171
+ | 
+
+ | 
+PHPTI
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3959
+ | 
+
+ | 
+PHPTI
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4019
+ | 
+
+ | 
+PHPTI
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4079
+ | 
+
+ | 
+PHPTI
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4139
+ | 
+
+ | 
+PHTIME
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3980-3985
+ | 
+
+ | 
+PHTIME
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4040-4045
+ | 
+
+ | 
+PHTIME
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4100-4105
+ | 
+
+ | 
+PHTIME
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4160-4165
+ | 
+
+ | 
+PINMIN
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3453
+ | 
+
+ | 
+PINSW
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3945
+ | 
+
+ | 
+PINSW
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4005
+ | 
+
+ | 
+PINSW
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4065
+ | 
+
+ | 
+PINSW
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4125
+ | 
+
+ | 
+PITCHA
+ | 
+ | 
+POWINA
+ | 
+ | 
+410
+ | 
+
+ | 
+PITCHG
+ | 
+ | 
+POWINA
+ | 
+ | 
+409
+ | 
+
+ | 
+PITCHT
+ | 
+ | 
+POWINA
+ | 
+ | 
+411
+ | 
+
+ | 
+PLENL
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+53
+ | 
+
+ | 
+PLIN
+ | 
+ | 
+POWINC
+ | 
+ | 
+45-52
+ | 
+
+ | 
+PLUT1
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1248
+ | 
+
+ | 
+PLUT10
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1257
+ | 
+
+ | 
+PLUT2
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1249
+ | 
+
+ | 
+PLUT3
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1250
+ | 
+
+ | 
+PLUT4
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1251
+ | 
+
+ | 
+PLUT5
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1252
+ | 
+
+ | 
+PLUT6
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1253
+ | 
+
+ | 
+PLUT7
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1254
+ | 
+
+ | 
+PLUT8
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1255
+ | 
+
+ | 
+PLUT9
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1256
+ | 
+
+ | 
+PMPEFR
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1947-1958
+ | 
+
+ | 
+PMPEFR
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1947-1958
+ | 
+
+ | 
+PMPEFR
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1947-1958
+ | 
+
+ | 
+PMPEFR
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1947-1958
+ | 
+
+ | 
+PMPFLR
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1935-1946
+ | 
+
+ | 
+PMPFLR
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1935-1946
+ | 
+
+ | 
+PMPFLR
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1935-1946
+ | 
+
+ | 
+PMPFLR
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1935-1946
+ | 
+
+ | 
+PMPHD
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3657-3719
+ | 
+
+ | 
+PMPINR
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1899-1910
+ | 
+
+ | 
+PMPINR
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1899-1910
+ | 
+
+ | 
+PMPINR
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1899-1910
+ | 
+
+ | 
+PMPSPR
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1923-1934
+ | 
+
+ | 
+PMPSPR
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1923-1934
+ | 
+
+ | 
+PMPSPR
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1923-1934
+ | 
+
+ | 
+PMPTQ
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3720-3800
+ | 
+
+ | 
+POD
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3944
+ | 
+
+ | 
+POD
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4004
+ | 
+
+ | 
+POD
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4064
+ | 
+
+ | 
+POD
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4124
+ | 
+
+ | 
+PORCSS
+ | 
+ | 
+PMATCH
+ | 
+ | 
+92
+ | 
+
+ | 
+PORMSS
+ | 
+ | 
+PMATCH
+ | 
+ | 
+91
+ | 
+
+ | 
+POROSS
+ | 
+ | 
+PMATCH
+ | 
+ | 
+90
+ | 
+
+ | 
+POW
+ | 
+ | 
+POWINA
+ | 
+ | 
+1
+ | 
+
+ | 
+POWLVL
+ | 
+ | 
+POWINA
+ | 
+ | 
+325-364
+ | 
+
+ | 
+POWTIM
+ | 
+ | 
+POWINA
+ | 
+ | 
+365-404
+ | 
+
+ | 
+POWTOT
+ | 
+ | 
+POWINA
+ | 
+ | 
+3
+ | 
+
+ | 
+PPLCV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4723-4760
+ | 
+
+ | 
+PREATB
+ | 
+ | 
+POWINA
+ | 
+ | 
+29-48
+ | 
+
+ | 
+PREATM
+ | 
+ | 
+POWINA
+ | 
+ | 
+49-68
+ | 
+
+ | 
+PRESG0
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1461-1498
+ | 
+
+ | 
+PRETAB
+ | 
+ | 
+PRIMIN
+ | 
+ | 
+5-24
+ | 
+
+ | 
+PRETB2
+ | 
+ | 
+POWINA
+ | 
+ | 
+100-179
+ | 
+
+ | 
+PRETM2
+ | 
+ | 
+POWINA
+ | 
+ | 
+180-259
+ | 
+
+ | 
+PRETME
+ | 
+ | 
+PRIMIN
+ | 
+ | 
+25-44
+ | 
+
+ | 
+PRFAIL
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1177
+ | 
+
+ | 
+PRFRA1
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2905-2912
+ | 
+
+ | 
+PRFRA2
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2913-2920
+ | 
+
+ | 
+PRSDRC
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3449-3452
+ | 
+
+ | 
+PRSFTN
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1297
+ | 
+
+ | 
+PRSHAP
+ | 
+ | 
+POWINC
+ | 
+ | 
+256
+ | 
+
+ | 
+PRSIHX
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3445-3448
+ | 
+
+ | 
+PRSMIN
+ | 
+ | 
+PMATCM
+ | 
+ | 
+605
+ | 
+
+ | 
+PRSTY
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1073-1080
+ | 
+
+ | 
+PRTDEL
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1265
+ | 
+
+ | 
+PRTSTR
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1264
+ | 
+
+ | 
+PSCRAM
+ | 
+ | 
+OPCIN
+ | 
+ | 
+24
+ | 
+
+ | 
+PSHAPB
+ | 
+ | 
+POWINC
+ | 
+ | 
+319-366
+ | 
+
+ | 
+PSHAPC
+ | 
+ | 
+POWINC
+ | 
+ | 
+271-318
+ | 
+
+ | 
+PSHAPE
+ | 
+ | 
+POWINC
+ | 
+ | 
+6-29
+ | 
+
+ | 
+PSHAPR
+ | 
+ | 
+POWINC
+ | 
+ | 
+30-44
+ | 
+
+ | 
+PSHPBT
+ | 
+ | 
+POWINC
+ | 
+ | 
+262-266
+ | 
+
+ | 
+PSHPBY
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2801-2856
+ | 
+
+ | 
+PSHPTP
+ | 
+ | 
+POWINC
+ | 
+ | 
+257-261
+ | 
+
+ | 
+PTCHRA
+ | 
+ | 
+POWINA
+ | 
+ | 
+450
+ | 
+
+ | 
+PTCHRT
+ | 
+ | 
+POWINA
+ | 
+ | 
+451
+ | 
+
+ | 
+PUBYU
+ | 
+ | 
+POWINA
+ | 
+ | 
+405
+ | 
+
+ | 
+PUHALF
+ | 
+ | 
+OPCIN
+ | 
+ | 
+152
+ | 
+
+ | 
+PUZRTP
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1300-1315
+ | 
+
+ | 
+PW
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3936
+ | 
+
+ | 
+PW
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3996
+ | 
+
+ | 
+PW
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4056
+ | 
+
+ | 
+PW
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4116
+ | 
+
+ | 
+PWLVL2
+ | 
+ | 
+POWINA
+ | 
+ | 
+881-920
+ | 
+
+ | 
+PWO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3946
+ | 
+
+ | 
+PWO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4006
+ | 
+
+ | 
+PWO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4066
+ | 
+
+ | 
+PWO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4126
+ | 
+
+ | 
+PWTIM2
+ | 
+ | 
+POWINA
+ | 
+ | 
+921-960
+ | 
+
+ | 
+PX
+ | 
+ | 
+PRIMIN
+ | 
+ | 
+1
+ | 
+
+ | 
+QA1
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1110
+ | 
+
+ | 
+QA2
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1111
+ | 
+
+ | 
+QA3
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1112
+ | 
+
+ | 
+QA4
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1113
+ | 
+
+ | 
+QA5
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1114
+ | 
+
+ | 
+QEMAX
+ | 
+ | 
+COOLIN
+ | 
+ | 
+196
+ | 
+
+ | 
+QETOT
+ | 
+ | 
+POWINA
+ | 
+ | 
+961-968
+ | 
+
+ | 
+QFACT
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3954-3955
+ | 
+
+ | 
+QFACT
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4014-4015
+ | 
+
+ | 
+QFACT
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4074-4075
+ | 
+
+ | 
+QFACT
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4134-4135
+ | 
+
+ | 
+QKD
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1274
+ | 
+
+ | 
+QLAX
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1120
+ | 
+
+ | 
+QLAX2
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1121
+ | 
+
+ | 
+QPG
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1089
+ | 
+
+ | 
+QPORE
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1084
+ | 
+
+ | 
+QPU
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1204
+ | 
+
+ | 
+QSTAR
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1202
+ | 
+
+ | 
+QSWL
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1082
+ | 
+
+ | 
+QV
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1091
+ | 
+
+ | 
+QV1
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1093
+ | 
+
+ | 
+RAFPLA
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1158
+ | 
+
+ | 
+RAFPSM
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1159
+ | 
+
+ | 
+RAFUZ
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+197-220
+ | 
+
+ | 
+RALUDI
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1284
+ | 
+
+ | 
+RALUFZ
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1285
+ | 
+
+ | 
+RAPIDEUT
+ | 
+ | 
+FUELIN
+ | 
+ | 
+29
+ | 
+
+ | 
+RBR
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+54-77
+ | 
+
+ | 
+RBR0
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+180
+ | 
+
+ | 
+RBRPL
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+102
+ | 
+
+ | 
+RCALBY
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2761-2768
+ | 
+
+ | 
+RCAUBY
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2769-2776
+ | 
+
+ | 
+RCBARR
+ | 
+ | 
+POWINA
+ | 
+ | 
+452
+ | 
+
+ | 
+RCBLBY
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2777-2784
+ | 
+
+ | 
+RCBUBY
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2785-2792
+ | 
+
+ | 
+RCDBY
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2793-2800
+ | 
+
+ | 
+RCORE
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+5008
+ | 
+
+ | 
+RCSHDR
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3560-3563
+ | 
+
+ | 
+RCSHHX
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3556-3559
+ | 
+
+ | 
+RCTUDR
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3568-3571
+ | 
+
+ | 
+RCTUHX
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3564-3567
+ | 
+
+ | 
+RDEXCF
+ | 
+ | 
+POWINA
+ | 
+ | 
+412
+ | 
+
+ | 
+RDEXPC
+ | 
+ | 
+POWINA
+ | 
+ | 
+78
+ | 
+
+ | 
+REAINS
+ | 
+ | 
+POWINA
+ | 
+ | 
+417
+ | 
+
+ | 
+REAITR
+ | 
+ | 
+OPCIN
+ | 
+ | 
+8
+ | 
+
+ | 
+REBRK
+ | 
+ | 
+FUELIN
+ | 
+ | 
+11
+ | 
+
+ | 
+REDPTO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3966
+ | 
+
+ | 
+REDPTO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4026
+ | 
+
+ | 
+REDPTO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4086
+ | 
+
+ | 
+REDPTO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4146
+ | 
+
+ | 
+REFDEN
+ | 
+ | 
+PMATCH
+ | 
+ | 
+72
+ | 
+
+ | 
+REFLAM
+ | 
+ | 
+COOLIN
+ | 
+ | 
+179
+ | 
+
+ | 
+RELAM
+ | 
+ | 
+COOLIN
+ | 
+ | 
+7
+ | 
+
+ | 
+RELAMV
+ | 
+ | 
+COOLIN
+ | 
+ | 
+193
+ | 
+
+ | 
+REORFT
+ | 
+ | 
+COOLIN
+ | 
+ | 
+191
+ | 
+
+ | 
+RER
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+78-101
+ | 
+
+ | 
+RER0
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+181
+ | 
+
+ | 
+RERPL
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+103
+ | 
+
+ | 
+RESMLT
+ | 
+ | 
+COOLIN
+ | 
+ | 
+166
+ | 
+
+ | 
+RETRAN
+ | 
+ | 
+COOLIN
+ | 
+ | 
+9
+ | 
+
+ | 
+REYTRV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4537
+ | 
+
+ | 
+RG
+ | 
+ | 
+PMATCH
+ | 
+ | 
+59
+ | 
+
+ | 
+RGAS
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1124
+ | 
+
+ | 
+RGASC
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1690
+ | 
+
+ | 
+RGASSI
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1086
+ | 
+
+ | 
+RGFV
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1216
+ | 
+
+ | 
+RGSV
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1217
+ | 
+
+ | 
+RHOCD
+ | 
+ | 
+FUELIN
+ | 
+ | 
+5
+ | 
+
+ | 
+RHOCG
+ | 
+ | 
+PMATCH
+ | 
+ | 
+58
+ | 
+
+ | 
+RHOCR
+ | 
+ | 
+PMATCH
+ | 
+ | 
+51-57
+ | 
+
+ | 
+RHOCRD
+ | 
+ | 
+POWINA
+ | 
+ | 
+440
+ | 
+
+ | 
+RHOCSI
+ | 
+ | 
+PMATCH
+ | 
+ | 
+37-43
+ | 
+
+ | 
+RHOCSO
+ | 
+ | 
+PMATCH
+ | 
+ | 
+44-50
+ | 
+
+ | 
+RHONAR
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2540-2577
+ | 
+
+ | 
+RHOREF
+ | 
+ | 
+FUELIN
+ | 
+ | 
+24
+ | 
+
+ | 
+RHOTAB
+ | 
+ | 
+PMATCM
+ | 
+ | 
+91-250
+ | 
+
+ | 
+RHOTEM
+ | 
+ | 
+PMATCM
+ | 
+ | 
+251-410
+ | 
+
+ | 
+RHOZN
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1316-1323
+ | 
+
+ | 
+RHOZRO
+ | 
+ | 
+POWINA
+ | 
+ | 
+470
+ | 
+
+ | 
+RHSLBT
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1198
+ | 
+
+ | 
+RHSLTP
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1199
+ | 
+
+ | 
+RHSSLQ
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1206
+ | 
+
+ | 
+RHSSSO
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1215
+ | 
+
+ | 
+RINFP
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+104-127
+ | 
+
+ | 
+RITB
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3801-3804
+ | 
+
+ | 
+RIZNC
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+224-247
+ | 
+
+ | 
+RIZNM
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+248-271
+ | 
+
+ | 
+RLEQ
+ | 
+ | 
+PMATCM
+ | 
+ | 
+603
+ | 
+
+ | 
+RODID
+ | 
+ | 
+POWINA
+ | 
+ | 
+429
+ | 
+
+ | 
+RODOD
+ | 
+ | 
+POWINA
+ | 
+ | 
+430
+ | 
+
+ | 
+ROFC
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1099
+ | 
+
+ | 
+ROFF
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1098
+ | 
+
+ | 
+ROGSPI
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1296
+ | 
+
+ | 
+ROTB
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3805-3808
+ | 
+
+ | 
+ROUGHG
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1833-1860
+ | 
+
+ | 
+ROUGHL
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+722-861
+ | 
+
+ | 
+ROUTFP
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+128-151
+ | 
+
+ | 
+RR1TC
+ | 
+ | 
+POWINA
+ | 
+ | 
+427
+ | 
+
+ | 
+RR2TC
+ | 
+ | 
+POWINA
+ | 
+ | 
+428
+ | 
+
+ | 
+RREF
+ | 
+ | 
+PMATCH
+ | 
+ | 
+63
+ | 
+
+ | 
+RST
+ | 
+ | 
+PMATCH
+ | 
+ | 
+61
+ | 
+
+ | 
+RUEQ
+ | 
+ | 
+PMATCM
+ | 
+ | 
+604
+ | 
+
+ | 
+RVHTAB
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4258-4269
+ | 
+
+ | 
+RVHTMP
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4270-4281
+ | 
+
+ | 
+RW5RV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4536
+ | 
+
+ | 
+SCCTC
+ | 
+ | 
+FUELIN
+ | 
+ | 
+204
+ | 
+
+ | 
+SCDAC
+ | 
+ | 
+FUELIN
+ | 
+ | 
+202
+ | 
+
+ | 
+SCDLA
+ | 
+ | 
+FUELIN
+ | 
+ | 
+201
+ | 
+
+ | 
+SCEUR
+ | 
+ | 
+FUELIN
+ | 
+ | 
+203
+ | 
+
+ | 
+SCRTAB
+ | 
+ | 
+POWINA
+ | 
+ | 
+80-89
+ | 
+
+ | 
+SCRTME
+ | 
+ | 
+POWINA
+ | 
+ | 
+90-99
+ | 
+
+ | 
+SECLIM
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1267
+ | 
+
+ | 
+SegLossCoefTableID
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1441
+ | 
+
+ | 
+SER
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+182-188
+ | 
+
+ | 
+SHRDID
+ | 
+ | 
+POWINA
+ | 
+ | 
+434-436
+ | 
+
+ | 
+SHRDLN
+ | 
+ | 
+POWINA
+ | 
+ | 
+431-433
+ | 
+
+ | 
+SHRDOD
+ | 
+ | 
+POWINA
+ | 
+ | 
+437-439
+ | 
+
+ | 
+SIGSTB
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4535
+ | 
+
+ | 
+SLA
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3964
+ | 
+
+ | 
+SLA
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4024
+ | 
+
+ | 
+SLA
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4084
+ | 
+
+ | 
+SLA
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4144
+ | 
+
+ | 
+SLANTD
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3608-3611
+ | 
+
+ | 
+SLANTX
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3604-3607
+ | 
+
+ | 
+SLLMAX
+ | 
+ | 
+POWINA
+ | 
+ | 
+408
+ | 
+
+ | 
+SLMIN
+ | 
+ | 
+COOLIN
+ | 
+ | 
+73
+ | 
+
+ | 
+SLRVC
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4450-4455
+ | 
+
+ | 
+SPFIN
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+5312-5315
+ | 
+
+ | 
+SPLITF
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+5326
+ | 
+
+ | 
+SRFMLE
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1231
+ | 
+
+ | 
+SRFSTZ
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+159-165
+ | 
+
+ | 
+SRLEN
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3825-3828
+ | 
+
+ | 
+STCOR
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+176
+ | 
+
+ | 
+STEBOL
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1107
+ | 
+
+ | 
+STRCRA
+ | 
+ | 
+POWINC
+ | 
+ | 
+378-425
+ | 
+
+ | 
+StructEX
+ | 
+ | 
+PMATCH
+ | 
+ | 
+148
+ | 
+
+ | 
+SUFU
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1157
+ | 
+
+ | 
+T0TAB
+ | 
+ | 
+PRIMIN
+ | 
+ | 
+45-64
+ | 
+
+ | 
+T0TME
+ | 
+ | 
+PRIMIN
+ | 
+ | 
+65-84
+ | 
+
+ | 
+TAIRVC
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4403
+ | 
+
+ | 
+TAUGAS
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1861-1898
+ | 
+
+ | 
+TAUINV
+ | 
+ | 
+PMATCH
+ | 
+ | 
+104
+ | 
+
+ | 
+TAUPEN
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4977
+ | 
+
+ | 
+TAUUP
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2693
+ | 
+
+ | 
+TCLMAX
+ | 
+ | 
+OPCIN
+ | 
+ | 
+12
+ | 
+
+ | 
+TCOSTP
+ | 
+ | 
+OPCIN
+ | 
+ | 
+9
+ | 
+
+ | 
+TCVSSI
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+5284-5293
+ | 
+
+ | 
+TDTMIN
+ | 
+ | 
+OPCIN
+ | 
+ | 
+105-114
+ | 
+
+ | 
+TECLMN
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1184
+ | 
+
+ | 
+TECLRL
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1185
+ | 
+
+ | 
+TEFAIL
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1175
+ | 
+
+ | 
+TELIQ
+ | 
+ | 
+PMATCM
+ | 
+ | 
+813-815
+ | 
+
+ | 
+TEMDLT
+ | 
+ | 
+COOLIN
+ | 
+ | 
+167
+ | 
+
+ | 
+TESOL
+ | 
+ | 
+PMATCM
+ | 
+ | 
+810-812
+ | 
+
+ | 
+TFIS
+ | 
+ | 
+COOLIN
+ | 
+ | 
+85-104
+ | 
+
+ | 
+TFLIQ
+ | 
+ | 
+PMATCM
+ | 
+ | 
+794-801
+ | 
+
+ | 
+TFSOL
+ | 
+ | 
+PMATCM
+ | 
+ | 
+786-793
+ | 
+
+ | 
+THETA1
+ | 
+ | 
+COOLIN
+ | 
+ | 
+67
+ | 
+
+ | 
+THETA2
+ | 
+ | 
+COOLIN
+ | 
+ | 
+68
+ | 
+
+ | 
+ThickWallTableID
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1414
+ | 
+
+ | 
+THKWAL
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4939-4976
+ | 
+
+ | 
+THRLIM
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1268
+ | 
+
+ | 
+THT2CV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4679
+ | 
+
+ | 
+THT2VL
+ | 
+ | 
+PRIMIN
+ | 
+ | 
+96
+ | 
+
+ | 
+TIFP
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1173
+ | 
+
+ | 
+TIMAX
+ | 
+ | 
+OPCIN
+ | 
+ | 
+7
+ | 
+
+ | 
+TIMCNS
+ | 
+ | 
+PMATCH
+ | 
+ | 
+1
+ | 
+
+ | 
+TIMDBG
+ | 
+ | 
+PRIMIN
+ | 
+ | 
+92
+ | 
+
+ | 
+TIMMIX
+ | 
+ | 
+PRIMIN
+ | 
+ | 
+95
+ | 
+
+ | 
+TINSRT
+ | 
+ | 
+POWINA
+ | 
+ | 
+416
+ | 
+
+ | 
+TIPLMX
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1167
+ | 
+
+ | 
+TIPNMX
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1278
+ | 
+
+ | 
+TIRRFU
+ | 
+ | 
+FUELIN
+ | 
+ | 
+200
+ | 
+
+ | 
+TLIMIT
+ | 
+ | 
+POWINA
+ | 
+ | 
+418
+ | 
+
+ | 
+TLPEL
+ | 
+ | 
+POWINA
+ | 
+ | 
+449
+ | 
+
+ | 
+TLPRRC
+ | 
+ | 
+POWINA
+ | 
+ | 
+413
+ | 
+
+ | 
+TMAINS
+ | 
+ | 
+OPCIN
+ | 
+ | 
+115-149
+ | 
+
+ | 
+TMDBP4
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1
+ | 
+
+ | 
+TME
+ | 
+ | 
+PMATCM
+ | 
+ | 
+899-901
+ | 
+
+ | 
+TMF
+ | 
+ | 
+PMATCM
+ | 
+ | 
+411-418
+ | 
+
+ | 
+TMFAIL
+ | 
+ | 
+COOLIN
+ | 
+ | 
+186-188
+ | 
+
+ | 
+TMIDFG
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1218
+ | 
+
+ | 
+TMO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3947
+ | 
+
+ | 
+TMO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4007
+ | 
+
+ | 
+TMO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4067
+ | 
+
+ | 
+TMO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4127
+ | 
+
+ | 
+TMPMTB
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3273-3440
+ | 
+
+ | 
+TNAO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3948
+ | 
+
+ | 
+TNAO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4008
+ | 
+
+ | 
+TNAO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4068
+ | 
+
+ | 
+TNAO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4128
+ | 
+
+ | 
+TNAX
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3937
+ | 
+
+ | 
+TNAX
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3997
+ | 
+
+ | 
+TNAX
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4057
+ | 
+
+ | 
+TNAX
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4117
+ | 
+
+ | 
+TNTRY
+ | 
+ | 
+PRIMIN
+ | 
+ | 
+85
+ | 
+
+ | 
+TOPLSS
+ | 
+ | 
+PMATCH
+ | 
+ | 
+147
+ | 
+
+ | 
+TPCOEN
+ | 
+ | 
+OPCIN
+ | 
+ | 
+91
+ | 
+
+ | 
+TPCOLE
+ | 
+ | 
+OPCIN
+ | 
+ | 
+90
+ | 
+
+ | 
+TPCOST
+ | 
+ | 
+OPCIN
+ | 
+ | 
+89
+ | 
+
+ | 
+TPDMIN
+ | 
+ | 
+COOLIN
+ | 
+ | 
+177
+ | 
+
+ | 
+TPLCV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4685-4722
+ | 
+
+ | 
+TPLIN
+ | 
+ | 
+POWINC
+ | 
+ | 
+53-60
+ | 
+
+ | 
+TPRFCI
+ | 
+ | 
+OPCIN
+ | 
+ | 
+18
+ | 
+
+ | 
+TPWH
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+5244-5283
+ | 
+
+ | 
+TPWMC
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+5204-5243
+ | 
+
+ | 
+TR
+ | 
+ | 
+PMATCM
+ | 
+ | 
+419
+ | 
+
+ | 
+TREFCV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1651-1688
+ | 
+
+ | 
+TRFU
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1692
+ | 
+
+ | 
+TRKLSC
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1959-1970
+ | 
+
+ | 
+TRKLSC
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1959-1970
+ | 
+
+ | 
+TRKLSC
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1959-1982
+ | 
+
+ | 
+TSEP1
+ | 
+ | 
+PMATCH
+ | 
+ | 
+69
+ | 
+
+ | 
+TSEP2
+ | 
+ | 
+PMATCH
+ | 
+ | 
+70
+ | 
+
+ | 
+TSNK
+ | 
+ | 
+PMATCH
+ | 
+ | 
+9
+ | 
+
+ | 
+TTRANC
+ | 
+ | 
+PMATCH
+ | 
+ | 
+81
+ | 
+
+ | 
+TTRANM
+ | 
+ | 
+PMATCH
+ | 
+ | 
+80
+ | 
+
+ | 
+TUPL
+ | 
+ | 
+COOLIN
+ | 
+ | 
+74
+ | 
+
+ | 
+TW6RV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4528-4533
+ | 
+
+ | 
+TWASTI
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+272
+ | 
+
+ | 
+TWASTO
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+273
+ | 
+
+ | 
+U0CVGS
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1691
+ | 
+
+ | 
+UACH1
+ | 
+ | 
+COOLIN
+ | 
+ | 
+189
+ | 
+
+ | 
+UACH2
+ | 
+ | 
+COOLIN
+ | 
+ | 
+190
+ | 
+
+ | 
+UACHM1
+ | 
+ | 
+COOLIN
+ | 
+ | 
+197-200
+ | 
+
+ | 
+UACHM2
+ | 
+ | 
+COOLIN
+ | 
+ | 
+201-204
+ | 
+
+ | 
+UEMELT
+ | 
+ | 
+PMATCM
+ | 
+ | 
+816-818
+ | 
+
+ | 
+UFMELT
+ | 
+ | 
+PMATCM
+ | 
+ | 
+802-809
+ | 
+
+ | 
+UIVOL
+ | 
+ | 
+POWINA
+ | 
+ | 
+77
+ | 
+
+ | 
+UMELT
+ | 
+ | 
+PMATCM
+ | 
+ | 
+902-909
+ | 
+
+ | 
+UN1281
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1281
+ | 
+
+ | 
+UN1282
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1282
+ | 
+
+ | 
+UN1283
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1283
+ | 
+
+ | 
+UNFSMC
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4544
+ | 
+
+ | 
+UNGVMC
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4543
+ | 
+
+ | 
+VFC
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+196
+ | 
+
+ | 
+VFCRD
+ | 
+ | 
+POWINA
+ | 
+ | 
+443
+ | 
+
+ | 
+VFLREF
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+178
+ | 
+
+ | 
+VFNALQ
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1160
+ | 
+
+ | 
+VFNARE
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1163
+ | 
+
+ | 
+VFPLNT
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+177
+ | 
+
+ | 
+VFUREF
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+179
+ | 
+
+ | 
+VIFI
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1145
+ | 
+
+ | 
+VIFULQ
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1162
+ | 
+
+ | 
+VINL
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1149
+ | 
+
+ | 
+VISMC
+ | 
+ | 
+FUELIN
+ | 
+ | 
+6
+ | 
+
+ | 
+VISSC
+ | 
+ | 
+FUELIN
+ | 
+ | 
+8
+ | 
+
+ | 
+VISTR
+ | 
+ | 
+FUELIN
+ | 
+ | 
+7
+ | 
+
+ | 
+VIVG
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1150
+ | 
+
+ | 
+VOIDRA
+ | 
+ | 
+POWINC
+ | 
+ | 
+112-159
+ | 
+
+ | 
+VOLBLI
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+5183-5185
+ | 
+
+ | 
+VOLD
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3960
+ | 
+
+ | 
+VOLD
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4020
+ | 
+
+ | 
+VOLD
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4080
+ | 
+
+ | 
+VOLD
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4140
+ | 
+
+ | 
+VOLGS0
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3612-3649
+ | 
+
+ | 
+VOLLGC
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1423-1460
+ | 
+
+ | 
+VOLMIX
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2692
+ | 
+
+ | 
+VSIHX1
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+5196-5199
+ | 
+
+ | 
+VSIHX2
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+5200-5203
+ | 
+
+ | 
+VSLEXP
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4174-4183
+ | 
+
+ | 
+W0
+ | 
+ | 
+COOLIN
+ | 
+ | 
+47
+ | 
+
+ | 
+WALLH
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1283-1422
+ | 
+
+ | 
+WALLH2
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4343-4372
+ | 
+
+ | 
+WallHeatTableID
+ | 
+ | 
+INPMR4
+ | 
+ | 
+1476
+ | 
+
+ | 
+WALLMC
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1143-1282
+ | 
+
+ | 
+WALMC2
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4313-4342
+ | 
+
+ | 
+WALTH2
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4978-5007
+ | 
+
+ | 
+WALTHK
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4799-4938
+ | 
+
+ | 
+WDOPA
+ | 
+ | 
+POWINC
+ | 
+ | 
+64-111
+ | 
+
+ | 
+WEVI
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3935
+ | 
+
+ | 
+WEVI
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3995
+ | 
+
+ | 
+WEVI
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4055
+ | 
+
+ | 
+WEVI
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4115
+ | 
+
+ | 
+WF0
+ | 
+ | 
+COOLIN
+ | 
+ | 
+84
+ | 
+
+ | 
+WFMIN
+ | 
+ | 
+COOLIN
+ | 
+ | 
+75
+ | 
+
+ | 
+WFMIND
+ | 
+ | 
+COOLIN
+ | 
+ | 
+172
+ | 
+
+ | 
+WFMINS
+ | 
+ | 
+COOLIN
+ | 
+ | 
+76
+ | 
+
+ | 
+WFMNSD
+ | 
+ | 
+COOLIN
+ | 
+ | 
+173
+ | 
+
+ | 
+WFS00
+ | 
+ | 
+COOLIN
+ | 
+ | 
+77
+ | 
+
+ | 
+WPUREF
+ | 
+ | 
+FUELIN
+ | 
+ | 
+26
+ | 
+
+ | 
+WRF
+ | 
+ | 
+PMATCH
+ | 
+ | 
+62
+ | 
+
+ | 
+WST
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1221
+ | 
+
+ | 
+WUREF
+ | 
+ | 
+FUELIN
+ | 
+ | 
+25
+ | 
+
+ | 
+WZRREF
+ | 
+ | 
+FUELIN
+ | 
+ | 
+27
+ | 
+
+ | 
+XCIPL0
+ | 
+ | 
+PMATCH
+ | 
+ | 
+135
+ | 
+
+ | 
+XCIPL1
+ | 
+ | 
+PMATCH
+ | 
+ | 
+136
+ | 
+
+ | 
+XCLDHR
+ | 
+ | 
+PMATCH
+ | 
+ | 
+107-130
+ | 
+
+ | 
+XCMPRS
+ | 
+ | 
+COOLIN
+ | 
+ | 
+219
+ | 
+
+ | 
+XEPSCA
+ | 
+ | 
+PMATCH
+ | 
+ | 
+138
+ | 
+
+ | 
+XEPSFE
+ | 
+ | 
+PMATCH
+ | 
+ | 
+139
+ | 
+
+ | 
+XEPTES
+ | 
+ | 
+PMATCH
+ | 
+ | 
+140
+ | 
+
+ | 
+XEUTHR
+ | 
+ | 
+PMATCH
+ | 
+ | 
+105
+ | 
+
+ | 
+XEVO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3938
+ | 
+
+ | 
+XEVO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3998
+ | 
+
+ | 
+XEVO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4058
+ | 
+
+ | 
+XEVO
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4118
+ | 
+
+ | 
+XEVTES
+ | 
+ | 
+PMATCH
+ | 
+ | 
+141
+ | 
+
+ | 
+XFDVC0
+ | 
+ | 
+PMATCH
+ | 
+ | 
+133
+ | 
+
+ | 
+XFDVC1
+ | 
+ | 
+PMATCH
+ | 
+ | 
+134
+ | 
+
+ | 
+XFPLC0
+ | 
+ | 
+PMATCH
+ | 
+ | 
+131
+ | 
+
+ | 
+XFPLC1
+ | 
+ | 
+PMATCH
+ | 
+ | 
+132
+ | 
+
+ | 
+XGBFRA
+ | 
+ | 
+PMATCH
+ | 
+ | 
+106
+ | 
+
+ | 
+XHTERR
+ | 
+ | 
+PMATCH
+ | 
+ | 
+137
+ | 
+
+ | 
+XKALBY
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2697-2704
+ | 
+
+ | 
+XKAUBY
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2705-2712
+ | 
+
+ | 
+XKBLBY
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2713-2720
+ | 
+
+ | 
+XKBUBY
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2721-2728
+ | 
+
+ | 
+XKDBY
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+2729-2736
+ | 
+
+ | 
+XKHXLS
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3829-3832
+ | 
+
+ | 
+XKLAT
+ | 
+ | 
+COOLIN
+ | 
+ | 
+209-212
+ | 
+
+ | 
+XKORGD
+ | 
+ | 
+COOLIN
+ | 
+ | 
+64
+ | 
+
+ | 
+XKORI
+ | 
+ | 
+COOLIN
+ | 
+ | 
+48-63
+ | 
+
+ | 
+XKRF
+ | 
+ | 
+PMATCH
+ | 
+ | 
+28-34
+ | 
+
+ | 
+XKRLS
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3833-3836
+ | 
+
+ | 
+XKSHDR
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3576-3579
+ | 
+
+ | 
+XKSHHX
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3572-3575
+ | 
+
+ | 
+XKSILS
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3853-3892
+ | 
+
+ | 
+XKSITM
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3893-3932
+ | 
+
+ | 
+XKSOLS
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3837-3840
+ | 
+
+ | 
+XKSTIZ
+ | 
+ | 
+PMATCH
+ | 
+ | 
+11-17
+ | 
+
+ | 
+XKSTOZ
+ | 
+ | 
+PMATCH
+ | 
+ | 
+18-24
+ | 
+
+ | 
+XKSWRL
+ | 
+ | 
+COOLIN
+ | 
+ | 
+214
+ | 
+
+ | 
+XKTAB
+ | 
+ | 
+PMATCM
+ | 
+ | 
+420-579
+ | 
+
+ | 
+XKTB
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3809-3812
+ | 
+
+ | 
+XKTEM
+ | 
+ | 
+PMATCM
+ | 
+ | 
+580-599
+ | 
+
+ | 
+XKTUDR
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3584-3587
+ | 
+
+ | 
+XKTUHX
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3580-3583
+ | 
+
+ | 
+XLAIRV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4408
+ | 
+
+ | 
+XLAORV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4411
+ | 
+
+ | 
+XLE10
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1238
+ | 
+
+ | 
+XLE4
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1232
+ | 
+
+ | 
+XLE5
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1233
+ | 
+
+ | 
+XLE6
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1234
+ | 
+
+ | 
+XLE7
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1235
+ | 
+
+ | 
+XLE8
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1236
+ | 
+
+ | 
+XLE9
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1237
+ | 
+
+ | 
+XLENEL
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+302-441
+ | 
+
+ | 
+XLENGG
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1693-1720
+ | 
+
+ | 
+XLENTR
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+5189-5191
+ | 
+
+ | 
+XLEPT1
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1239
+ | 
+
+ | 
+XLEPT2
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1240
+ | 
+
+ | 
+XLEPT3
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1241
+ | 
+
+ | 
+XLEPT4
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1242
+ | 
+
+ | 
+XLEPT5
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1243
+ | 
+
+ | 
+XLEPT6
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1244
+ | 
+
+ | 
+XLEPT7
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1245
+ | 
+
+ | 
+XLEPT8
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1246
+ | 
+
+ | 
+XLEPT9
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1247
+ | 
+
+ | 
+XLINRT
+ | 
+ | 
+COOLIN
+ | 
+ | 
+220
+ | 
+
+ | 
+XLOGNA
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1324-1331
+ | 
+
+ | 
+XLP8
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1190
+ | 
+
+ | 
+XLP9
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1191
+ | 
+
+ | 
+XLRVC
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4246-4251
+ | 
+
+ | 
+XLTUBE
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+5316-5319
+ | 
+
+ | 
+XLUNRV
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4541
+ | 
+
+ | 
+XMCFMC
+ | 
+ | 
+PMATCH
+ | 
+ | 
+142
+ | 
+
+ | 
+XMCSTW
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+5108-5179
+ | 
+
+ | 
+XMCUI
+ | 
+ | 
+POWINA
+ | 
+ | 
+407
+ | 
+
+ | 
+XMCXAC
+ | 
+ | 
+POWINA
+ | 
+ | 
+79
+ | 
+
+ | 
+XMINL
+ | 
+ | 
+COOLIN
+ | 
+ | 
+170
+ | 
+
+ | 
+XMXMSI
+ | 
+ | 
+PRIMIN
+ | 
+ | 
+93
+ | 
+
+ | 
+XMXMSO
+ | 
+ | 
+PRIMIN
+ | 
+ | 
+94
+ | 
+
+ | 
+XPL10
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1192
+ | 
+
+ | 
+XPL11
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1193
+ | 
+
+ | 
+XPL12
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1194
+ | 
+
+ | 
+XPL5
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1182
+ | 
+
+ | 
+XPL6
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1183
+ | 
+
+ | 
+XPL7
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1189
+ | 
+
+ | 
+XPUZR
+ | 
+ | 
+FUELIN
+ | 
+ | 
+55-198
+ | 
+
+ | 
+XRFSHP
+ | 
+ | 
+POWINC
+ | 
+ | 
+268
+ | 
+
+ | 
+XRNSHP
+ | 
+ | 
+POWINC
+ | 
+ | 
+269
+ | 
+
+ | 
+XRSSHP
+ | 
+ | 
+POWINC
+ | 
+ | 
+270
+ | 
+
+ | 
+XSIGMC
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1332
+ | 
+
+ | 
+XSIGMD
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1334
+ | 
+
+ | 
+XSIGMK
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1333
+ | 
+
+ | 
+XTTUBE
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+5320-5323
+ | 
+
+ | 
+XVISC
+ | 
+ | 
+FUELIN
+ | 
+ | 
+9
+ | 
+
+ | 
+XXNPIN
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+274
+ | 
+
+ | 
+YABOW
+ | 
+ | 
+POWINA
+ | 
+ | 
+466
+ | 
+
+ | 
+YBBOW
+ | 
+ | 
+POWINA
+ | 
+ | 
+467
+ | 
+
+ | 
+YCLAD
+ | 
+ | 
+PMATCH
+ | 
+ | 
+76
+ | 
+
+ | 
+YDELT0
+ | 
+ | 
+POWINA
+ | 
+ | 
+465
+ | 
+
+ | 
+YFUEL
+ | 
+ | 
+PMATCH
+ | 
+ | 
+75
+ | 
+
+ | 
+YKHF
+ | 
+ | 
+POWINA
+ | 
+ | 
+456
+ | 
+
+ | 
+YKNF
+ | 
+ | 
+POWINA
+ | 
+ | 
+455
+ | 
+
+ | 
+YKNNA
+ | 
+ | 
+POWINA
+ | 
+ | 
+457
+ | 
+
+ | 
+YKNSS
+ | 
+ | 
+POWINA
+ | 
+ | 
+458
+ | 
+
+ | 
+YLCLR
+ | 
+ | 
+POWINA
+ | 
+ | 
+460
+ | 
+
+ | 
+YLDTAB
+ | 
+ | 
+PMATCM
+ | 
+ | 
+910-969
+ | 
+
+ | 
+YLDTEM
+ | 
+ | 
+PMATCM
+ | 
+ | 
+970-989
+ | 
+
+ | 
+YRCCR
+ | 
+ | 
+POWINA
+ | 
+ | 
+462
+ | 
+
+ | 
+YRCDOP
+ | 
+ | 
+POWINA
+ | 
+ | 
+464
+ | 
+
+ | 
+YRCGP
+ | 
+ | 
+POWINA
+ | 
+ | 
+463
+ | 
+
+ | 
+YRCRR
+ | 
+ | 
+POWINA
+ | 
+ | 
+461
+ | 
+
+ | 
+YRCUR
+ | 
+ | 
+POWINA
+ | 
+ | 
+459
+ | 
+
+ | 
+YTCUT
+ | 
+ | 
+POWINA
+ | 
+ | 
+469
+ | 
+
+ | 
+ZBRVC
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4404
+ | 
+
+ | 
+ZCENTR
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+3105-3272
+ | 
+
+ | 
+ZCHOBT
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+221
+ | 
+
+ | 
+ZCHOTP
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+222
+ | 
+
+ | 
+ZCVL
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+1575-1612
+ | 
+
+ | 
+ZFISD
+ | 
+ | 
+COOLIN
+ | 
+ | 
+145-162
+ | 
+
+ | 
+ZFISU
+ | 
+ | 
+COOLIN
+ | 
+ | 
+125-144
+ | 
+
+ | 
+ZIHX
+ | 
+ | 
+PRIMIN
+ | 
+ | 
+89
+ | 
+
+ | 
+ZINL
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+42-81
+ | 
+
+ | 
+ZINST
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+5180-5182
+ | 
+
+ | 
+ZOFFST
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+223
+ | 
+
+ | 
+ZONEL
+ | 
+ | 
+GEOMIN
+ | 
+ | 
+152-158
+ | 
+
+ | 
+ZoneLossCoefTableID
+ | 
+ | 
+INPCHN
+ | 
+ | 
+545
+ | 
+
+ | 
+ZOUTEL
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+162-301
+ | 
+
+ | 
+ZPLENC
+ | 
+ | 
+PMR4IN
+ | 
+ | 
+4761-4798
+ | 
+
+ | 
+ZPLENL
+ | 
+ | 
+PRIMIN
+ | 
+ | 
+87
+ | 
+
+ | 
+ZPLENU
+ | 
+ | 
+PRIMIN
+ | 
+ | 
+88
+ | 
+
+ | 
+ZSWFAC
+ | 
+ | 
+PMATCM
+ | 
+ | 
+1228
+ |
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch02/INPCOM.html]
+------------------------------------------------------------------------------
+[anchor: block-1-inpcom-channel-independent-options-and-integer-input]
+
+# 2.7.1. Block 1 — INPCOM — Channel-Independent Options and Integer Input
+
+1
+
+NCHAN
+
+Number of core channels. Maximum = 22000. (not to be confused with
+the bypass channels of PRIMAR-4). NCHAN must be less than or equal
+to NCH from the data allocation record.
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch02/INPMR4.html]
+------------------------------------------------------------------------------
+[anchor: block-3-inpmr4-primar-4-integer-input]
+
+# 2.7.2. Block 3 — INPMR4 — PRIMAR-4 Integer Input
+
+1
+
+NCVP
+
+Number of compressible volumes, primary loops.
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch02/INCONT.html]
+------------------------------------------------------------------------------
+[anchor: block-5-incont-control-system-input]
+
+# 2.7.3. Block 5 — INCONT — Control System Input
+
+INPUT BLOCK STRUCTURE
+
+The control system input block structure is identical to the standard
+SAS4A/SASSYS-1 input block structure in all but one respect. A new card
+format known as a signal card has been introduced. These cards
+immediately follow the block identifier card and precede the standard
+format data cards. The ordering of the different card types is depicted
+as follows:
+
+The format for the block identifier card is described above. For the
+control system input block the block name is “INCONT” and the block
+number is 5.
+
+SIGNAL CARDS
+
+A signal card contains data fields for the FORTRAN variables ISIG,
+JTYPE, J1SIG, J2SIG, F1SIG, F2SIG, F3SIG, F4SIG, and F5SIG, with record
+format 4I5,5F10.3. These variables are described in Table 2.7.3.
+
+A signal card is used to define a signal in the user’s block diagram.
+There are four signal types: measured, demand, block, and control. Each
+signal must be assigned a unique signal identification number using the
+“ISIG” field. The value of ISIG must be greater than zero and less than
+999, or between 1000 and 10000.
+
+Table 2.7.3 Signal Card Format
+ | 
+
+ | 
+Column
+ | 
+ | 
+Fortran Symbol
+ | 
+ | 
+Definition
+ | 
+ | 
+Variable Type
+ | 
+
+ | 
+
+ | 
+1-5
+ | 
+ | 
+ISIG
+ | 
+ | 
+Serial Number
+ | 
+ | 
+Integer
+ | 
+
+ | 
+6-10
+ | 
+ | 
+JTYPE
+ | 
+ | 
+Signal Type
+ | 
+ | 
+Integer
+ | 
+
+ | 
+11-15
+ | 
+ | 
+J1SIG
+ | 
+ | 
+Signal Descriptor 1
+ | 
+ | 
+Integer
+ | 
+
+ | 
+16-20
+ | 
+ | 
+J2SIG
+ | 
+ | 
+Signal Descriptor 2
+ | 
+ | 
+Integer
+ | 
+
+ | 
+21-30
+ | 
+ | 
+F1SIG
+ | 
+ | 
+Constant 1
+ | 
+ | 
+Real
+ | 
+
+ | 
+31-40
+ | 
+ | 
+F2SIG
+ | 
+ | 
+Constant 2
+ | 
+ | 
+Real
+ | 
+
+ | 
+41-50
+ | 
+ | 
+F3SIG
+ | 
+ | 
+Constant 3
+ | 
+ | 
+Real
+ | 
+
+ | 
+51-60
+ | 
+ | 
+F4SIG
+ | 
+ | 
+Constant 4
+ | 
+ | 
+Real
+ | 
+
+ | 
+61-70
+ | 
+ | 
+F5SIG
+ | 
+ | 
+Constant 5
+ | 
+ | 
+Real
+ | 
+
+MEASURED SIGNAL
+
+A measured signal makes available to the block diagram the present value
+of a referenced SAS4A/SASSYS-1 variable. The correspondence between the
+variable that is referenced and the signal card data field values is
+given in Table 2.7.6. Note that all measured
+signals have a JTYPE value in the range of -50 to -89 or -101 to -136, inclusive.
+
+DEMAND SIGNAL
+
+A demand signal makes available to the block diagram the product of the
+current value of a time dependent function defined by the user through a
+demand table and an initial condition value. A demand table is a set of
+ordered pair values supplied by the user in the format of Table 2.7.5 and described by Data Card
+Input.
+
+The code obtains the demand signal by linearly interpolating among the
+table entries using the current time. The initial value is obtained as
+described in Section 6.4.3. The correspondence
+between the demand table and the signal card data fields is given in
+Table 2.7.6. Note that a demand signal has a JTYPE
+value of -90.
+
+BLOCK SIGNAL
+
+A block signal makes available to the block diagram the value at the
+output of a block. The correspondence between the block characteristics
+and the signal card data fields is given in Table 2.7.6. Note that all block signals have a JTYPE
+value in the range from 1 through 23. A measured, demand, or block
+signal can be used as an input to a block by specifying on the block’s
+signal definition card the signal identification number assigned to the
+input signal. The signals input to each block type are combined
+according to the mathematical expressions given in Table 2.7.4.
+
+Table 2.7.4 Basic Mathematical Blocks.
+
+ | 
+
+ | 
+JTYPE
+ | 
+ | 
+Block
+ | 
+ | 
+Type
+ | 
+ | 
+Representation
+ | 
+ | 
+Mathematical Expression
+ | 
+
+ | 
+
+ | 
+1
+ | 
+ | 
+summer
+ | 
+ | 
+function
+ | 
+ | 
+
+ | 
+ | 
+ $y = g\left( g_{1}u_{1} + g_{2}u_{2} \right)$ 
+ | 
+
+ | 
+2
+ | 
+ | 
+multiplier
+ | 
+ | 
+function
+ | 
+ | 
+
+ | 
+ | 
+ $y = gu_{1}u_{2}$ 
+ | 
+
+ | 
+3
+ | 
+ | 
+divider
+ | 
+ | 
+function
+ | 
+ | 
+
+ | 
+ | 
+ $y = g\frac{u_{1}}{u_{2}}$ 
+ | 
+
+ | 
+4
+ | 
+ | 
+differentiator
+ | 
+ | 
+function
+ | 
+ | 
+
+ | 
+ | 
+ $y = g\frac{\text{d}}{\text{dt}}u$ 
+ | 
+
+ | 
+5
+ | 
+ | 
+integrator
+ | 
+ | 
+dynamic
+ | 
+ | 
+
+ | 
+ | 
+ $y = y_{0} + g\int_{0}^{t}{\text{ud}t'}$ 
+ | 
+
+ | 
+6
+ | 
+ | 
+lag compensator
+ | 
+ | 
+dynamic
+ | 
+ | 
+
+ | 
+ | 
+ $y + \tau\frac{\text{d}}{\text{dt}}y = gu$ 
+
+ $y\left( 0 \right) = y_{0}$ 
+
+ | 
+
+ | 
+7
+ | 
+ | 
+lead-lag compensator
+ | 
+ | 
+dynamic
+ | 
+ | 
+
+ | 
+ | 
+ $y + \tau_{1}\frac{\text{d}}{\text{dt}}y = g\left( u + \tau_{2}\frac{\text{d}}{\text{dt}}u \right)$ 
+
+ $y\left( 0 \right) = y_{0}$ 
+
+ | 
+
+ | 
+8
+ | 
+ | 
+function generator
+ | 
+ | 
+table
+ | 
+ | 
+
+ | 
+ | 
+ $y = gf\left( u \right)$ 
+ | 
+
+ | 
+9
+ | 
+ | 
+maximum value
+ | 
+ | 
+function
+ | 
+ | 
+
+ | 
+ | 
+ $y = \mathrm{\max}\left( u_{1},u_{2} \right)$ 
+ | 
+
+ | 
+10
+ | 
+ | 
+minimum value
+ | 
+ | 
+function
+ | 
+ | 
+
+ | 
+ | 
+ $y = \mathrm{\min}\left( u_{1},u_{2} \right)$ 
+ | 
+
+ | 
+11
+ | 
+ | 
+time delay
+ | 
+ | 
+function
+ | 
+ | 
+
+ | 
+ | 
+ $y = y_{0}$ $0 \leq t \leq \tau$ 
+
+ $y = u\left( t - \tau \right)$ $t \geq \tau$ 
+
+ | 
+
+ | 
+12
+ | 
+ | 
+natural logarithm
+ | 
+ | 
+function
+ | 
+ | 
+
+ | 
+ | 
+ $y = \ln u$ 
+ | 
+
+ | 
+13
+ | 
+ | 
+exponential
+ | 
+ | 
+function
+ | 
+ | 
+
+ | 
+ | 
+ $y = u_{1}^{u_{2}}$ 
+ | 
+
+ | 
+14
+ | 
+ | 
+velocity limiter
+ | 
+ | 
+function
+ | 
+ | 
+
+ | 
+ | 
+ $y = y_{\mathrm{\text{dn}}}$ $gu < y_{\mathrm{\text{dn}}}$ 
+
+ $y = y_{\mathrm{\text{up}}}$ $gu > y_{\mathrm{\text{up}}}$ 
+
+ $y = gu$ otherwise
+
+ $y_{\mathrm{\text{dn}}} = y\left( t - h \right) - hv_{\mathrm{\text{dn}}}$ 
+
+ $y_{\mathrm{\text{up}}} = y\left( t - h \right) + hv_{\mathrm{\text{up}}}$ 
+
+ | 
+
+ | 
+15
+ | 
+ | 
+AND
+ | 
+ | 
+logic
+ | 
+ | 
+
+ | 
+ | 
+ $y = 1$ $u_{1} > 0,u_{2} > 0$ 
+
+ $y = 0$ otherwise
+
+ | 
+
+ | 
+16
+ | 
+ | 
+OR
+ | 
+ | 
+logic
+ | 
+ | 
+
+ | 
+ | 
+ $y = 0$ $u_{1} \leq 0,u_{2} \leq 0$ 
+
+ $y = 1$ otherwise
+
+ | 
+
+ | 
+17
+ | 
+ | 
+NOT
+ | 
+ | 
+logic
+ | 
+ | 
+
+ | 
+ | 
+ $y = 0$ $u \leq 0$ 
+
+ $y = 1$ $u > 0$ 
+
+ | 
+
+ | 
+18
+ | 
+ | 
+comparator
+ | 
+ | 
+logic
+ | 
+ | 
+
+ | 
+ | 
+ $y = 0$ $u_{1} < u_{2}$ 
+
+ $y = 1$ $u_{1} \geq u_{2}$ 
+
+ | 
+
+ | 
+19
+ | 
+ | 
+sample and hold
+ | 
+ | 
+function
+ | 
+ | 
+
+ | 
+ | 
+ $y\left( t \right) = u_{2}\left( t \right)$ $u_{1}\left( t \right) \leq 0$ 
+
+ $y\left( t \right) = u_{2}\left( t_{0} \right)$ $u_{1}\left( t \right) \geq 0$ ,
+
+ $t \geq t_{0}$ , where
+
+ $u_{1}\left( t' \right) \leq 0$ 
+
+ $t' < t_{0}$ 
+
+ | 
+
+ | 
+20
+ | 
+ | 
+J-K flip flop
+ | 
+ | 
+logic
+ | 
+ | 
+
+ | 
+ | 
+ $y^{n + 1} = Q^{n}$ $u_{1} \leq 0,u_{2} \leq 0$ 
+
+ $y^{n + 1} = 0$ $u_{1} > 0,u_{2} \leq 0$ 
+
+ $y^{n + 1} = 1$ $u_{1} \leq 0,u_{2} > 0$ 
+
+ $y^{n + 1} = {\overline{Q}}^{n}$ $u_{1} > 0,u_{2} > 0$ 
+
+ | 
+
+ | 
+21
+ | 
+ | 
+constant
+ | 
+ | 
+function
+ | 
+ | 
+
+ | 
+ | 
+ $y = g$ 
+ | 
+
+ | 
+22
+ | 
+ | 
+sine
+ | 
+ | 
+function
+ | 
+ | 
+
+ | 
+ | 
+ $y = g_{1}\sin\left( g_{2}u + g_{3} \right)$ 
+ | 
+
+ | 
+23
+ | 
+ | 
+variable lag
+compensator
+ | 
+ | 
+dynamic
+ | 
+ | 
+
+ | 
+ | 
+ $y + \tau(t)\frac{d}{dt}y = gu$ 
+
+ $y\left( 0 \right) = y_{0}$ 
+
+ | 
+
+CONTROL SIGNALS
+
+A control signal is used to set the value of a SAS4A/SASSYS-1 variable
+equal to the value of a block signal. The correspondence between the
+block signal and the SAS4A/SASSYS-1 variable and the signal card data
+fields is given in Table 2.7.6. Note that all
+control signals have a JTYPE value that ranges from -1 through -10.
+
+END OF SIGNALS
+
+A sequence of signal definition cards is delimited by a signal card with
+the ISIG field entry equal to “999”.
+
+This card also contains flags for the binary output file print interval
+and control of the steady-state solution finder. First, the absolute
+value of the JTYPE field for the 999 card is sets the print interval for
+control system results output to the binary output file CONTROL.dat.
+Second, the J1SIG field is used to determine whether the steady-state
+solution finder is to be used. An entry of “1” activates the
+steady-state solution finder, while any other entry in this field causes
+the solution finder to be bypassed. (A discussion of the initial
+condition option is given in Section 6.4.3.)
+Finally, the J2SIG field allows the user to control the amount of
+steady-state output generated. An entry of “1” produces an extended
+output for trouble shooting purposes, while any other entry produces a
+standard output.
+
+The JTYPE field is also used to generate an extended print-out during
+the transient for debugging purposes. The debug print is generated by
+setting the JTYPE field of the 999 card to a negative value. The
+print-out begins at the time specified on the F1SIG field.
+
+DATA CARDS
+
+A data card contains the data fields for the FORTRAN variables LOC, N,
+VAR1, VAR2, VAR3, VAR4, and VAR5, with the record format (2I6,5E12.5).
+The variables are defined in Data Card Input.
+
+A data card appearing in the control system block has a format identical
+to the standard SAS4A/SASSYS-1 data card used in other input blocks and
+is processed in the same way. The format information given above is the
+same as in the SAS manuals and is given here for completeness.
+
+Data cards are used to construct demand tables and function generator
+tables, and to supply solution control parameters. These quantities and
+their storage locations are defined in Data Card
+Input.
+
+Table 2.7.5 Data Card Format
+ | 
+
+ | 
+Column
+ | 
+ | 
+FORTRAN
+Symbol
+ | 
+ | 
+Definition
+ | 
+ | 
+Variable
+Type
+ | 
+
+ | 
+
+ | 
+1
+ | 
+ | 
+LOC
+ | 
+ | 
+Storage Location of VAR1
+ | 
+ | 
+Integer
+ | 
+
+ | 
+7
+ | 
+ | 
+N
+ | 
+ | 
+Number of Consecutive Locations
+ | 
+ | 
+Integer
+ | 
+
+ | 
+13
+ | 
+ | 
+VAR1
+ | 
+ | 
+Constant 1
+ | 
+ | 
+Real
+ | 
+
+ | 
+25
+ | 
+ | 
+VAR2
+ | 
+ | 
+Constant 2
+ | 
+ | 
+Real
+ | 
+
+ | 
+37
+ | 
+ | 
+VAR3
+ | 
+ | 
+Constant 3
+ | 
+ | 
+Real
+ | 
+
+ | 
+49
+ | 
+ | 
+VAR4
+ | 
+ | 
+Constant 4
+ | 
+ | 
+Real
+ | 
+
+ | 
+61
+ | 
+ | 
+VAR5
+ | 
+ | 
+Constant 5
+ | 
+ | 
+Real
+ |
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch02/IINBOP.html]
+------------------------------------------------------------------------------
+[anchor: block-6-iinbop-balance-of-plant-integer-input]
+
+# 2.7.4. Block 6 — IINBOP — Balance-of-Plant Integer Input
+
+Note
+
+The first-encountered IINBOP is saved and may not be redefined by
+subsequent data. Within the block, the data must be presented as defined
+in ANL/RAS 89/6. This block must precede Block 15, FINBOP.
+
+See ANL/RAS 89/6, Appendix B.
+
+The input format for each record in Block 6 is:
+
+(2I3,11I6)
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch02/OPCIN.html]
+------------------------------------------------------------------------------
+[anchor: block-11-opcin-channel-independent-floating-point-input]
+
+# 2.7.5. Block 11 — OPCIN — Channel-Independent Floating-Point Input
+
+1
+
+EPSTEM
+
+K
+
+Steady-state temperature convergence delta. The steady-state temperatures in the fuel-pin must converge such that |T’ - T| <= EPSTEM, where T’ is the temperature on the last iteration and T is the temperature on the previous iteration.
+
+Suggested value: 0.1.
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch02/POWINA.html]
+------------------------------------------------------------------------------
+[anchor: block-12-powina-power-decay-heat-and-reactivity-input]
+
+# 2.7.6. Block 12 — POWINA — Power, Decay-Heat, and Reactivity Input
+
+1
+
+POW
+
+W
+
+Steady-state power in the peak axial fuel pin segment. (sum of fuel + cladding + coolant + structure power; See IPOWOP).
+Note: POW=POWTOT*FRPR/POWSUM where POWSUM=sum over NCHAN channels of (NPIN*NSUBAS*(sum over MZ of PSHAPE)). (See MZ, NCHAN, PSHAPE, NPIN, FRPR, and NSUBAS).
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch02/PMATCM.html]
+------------------------------------------------------------------------------
+[anchor: block-13-pmatcm-fuel-and-cladding-properties]
+
+# 2.7.7. Block 13 — PMATCM — Fuel and Cladding Properties
+
+Note: Suggested values refer to oxide fuel.
+
+1
+
+COEFDS (1)
+
+kg/m^3
+
+Solid fuel theoretical density at the reference temperature. Suggested value: 11.08E+3.
+Theoretical fuel density = COEFDS(1) / [1.0 + (COEFDS(2) + COEFDS(3) * (TK-273.15)) * (TK-273.15)].
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch02/PRIMIN.html]
+------------------------------------------------------------------------------
+[anchor: block-14-primin-primary-loop-input-data]
+
+# 2.7.8. Block 14 — PRIMIN — Primary Loop Input Data
+
+1
+
+PX
+
+Pa
+
+Coolant exit pressure at ZPLENU.
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch02/FINBOP.html]
+------------------------------------------------------------------------------
+[anchor: block-15-finbop-balance-of-plant-floating-point-input]
+
+# 2.7.9. Block 15 — FINBOP — Balance-of-Plant Floating-Point Input
+
+Note
+
+The first-encountered FINBOP is saved and may not be
+redefined by subsequent data. Within the block, the data must be
+presented as defined in ANL/RAS 89/6. This block must follow
+Block 6, IINBOP.
+
+See ANL/RAS 89/6, Appendix B.
+
+The input format for each record in Block 15 is:
+
+(2I3,I6,5E12.5)
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch02/PMR4IN.html]
+------------------------------------------------------------------------------
+[anchor: block-18-pmr4in-primar-4-floating-point-input]
+
+# 2.7.10. Block 18 — PMR4IN — PRIMAR-4 Floating-Point Input
+
+1
+
+TMDBP4
+
+s
+
+Time when IDBPR4 is set to IDBP4N. (See IDBPR4 and IDBP4N).
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch02/INPCHN.html]
+------------------------------------------------------------------------------
+[anchor: block-51-inpchn-channel-dependent-options-and-integer-input]
+
+# 2.7.11. Block 51 — INPCHN — Channel-Dependent Options and Integer Input
+
+1
+
+IDBUGV
+
+Channel-dependent debug flag. (See IDBUG0 and IERSTP).
+
+= 0, For no debugging output.
+
+= 1, For steady-state debugging output.
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch02/GEOMIN.html]
+------------------------------------------------------------------------------
+[anchor: block-61-geomin-channel-dependent-geometry-data]
+
+# 2.7.12. Block 61 — GEOMIN — Channel-Dependent Geometry Data
+
+1-7
+
+ACCZ (KZ)
+
+m^2
+
+Coolant flow area per fuel-pin in zone KZ. For example, core plus axial blankets plus fission-gas plenum, i.e., the whole fuel-pin length, is one zone. Each axial reflector is a separate zone.
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch02/POWINC.html]
+------------------------------------------------------------------------------
+[anchor: block-62-powinc-channel-dependent-power-and-reactivity-input]
+
+# 2.7.13. Block 62 — POWINC — Channel-Dependent Power and Reactivity Input
+
+1
+
+FPDAYS
+
+Effective full power days during the steady state irradiation. Used with FLTPOW to determine cladding fluence when BURNFU is not used.
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch02/PMATCH.html]
+------------------------------------------------------------------------------
+[anchor: block-63-pmatch-channel-dependent-properties-input]
+
+# 2.7.14. Block 63 — PMATCH — Channel-Dependent Properties Input
+
+1
+
+TIMCNS
+
+s
+
+Time constant for fuel pin heat transfer. Default = 0.1.
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch02/COOLIN.html]
+------------------------------------------------------------------------------
+[anchor: block-64-coolin-channel-dependent-coolant-input]
+
+# 2.7.15. Block 64 — COOLIN — Channel-Dependent Coolant Input
+
+1
+
+AFR
+
+Liquid slug friction factor coefficients.
+
+Default values when IFRFAC < 2: AFR = 0.1875, BFR = -0.2.
+
+Required input when IFRFAC = 2.
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch02/FUELIN.html]
+------------------------------------------------------------------------------
+[anchor: block-65-fuelin-channel-dependent-fuel-input]
+
+# 2.7.16. Block 65 — FUELIN — Channel-Dependent Fuel Input
+
+1
+
+FSPEC
+
+Fuel-pin failure criterion, threshold value. IERSTP
+
+(See also FMELTM and PCFAIL).
+
+See MFAIL.

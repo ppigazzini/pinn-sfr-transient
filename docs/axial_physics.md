@@ -52,7 +52,7 @@ onset and feedback laws from the manual.
 | Sodium properties | Eq. 12.13-1 … 12.13-13 | **done** (`axial/sodium.py`) |
 
 The chapters are mirrored for offline reading; regenerate with
-`python __DEV/sasdoc_fetch.py <outdir>`.
+`uv run python tools/fetch_sas_manual.py docs/sas4a`.
 
 ## 3. Deviation register
 

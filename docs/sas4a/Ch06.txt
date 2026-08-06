@@ -1,0 +1,1235 @@
+==============================================================================
+CHAPTER 6. Control System
+source: https://sas-doc.nse.anl.gov/latest/Part02/Ch06/Ch06.html   (ANL/NSE-SAS/5.8.1)
+scope: out of scope: control system; ULOF is unprotected
+==============================================================================
+[anchor: control-system]
+
+# 6. Control System
+
+6.1. Introduction
+
+6.2. Generalized Model
+
+6.2.1. General Equations
+
+6.2.2. Block Diagram Approach
+
+6.3. Solution Techniques
+
+6.3.1. Definition of Block Diagram
+
+6.3.2. Steady-State Solution
+
+6.3.3. Transient Solution
+
+6.4. Guide to User Application
+
+6.4.1. Signal Definition Rules
+
+6.4.2. Units
+
+6.4.3. Initial Conditions
+
+6.4.4. Solution Accuracy
+
+6.4.5. Solution Stability
+
+6.4.6. Zero Crossing Parameter
+
+6.5. Control System Signals
+
+6.5.1. Measured Signals
+
+6.5.2. Demand Signals
+
+6.5.3. Block Signals
+
+6.5.4. Control Signals
+
+6.6. References
+
+6.7. Nomenclature
+
+6.8. Appendix 6.1: Control System Input Description
+
+6.8.1. Input Block Structure
+
+6.8.2. Block Identifier Card
+
+6.8.3. Signal Cards
+
+6.8.4. Data Cards
+
+6.8.5. Sample Input
+
+
+------------------------------------------------------------------------------
+[page: Part02/Ch06/introduction.html]
+------------------------------------------------------------------------------
+[anchor: introduction]
+
+# 6.1. Introduction
+
+The SAS4A/SASSYS-1 control system model was developed for the design and
+analysis of control systems in LMR plants. The model is described in
+Ref. 6-1 while application of the model is described in Ref. 6-2. In
+this chapter, the model is described and guidelines for using the model
+are given. Essentially, the user should be able to set up an input deck
+and run the model using the material in this section and in Section 6.8.
+
+The model is very flexible, allowing the user to select any number of
+plant variables for input to the control system as measured quantities.
+These signals can then be processed by a user defined network of
+mathematical blocks that implement the control equations. The output
+from these blocks can then be used to drive various actuators already
+existing in SAS4A/SASSYS-1 or they can be used to directly control plant
+variables in SAS4A/SASSYS-1. The model has a steady- state solution
+finder that can be used to determine initial values for demand signals
+and state variables that place the control system in a steady state that
+is consistent with the plant steady state as calculated by
+SAS4A/SASSYS-1. The control system model can also be used to calculate
+auxiliary variables and print their values.
+
+The model is an integral component of SAS4A/SASSYS-1 and is accessed
+through the input deck in a manner similar to the other reactor
+component models. Before using the model however, one must write the
+mathematical equations that describe the desired plant control system
+and identify the plant variables that are to be measured and controlled.
+The user then transforms the equations and variables into a block
+diagram where the individual component blocks are basic mathematical
+elements such as integrators and summers. The input deck is prepared
+directly from this block diagram with each block definition occupying an
+input card and each plant variable that links with the control system
+also occupying an input card. Several other cards must also be entered
+to specify how the control system initial conditions are to be
+calculated and to assign values to parameters that control the accuracy
+and stability of the transient solution. A set of parameters also exists
+for controlling the printing of debug data. This output is useful for
+diagnosing input errors.
+
+This section describes the basic model; it also gives some general
+guidelines for using the model. The section assumes the reader has a
+knowledge of power plant control systems and is able to write the
+equations that describe their system. The organization of the material is
+as follows. In Section 6.2 the general equation form that can be
+represented is given. It is very probable that the user’s model fits
+this form but this should be verified. The solution techniques used to
+solve the block diagram equations are described in Section 6.3. Section 6.4 presents some general guidelines for selecting values of solution
+control parameters and describes some of the model features and how they
+are used. The input description is given in Section 6.8.
+
+
+------------------------------------------------------------------------------
+[page: Part02/Ch06/modeling.html]
+------------------------------------------------------------------------------
+[anchor: generalized-model]
+
+# 6.2. Generalized Model
+
+The control system model was developed with the intent that a wide range
+of plant control systems can be simulated. For this purpose, two
+specific objectives were set. First, the model should be general enough
+to permit the user to assemble any set of control equations and specify
+how they interface to the plant solely through the input. And second,
+the model should employ a numerical method which is reliable in all
+foreseeable applications. Fulfilling these two goals led to the
+identification of a general equation form capable of representing all
+classes of plant control systems.
+
+[anchor: general-equations]
+
+## 6.2.1. General Equations
+
+The solution algorithms of the model are based on a general set of
+equations for the control system state variables and outputs. These
+equations are formulated under the assumption that the three components
+of a control system, the sensor, the controller, and the actuator, can
+all be modeled as ordinary differential equations. The general equation
+form is easy to deduce.
+
+Since the sensor and actuator behavior are governed by physical laws and
+they are normally modeled in lumped parameter form, they are both
+described by
+
+$$\begin{split} \frac{\text{d}}{\text{dt}} x \left( t \right) &= f \left( x \left( t \right), u \left( t \right) \right) \\
+ y \left( t \right) &= g \left( x \left( t \right), u \left( t \right) \right)\end{split}$$ [eq 6.2-1]
+
+where
+
+ $x \left( t \right)$ = n x 1 state vector;
+
+ $u \left( t \right)$ = r x 1 input vector; and
+
+ $y \left( t \right)$ = m x 1 output vector.
+
+The controller also has the basic form of Eq. (6.2-1) as it consists of
+integrating and function elements. But in addition a derivative element
+is sometimes used in which case derivatives appear on the right hand
+side of Eq. (6.2-1). In practice the output signal from an integrator
+will be differentiated at most once so that the controller equation is
+
+$$\begin{split} \frac{\text{d}}{\text{dt}} x \left( t \right) &= f \left( x \left( t \right), \frac{\text{d}}{\text{dt}} x, u \left( t \right) \right) \\
+ y \left( t \right) &= g \left( x \left( t \right), u \left( t \right) \right)~.\end{split}$$ [eq 6.2-2]
+
+The general equation form results when the equations for the three
+components are coupled and the signals that link to the plant are
+explicitly labeled
+
+$$\begin{split} \frac{\text{d}}{\text{dt}} x \left( t \right) &= f \left( x \left( t \right), \frac{\text{d}}{\text{dt}} x, u_{\text{mea}} \left( t \right), u_{\text{dmd}} \left( t \right) \right) \\
+ y_{\text{ctl}} \left( t \right) &= g \left( x \left( t \right), u_{\text{mea}} \left( t \right), u_{\text{dmd}} \left( t \right) \right)~,\end{split}$$ [eq 6.2-3]
+
+where
+
+ $u_{\text{mea}}\left( t \right) = 1 \times n_{\text{mea}}$ measured
+input vector;
+
+ $u_{\text{dmd}}\left( t \right) = 1 \times n_{\text{dmd}}$ demand input
+vector; and
+
+ $y_{\text{ctl}}\left( t \right) = 1 \times n_{\text{ctl}}$ control
+system output vector.
+
+To guide the choice of initial conditions and their calculation for the
+above equations, we must consider the intended applications. Since the
+code is ultimately to be used for analysis of plant wide transients, the
+initial conditions must be compatible with the way in which these
+transients begin. Generally the user prescribes the plant steady state
+and therefore it should be reasonable to initialize the control system
+so that at time zero it preserves this steady state. In this case
+boundary conditions for the control system are taken from the plant, and
+control system time derivatives are set to zero. Writing the control
+equations explicitly in terms of the measured signals, control signals
+and the demand signals, Eq. (6.2-3) becomes
+
+$$\begin{split} 0 &= f \left( x \left( 0 \right), 0, {u^{*}}_{\text{mea}} \left( 0 \right), u_{\text{dmd}} \left( 0 \right) \right) \\
+ 0 &= g \left( x \left( 0 \right), {u^{*}}_{\text{mea}} \left( 0 \right), u_{\text{dmd}} \left( 0 \right) \right) - {y^{*}}_{\text{ctl}} \left( 0 \right)~,\end{split}$$ [eq 6.2-4]
+
+where
+
+ ${y^{*}}_{\text{ctl}}\left( 0 \right) = 1 \times n_{\text{ctl}}$ 
+vector of plant values associated with
+ $y_{\text{ctl}}\left( 0 \right)$ ; and
+
+ ${u^{*}}_{\text{mea}}\left( 0 \right) = 1 \times n_{\text{mea}}$ 
+vector of plant values associated with
+ $u_{\text{mea}}\left( 0 \right)$ .
+
+The asterisk denotes steady state conditions in the plant. The initial
+conditions then that place the control system in steady state
+equilibrium with the plant are the values of $u_{\text{dmd}}\left( 0 \right)$ and $x \left( 0 \right)$ 
+that satisfy Eq. (6.2-4).
+
+[anchor: block-diagram-approach]
+
+## 6.2.2. Block Diagram Approach
+
+One might well ask what benefits can be obtained from a knowledge of
+this general equation. The principal benefit is a flexible modeling
+approach that permits the user to describe the plant control equations
+in a block diagram manner. The key to achieving this capability is the
+fact that the properties of the general equation form are well known and
+can be brought to bear on the development of a reliable numerical
+scheme.
+
+The process by which the user describes their block diagram is analogous
+to the process of programming an analog computer. Basically, four types
+of information must be supplied. First, each mathematical block must be
+defined and the interconnections among them specified. Presently there
+are twenty-three blocks to choose from and these are shown in Table 6.8.2;
+additional blocks can be added if required. Each block can accept up to
+two signals at its input for processing and supply the result, termed a
+block signal, for further processing by other blocks. Second, each
+forcing function driving the collection of blocks must be defined. A
+demand signal is available for this purpose and references a
+user-supplied table of values that specifies the signal as a function of
+time. Third, plant measured quantities input to the collection of blocks
+must be defined. A measured signal is available for this purpose and
+permits access to a number of plant variables including temperature,
+flow, pressure and inventory in a number of reactor components. A
+complete list is given in Table 6.8.3. Finally, those block signals
+that are used to drive the plant must be defined. For that purpose,
+control signals can be defined by the user to represent, among other
+things, sources of external reactivity, feedwater mass flowrate and pump
+motor torque. A complete list is given in Table 6.8.3.
+
+
+------------------------------------------------------------------------------
+[page: Part02/Ch06/solution.html]
+------------------------------------------------------------------------------
+[anchor: solution-techniques]
+
+# 6.3. Solution Techniques
+
+So far we have focused on the benefits derived from a generalized model,
+but have not touched on the methods used to implement the model. We will
+now describe the numerical techniques, first discussing the potential
+problems that can occur when solving a set of equations of the form
+Eq. (6.2-3) and then describing the numerical methods used to handle them.
+
+Because the model is generalized, the solution techniques should be
+transparent for a wide range of situations that can arise. In the case
+of the steady-state solution finder, it is clear that the equations and
+variables to be solved for are given by Eq. (6.2-4). In certain
+instances these equations may not be square yet a solution exists while
+at other times the Jacobian of the right hand side may be singular. In
+the case of the transient solution it is important that the solution
+technique be able to maintain a user specified level of solution
+accuracy under a wide range of system response times. Solution
+techniques capable of handling these situations might be termed robust.
+We describe such techniques here.
+
+The reader is cautioned that the difference equations we write may
+appear unconventional. The equations of reactor physics and thermal
+hydraulics when differenced in one-dimensional space appear with a
+single index denoting location in space. However in the generalized
+control system problem, geometry or space does not enter. Instead the
+continuum of space is replaced by a logical relationship among block
+outputs, block inputs and plant signals. These relationships must be
+recorded as part of the specific problem definition and, as will become
+clear in this work, vectors can be used to store these relationships. To
+summarize, the usual physical relationships that exist between points in
+space in conventional difference equations are replaced by logical
+relationships among blocks.
+
+[anchor: definition-of-block-diagram]
+
+## 6.3.1. Definition of Block Diagram
+
+The specification of the user’s control equations and the solution of
+these are closely tied to the block diagram concept. Therefore, before
+the solution techniques can be discussed, we need to define the block
+diagram.
+
+The block diagram is represented through several vectors whose entries
+define the types of blocks and the interconnections among blocks. The
+vectors are one-dimensional and the index to the elements can be thought
+of as analogous to a space index. To begin with, a unique signal number
+is assigned to the output of a block. If there are $n_{\text{blk}}$ 
+blocks occurring in the user’s input and the $i$ -th one is
+assigned signal number m and the block is of type $k$ then the following
+entries are created
+
+$$\begin{aligned}
+L_{\text{blk,i}} = m && \text{and} && K_{\text{blk,m}} = k ; && i = 1, ..., n_{\text{blk}}~.
+\end{aligned}$$
+
+Further if the inputs to this block are signal $q$ and $r$ then the
+entries
+
+$$\begin{aligned}
+J1_{\text{blk,m}} = q && \text{and} && J2_{\text{blk,m}} = r
+\end{aligned}$$
+
+are also created. If the block is a non-dynamic one then the block
+operator is
+
+ $F_{\text{k}}\left( S_{\text{q}}^{j} , S_{\text{r}}^{j} \right)$ = value of signal
+ $m$ at time $j$ 
+
+or, if the block is a dynamic one, then the block operator is
+
+ $D_{\text{k}}\left( S_{\text{q}}^{j} , S_{\text{r}}^{j} \right)$ = value of
+derivative of signal $m$ at time $j$ .
+
+The variable $S_{\text{q}}^{j}$ denotes that value of signal $q$ at time
+ $j$ . The block operators are defined in Fig. A6.1-1. An auxiliary vector
+also stores information on dynamic blocks only. For the $i$ -th occurring
+dynamic block having signal number $m$ , the entry
+
+$$\begin{aligned}
+L_{\text{dyn,i}} = m; && i = 1, ..., n_{\text{dyn}}
+\end{aligned}$$
+
+is created.
+
+A unique signal number must also be assigned to each control signal.
+Recall a control signal is used to drive a plant variable and that the
+signal originates at the output of a block. If there are $n_{\text{ctl}}$ 
+control signals occurring in the user’s input and the $i$ -th one
+is assigned signal number $m$ , then the following entries are created
+
+ $L_{\text{ctl,i}} = m;\ i = 1,\ldots , n_{\text{ctl}}.$ 
+
+Further, if this control signal is taken from the output of block $q$ ,
+then the entry
+
+ $J_{\text{ctl,m}} = q.$ 
+
+is also created.
+
+The vectors $L_{\text{blk}}$ , $K_{\text{blk}}$ , $J1_{\text{blk}}$ and
+ $J2_{\text{blk}}$ thus define the block diagram. Both the
+steady-state and transient solution methods access the elements in these
+vectors to march through the block diagram in a manner analogous to the
+step-wise progression up an axial mesh that is used in one-dimensional
+thermal and hydraulic analysis codes. In the control system problem,
+however, a logical relationship among blocks is substituted for the
+spatial relationship among fluid cells that occurs in thermal hydraulic
+problems.
+
+[anchor: steady-state-solution]
+
+## 6.3.2. Steady-State Solution
+
+The set of equations given by Eq. (6.2-4) are a set of non-linear
+equations. Having the boundary conditions
+ ${u^{*}}_{\text{mea}}\left( 0 \right)$ and
+ ${y^{*}}_{\text{ctl}}\left( 0 \right)$ , we must solve this set of
+equations for the initial conditions
+ $u_{\text{dmd}}\left( 0 \right)$ and $x \left( 0 \right)$ .
+However, before describing the solution method, we discuss two important
+considerations.
+
+The first consideration is that the solution technique not require
+calculation of the inverse Jacobian of Eq. (6.2-4) with respect to the
+unknowns. Any non-linear equation solver that does will fail in certain
+cases when in fact a solution exists. If, for example, one of the
+unknowns feeds into a block that has a deadband region, then during
+iteration on the unknowns the input to this block may end up in the
+deadband zone. Then the derivative of the right-hand side of Eq. (6.2-4)
+will be zero with respect to the unknown, in which case the inverse of
+the Jacobian does not exist. The second consideration involves the
+relationship between the number of equations and the number of unknowns
+to be solved for. If the control system is properly designed then the
+equations are either square or they are over-determined. In the later
+case, the number of equations exceeds the number of unknowns. The
+solution method must be able to find a solution if it exists in either
+case. As for the non-linear equation solver used in this work, it will
+handle both the singular Jacobian and the over-determined equation
+situations. The solver is based on a least squares technique that is
+described in Ref. 6-3. When used in a case with deadband as described
+above, the equation solver will return a true solution if one exists.
+However, the returned solution may in fact be one of an infinite number.
+
+The non-linear equation solver uses an iterative process to converge to
+the values of $u_{\text{dmd}}\left( 0 \right)$ and
+ $x \left( 0 \right)$ that satisfy Eq. (6.2-4). The equation solver
+provides successively more refined estimates for $u_{\text{dmd}}$ and
+ $x \left( 0 \right)$ at the start of every iteration and expects the
+right-hand side of Eq. (6.2-4) to be calculated for each new set of
+values. Values for the right-hand side are generated by marching through
+the block diagram in the sequence defined by the vectors
+ $L_{\text{blk}}$ , $K_{\text{blk}}$ , $J1_{\text{blk}}$ and
+ $J2_{\text{blk}}$ . The marching procedure is as follows. Suppose
+ $S_{\text{m}}^{P}$ denotes the value of signal $m$ on the $p$ -th iterate.
+Assume that if the signal $S_{\text{m}}^{P}$ is either a measured signal
+or a control signal that it has been set with the respective boundary
+condition contained in $u_{\text{mea}} \left( 0 \right)$ or $y_{\text{ctl}} \left( 0 \right)$ .
+Assume also that if the signal $S_{\text{m}}^{P}$ corresponds to one of
+the unknowns in $u_{\text{dmd}} \left( 0 \right)$ or $x \left( 0 \right)$ that the equation solver has
+made its estimate for the signal prior to the $p^{th}$ pass
+through the block diagram and the $S_{\text{m}}^{P}$ has been set to this
+value. Then the value of the right hand-site of Eq. (6.2-4) for the
+ $p^{th}$ iteration is calculated using
+
+$$\begin{split}& i = 1, \ldots n_{\text{blk}} \\
+& m = L_{\text{blk,i}};\ k = K_{\text{blk,m}};\ q = J1_{\text{blk,m}};\ r = J2_{\text{blk,m}} \\
+& S_{\text{m}}^{P} = 0,\ k = 4 \\
+& S_{\text{m}}^{P} = F_{\text{k}} \left( S_{\text{q}}^{P},\ S_{\text{r}}^{P} \right),\ k = 1,2,3,8, \ldots 21 ~.\end{split}$$
+
+On completion the elements of $f$ are
+
+$$S_{\text{J}1_{\text{blk}},\text{L}_{\text{dyn}},\text{i}}^{P}, i = 1, \ldots n_{\text{dyn}}$$
+
+and the elements of $g$ are
+
+$$S_{\text{J}_{\text{ctl}},\text{L}_{\text{ctl}},\text{i}}^{P}, i = 1, \ldots n_{\text{ctl}} ~.$$
+
+[anchor: transient-solution]
+
+## 6.3.3. Transient Solution
+
+The numerical techniques used to solve Eq. (6.2-3) are based on explicit
+differencing and a numerical marching procedure. The numerical
+techniques have performed well for those problems examined to date. A
+time step control mechanism automatically adjusts time step size to
+maintain a specified level of accuracy. This usually results in a step
+size smaller than the time constant of the fastest component which is
+often a sensor. When the equations are stiff, other solution techniques
+may offer a computationally more efficient solution. However, experience
+has shown that the order of the control equations is usually small and
+that the computational demands of the current scheme are reasonable.
+
+The block diagram is advanced across a time step in two phases. In the
+first step, the block signals are updated to the start of the time step.
+This involves setting the measured and demand signals and then marching
+through the block diagram while holding dynamic block signals constant
+
+$$\begin{split}& i = 1, \ldots n_{\text{blk}} \\
+& m = L_{\text{blk,i}};\ k = K_{\text{blk,m}};\ q = J1_{\text{blk,m}};\ r = J2_{\text{blk,m}} ~, \\
+& S_{\text{m}}^{j} = \frac{S_{\text{q}}^{j} - S_{\text{q}}^{j - 1}}{t^{j} - t^{j - 1}} ,\ k = 4 ~, \\
+& S_{\text{m}}^{j} = F_{\text{k}}\left( S_{\text{q}}^{j}, S_{r}^{j} \right),\ k = 1,2,3,8, \ldots 21 ~, \\
+& S_{\text{m}}^{j} = S_{\text{m}}^{j},\ k = 5,6,7 ~.\end{split}$$
+
+Then in the second step, the block signals are advanced across the time
+step.
+
+$$\begin{split}& i = 1,....n_{\text{blk}} \\
+& m = L_{\text{blk,i}};\ k = K_{\text{blk,m}};\ q = J1_{\text{blk,m}};\ r = J2_{\text{blk,m}} ~, \\
+& S_{\text{m}}^{j + 1} = \frac{S_{\text{q}}^{j} - S_{\text{q}}^{j - 1}}{t^{j} - t^{j - 1}} ,\ k = 4 ~, \\
+& S_{\text{m}}^{j + 1} = F_{\text{k}} \left( S_{\text{q}}^{j + 1}, S_{\text{r}}^{j + 1} \right),\ k = 1,2,3,8, \ldots 21 \\
+& S_{\text{m}}^{j + 1} = D_{\text{k}} \left( \frac{S_{\text{q}}^{j} + S_{\text{q}}^{j + 1}}{2}, \frac{S_{\text{r}}^{j}
++ S_{\text{r}}^{j + 1}}{2} \right) \left( t^{j + 1} - t^{j} \right) + S_{\text{m}}^{j},\ k = 5,6,7 ~.\end{split}$$
+
+On completion the elements of $x^{j+1}$ are stored in
+
+$$S_{\text{L}_{\text{dyn},\text{i}}}^{j + 1} i = 1, \ldots n_{\text{dyn}} ~.$$
+
+An accurate and stable solution to both the control equations and the
+plant equations is obtained by controlling the basic time step size
+known as a subinterval. The initial size of a new subinterval is
+obtained by SAS4A/SASSYS-1 by extrapolating rates of change in the plant
+from the previous subinterval. The control equations are advanced first
+over this new subinterval according to the algorithm just described. Two
+time step control mechanisms can come into effect during integration of
+the control equations.
+
+The first time step mechanism attempts to limit the error in the control
+equation solution that results from numerically integrating over the
+subinterval. An initial estimate for this error is made after the
+integration algorithm has obtained a solution at the end of the current
+subinterval. The estimate is made for each element of the vector x (i.e.
+dynamic blocks) by first estimating a value at the end of the current
+subinterval by linearly extrapolating the change across the previous
+subinterval:
+
+$$S_{\text{m,e}}^{j + 1} = S_{\text{m}}^{j} + \frac{S_{\text{m}}^{j} - S_{\text{m}}^{j - 1}}{t^{j} - t^{j - 1}} \left( t^{j + 1} - t^{j} \right) ~,$$ [eq 6.3-1]
+
+where
+
+$$m = L_{\text{dyn,i}};\ i = 1, \ldots n_{\text{dyn}} ~.$$ [eq 6.3-2]
+
+If $S_{\text{m}}^{j + 1}$ is the value calculated by the integration
+algorithm then the error estimate is
+
+$$e_{\text{m}}^{j} = \frac{\left| S_{\text{m}}^{j + 1} - S_{\text{m,e}}^{j + 1} \right|}{\left| S_{\text{m}}^{j} \right| + \text{F5SIG}\left( m \right)}$$
+
+where $\text{F5SIG} \left( m \right)$ is the zero crossing parameter supplied by the user as
+discussed below. The solution has converged if the quantity
+ $e_{\text{m}}^{j}$ is less than the user-supplied value for the error
+criterion EPSCS. If the solution has not converged, then for purposes of
+control system integration only, the subinterval is bisected into two
+substeps and the control equations are again advanced over the
+subinterval. The error is again computed using Eq. (6.3-2) but using the
+value that resulted from the previous integration in place of
+ $S_{\text{m,e}}^{j + 1}$ . If the subinterval is still not converged, it
+is again bisected so now there are four substeps in the subinterval.
+This process is repeated until the error between successive iterations
+as defined by Eq. (6.3-2) is less than the input value for EPSCS.
+
+The second time step mechanism limits the relative change in the control
+solution over a single subinterval. Large and unrestricted changes can
+lead to instability between the control system solution and the plant
+solution. After the subinterval has converged as described above, the
+relative change in control signals is computed via
+
+$$C_{\text{m}}^{j} = \frac{\left| S_{\text{m}}^{j + 1} - S_{\text{m}}^{j} \right|}{\left| S_{\text{m}}^{j} \right| + \text{F5SIG}\left( m \right)}$$ [eq 6.3-3]
+
+where
+
+$$m = L_{\text{ctl,i}};\ i = 1, \ldots n_{\text{ctl}} ~.$$
+
+where $\text{F5SIG} \left( m \right)$ is the zero crossing parameter whose value is supplied by
+the user. For the m that gives the largest value of
+ $C_{\text{m}}^{j}$ if this value $C_{\text{m}}^{j}$ is greater than
+the user-supplied relative change criterion EPSCPL, then the subinterval
+time step is cutback so that the relative change EPSCPL is just met. The
+subinterval cutback size is obtained by linear interpolation so that the
+new size is the value of $\Delta t$ that satisfies
+
+$$\frac{\Delta t}{\text{EPSCPL}} = \frac{t^{j + 1} - t^{j}}{C_{\text{m}}^{j}}$$ [eq 6.3-4]
+
+If the subinterval time step is cutback, then the control system
+integration starts over again using the new subinterval size.
+
+A third time step mechanism is used to limit the relative change in the
+plant solution across a subinterval. This mechanism is analogous to the
+second time step mechanism and is described in Ref. 6-1.
+
+
+------------------------------------------------------------------------------
+[page: Part02/Ch06/user-guide.html]
+------------------------------------------------------------------------------
+[anchor: guide-to-user-application]
+
+# 6.4. Guide to User Application
+
+This section provides some guidelines that should help tie together the
+model equations and solution techniques just described and the card
+input description given in Section 6.8. In this section signal
+definition rules that must be observed are stated, model capabilities
+are highlighted, and rules of thumb for choosing the values of solution
+control parameters are given.
+
+[anchor: signal-definition-rules]
+
+## 6.4.1. Signal Definition Rules
+
+Signals are defined through the input deck and the definitions must
+conform to certain rules. Any of the four signal kinds can appear
+anywhere in the signal card region of the input deck, subject to the
+following rules.
+
+A block signal that is output from other than an integrator, lag compensator or lead-lag compensator must have been previously defined in the input stream before it can be used as an input to another block. This rule is intended to avoid circular references and to maintain proper sequencing of signals during numerical integration.
+
+A demand signal or measured signal must pass through at least one block before it can be used as a control signal.
+
+Each signal must be assigned a unique signal number between 1 and 998.
+
+The card format for defining a signal is given in Section 6.8.
+
+[anchor: units]
+
+## 6.4.2. Units
+
+Generally all measured signals are in MKS units while all control
+signals should be calculated in these same units. The exceptions are
+those signals that are normalized to a steady state value; these are
+appropriately noted in Table 6.8.3.
+
+The convention for demand signals is that demand tables are always
+entered by the user, normalized to a time zero value of unity. The
+actual value for a demand signal is calculated in the code by
+multiplying the current time entry in the demand table by the initial
+condition value. The next subsection describes how the initial condition
+value is obtained.
+
+The units of a block output signal are determined solely by the units of
+the input signals and any conversion factors that are entered by the
+user as constants on the block definition card.
+
+[anchor: initial-conditions]
+
+## 6.4.3. Initial Conditions
+
+In order to begin a transient calculation, initial condition values are
+required for demand signals and for the integrator, lag compensator and
+lead-lag compensator blocks. There are basically three options available
+for setting these values. In the first option, all values are supplied
+by the user through input cards: in this case the steady state solution
+finder is bypassed. If the user is seeking the steady state solution,
+then a null transient may have to be run. In the second option, the
+steady state solution finder is used to solve for the steady state
+values. In the final option, a mixed set of initial conditions are used
+with some values read directly from the signal cards while the remaining
+values are solved for such that Eq. (6.2-4) is satisfied. The card input
+data required for each of these options is described below.
+
+If the initial condition values are to be read from the input cards then
+the steady state solution finder should be bypassed by setting the J1SIG
+field on the 999 card to ‘0’. Then the value for a demand signal and for
+the block signal of each integrator, lag compensator and lead-lag
+compensator is taken from the F4SIG field on the associated signal
+definition card.
+
+If the initial condition values are to be calculated by the steady state
+solution finder then the J1SIG field on the 999 card is set to ‘1’. An
+initial guess for each demand signal and integrator initial condition
+variable must be supplied on the F4SIG field of the signal definition
+card. In addition the F3SIG field must be set to ‘0’. As a rule of
+thumb, the initial guess should be within 15% of the actual steady state
+value to ensure convergence. The lag compensator and lead-lag
+compensator are special cases and do not require initial condition
+information from the user.
+
+Finally, if a mixed set of initial conditions is to be used, the card
+data is identical to the case directly above, except for those demand
+and integrator signals whose initial conditions are to be read from
+cards. For these signals the F3SIG field is set to ‘1.0’ and the F4SIG
+field is set to the initial condition value desired.
+
+[anchor: solution-accuracy]
+
+## 6.4.4. Solution Accuracy
+
+The control system modeling capability attempts to limit the solution
+error that is introduced during the numerical integration of the control
+equations over a subinterval. Recall the error is controlled by
+repeatedly bisecting the subinterval time step into substeps until
+integrating across the subinterval gives a relative error between
+successive iterations that is less than the user-supplied value for
+EPSCS. [The method was described in Section 6.3]. The value of EPSCS is
+input on a table card and occupies location 8001. A value of 0.01 is
+suggested for most applications.
+
+[anchor: solution-stability]
+
+## 6.4.5. Solution Stability
+
+The modeling capability also attempts to maintain a stable solution to
+the coupled control system and plant equations. The basic idea is that
+stability is enhanced if the relative change in a control signal across
+a subinterval is maintained less than the user supplied value for
+EPSCPL. [The method was described in Section 6.3]. The value of EPSCPL
+is input on a table card and occupies location 8002. A value of 0.1 is
+suggested for most applications.
+
+[anchor: zero-crossing-parameter]
+
+## 6.4.6. Zero Crossing Parameter
+
+The zero crossing parameter in Eq. (6.3-2) is intended to prevent
+unnecessarily small time step size when a signal passes close to zero.
+The situation we seek to avoid occurs when the zero crossing parameter
+F5SIG is zero. Then the denominator in Eq. (6.3-2) is very small so that
+the relative error is very large. Time step size is severely reduced
+even though the absolute error in the signal may well be acceptably
+small. The solution is to control absolute error at the zero crossing
+and we do it through the relative error control mechanisms associated
+with Eq. (6.3-2) by proper choice of a value for F5SIG.
+
+The appropriate value of F5SIG is problem dependent and is selected by
+the user for input to the code. The goal is to select a value that gives
+a desired level of absolute error near the zero crossing yet does not
+significantly impact the calculation of relative error away from the
+zero crossing. To do so we note that the code controls integration error
+using Eq. (6.3-2) so that on convergence the solution satisfies
+
+$$\left| S_{\text{m}}^{j + 1} - S_{\text{m,e}}^{j + 1} \right| = \text{EPSCS} \left( \left| S_{\text{m}}^{j} \right| + \text{F5SIG}\left( m \right) \right)$$ [eq 6.4-1]
+
+where the value of $m$ is restricted to those signals that are output by
+dynamic blocks. Near the zero crossing $S_{\text{m}}^{j}$ will be
+insignificant so that Eq. (6.4-1) is equivalently
+
+$$\text{F5SIG}\left( m \right) = \frac{\left| S_{\text{m}}^{j + 1} - S_{\text{m,e}}^{j + 1} \right|}{\text{EPSCS}} ~.$$ [eq 6.4-2]
+
+Note that the numerator is the absolute error in the solution at
+convergence. We can arrange for the numerator to take on a specific
+value by appropriately choosing the value of $\text{F5SIG} \left( m \right)$ once the value of
+EPSCS has been selected. For example, suppose we want the absolute error
+on convergence near the zero crossing to be $S_{\text{m}}^{o} \times 10^{-4}$ 
+where $S_{\text{m}}^{o}$ is the maximum magnitude signal $m$ is to take
+on over all time. If, the sake of illustration, a value of $10^{-2}$ 
+was input for EPSCS, then we can achieve our absolute error objective by
+calculating the value of $\text{F5SIG} \left( m \right)$ from Eq. (6.4-2),
+
+$$\text{F5SIG} \left( m \right) = \frac{S_{\text{m}}^{o} 10^{-4}}{10^{- 2}} = S_{\text{m}}^{o} 10^{-2}$$
+
+Away from the zero crossing, the impact of $\text{F5SIG} \left( m \right)$ is insignificant.
+
+Similarly, the value of $\text{F5SIG} \left( m \right)$ associated with a control signal should
+be selected as follows. The time step is adjusted down if necessary so
+that the largest relative change in a control signal is limited by
+Eq. (6.3-3) to
+
+$$\left| S_{\text{m}}^{j + 1} - S_{\text{m,e}}^{j} \right| = \text{EPSCPL} \left( \left| S_{\text{m}}^{j} \right| + \text{F5SIG}\left( m \right) \right)$$ [eq 6.4-3]
+
+where the value of m is restricted to those signals that are control
+signals. Near the zero crossing $S_{m}^{j}$ will be insignificant
+so that Eq. (6.4-3) is equivalently
+
+$$\text{F5SIG} \left( m \right) = \frac{\left| S_{\text{m}}^{j + 1} - S_{\text{m}}^{j} \right|}{\text{EPSCPL}} ~.$$ [eq 6.4-4]
+
+Note that the numerator is the absolute change in the solution across
+the time step. We can arrange for the numerator to take on a specific
+value by appropriately choosing the value of $\text{F5SIG} \left( m \right)$ once the value of
+EPSCPL has been selected. For example, suppose we want the absolute
+change in the control signal near the zero crossing to be as large as
+ $S_{\text{m}}^{o} \times 10^{- 3}$ before time step size is reduced. If, for
+the sake of illustration, a value of $10^{-1}$ was input for EPSCPL,
+then the absolute change objective will be met if $\text{F5SIG} \left( m \right)$ is calculated
+from Eq. (6.4-4),
+
+$$\text{F5SIG}\left( m \right) = \frac{S_{\text{m}}^{o} 10^{- 3}}{10^{- 1}} = S_{\text{m}}^{o} 10^{- 2}$$
+
+Away from the zero crossing, the impact of $\text{F5SIG} \left( m \right)$ on the control of
+fractional change is insignificant.
+
+
+------------------------------------------------------------------------------
+[page: Part02/Ch06/signals.html]
+------------------------------------------------------------------------------
+[anchor: control-system-signals]
+
+# 6.5. Control System Signals
+
+One or more sequences of user-defined signals are used to define a control-system
+block diagram. The four types of signals are measured, demand, block, and control. Each is
+described in the sections that follow. Detailed information on the input requirements is
+provided in the Appendix.
+
+[anchor: measured-signals]
+
+## 6.5.1. Measured Signals
+
+Measured signals represent the value of plant-state variables, such as pressure,
+temperature, or flow rate. Measured signals are implemented in SAS as a virtual data
+acquisition system (DAS). Unless otherwise noted, measured signal values are obtained at
+the beginning of a PRIMAR time step. These values are used to update the control system
+state in effect during the time step. That state is then reported along with other simulation
+output at the end of the time step.
+
+[anchor: demand-signals]
+
+## 6.5.2. Demand Signals
+
+Demand signals represent the value of an external, time-dependent load. Demand signals are
+interpolated from a table of user-defined (time,value) pairs, where the values are assumed
+to be normalized to an initial-condition value.
+
+[anchor: block-signals]
+
+## 6.5.3. Block Signals
+
+Block signals represent mathematical or logical operations that define the control system’s behavior. Input to block signals comes from measured, demand, or other block signals.
+
+[anchor: variable-lag-compensator]
+
+### 6.5.3.1. Variable Lag Compensator
+
+Note
+
+New in Version 5.3.
+
+Theory
+
+A variable lag compensator is similar to the lag compensator except
+that the delay time parameter, $\tau$ , can vary during the Control System
+simulation. An equation that expresses this behavior is
+
+$$y\left( t \right) + \tau\left( t \right)\frac{dy}{dt} = u\left( t \right)$$
+
+where
+
+ $u\left( t \right)$ = input driving function
+
+ $\tau\left( t \right)$ = delay (lag)
+
+ $y\left( t \right)$ = output function result
+
+Assuming that the lag time is always positive, a solution to the above
+equation is
+
+$$y\left( t \right) = y_{0}e^{- \int_{0}^{t}\frac{dt'}{\tau\left( t \right)}} + e^{- \int_{t_{0}}^{t}\frac{dt'}{\tau\left( t \right)}}\int_{0}^{t}{\frac{u\left( t' \right)}{\tau\left( t' \right)}e^{\int_{t_{0}}^{t'}\frac{dt''}{\tau\left( t'' \right)}}dt'}$$
+
+where $y_{0} = y\left( 0 \right)$ and $t_{0}$ is an
+arbitrary integration constant.
+
+The complexity of the above solution can be simplified if we assume the
+input driving function and delay function are linear functions of time:
+ $u\left( t \right) = u_{0} + u't$ and
+ $\tau\left( t \right) = \tau_{0} + \tau't$ , respectively. With
+this assumption, the solution becomes
+
+$$y\left( t \right) = y_{0}\left( 1 + \frac{\tau'}{\tau_{0}}t \right)^{- \frac{1}{\tau'}} + u_{0}\left\lbrack 1 - \left( 1 + \frac{\tau'}{\tau_{0}}t \right)^{- \frac{1}{\tau'}} \right\rbrack + \frac{u'}{1 + \tau'}\left\lbrack t - \tau_{0}\left\lbrack 1 - \left( 1 + \frac{\tau'}{\tau_{0}}t \right)^{- \frac{1}{\tau'}} \right\rbrack \right\rbrack$$
+
+If $\tau$ is slowly varying with time and we take the limit that $\tau' \rightarrow 0$ , we arrive at the
+solution for a constant $\tau$ during the time interval:
+
+$$y\left( t \right) = y_{0}e^{- \frac{t}{\tau}_{0}} + u_{0}\left( 1 - e^{- \frac{t}{\tau_{0}}} \right) + u'\left\lbrack t - \tau_{0}\left( 1 - e^{- \frac{t}{\tau_{0}}} \right) \right\rbrack$$
+
+Implementation
+
+The analytic solution for the variable lag compensator can be used to
+solve for the value of $y_{1} = y\left( t_{0} + \Delta t \right)$ 
+at the end of a Control System sub-interval (time step) given the
+initial value $y_{0} = y\left( t_{0} \right)$ . Knowing the lag
+time at the beginning of the time step, $\tau_{0}$ , and the input
+driving function at the beginning and end of the time step,
+ $u_{0} = u\left( t_{0} \right)$ and
+ $u_{1} = u\left( t_{0} + \Delta t \right)$ , respectively, then the
+solution for $y_{1}$ at the end of the time step is
+
+$$y_{1} = y_{0}e^{- \delta} + u_{0}\left( 1 - e^{- \delta} \right) + \left( u_{1} - u_{0} \right)\left\lbrack 1 - \frac{1 - e^{- \delta}}{\delta} \right\rbrack$$
+
+where $\delta = \frac{\Delta t}{\tau_{0}}$ .
+
+Because this solution is prone to numerical round-off errors, expansions
+for the exponential function are used:
+
+$$e^{- \delta} = 1 - \delta + \frac{\delta^{2}}{2} - \frac{\delta^{3}}{6} + O\left\lbrack \delta^{4} \right\rbrack$$
+
+and
+
+$$\frac{1 - e^{- \delta}}{\delta} = 1 - \frac{\delta}{2} + \frac{\delta^{2}}{6} - \frac{\delta^{3}}{24} + O\left\lbrack \delta^{4} \right\rbrack$$
+
+Using these expansions, the solution is written as
+
+$$y_{1} = y_{0}\left\lbrack 1 - \delta + \frac{\delta^{2}}{2} \right\rbrack + u_{0}\left\lbrack \frac{\delta}{2} - \frac{\delta^{2}}{3} \right\rbrack + u_{1}\left\lbrack \frac{\delta}{2} - \frac{\delta^{2}}{6} \right\rbrack + O\left\lbrack \delta^{3} \right\rbrack$$
+
+To minimize numerical round-off errors in the code, the following form
+is used:
+
+$$y_{1} \approx y_{0}\left\lbrack 1 - \delta\left( 1 - \delta\left( \frac{1}{2} \right) \right) \right\rbrack + u_{0}\left\lbrack \delta\left( \frac{1}{2} - \delta\left( \frac{1}{3} \right) \right) \right\rbrack + u_{1}\left\lbrack \delta\left( \frac{1}{2} - \delta\left( \frac{1}{6} \right) \right) \right\rbrack$$
+
+which is second-order accurate in $\delta$ . This form also avoids
+the need to make expensive exponential function evaluations.
+
+Use
+
+A variable lag compensator is identified in the Control System input
+as signal type ITYPE = 23. It requires two input signals to define the
+time-dependent functions $u\left( t \right)$ and
+ $\tau\left( t \right)$ . These are identified by the input
+parameters J1 and J2, respectively. Input for the variable lag
+compensator is summarized in the table below.
+
+ | 
+
+ | 
+Input
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+ISIG
+ | 
+ | 
+User-defined signal number
+ | 
+
+ | 
+ITYPE = 23
+ | 
+ | 
+Variable Lag Compensator type
+ | 
+
+ | 
+J1
+ | 
+ | 
+Signal # of driving function, $u(t)$ 
+ | 
+
+ | 
+J2
+ | 
+ | 
+Signal # of delay time, $\tau\left( t \right)$ 
+ | 
+
+ | 
+F1
+ | 
+ | 
+Multiplier for driving function
+[default: 1]
+ | 
+
+ | 
+F2
+ | 
+ | 
+(unused)
+ | 
+
+ | 
+F3
+ | 
+ | 
+(unused)
+ | 
+
+ | 
+F4
+ | 
+ | 
+Steady-state initial condition, $y\left( 0 \right)$ 
+[default: $y\left( 0 \right) = u\left( 0 \right)$ ]
+ | 
+
+ | 
+F5
+ | 
+ | 
+Zero-crossing parameter (F5 > 0)
+ | 
+
+The input includes two optional parameters, F1 and F4, and one
+required parameter, F5. If the optional parameters are blank or zero,
+defaults will be applied as indicated in the table. For example, if F1
+is non-zero, then the actual driving function will include a multiplier:
+
+$$u\left( t \right) = \mathrm{F1} \times \mathrm{\text{sig}}\left( \mathrm{J1} \right)$$
+
+Likewise, if F4 is non-zero, it is used to define the initial
+steady-state condition as $y\left( 0 \right) = \mathrm{F4}$ .
+Otherwise, the steady-state solution to the equation is
+ $y\left( 0 \right) = u\left( 0 \right)$ .
+
+The zero-crossing parameter, F5, is used in the same manner as with
+other Control System signals to stabilize convergence testing when the
+solution for $y\left( t \right)$ is near zero. The normalized
+error is approximated as follows to avoid divide-by-zero errors:
+
+$$\mathrm{\text{error}} = \left| \frac{\Delta y}{y} \right| \cong \frac{\left| \Delta y \right|}{\left| y \right| + \mathrm{F5}}$$
+
+Therefore, users can select a value for F5 that is small enough to
+ensure convergence when $y\left( t \right)$ is small, but large
+enough to avoid excessive iterations when small values for
+ $y\left( t \right)$ do not have a significant impact on the
+overall solution.
+
+Like the lag compensator, the variable lag compensator shifts both the
+phase and amplitude of the input signal $u\left( t \right)$ .
+However, the phase and amplitude vary as a function of time through the
+additional input for $\tau\left( t \right)$ . To demonstrate this,
+consider the following conditions:
+
+$$\begin{split}u\left( t \right) &= \sin\left( \frac{2\pi}{5}t \right) \\
+\tau\left( t \right) &= 1.9\sin\left( \frac{2\pi}{50}t \right) + 2 \\
+y\left( 0 \right) &= 2 \\\end{split}$$
+
+These can be represented in the Control System input as follows:
+
+INCONT 5
+
+# Time: t
+1 -55 0 0 0.0 0.0 0.0 0.0 0.0
+
+# Driving Signal: Sin(2πt/5)
+11 22 1 0 1.0 1.2566370 0.0 0.0
+
+# Lag Time Variation: Sin(2πt/50)
+12 22 1 0 1.0 .12566370 0.0 0.0
+
+# Constant: 2
+13 21 0 0 2.0 0.0 0.0 0.0 0.0
+
+# Lag Time: 1.9Sin(2πt/50) + 2
+17 1 12 13 1.9 1.0 1.0 0.0 0.0
+
+# Variable Lag Compensator(11,17)
+# ITYPE J1 J2 F1 F4 F5
+18 23 11 17 1.0 0.0 0.0 2.0 0.001
+
+999 1
+
+8001 2 0.00000001 0.00000001
+
+END
+
+
+------------------------------------------------------------------------------
+[page: Part02/Ch06/references.html]
+------------------------------------------------------------------------------
+[anchor: references]
+
+# 6.6. References
+
+6-1. R. B. Vilim, Unpublished information, Argonne National Laboratory, 1986.
+
+6-2. R. B. Vilim, T. Y. C. Wei, and F. E. Dunn, “Generalized Control
+System Modeling for Liquid-Metal Reactors,” Nucl. Sci. Eng., vol. 99,
+pp. 183-196, July, 1988.
+
+6-3. J. J. More, “The Levenberg-Marquardt Algorithm: Implementation and
+Theory,” Proceedings of the Biennial Conference on Numerical Analysis,
+Dundee, Scotland, June 28 - July 1, 1977, Springer-Verlag, New York, pp.
+105-116, 1978.
+
+
+------------------------------------------------------------------------------
+[page: Part02/Ch06/nomenclature.html]
+------------------------------------------------------------------------------
+[anchor: nomenclature]
+
+# 6.7. Nomenclature
+
+ | 
+
+ | 
+Symbol
+ | 
+ | 
+Definition
+ | 
+ | 
+Units
+ | 
+
+ | 
+
+ | 
+ $C$ 
+ | 
+ | 
+Normalized signal change
+ | 
+ | | 
+
+ | 
+ $D$ 
+ | 
+ | 
+Dynamic block operator
+ | 
+ | | 
+
+ | 
+ $e$ 
+ | 
+ | 
+Error estimate
+ | 
+ | | 
+
+ | 
+ $F$ 
+ | 
+ | 
+Static block operator
+ | 
+ | | 
+
+ | 
+ $i$ 
+ | 
+ | 
+Block index
+ | 
+ | | 
+
+ | 
+ $J$ 
+ | 
+ | 
+Block input signal
+ | 
+ | | 
+
+ | 
+ $j$ 
+ | 
+ | 
+Time step index
+ | 
+ | | 
+
+ | 
+ $K$ 
+ | 
+ | 
+Block type index
+ | 
+ | | 
+
+ | 
+ $k$ 
+ | 
+ | 
+Block type index
+ | 
+ | | 
+
+ | 
+ $L$ 
+ | 
+ | 
+Block output signal number
+ | 
+ | | 
+
+ | 
+ $m$ 
+ | 
+ | 
+Block output signal number
+ | 
+ | | 
+
+ | 
+ $q$ 
+ | 
+ | 
+Block input signal
+ | 
+ | | 
+
+ | 
+ $r$ 
+ | 
+ | 
+Block input signal
+ | 
+ | | 
+
+ | 
+ $S$ 
+ | 
+ | 
+Signal value
+ | 
+ | | 
+
+ | 
+ $t$ 
+ | 
+ | 
+Time
+ | 
+ | 
+s
+ | 
+
+ | 
+ $u$ 
+ | 
+ | 
+Input variable
+ | 
+ | | 
+
+ | 
+ $x$ 
+ | 
+ | 
+State variable
+ | 
+ | | 
+
+ | 
+ $y$ 
+ | 
+ | 
+Output variable
+ | 
+ | |
+
+
+------------------------------------------------------------------------------
+[page: Part02/Ch06/appendices.html]
+------------------------------------------------------------------------------
+[anchor: appendix-6-1-control-system-input-description]
+
+# 6.8. Appendix 6.1: Control System Input Description
+
+This appendix contains a description of the SAS4A/SASSYS-1 input block
+assigned to the control system model.
+
+[anchor: input-block-structure]
+
+## 6.8.1. Input Block Structure
+
+The input block structure is identical to the standard SAS4A/SASSYS-1
+input block structure in all but one respect. A new card format known as
+a signal card has been introduced. These cards immediately follow the
+block identifier card and precede the standard data cards. The ordering
+of the different card types is depicted in the diagram below.
+
+block identifier card
+signal card # 1
+signal card # 2
+
+.
+.
+.
+
+signal card # n
+end of signal card
+
+data card # 1
+data card # 2
+
+.
+.
+.
+
+data card # m
+block delimiter card

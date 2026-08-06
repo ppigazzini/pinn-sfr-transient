@@ -1,0 +1,3579 @@
+==============================================================================
+CHAPTER 15. PINACLE: In-Pin Pre-Failure Molten Fuel Relocation Module
+source: https://sas-doc.nse.anl.gov/latest/Part04/Ch15/Ch15.html   (ANL/NSE-SAS/5.8.1)
+scope: out of scope: PINACLE molten fuel relocation, post-failure
+==============================================================================
+[anchor: pinacle-in-pin-pre-failure-molten-fuel-relocation-module]
+
+# 15. PINACLE: In-Pin Pre-Failure Molten Fuel Relocation Module
+
+15.1. Overview
+
+15.1.1. Historical Background
+
+15.1.2. Physical Description of the PINACLE Model
+
+15.1.3. Interaction of PINACLE with other Models Within the SAS4A System
+
+15.2. In-pin Hydrodynamic Model
+
+15.2.1. Overview of the Numerical Approach for the In-pin Fuel Motion Calculation and Description of Subroutines PN1PIN and PN2PIN
+
+15.2.2. Definition of the Generalized Smear Densities for the In-pin Hydrodynamic Calculation
+
+15.2.3. Differential Equations for the In-Pin Fuel Motion and Description of Sink and Source Terms
+
+15.2.4. Finite Difference Equations for the In-Pin Motion Model
+
+15.2.5. Treatment of the Fuel Ejection Above the Top of the Active Fuel Pin
+
+15.2.6. Time-step Determination for the Pre-Failure In-Pin Motion
+
+15.3. Computer Implementation
+
+15.3.1. Detailed Logic Flow Description
+
+15.3.2. Input Parameters Relevant to PINACLE
+
+15.3.3. Output Description
+
+15.4. Future Directions for Modeling Efforts.
+
+15.4.1. Annular Molten Region
+
+15.4.2. New Moving Material Components
+
+15.4.3. Inner Cladding Ablation
+
+15.4.4. Composition-Dependent Moving Mixture Properties
+
+15.4.5. Fuel Freezing in the Plenum
+
+15.4.6. Initiation of Axial Motion
+
+15.4.7. Fuel Blanket and Sodium Slug Motion
+
+15.4.8. PINACLE Termination Upon Fuel Freezing and Restart Upon Remelting
+
+15.5. References
+
+15.6. Nomenclature
+
+
+------------------------------------------------------------------------------
+[page: Part04/Ch15/introduction.html]
+------------------------------------------------------------------------------
+[anchor: overview]
+
+# 15.1. Overview
+
+[anchor: historical-background]
+
+## 15.1.1. Historical Background
+
+During both the LOF and TOP postulated accidents, the mismatch between
+the energy generated in the fuel pin and the energy removed by the
+coolant may lead to the overheating of the fuel pin. During the early
+period, limited fuel relocation occurs due to the axial expansion of the
+solid fuel pin, which may reduce or increase the core reactivity,
+depending on the power response. As the accident proceeds, the inside of
+the fuel pin begins to melt, leading to the formation of an internal
+cavity as shown in Figure 15.1.1.
+
+Figure 15.1.1 Cavity Formation During Initial Accident Phase
+
+This cavity is filled with a mixture of molten fuel and fission gas and
+expands continuously, both radially and axially, due to continued fuel
+melting. The fuel-gas mixture in the cavity is pressurized due to the
+presence of fission gas and can move under the influence of the local
+pressure gradients. During this period fuel relocation occurs due to
+both axial extrusion of the solid fuel pin and the in-pin hydrodynamic
+relocation of the molten fuel. As long as the cavity maintains a
+bottled-up configuration the hydrodynamic fuel relocation is limited and
+tends to introduce an amount of negative reactivity comparable in
+magnitude to the negative reactivity introduced by axial extrusion of
+the solid fuel. As the cavity walls continue to melt there is a
+competition between the two effects illustrated in Figure 15.1.2:
+
+The radial extension of the cavity and cladding melting which can
+cause fuel pin failure. When pin failure occurs, the inner cavity is
+connected to the coolant channel, which is at a significantly lower
+pressure, and the molten fuel inside the pin is accelerated rapidly
+toward the pin failure location. This initial in-pin fuel relocation
+can have either a negative or positive reactivity contribution,
+depending on the failure location and axial failure propagation.
+Molten fuel is ejected into the coolant channel where it is dispersed
+axially. This fuel dispersal leads to a large insertion of negative
+reactivity and eventual neutronic shutdown of the reactor.
+
+The axial extension of the cavity, which can cause the cavity to
+reach the top of the fuel pin. When this happens the pressurized
+molten fuel in the cavity is connected to the lower pressure upper
+plenum and can relocate suddenly, leading to a large insertion of
+negative reactivity and possible neutronic shutdown of the reactor.
+
+The traditional pressure relief mechanism in the SAS4A [15-1] context
+was the rupture of fuel pin cladding leading to the onset of fuel
+motion. While the post pin-failure fuel relocation was modeled in
+considerable detail by the LEVITATE [15-2] and PLUTO [15-3] models, the
+in-pin relocation of molten fuel prior to pin failure was not modeled.
+
+The new PINACLE [15-4] code that has been implemented in SAS4A provides
+the capability to model the dynamic relocation of the in-pin molten fuel
+prior to cladding failure. PINACLE is an Eulerian, two-phase, transient
+hydrodynamic model describing the axial fuel relocation in a variable
+area geometry. It has been constructed using the same computational
+variables and method of solution as LEVITATE and PLUTO. The
+compatibility of PINACLE with these two models allows SAS4A to provide a
+consistent treatment of the in-pin fuel relocation from melting to the
+end of the initiating phase.
+
+The components tracked by PINACLE are the molten fuel and two types of
+fission gas. The fission gas can exist either in the form of small
+bubbles, constrained by surface tension, which do not contribute
+significantly to the cavity pressure or as free gas which pressurizes
+the surrounding molten fuel. The small bubbles coalesce in time and
+gradually become part of the free gas field.
+
+Figure 15.1.2 Molten Fuel Relocation Modes
+
+To advance the numerical solution, PINACLE uses a staggered mesh, with
+the dependent variables, density and enthalpy, defined at the center of
+each cell, and the velocities defined at the cell boundaries. Only a
+bubbly flow regime is currently modeled, with the assumption that the
+molten fuel and the fission gas are well mixed and move with the same
+velocity at a given axial location.
+
+Pre-failure in-pin fuel motion can play a particularly significant role
+in metal fuel cores and in oxide fuel cores subjected to a slow ramp
+transient overpower (TOP) excursion. In these cases the molten fuel
+cavity can extend all the way to the top of the pin and allow
+significant in-pin molten fuel relocation prior to cladding failure. The
+ejection of the molten fuel into the gas plenum space can provide an
+important source of negative reactivity.
+
+[anchor: physical-description-of-the-pinacle-model]
+
+## 15.1.2. Physical Description of the PINACLE Model
+
+[anchor: cavity-formation-and-in-pin-fuel-motion]
+
+### 15.1.2.1. Cavity Formation and In-pin Fuel Motion
+
+As the accident proceeds, the inside of the fuel pin begins to melt,
+leading to the formation of an internal cavity. This cavity is filled
+with a mixture of molten fuel and fission gas, and expands continuously,
+both radially and axially, due to fuel melting. The fuel-gas mixture in
+the cavity is pressurized due to the presence of fission gas and fuel
+vapor. A limited amount of axial fuel relocation occurs in this
+bottled-up configuration. PINACLE models this molten fuel relocation,
+the heat transfer between the molten fuel in the cavity and the solid
+fuel walls, and the cavity extension. Note that while in oxide fuel pins
+and in metal U-Fissium pins the internal molten cavity is likely to be
+centrally located within the pin at any axial location, the situation is
+different for the U-Pu-Zr fuel pins. Due to the Zr migration and the
+formation of a middle Zr-depleted region, the molten cavity in these
+pins is likely to develop as an annular cavity. The current PINACLE
+version only treats circular cavities, but the modeling of the annular
+cavity formation will be added in a future version.
+
+The hydrodynamic calculations in the coolant channel and the heat
+transfer in the solid fuel are not modeled by PINACLE. These
+calculations are performed by other SAS4A modules as described in
+Section 15.1.3.
+
+[anchor: in-pin-molten-fuel-relocation]
+
+#### 15.1.2.1.1. In-pin Molten Fuel Relocation
+
+In metal fuel cores and in oxide cores subjected to slow ramp TOP’s it
+is possible that the molten cavity will reach the top of the active fuel
+column prior to the cladding failure. If no upper blanket pellets are
+present, as was the case in the metal fuel pins used in the M2 and M3
+experiment [15-9], the pressurized molten fuel in the cavity is offered
+an escape path to the lower pressure upper gas plenum. As it escapes
+from the pressurized cavity, the fuel will displace the liquid sodium
+slug present above the top of the pin and will reduce the free volume
+available in the gas plenum. The pressure in the cavity will decrease as
+the molten fuel is ejected into the plenum, while the pressure in the
+plenum will increase due to the volume reduction. After the initial fuel
+burst, a quasi-equilibrium will be established, with more fuel being
+ejected, at a slower rate, as the fuel melting in the cavity continues.
+
+If blanket pellets are present above the active fuel column, PINACLE
+assumes that these pellets can move freely upward, for a distance
+FUSDLT. The input value FUSLDT is defined by the actual pin
+construction. Thus, in pins with dimples limiting the axial fuel motion,
+the input FUSLDT is determined by the distance between the top of the
+blanket stack and the dimples. When the fuel is ejected above the active
+fuel column it displaces the blanket pellets and creates a fuel-filled
+space above the active fuel. When the blanket stack reaches the dimples,
+or another rigid obstacle, its motion stops and the axial fuel ejection
+is reduced significantly. The ejection can still continue at a low rate
+by the ejection of limited amounts of fuel into the space already
+available above the active fuel column.
+
+[anchor: geometry-description]
+
+### 15.1.2.2. Geometry Description
+
+The geometry modeled in PINACLE and its relationship to the fuel
+assembly modelled by SAS4A is shown in Figure 15.1.3.
+
+Figure 15.1.3 Geometry Modeled by PINACLE
+
+PINACLE calculates all the thermal hydraulic events that occur in the
+fuel pin cavity. Although only one pin is shown in Figure 15.1.3. PINACLE
+will account for the appropriate number of pins per subassembly, as
+specified in the input description. The hydrodynamic in-pin calculations
+are performed on a mesh grid using the subscript K, having the origin at
+the bottom of the lower blanket. The top node of the upper blanket is
+indicated by the variable MZ. The active fuel core extends from KCORE1
+and KCORE2. The fuel pin cavity, which increases gradually both radially
+and axially, extends form KK1 to KKMX. It cannot extend beyond the
+active core boundaries.
+
+The upper blanket or liquid sodium above the active fuel column extends
+initially from KCORE2+1 to MZ. When the molten cavity reaches the top of
+the fuel column the molten fuel in the cavity is ejected above the fuel
+column, displacing the blanket pellets and/or liquid sodium, as shown in
+Figure 15.1.3. The initial fuel ejection is determined by the pressure
+difference between the upper gas plenum and the top cavity cell. When
+the upper blanket stack reaches a rigid obstacle, fuel ejection is
+determined by the pressure difference between the space above the active
+fuel and the top cavity node.
+
+[anchor: interaction-of-pinacle-with-other-models-within-the-sas4a-system]
+
+## 15.1.3. Interaction of PINACLE with other Models Within the SAS4A System
+
+The PINACLE model is fully integrated within the SAS4A whole core
+accident analysis code. PINACLE is initiated when the accident sequence,
+as modeled by other modules, leads to the internal melting of the fuel
+pins in some of the subassemblies. During its calculations PINACLE
+exchanges information with other SAS4A models such as DEFORM-4 or the
+point kinetics model, which describe other phenomena affecting the same
+computational channel. Finally when the cladding failure occurs in a
+computational channel PINACLE will transfer control to other models such
+as PLUTO2 or LEVITATE, which will continue the calculations in the
+channel.
+
+This chapter describes the important aspects related to the initiation,
+calculations and termination of PINACLE execution. A simplified modular
+representation of the relationships between PINACLE and other SAS4A
+modules is presented in Figure 15.1.4.
+
+Figure 15.1.4 Relationship Between PINACLE and Other SAS4A Modules
+
+[anchor: pinacle-initiation]
+
+### 15.1.3.1. PINACLE Initiation
+
+PINACLE can be initiated only by one routine of the SAS4A code, i.e.,
+CAVMOT.
+
+The initiation of the in-pin molten fuel motion is decided, for any
+given channel, in the routine CAVMOT, called from DFORM3. CAVMOT checks
+if the maximum areal melt fraction (defined by FNMELT times the heat of
+fusion) in the pin has reached the input value FPINAC. If
+this condition has been met, CAVMOT checks if there are at least 3
+adjacent axial segments with a melt fraction higher than FPINAC ⨉ CPINAC,
+where CPINAC is an input constant. If this condition has
+also been met, CAVMOT will set the flag IPINAC = 1 and will begin the
+PINACLE initiation by calling the PNINIT routine. It should be noted
+here that the routine CAVMOT is called even if the DEFORM pin mechanics
+model is not used i.e., when ISSFU2 = 0.
+
+The PNINIT routine prepares a number of variable necessary for PINACLE
+and then calls two initialization routines, PNINPT and PNSET. These
+routines complete the PINACLE initialization. Control is then returned
+to TSTHRM, via PNINIT, CAVMOT, and DFORM3.
+
+It is important to note that, after the PINACLE initiation, the coolant
+channel hydrodynamic calculation is performed by the boiling module,
+even if only subcooled sodium is present in the channel. This is a
+temporary situation, due to the fact that the HTRVPN heat transfer
+module developed for PINACLE can only interface with the boiling model.
+
+[anchor: pinacle-calculations]
+
+### 15.1.3.2. PINACLE Calculations
+
+Once the PINACLE initialization routines have been executed and the flag
+IPINAC has been set to 1 for that channel, ICH, the SAS4A transient
+driver, TSTHRM, will begin the execution of calculations for the
+remaining channels. The initialization of PINACLE in any given channel
+is always performed at the end of a heat transfer time step. The time is
+advanced then for all the channels by the coolant time step. When the
+end of the next heat transfer time step is reached for the channel where
+IPINAC=1, TSTHRM will transfer control to the PINACLE driver routine,
+PINACL. PINACL will retain control and advance the solution in the pin
+cavity for the channel from the end of the previous heat transfer step
+to the end of the current one. The flow chart in Figure 15.1.5 shows the
+logic of the PINACLE driver.
+
+First PINACL will execute PNSET2. This subroutine initializes all
+temporary integers and arrays. These are values that can be calculated
+using the permanent quantities. They are kept only as long as PINACL
+retains control in the channel ICH. The solution for the hydrodynamic
+in-pin fuel motion is then advanced for the channel by calling the
+routine PN1PIN and PN2PIN.
+
+Next, the PINACL driver routine determines the maximum time step
+acceptable for the hydrodynamic calculation in the next cycle. It is
+noted that the PINACLE time step is not allowed to exceed the time
+remaining until the end of the heat-transfer time step. If this happens,
+the PINACLE time step will be cut back, so that the end of the next
+PINACLE time step will coincide with the end of the heat transfer time
+step. The next task of PINACLE is to calculate the fuel reactivity. This
+calculation is described in more detail in the section on PINACLE
+interaction with the FEEDBK routine, 15.1.3.3.3.
+
+If the end of the PINACLE time step coincides with the end of a
+heat-transfer time step, the HTRVPN routine is called. This routine
+calculates the new temperatures in the solid fuel pin and in the
+cladding at the end of the current heat transfer time step.
+
+If it is time to produce output, PINACL will print the output described
+in Section 15.3.3. Then PINACL will return control to TSTHRM. When the
+pin mechanics model DEFORM-4 is used the PINACLE calculation is always
+followed immediately by the DEFORM-4 calculation.
+
+Figure 15.1.5 PINACLE Driver Flowchart
+
+[anchor: pinacle-interfaces]
+
+### 15.1.3.3. PINACLE Interfaces
+
+[anchor: pinacle-interface-with-the-deform-4-pin-mechanics-model]
+
+#### 15.1.3.3.1. PINACLE Interface with the DEFORM-4 Pin Mechanics Model
+
+PINACLE is tightly coupled to the DEFORM-4 pin mechanics model. After
+PINACLE initiation in a channel both PINACLE and DEFORM-4 are called
+successively at the end of each heat transfer time step. PINACLE
+receives from DEFORM-4 the modified cavity radii via the R(I,J) array
+and the modified axial length of each axial cell via the ZCOOL(I) array.
+It then calculates the temperature and composition changes in each
+cavity cell and, using the modified volume, calculates the new pressure
+in each cavity cell. These pressures are then passed back to DEFORM-4
+via the CAVPRS(J) array and will be used as a boundary condition in the
+DEFORM calculations during the next heat transfer time step. PINACLE
+also calculates the fuel melt-in at the cavity boundary and modifies the
+cavity radius, which is then passed back to DEFORM, via the R(I,J)
+array. Finally, the axial cavity extension is calculated in the HTRVPN
+heat transfer module and the new cavity axial boundaries are passed to
+DEFORM from PINACLE via the KK1DF and KKMXDF integers. Using the
+information received from PINACLE and the updated pressures in the
+coolant channel received from the boiling hydrodynamic model, DEFORM
+calculates the new radial and axial pin dimensions, which are then
+passed back to PINACLE to be used in the next heat transfer time step
+calculations.
+
+[anchor: pinacle-interface-with-the-htrvpn-heat-transfer-model]
+
+#### 15.1.3.3.2. PINACLE Interface with the HTRVPN Heat Transfer Model
+
+After the initiation of PINACLE calculations in a particular SAS4A
+channel, the heat transfer calculations in the solid fuel pin are
+performed by the HTRVPN heat transfer module. This module is similar to
+the TSHTRV module used when the boiling model is active but PINACLE has
+not yet started. HTRVPN differs from TSHTRV in the treatment of the fuel
+inner boundary condition. While TSHTRV treats a solid or hollow fuel pin
+with a zero heat flux inner boundary condition, HTRVPN takes into
+account the presence of the molten fuel cavity, when necessary. If the
+cavity is present in an axial cell, HTRVPN will perform the heat
+transfer calculation for the solid fuel only. The heat flux between the
+molten fuel in the cavity and the inner boundary of the solid fuel is
+calculated by PINACLE, which integrates the energy transferred each
+PINACLE time step, from the beginning to the end of the heat transfer
+time step. The integrated heat flux is then passed to HTRVPN via the
+HFCAWA(I) array. PINACLE also calculates the fuel melt-in at the cavity
+boundary and modifies the cavity radius which is made available to
+HTRVPN via the R(I,J) array and the number of solid radial fuel nodes
+present at each axial location. The index of the innermost solid fuel
+node is made available to HTRVPN via the IZJ(I) array. HTRVPN then
+calculates the new temperatures in the solid fuel, updating the array
+T2(I,J). These new temperatures will be used by PINACLE in the next heat
+transfer time step to determine the fuel melt-in and the heat flux at
+the cavity boundary.
+
+[anchor: pinacle-interface-with-the-feedbk-reactivity-module]
+
+#### 15.1.3.3.3. PINACLE Interface with the FEEDBK Reactivity Module
+
+FEEDBK calculates the data for net reactivity changes for a channel
+during a primary time step and transfers this information to the
+neutronic model which calculates the changes in the reactor power.
+PINACLE calculates the axial fuel mass distribution for the SAS4A
+channel under its control at the end of each primary time step. In other
+channels the fuel masses can be updated by other modules, e.g., PLUTO2
+or LEVITATE, which have control at the given time. As each channel is
+calculated, FEEDBK sums the fuel relocation reactivity together with the
+other reactivity contributions, such as fuel axial expansion, to
+determine the total reactivity of the core. Using this information, the
+neutronic model determines the new power level which is used by PINACLE
+in the following time step. The power level at the end of each PINACLE
+time step is determined in PINACL, using an exponential fit of the
+power-time history supplied by the neutronic model. This fit is based on
+the power level at the beginning of the time step and the precalculated
+power level at the end of the current main time step. By using this
+calculated power level and the axial input power distribution, the
+specific power for each axial segment is calculated.
+
+[anchor: pinacle-termination]
+
+### 15.1.3.4. PINACLE Termination
+
+The PINACLE calculation will continue in a channel until the calculation
+is terminated due to neutronic shutdown (i.e., the total reactivity is
+less then the input value NFUELD), the fuel freezes in all cavity cells
+due to lower power levels or the failure routine FAILUR indicates that
+the cladding failure has occurred. If such a failure occurs, the PINACLE
+calculation terminates and a transition is made to one of the
+post-failure fuel motion models, PLUTO2 or LEVITATE. These models will
+continue to calculate the thermal hydraulic events in the pin cavity in
+addition to calculating the hydrodynamic events in the coolant channel.
+Because the PINACLE model was developed using as a starting point the
+cavity hydrodynamic model used in PLUTO2 and LEVITATE, there is full
+consistency between the cavity models used in SAS4A before and after the
+fuel pin failure. However, at present PLUTO2 and LEVITATE do not yet
+account for the presence of the fuel ejected above the active fuel
+column which is modeled in PINACLE.
+
+The PINACLE calculations will terminate in a channel where the fuel in
+the cavity refreezes due to lower power levels. PINACLE will then remain
+in a stand-by state and could be restarted again in that channel if the
+conditions require it. This restart feature of PINACLE is not
+implemented at this time, but will be part of the near-term development
+effort.
+
+
+------------------------------------------------------------------------------
+[page: Part04/Ch15/in-pin-dynamics.html]
+------------------------------------------------------------------------------
+[anchor: in-pin-hydrodynamic-model]
+
+# 15.2. In-pin Hydrodynamic Model
+
+[anchor: overview-of-the-numerical-approach-for-the-in-pin-fuel-motion-calculation-and-description-of-subroutines-pn1pin-and-pn2pin]
+
+## 15.2.1. Overview of the Numerical Approach for the In-pin Fuel Motion Calculation and Description of Subroutines PN1PIN and PN2PIN
+
+There are several requirements for the solution algorithm for this
+one-dimensional, compressible flow problem with variable flow cross
+section: (a) it has to be able to handle large mass sources (due to fuel
+melting at the cavity boundary), (b) it has to conserve mass perfectly,
+and (c) it has to run efficiently. This was achieved with a
+predominantly explicit Eulerian solution method. All convective mass,
+energy, and momentum fluxes are treated explicitly (i.e., the beginning
+of time-step values are used). However, the solution sequence of the
+different equations introduces a certain implicitness, which can be
+important when treating the strong mass sources.
+
+The set of conservation equations describing the in-pin fuel motion
+includes the following; 3 for mass, 1 for momentum, and 1 for energy.
+The mass conservation equations are for the fuel, and the free and
+dissolved fission gas. The fuel and free fission-gas mass conservation
+equations are solved first, followed by the fuel energy conservation
+equation. The fission gas temperature change is assumed to be the same
+as the fuel temperature change. From the results of the mass and energy
+conservation equations, a new pressure is calculated. This is not the
+true end-of-time-step pressure because the velocity changes during the
+time step have not been included. However, it is a proper prediction for
+the end-of-time-step value in an explicit sense. The new pressures are
+then used in the fuel/fission-gas momentum equation. There is an input
+option in PINACLE to use a combination of the new and the old pressures.
+This option lets the pressure, P, be:
+
+$$\begin{split} P = \left( 1 - \text{EPCH} \right) \cdot \text{beginning-of-time-step pressure} \\
+ + \text{EPCH} \cdot \text{advanced pressure.}\end{split}$$ [eq 15.2-1]
+
+The recommended input value is $\text{EPCH} = 1$ because the calculation
+remained stable for longer time steps in test problems involving shock
+propagation and shock reflection when this input value was used [15-5].
+
+The time-step criterion in this compressible calculation is the sonic
+Courant condition. This does not require particularly small time steps
+because the sonic velocity in two-phase mixtures is fairly low for the
+void fractions encountered in pin blowdown calculations.
+
+A staggered numerical grid is used with the densities, energies, and
+temperatures defined at the cell centers, and the velocities defined at
+the cell edges. The spatial differencing uses full donor cell
+differencing. Although this is not as accurate as higher order
+differencing, it makes the calculation very stable.
+
+The free fission-gas mass conservation, the fuel mass conservation, and
+the fuel energy conservation equations are solved in subroutine PN1PIN
+(PINACLE 1st PIN ROUTINE). PN1PIN also computes the
+molten cavity geometry changes due to fuel melt-in. The fuel/fission-gas
+momentum equation and the dissolved fission-gas mass equation are solved
+in PN2PIN (PINACLE 2nd PIN ROUTINE). This routine also
+calculates the sonic velocities for each node and the maximum
+hydrodynamic time step (see Section 15.3.1.3).
+
+[anchor: definition-of-the-generalized-smear-densities-for-the-in-pin-hydrodynamic-calculation]
+
+## 15.2.2. Definition of the Generalized Smear Densities for the In-pin Hydrodynamic Calculation
+
+The use of generalized smear densities in SAS4A for the PLUTO2 [15-3]
+and LEVITATE [15-2] fuel motion models was prompted by the many
+different moving and stationary components treated by these models.
+PINACLE, which has used the in-pin fuel motion model in PLUTO2 and
+LEVITATE as a starting point, has maintained the use of the smeared
+densities for consistency and convenience. The use of this concept also
+simplified the differential and finite difference equations for variable
+cross section flow. The pie chart in Figure 15.2.1 gives an example of the
+relative cross sectional areas within a subassembly or experimental loop
+at a certain axial elevation.
+
+Figure 15.2.1 Illustration of the Generalized Volume Fraction
+
+If the total area of the subassembly is AXMX, the generalized volume
+fraction of a certain component $k$ is:
+
+$$\theta_{k} \left( z,t \right) = \frac{A_{\text{k}}\left( z,t \right)}{\text{AXMX}}$$ [eq 15.2-2]
+
+where $A_{\text{k}}$ is the cross sectional area occupied by component $k$ 
+(the latter refers, e.g., to the cavities or the moving fuel in all
+failed pins within the subassembly cross section). The reference area
+AXMX, which is an input quantity, can be arbitrarily chosen. This is
+because the code is invariant to the choice of AXMX (i.e., as long as it
+is not varied by several orders of magnitude which can lead to
+differences due to truncation errors). However, the recommended value of
+AXMX is the cross sectional area of a subassembly or experiment test
+section (including the can wall) because the volume fractions of the
+different components that appear in the PINACLE output are better
+understood in this case.
+
+The generalized volume fraction of the free fission gas and fuel vapor
+in the cavity is the difference between the cavity volume fraction and
+the fuel volume fraction.
+
+$$\theta_{\text{fica}}\left( z,t \right) = \theta_{\text{ca}}\left( z,t \right) - \theta_{\text{fuca}}\left( z,t \right)$$ [eq 15.2-3]
+
+where:
+
+ $\theta_{\text{fica}}$ = Generalized volume fraction of the free fission gas
+and fuel vapor in the pin cavities
+
+ $\theta_{\text{ca}}$ = Generalized volume fraction of the molten cavities in
+all pins which can be calculated from $A_{\text{ca}}/\text{AXMX}$ 
+
+ $\theta_{\text{fuca}}$ = Generalized volume fraction of the fuel in the
+cavities of all pins
+
+Generalized smear densities, which are always marked by a prime, are
+defined as products of physical densities and generalized volume
+fractions:
+
+$${\rho'}_{\text{fuca}}\left( z,t \right) = \rho_{\text{fuca}}\left( T \right) \cdot \theta_{\text{fuca}}\left( z,t \right) \
+ = \rho_{\text{fuca}}\left( T \right) \cdot \frac{A_{\text{fuca}}\left( z,t \right)}{\text{AXMX}}$$ [eq 15.2-4]
+
+$${\rho'}_{\text{fica}}\left( z,t \right) = \rho_{\text{fica}}\left( T \right) \cdot \theta_{\text{fica}}\left( z,t \right) \
+ = \rho_{\text{fica}}\left( T \right) \cdot \frac{A_{\text{fica}}\left( z,t \right)}{\text{AXMX}}$$ [eq 15.2-5]
+
+$${\rho'}_{\text{fsca}}\left( z,t \right) = \rho_{\text{fsca}}\left( T \right) \cdot \theta_{\text{fuca}}\left( z,t \right) \
+ = \rho_{\text{fsca}}\left( T \right) \cdot \frac{A_{\text{fuca}}\left( z,t \right)}{\text{AXMX}}$$ [eq 15.2-6]
+
+where the subscript fsca refers to the fission gas which is dissolved
+in the cavity fuel. The temperature $T$ is the fuel temperature which
+should actually be written with subscript fuca. It should again be
+pointed out that the $A$ ’s refer to total cross section areas of all the
+cavity fuel, free fission gas, and dissolved fission gas in the pins of
+one subassembly.
+
+The generalized source or sink term is written as:
+
+$$S' = \frac{S^{\mathcal{l}}}{\text{AXMX}}$$ [eq 15.2-7]
+
+where the source or sink term $S_{\text{l}}$ represents a mass source or
+sink per unit time and unit length. The primed source or sink term has
+the dimension of mass per unit time and per unit smear volume. This unit
+of smear volume is a m3 of the cell volume $\text{AXMX} \cdot \Delta z$ in
+which all relevant components (including components in all failed pins,
+the components in all the channels and the structure) are assumed to be
+uniformly smeared. From Eq. (15.2-7), a change in the generalized smear
+density, ${\rho'}$ , due to source or sink $S'$ is just $S' \Delta t$ .
+
+[anchor: differential-equations-for-the-in-pin-fuel-motion-and-description-of-sink-and-source-terms]
+
+## 15.2.3. Differential Equations for the In-Pin Fuel Motion and Description of Sink and Source Terms
+
+The equation set for the in-pin fuel motion includes three mass
+conservation equations (for fuel, free fission gas, and dissolved
+fission gas), one energy, and one momentum conservation equation. The
+continuity equation for the molten fuel in the pin cavity is written:
+
+$$\frac{\partial}{\partial \text{t}} \left( \rho_{\text{fuca}} A_{\text{fuca}} \right) = \
+ - \frac{\partial}{\partial \text{z}}\left( \rho_{\text{fuca}} A_{\text{fuca}} u_{\text{fuca}} \right) +\
+ S_{\text{fuca,me}}^{\mathcal{l}}\left( z,t \right)$$ [eq 15.2-8]
+
+where the subscript me refers to fuel melting into the pin cavities of
+all pins. By dividing by AXMX and using the definitions of the
+generalized smear densities and source and sink terms, Eq. (15.2-8)
+becomes:
+
+$$\frac{\partial}{\partial \text{t}}{\rho'}_{\text{fuca}} = \
+ - \frac{\partial}{\partial \text{z}}\left( {\rho'}_{\text{fuca}} u_{\text{fuca}} \right) + {S'}_{\text{fuca,me}}$$ [eq 15.2-9]
+
+where the primed source is per unit time and per unit smear volume (see
+Eq. (15.2-7)). The integrated source term,
+ $S'_{\text{fuca,me}} \Delta t_{\text{PN}}$ , which is actually needed in the
+finite difference equations of the code, is calculated from
+
+$${S'}_{\text{fuca,me}} \Delta t_{\text{PN}} = \frac{\rho_{\text{fu,cabd}} \Delta A_{\text{me}} \text{NRPI}}{\text{AXMX}}$$ [eq 15.2-10]
+
+where
+
+ $\Delta t_{\text{PN}}$ = PINACLE time step, s
+
+ $\rho_{\text{fu,cabd}}$ = Fuel density (including porosity) adjacent to the
+cavity boundary kg/m3
+
+ $\Delta A_{\text{me}}$ = Area of fuel (including porosity) melted into the
+cavity per PINACLE time step per pin, m3
+
+NRPI = Number of pins per subassembly,
+
+When the solid fuel node adjacent to the cavity has not yet exceeded an
+input melt fraction value FNMELT:
+
+$${S'}_{\text{fuca,me}} \Delta t_{\text{PN}} = 0$$ [eq 15.2-11]
+
+The $\Delta A_{\text{me}}$ in Eq. (15.2-10) is related to a change in the
+cavity diameter by
+
+$$\Delta A_{\text{me}} = \frac{\pi}{4}\Delta D_{\text{ca}} \left( 2D_{\text{ca}} + \Delta D_{\text{ca}} \right)$$ [eq 15.2-12]
+
+where
+
+ $D_{\text{ca}}$ = Cavity diameter, m
+
+ $\Delta D_{\text{ca}}$ = Change in the cavity diameter, m
+
+In order to avoid adding the whole radial node instantaneously upon
+meeting the input melt fraction criterion FNMELT, the radial node is
+added gradually beginning at the time FNMELT is reached and the
+addition is completed once the melt fraction has exceeded FNMELT + 0.1.
+Once the melt fraction has become greater than FNMELT, the change
+in cavity diameter is calculated from
+
+$$\Delta D_{\text{ca}} = \text{FNMECA} \cdot 2 \cdot \Delta r_{\text{node}}$$ [eq 15.2-13]
+
+where $\Delta r_{\text{node}}$ is the width of the heat-transfer node
+adjacent to the cavity wall before it is melted into the cavity.
+FNMECA is the fraction of this node width which has melted into the
+cavity per PINACLE time step.
+
+$$\begin{split} \text{FNMECA} = \Delta t_{\text{PN}} \frac{\left\lbrack \frac{\left( T_{\text{cabd}}^{n + 1} - T_{\text{cabd}}^{n} \right)}{\Delta t_{\text{Ht}}} \right\rbrack}{\left\lbrack 0.1 \cdot \left( T_{\text{fu,liq}} - T_{\text{fu,sol}} \right) \right\rbrack} \
+ = \frac{\Delta T_{\text{PN}}}{\left\lbrack 0.1 \cdot \left( T_{\text{fu,liq}} - T_{\text{fu,sol}} \right) \right\rbrack} \\\end{split}$$ [eq 15.2-14]
+
+where
+
+ $T_{\text{cabd}}^{n}, T_{\text{cabd}}^{n + 1}$ = The
+temperatures of the fuel node adjacent to the cavity at the beginning
+and at the end of the heat-transfer time step $\Delta t_{\text{Ht}}$ ,
+respectively
+
+ $T_{\text{fu,liq}}, T_{\text{fu,sol}}$ = Fuel
+liquidus and solidus temperatures, respectively (The difference between
+the two is the melting band width)
+
+ $\Delta t_{\text{PN}}$ = The PINACLE time step.
+
+ $\Delta T_{\text{PN}}$ = The temperature change of the fuel
+adjacent to the cavity during a PINACLE time step
+
+Eq. (15.2-14) implies that the whole heat-transfer node will be
+melted into the cavity after its temperature has risen by 1/10 of the
+melting band width beyond the input value FNMELT. Moreover, it is
+checked whether the neighboring solid fuel node also has exceeded the
+input melt fraction criterion FNMELT. If this is the case, the entire
+remaining node currently melting into the cavity is added immediately to
+the cavity. This situation can occur in TREAT experiments.
+
+The free fission-gas mass conservation equation is written
+
+$$\frac{\partial}{\partial \text{t}}\left( \rho_{\text{fica}}A_{\text{fica}} \right) = \
+ - \frac{\partial}{\partial \text{z}}\left( \rho_{\text{fica}} A_{\text{fica}} u_{\text{fuca}} \right) \
+ + S_{\text{fica,me}}^{l} + S_{\text{fsca,rl}}^{l}$$ [eq 15.2-15]
+
+where the subscripts fsca and rl refer to fission gas in solution
+and to the release of this dissolved fission gas, respectively. Dividing
+by AXMX and by using the definition of the generalized smear densities
+and source terms yields
+
+$$\frac{\partial}{\partial \text{t}}{\rho'}_{\text{fica}} = \
+ - \frac{\partial}{\partial \text{z}}\left( {\rho'}_{\text{fica}} u_{\text{fuca}} \right) \
+ + {S'}_{\text{fica,me}} + {S'}_{\text{fsca,rl}}$$ [eq 15.2-16]
+
+The integrated source term for free fission gas due to fuel melt-in is
+similar to that in Eq. (15.2-10):
+
+$${S'}_{\text{fica,me}} \Delta t_{\text{PN}} = \rho_{\text{figb,cabd}} \Delta A_{\text{me}} \left( \frac{\text{NRPI}}{\text{AXMX}} \right)$$ [eq 15.2-17]
+
+where
+
+ $\Delta A_{\text{me}}$ = Calculated change in cavity cross sectional area
+from Eq. (15.2-12)
+
+ $\rho_{\text{figb,cabd}}$ = Density of the grain-boundary gas
+in the fuel node adjacent to the cavity
+
+The quantity $\rho_{\text{figb,cabd}}$ is calculated from:
+
+$$\rho_{\text{figb,cabd}} = \frac{\text{GNBFG} 2_{\text{cabd}} \cdot \left( \frac{\text{FUMS}_{\text{cabd}}}{\text{FUELMS}_{\text{cabd}}} \right)}{\text{VOLUME}_{\text{cabd}}}$$ [eq 15.2-18]
+
+where
+
+ $\text{GNBFG2}_{\text{cabd}}$ = The grain-boundary fission-gas mass in the
+original radial fuel-pin node at the cavity boundary before it has
+actually melted in
+
+ $\text{FUMS}_{\text{cabd}}$ = The current fuel mass in the melting radial
+fuel-pin node at the cavity boundary
+
+ $\text{FUELMS}_{\text{cabd}}$ = The original fuel mass of the radial fuel-pin
+node at the cavity boundary before any fuel is removed due to melt-in
+
+ $\text{VOLUME}_{\text{cabd}}$ = The current volume of the melting radial
+fuel-pin node at the cavity boundary
+
+The source term due to dissolved fission-gas release in Eq. (15.2-16) is:
+
+$${S'}_{\text{fsca,rl}} = {\rho'}_{\text{fsca}} \cdot \text{CIRTFS} \cdot \Delta t_{\text{PN}}$$ [eq 15.2-19]
+
+where
+
+ $\text{CIRTFS}$ = Release time constant for dissolved fission gas which is
+input and has the dimensions s-1
+
+The same release constant is also used for the dissolved fission-gas
+release in the coolant channels - see Eq. (14.4-20). This is a relatively
+simple exponential decay-type approach to treat the release of the gas
+dissolved in molten fuel. However, the understanding of the mechanism of
+dissolved gas release from molten fuel is still very limited.
+
+The dissolved fission-gas mass conservation equation is:
+
+$$\frac{\partial}{\partial \text{t}} \left( \rho_{\text{fsca}} A_{\text{fuca}} \right) = \
+ - \frac{\partial}{\partial \text{z}}\left( \rho_{\text{fsca}} A_{\text{fuca}} u_{\text{fuca}} \right) \
+ + {S'}_{\text{fsca,me}} - {S'}_{\text{fsca,rl}}$$ [eq 15.2-20]
+
+By dividing this equation by AXMX and using the definitions of the
+generalized smear densities and sources, one obtains:
+
+$$\frac{\partial}{\partial \text{t}}\left( {\rho'}_{\text{fsca}} \right) = \
+ - \frac{\partial}{\partial \text{z}}\left( {\rho'}_{\text{fsca}} u_{\text{fuca}} \right) \
+ + {S'}_{\text{fsca,me}} - {S'}_{\text{fsca,rl}}$$ [eq 15.2-21]
+
+where
+
+$${S'}_{\text{fsca,me}} = \rho_{\text{fi,ig,cadb}} \cdot \Delta A_{\text{me}} \cdot \left( \frac{\text{NRPI}}{\text{AXMX}} \right)$$ [eq 15.2-22]
+
+ $\rho_{\text{fi,ig,cabd}}$ = The density of the
+intra-granular gas in the fuel node adjacent to the cavity.
+
+The absolute value of the sink term due to the dissolved fission-gas
+release has been described in Eq. (15.2-19).
+
+The fuel energy conservation equation is written:
+
+$$\begin{split} \frac{\partial}{\partial \text{t}} \left\lbrack \rho_{\text{fuca}} e_{\text{fuca}} A_{\text{fuca}} \right\rbrack = - \frac{\partial}{\partial \text{z}} \left\lbrack \rho_{\text{fuca}} e_{\text{fuca}} A_{\text{fuca}} u_{\text{fuca}} \right\rbrack + S_{\text{fuca,me}}^{l} e_{\text{fu,cabd}} \\
+ + Q A_{\text{fuca}} \rho_{\text{fuca}} - h_{\text{fuca,cabd}} \cdot \left( T_{\text{fuca}} - T_{\text{fu,cabd}} \right) \pi D_{\text{ca}} \text{NRPI}\end{split}$$ [eq 15.2-23]
+
+Dividing Eq. (15.2-23) by AXMX and using the definitions of the
+generalized smear densities and sources and sinks produces:
+
+$$\begin{split}\frac{\partial}{\partial \text{t}}\left\lbrack {\rho'}_{\text{fuca}} e_{\text{fuca}} \right\rbrack = - \frac{\partial}{\partial \text{z}}{\rho'}_{\text{fuca}} e_{\text{fuca}} u_{\text{fuca}} + {S'}_{\text{fuca,me}} e_{\text{fu,cabd}} \\
++ Q {\rho'}_{\text{fuca}} - h_{\text{fuca,cabd}} \cdot \left( T_{\text{fuca}} - T_{\text{fu,cabd}} \right) \pi D_{\text{ca}} \frac{\text{NRPI}}{\text{AXMX}}\end{split}$$ [eq 15.2-24]
+
+By rewriting the left-hand side of Eq. (15.2-24) as
+
+$$\frac{\partial}{\partial \text{t}}\left( {\rho'}_{\text{fuca}} e_{\text{fuca}} \right) \
+ = {\rho'}_{\text{fuca}} \frac{\partial}{\partial \text{t}} e_{\text{fuca}} + e_{\text{fuca}} \
+ \frac{\partial}{\partial \text{t}} {\rho'}_{\text{fuca}}$$ [eq 15.2-25]
+
+and by using the mass conservation Eq. (15.2-8), one obtains
+
+$$\begin{split} {\rho'}_{\text{fuca}} \frac{\partial}{\partial \text{t}} e_{\text{fuca}} \
+ = - \frac{\partial}{\partial \text{z}}\left( {\rho'}_{\text{fuca}} e_{\text{fuca}} u_{\text{fuca}} \right) \
+ + e_{\text{fuca}}\frac{\partial}{\partial \text{z}} \left( {\rho'}_{\text{fuca}} u_{\text{fuca}} \right) \\
+ + {S'}_{\text{fuca,me}}\left( e_{\text{fu,cabd}} - e_{\text{fuca}} \right) + Q {\rho'}_{\text{fuca}} \\
+ - h_{\text{fuca,cabd}} \left( T_{\text{fuca}} - T_{\text{fu,cabd}} \right) \pi D_{\text{ca}} \frac{\text{NRPI}}{\text{AXMX}}\end{split}$$ [eq 15.2-26]
+
+where $Q$ is the fission heat source per kg of fuel
+
+$$\begin{split} Q = \text{FNPOHE} \cdot \text{POW} \cdot \text{PSHAPE} \left( K \right) \cdot \\
+ \left( 1 - \text{GAMSS} - \text{GAMTNC} - \text{GAMTNE} \right) \cdot \frac{F_{\text{POWER}}}{\text{FUMASS}\left( K \right)}\end{split}$$ [eq 15.2-27]
+
+In Eq. (15.2-27),
+
+$$\text{FNPOHE} = \exp\left\lbrack \text{POWCOF}\left( 1 \right) + \Delta t_{\text{x}} \left\{ \text{POWCOF}\left( 2 \right) \
+ + \Delta t_{\text{x}} \text{POWCOF}\left( 3 \right) \right\} \right\rbrack$$ [eq 15.2-28]
+
+where $\Delta t_{\text{x}}$ is the time between the current PINACLE time
+and the beginning of the current main (point kinetics) time step. The
+POWCOF’s are the coefficients that are found by fitting an
+exponential function to the power levels at the end of the last three
+point kinetics time step.
+
+ $\text{POW}$ = steady-state power in the peak axial fuel-pin segment (see SAS4A input description)
+
+ $\text{PSHAPE} \left( K \right)$ = ratio of pin power at axial node $K$ to POW (see SAS4A input description)
+
+ $\text{GAMSS, GAMTNC, GAMTNE}$ = fractions of total power for the direct
+heating of structure, coolant, and cladding, respectively. (See SAS4A
+input description)
+
+ $\text{FUMASS} \left( K \right)$ = initial total fuel mass in axial pin segment $K$ 
+
+ $F_{\text{POWER}}$ = power reduction factor if there is a radial power
+gradient in the pin (as is common in TREAT experiments):
+
+$$F_{\text{POWER}} = \frac{\sum_{\text{I=1}}^{I_{\text{cabd}}}{\text{PSHAPR}\left( I \right) \cdot \text{FUELMS} \
+ \left( I,K \right) \big/ \sum_{\text{I=1}}^{I_{\text{cabd}}}{\text{FUELMS}\left( I,K \right)}}}{\sum_{\text{I=1}}^{\text{NT}}{\text{PSHAPR}\
+ \left( I \right) \cdot \text{FUELMS} \left( I,K \right)} \big/ \sum_{\text{I=1}}^{\text{NT}}{\text{FUELMS}\left( I,K \right)}}$$ [eq 15.2-29]
+
+where
+
+ $\text{NT}$ = Number of radial pin nodes
+
+ $I_{\text{cabd}}$ = Number of radial pin nodes in the cavity
+
+ $\text{PSHAPR} \left( I \right)$ = Mass normalized radial power distribution in radial node
+ $I$ (See SAS4A input description)
+
+ $\text{FUELMS} \left( I,K \right)$ = Initial fuel mass in the radial fuel-pin node
+ $I, K$ 
+
+The heat-transfer coefficient in Eq. (15.2-23) is the sum of a convective
+and a conduction heat-transfer term.
+
+$$h_{\text{fuca,cabd}} = \left( h_{1} + h_{2} \right)$$ [eq 15.2-30]
+
+where
+
+$$h_{1} = \frac{k_{\text{fu}}}{D_{\text{ca}}} \cdot \text{St} \cdot \text{Pr} \cdot \text{Re}$$ [eq 15.2-31]
+
+This comes from the definition of the Nusselt number
+
+$$\text{Nu} = \text{St} \cdot \text{Pr} \cdot \text{Re}$$ [eq 15.2-32]
+
+where
+
+ $\text{St}$ = Stanton number = $\frac{h}{\rho u C_{\text{p}}}$ 
+
+ $\text{Pr}$ = Prandtl number in $\frac{\mu C_{\text{p}}}{k}$ 
+
+ $\text{Re}$ = Reynolds numbers = $\frac{D \rho u}{\mu}$ 
+
+The Deissler correlation [15-7] was used for finding the relationship
+between the three nondimensional numbers on the right-hand side of
+Eq. (15.2-32). The Prandtl number for fuel is about 2.2. By using this value
+in the Deissler correlation, it can be shown that
+
+$$\text{St} \approx 0.0158\ \text{Re}^{- 0.2}$$ [eq 15.2-33]
+
+By using Eq. (15.2-33) and the definition of the Prandtl number,
+
+$$h_{1} = \frac{1}{D_{\text{ca}}} \cdot \mu_{\text{fu,liq}} \cdot C_{\text{p,fu}} \cdot \text{CIA3} \cdot \text{Re}_{\text{ca}}^{0.8}$$ [eq 15.2-34]
+
+where
+
+ $C_{\text{p,fu}}$ = Heat capacity of fuel, which is input (CPFU)
+
+ $\mu_{\text{fu,liq}}$ = Liquid fuel viscosity, which is input (VIFULQ)
+
+ $\text{CIA3}$ = Input constant. A value of CIA3 = 0.0158 is recommended because of Eq. (15.2-33)
+
+$$\text{Re}_{\text{ca}} = \frac{\left( \left| u_{\text{fuca}} \right| D_{\text{ca}} {\rho'}_{\text{fuca}} \
+ \big/ \theta_{\text{ca}} \right)}{\mu_{\text{fu,liq}}}$$ [eq 15.2-35]
+
+The conduction heat-transfer coefficient, $h_{2}$ , which is
+relevant for a low flow or a stagnant flow condition is of the following
+form
+
+$$h_{2} = 4 \cdot \frac{k_{\text{fu}}}{D_{\text{ca}}}$$ [eq 15.2-36]
+
+The pressure calculation in the fuel-pin cavity is based on the
+assumption that the fission-gas pressure and fuel-vapor pressure can be
+added. The total cavity pressure is:
+
+$$P_{\text{ca}} = P_{\text{fica}}\left( T_{\text{fuca}}, \rho_{\text{fica}} \right) + P_{\text{fvca}} \left( T_{\text{fuca}} \right)$$ [eq 15.2-37]
+
+If the input variable INAPN is equal to 1, then the sodium
+vapor pressure contribution will also be included in the pressure
+calculation, accounting for the possible presence of liquid sodium in
+metal fuel pins:
+
+$$P_{\text{ca}} = P_{\text{fica}}\left( T_{\text{fuca}}, \rho_{\text{fica}} \right) \
+ + P_{\text{fvca}} \left( T_{\text{fuca}} \right) + P_{\text{Na}}$$ [eq 15.2-38]
+
+where the sodium vapor pressure contribution is calculated as follows:
+
+$$P_{\text{Na}} = P_{\text{Nv,ca}} \left( T_{\text{fuca}} \right) - \left\lbrack P_{\text{fica}}\left( T_{\text{fuca}},\
+ \rho_{\text{fica}} \right) + P_{\text{fvca}} \right\rbrack \cdot \text{CINAPN}$$ [eq 15.2-39]
+
+where CINAPN is an input constant with values between 0
+and 1.
+
+The fission-gas pressure in Eq. (15.2-37) and Eq. (15.2-38) is calculated from
+a special form of the ideal-gas equation which takes the compressibility
+of the liquid fuel into account:
+
+$$P_{\text{fica}} = \frac{R_{\text{fi}} \cdot T_{\text{fuca}} {\rho'}_{\text{fica}}}{\left( \theta_{\text{ca}} \
+ - \theta_{\text{fuca}} + \theta_{\text{fuca}} K_{\text{fu}} \cdot P_{\text{fica}} \right)}$$ [eq 15.2-40]
+
+where
+
+ $R_{\text{fi}}$ = The universal gas constant divided by the molecular
+weight of the mixture of fission gas and helium fill gas ( $R_{\text{fi}}$ is
+equal to an input value RGAS which should take into account the relative
+amounts of krypton, xenon, and helium. The latter may be important for
+near-fresh fuel)
+
+ $K_{\text{fu}}$ = Liquid fuel compressibility which is input (see CMFU)
+
+The physically meaningful solution of the quadratic Eq. (15.2-40) is:
+
+$$P_{\text{fica}} = \frac{- \left( \theta_{\text{ca}} - \theta_{\text{fuca}} \right) \
+ + \sqrt{\left( \theta_{\text{ca}} - \theta_{\text{fuca}} \right)^{2} \
+ + 4 \theta_{\text{fuca}} K_{\text{fu}} \cdot R_{\text{fi}} \cdot T_{\text{fuca}}\
+ {\rho'}_{\text{fica}}}}{2 \theta_{\text{fuca}} K_{\text{fu}}}$$ [eq 15.2-41]
+
+There is also a second solution with a minus sign in front of the square
+root which does not give a physically meaningful result.
+Eq. (15.2-41) reduces to a single-phase liquid pressure solution for no
+fission gas and $\theta_{\text{fuca}} > \theta_{\text{ca}}$ :
+
+$$P_{\text{fica}} = - \frac{\left( \theta_{\text{ca}} - \theta_{\text{fuca}} \right)}{\left( \theta_{\text{fuca}}K_{\text{fu}} \right)}$$ [eq 15.2-42]
+
+which is equivalent to the definition of the fuel compressibility. For
+void fractions greater than 30% the fission-gas pressure is calculated
+from a simplified form of Eq. (15.2-40) in which the term with
+ $K_{\text{fu}}$ is dropped.
+
+The momentum conservation equation for the fuel/fission-gas mixture is:
+
+$$\begin{split}\frac{\partial}{\partial \text{t}}\left( \rho_{\text{fuca}} A_{\text{fuca}} u_{\text{fuca}} + \rho_{\text{fica}} A_{\text{fica}} u_{\text{fuca}} \right) \\
+= - \frac{\partial}{\partial \text{z}}\left( \rho_{\text{fuca}} A_{\text{fuca}} u_{\text{fuca}}^{2} + \rho_{\text{fica}} A_{\text{fica}} u_{\text{fuca}}^{2} \right) \\
+- A_{\text{ca}} \cdot \left( \frac{\partial \text{P}_{\text{ca}}}{\partial \text{z}} \right) - g \left( \rho_{\text{fuca}} A_{\text{fuca}} + \rho_{\text{fica}} A_{\text{fica}} \right) \\
+- u_{\text{fuca}}\left| u_{\text{fuca}} \right| \cdot \left( \rho_{\text{fuca}} \frac{A_{\text{fuca}}}{A_{\text{ca}}} + \rho_{\text{fica}} \frac{A_{\text{fica}}}{A_{\text{ca}}} \right) A_{\text{ca}} \cdot F_{\text{friction}} \big/ \left( 2D_{\text{ca}} \right)\end{split}$$ [eq 15.2-43]
+
+Dividing Eq. (15.2-43) by AXMX and using the definitions for the
+generalized smear densities and mass sinks gives:
+
+$$\begin{split} \frac{\partial}{\partial \text{t}}\left\lbrack u_{\text{fuca}}\left( {\rho'}_{\text{fuca}} + {\rho'}_{\text{fica}} \right) \right\rbrack \\
+ = \frac{\partial}{\partial \text{z}}\left\lbrack u_{\text{fuca}}^{2}\left( {\rho'}_{\text{fuca}} + {\rho'}_{\text{fica}} \right) \right\rbrack \\
+ - \theta_{\text{ca}} \left( \frac{\partial \text{P}_{\text{ca}}}{\partial \text{z}} \right) - g \left( {\rho'}_{\text{fuca}} + {\rho'}_{\text{fica}} \right) \\
+ - u_{\text{fuca}} \left| u_{\text{fuca}} \right| \cdot \left( {\rho'}_{\text{fuca}} + {\rho'}_{\text{fica}} \right) \frac{F_{\text{friction}}}{\left( 2D_{\text{ca}} \right)}\end{split}$$ [eq 15.2-44]
+
+where
+
+ $u_{\text{fuca}}$ = Upward fuel velocity in the cavity (see the sign of
+the gravity head term in Eq. (15.2-43))
+
+The Moody friction factor $F_{\text{friction}}$ in Eq. (15.2-44) depends on
+the Reynolds number:
+
+$$Re_{\text{pi}} = \frac{\left| u_{\text{fuca}} \right| D_{\text{ca}} \cdot \left( {\rho'}_{\text{fuca}} \
+ + {\rho'}_{\text{fica}} \right)}{\left( \theta_{\text{ca}} \cdot \text{VIFULQ} \right)}$$ [eq 15.2-45]
+
+where VIFULQ is the viscosity of liquid fuel which is input. The
+friction factor is
+
+$$\begin{split} F_{\text{frication}} = \begin{cases}
+ \frac{64}{\text{Re}_{\text{pi}}} & \text{for } \text{Re}_{\text{pi}} < \text{CIREFU} \\
+ \text{CIFRFU} & \text{for } \text{Re}_{\text{pi}} > \text{CIREFU} \\
+ \end{cases}\end{split}$$ [eq 15.2-46]
+
+where CIREFU and CIFRFU are both input and should be made consistent
+in order to avoid a jump in the friction factor at $\text{Re}_{\text{pi}} = \text{CIREFU}$ .
+
+There is no term accounting for the fuel melt-in because this fuel is
+added to the cavity with zero axial velocity, and therefore does not
+change the total momentum. However, since the generalized fuel smear
+density will change in a cell with melt-in, this will lead to a velocity
+decrease in such a cell.
+
+[anchor: finite-difference-equations-for-the-in-pin-motion-model]
+
+## 15.2.4. Finite Difference Equations for the In-Pin Motion Model
+
+In the overview of the numerical scheme given in Section 15.2.1, it was
+pointed out that full donor cell spatial differencing and a largely
+explicit time differencing are used for treating the in-pin motion. The
+implicit aspect of the solution is that the mass and energy conservation
+equations are solved first and then a pressure is calculated on the
+basis of the mass and energy equation results. This advanced pressure is
+used in the momentum conservation equation.
+
+The finite differencing of all the mass conservation equations is the
+same. The fuel mass conservation is used as an illustration.
+
+$$\frac{\left( {\rho'}_{\text{fuca,K}}^{n + 1} - {\rho'}_{\text{fuca,K}}^{n} \right)}{\Delta t_{\text{PN}}} = \
+ - \frac{\left( \left( {\rho'} u \right)_{\text{fuca,K+1}} - \left( {\rho'} u \right)_{\text{fuca,K}} \right)}{\Delta z_{\text{K}}} \
+ + \sum_{\text{k}}{{S'}_{\text{K,k}}}$$ [eq 15.2-47]
+
+where
+
+$$\begin{split} \left( {\rho'} u \right)_{\text{fuca,K}} = \begin{cases}
+ {\rho'}_{\text{fuca,K-1}} u_{\text{K}} & \text{for } u_{\text{K}} > 0 \\
+ {\rho'}_{\text{fuca,K}} u_{\text{K}} & \text{for } u_{\text{K}} < 0 \\
+ \end{cases}\end{split}$$ [eq 15.2-48]
+
+ $u_{\text{K}}$ = Fuel velocity at the mesh cell boundary $K$ .
+
+ ${\rho'}_{\text{fuca,K-1}}$ = Generalized fuel smear density at the
+mesh cell midpoint below boundary $K$ 
+
+ ${\rho'}_{\text{fuca,K}}$ = Generalized fuel smear density at the mesh
+cell midpoint above boundary $K$ 
+
+The numerical grid used in the program was discussed in Section 15.2.1
+which gives an overview of the numerical scheme. Densities are defined
+at the cell centers and velocities at the cell edges as illustrated in
+Figure 15.2.2. The source and sink terms have already been described in
+their finite difference form in the previous section.
+
+Figure 15.2.2 Numerical Grid Used in PINACLE
+
+The convective fluxes at the lower and upper boundaries of the cavity
+which are located in the end cells KK1 and KKMX, respectively, are
+
+$$\left( {\rho'} u \right)_{\text{fuca,KK1}} = 0$$ [eq 15.2-49]
+
+and
+
+$$\left( {\rho'} u \right)_{\text{fuca,KKMX+1}} = 0$$ [eq 15.2-50]
+
+The end cells are not always the same during a PINACLE run because the
+molten cavity can extend axially. When a new cell is added to the
+cavity, mass can only flow into this end cell if its cross section is at
+least 20% of that of the neighboring cell in the molten cavity. This
+restriction had to be included because of problems with overcompression
+of cells with a very small cross section.
+
+The finite difference form of the fuel energy Eq. (15.2-26) is:
+
+$$\begin{split} \frac{{\rho'}_{\text{fuca,K}} \left( e_{\text{fuca,K}}^{n + 1} - e_{\text{fuca,K}}^{n} \right)}{\Delta t_{\text{PN}}} = - \left\lbrack \left( {\rho'}_{\text{fuca}} e_{\text{fuca}} u_{\text{fuca}} \right)_{\text{K+1}}^{n} \right. \\ \left.
+ - \left( {\rho'}_{\text{fuca}} e_{\text{fuca}} u_{\text{fuca}} \right)_{\text{K}}^{n} \right\rbrack \big/ \Delta z_{\text{k}} + e_{\text{fuca,K}}^{n}\left\lbrack \left( {\rho'}_{\text{fuca}} u_{\text{fuca}} \right)_{\text{K+1}}^{n} \right. \\ \left.
+ - \left( {\rho'}_{\text{fuca}} u_{\text{fuca}} \right)_{\text{K}}^{n} \right\rbrack \big/ \Delta z_{\text{k}} + {S'}_{\text{fuca,me,K}}^{n} \left( e_{\text{fu,cabd,K}}^{n} - e_{\text{fuca,K}}^{n} \right) \\
+ + Q_{\text{K}}^{n} {\rho'}_{\text{fuca,K}}^{n} - h_{\text{fuca,cabd,K}}^{n} \left( T_{\text{fuca,K}}^{n} - T_{\text{fu,cabd,K}}^{n} \right) \pi D_{\text{ca,K}}^{n} \frac{\text{NRPI}}{\text{AXMX}}\end{split}$$ [eq 15.2-51]
+
+The fuel cavity temperature $T_{\text{fuca}}$ in the above equation has
+to be calculated from the internal energy:
+
+$$\text{For } e_{\text{fu,sol}} < e_{\text{fuca}} < e_{\text{fu,liq}}$$
+
+$$T_{\text{fuca}} = T_{\text{fu,sol}} + \left( T_{\text{fu,liq}} - T_{\text{fu,sol}} \right) \cdot \frac{\left( e_{\text{fuca}}
+ - e_{\text{fu,sol}} \right)}{\left( e_{\text{fu,liq}} - e_{\text{fu,sol}} \right)}$$ [eq 15.2-52]
+
+$$\text{For } e_{\text{fuca}} > e_{\text{fu,liq}}$$
+
+$$T_{\text{fuca}} = T_{\text{fu,liq}} + \frac{\left( e_{\text{fuca}} - e_{\text{fu,liq}} \right)}{C_{\text{p,fu}}}$$ [eq 15.2-53]
+
+where $C_{\text{p,fu}}$ is the fuel specific heat which is
+the single input value CPFU. The convective energy flux at cell
+boundary $K$ in Eq. (15.2-51) is calculated as:
+
+$$\begin{split} \left( {\rho'}_{\text{fuca}} e_{\text{fuca}} u_{\text{fuca}} \right)_{\text{K}} = \begin{cases}
+ \left( {\rho'}_{\text{fuca}} e_{\text{fuca}} \right)_{\text{K-1}} u_{\text{fuca,K}} & \text{for } u_{\text{fuca,K}} > 0 \\
+ \left( {\rho'}_{\text{fuca}} e_{\text{fuca}} \right)_{\text{K}} u_{\text{fuca,K}} & \text{for } u_{\text{fuca,K}} < 0 \\
+ \end{cases}\end{split}$$ [eq 15.2-54]
+
+At the lower and upper cavity ends, which are in cells KK1 and KKMX, the
+convective energy fluxes are zero:
+
+$$\left( {\rho'}_{\text{fuca}} e_{\text{fuca}} u_{\text{fuca}} \right)_{\text{KK1}}^{n} = 0$$ [eq 15.2-55]
+
+and
+
+$$\left( {\rho'}_{\text{fuca}} e_{\text{fuca}} u_{\text{fuca}} \right)_{\text{KKMX+1}}^{n} = 0$$ [eq 15.2-56]
+
+By using the convective fluxes from Eq. (15.2-48) and Eq. (15.2-54), and
+the definitions of the energy gain and loss terms given earlier, and by
+differencing the second term of Eq. (15.2-51) like the first, Eq. (15.2-51)
+can be solved for $e_{\text{fuca,K}}^{n + 1}$ . Fuel temperatures
+that are shown in the PINACLE output are calculated by using
+Eq. (15.2-52) and Eq. (15.2-53).
+
+For the finite difference form of the momentum equation the following
+quantities have to be defined at the edges of the numerical cells: the
+combined fuel/fission-gas generalized smear density and the cavity
+volume fraction. These quantities become:
+
+$${\rho'}_{\text{fufi,bk}} = 0.5 \left( {\rho'}_{\text{fuca,K-1}} + {\rho'}_{\text{fuca,K}} \right)
+ + 0.5 \left( {\rho'}_{\text{fica,K-1}} + {\rho'}_{\text{fica,K}} \right)$$ [eq 15.2-57]
+
+$$\theta_{\text{ca,bk}} = 0.5 \left( \theta_{\text{ca,K}} + \theta_{\text{ca,K-1}} \right)$$ [eq 15.2-58]
+
+where the subscript bk indicates that these quantities are at the
+lower boundaries of cell $K$ . This is shown in Figure 15.2.2. On the
+numerical grid the velocities are also defined on the cell boundaries,
+whereas the pressures, densities and volume fractions are defined at the
+cell centers. This is also shown in Figure 15.2.2. The finite difference
+form of the momentum conservation, Eq. (15.2-44), is written using
+Eq. (15.2-57) and Eq. (15.2-58) as:
+
+$$\begin{split} \frac{\left( {\rho'}_{\text{fufi,bk}}^{n + 1} u_{\text{fuca,K}}^{n + 1} - {\rho'}_{\text{fufi,bk}}^{n} u_{\text{fuca,K}}^{n} \right)}{\Delta t_{\text{PN}}} = - \left\lbrack \left( u_{\text{fuca}}^{2} {\rho'}_{\text{fufi}} \right)_{\text{K}}^{n} \right. \\ \left.
+ - \left( u_{\text{fuca}}^{2} {\rho'}_{\text{fufi}} \right)_{\text{K-1}}^{n} \right\rbrack \big/ \Delta z - \theta_{\text{ca,bk}}\left\lbrack \left( 1 - \varepsilon \right) \cdot \left( P_{\text{ca,K}}^{n} - P_{\text{ca,K-1}}^{n} \right) \right. \\ \left.
+ + \varepsilon \cdot \left( P_{\text{ca,K}}^{n + 1} - P_{\text{ca,K-1}}^{n + 1} \right) \right\rbrack \big/ \Delta z - g {\rho'}_{\text{fufi,bk}} \\
+ - u_{\text{fuca,K}}^{n + 1} \left| u_{\text{fuca,K}}^{n} \right| {\rho'}_{\text{fufi,bk}}^{n} \frac{F_{\text{friction,bk}}}{\left( 2D_{\text{ca}} \right)}\end{split}$$ [eq 15.2-59]
+
+where
+
+ $\varepsilon$ = Input value EPCH that can be between zero and one (see Eq. (15.2-1))
+
+ $\Delta z = 0.5 \left( \Delta z_{\text{K-1}} + \Delta z_{\text{K}} \right)$ 
+
+By collecting all terms with $u_{\text{fuca}}^{n + 1}$ on the
+left-hand side of the equation, one obtains
+
+$$\begin{split} u_{\text{fuca,K}}^{n + 1}\left\lbrack \frac{{\rho'}_{\text{fufi,bk}}^{n + 1}}{\Delta t_{\text{PN}}} + \left| u_{\text{fuca,K}}^{n} \right| {\rho'}_{\text{fufi,bk}}^{n} \frac{F_{\text{friction,bk}}}{\left( 2D_{\text{ca}} \right)} \right\rbrack \\
+ = \frac{{\rho'}_{\text{fufi,bk}}^{n + 1} u_{\text{fuca,K}}^{n}}{\Delta t_{\text{PN}}} \\
+ - \frac{\left\lbrack \left( u_{\text{fuca}}^{2} {\rho'}_{\text{fufi}} \right)_{\text{K}}^{n} - \left( u_{\text{fuca}}^{2} {\rho'}_{\text{fufi}} \right)_{\text{K-1}}^{n} \right\rbrack}{\Delta z} \\
+ - \theta_{\text{ca,bk}} \left\lbrack \left( 1 - \varepsilon \right) \cdot \left( P_{\text{ca,K}}^{n} - P_{\text{ca,K-1}}^{n} \right) \right. \\ \left.
+ + \varepsilon \left( P_{\text{ca,K}}^{n + 1} - P_{\text{ca,K-1}}^{n + 1} \right) + \left( P_{\text{vi,K}}^{n} - P_{\text{vi,K-1}}^{n} \right) \right\rbrack \Delta z - g {\rho'}_{\text{fufi,bk}}\end{split}$$ [eq 15.2-60]
+
+The convective momentum flux in Eq. (15.2-60) is calculated as
+
+$$\begin{split} \left( u_{\text{fuca}}^{2} {\rho'}_{\text{fufi}} \right)_{\text{K}} = \begin{cases}
+ {\rho'}_{\text{fufi,K}} u_{\text{fuca,K}}^{2} & \text{if } \left( u_{\text{fuca,K}} + u_{\text{fuca,K+1}} \right) > 0 \\
+ {\rho'}_{\text{fufi,K}} u_{\text{fuca,K+1}}^{2} & \text{if } \left( u_{\text{fuca,K}} + u_{\text{fuca,K+1}} \right) < 0
+ \end{cases}\end{split}$$ [eq 15.2-61]
+
+$$\begin{split} \left( u_{\text{fuca}}^{2} {\rho'}_{\text{fufi}} \right)_{\text{K-1}} = \begin{cases}
+ {\rho'}_{\text{fufi,K-1}} u_{\text{fuca,K-1}}^{2} & \text{if } \left( u_{\text{fuca,K-1}} + u_{\text{fuca,K}} \right) > 0 \\
+ {\rho'}_{\text{fufi,K-1}} u_{\text{fuca,K}}^{2} & \text{if } \left( u_{\text{fuca,K-1}} + u_{\text{fuca,K}} \right) < 0
+ \end{cases}\end{split}$$ [eq 15.2-62]
+
+where
+
+$${\rho'}_{\text{fufi,K}} = {\rho'}_{\text{fuca,K}} + {\rho'}_{\text{fica,K}}$$ [eq 15.2-63]
+
+The momentum fluxes for the lower and upper end cells of the cavity,
+which are designated by KK1 and KKMX, are:
+
+$$\begin{split} \left( u_{\text{fuca}}^{2} {\rho'}_{\text{fufi}} \right)_{\text{KK1}} = \begin{cases}
+ {\rho'}_{\text{fufi,KK1}} u_{\text{fuca,KK1+1}}^{2} \cdot 0.25 & \text{if } u_{\text{fuca,KK1+1}} > 0 \\
+ {\rho'}_{\text{fufi,KK1}} u_{\text{fuca,KK1+1}}^{2} & \text{if } u_{\text{fuca,KK1+1}} < 0
+ \end{cases}\end{split}$$ [eq 15.2-64]
+
+$$\begin{split} \left( u_{\text{fuca}}^{2} {\rho'}_{\text{fufi}} \right)_{\text{KKMX}} = \begin{cases}
+ {\rho'}_{\text{fufi,KKMX}} u_{\text{fuca,KKMX}}^{2} & \text{if } u_{\text{fuca,KKMX}} > 0 \\
+ {\rho'}_{\text{fufi,KKMX}} u_{\text{fuca,KKMX}}^{2} \cdot 0.25 & \text{if } u_{\text{fuca,KKMX}} < 0
+ \end{cases}\end{split}$$ [eq 15.2-65]
+
+The factor 0.25 in the above convection terms comes from the assumption
+of a zero velocity at the end of the cavity.
+
+The momentum Eq. (15.2-60) can be solved for
+ $u_{\text{fuca,K}}^{n + 1}$ if Eq. (15.2-57), Eq. (15.2-58), and Eq. (15.2-61)
+through Eq. (15.2-65) are used.
+
+[anchor: treatment-of-the-fuel-ejection-above-the-top-of-the-active-fuel-pin]
+
+## 15.2.5. Treatment of the Fuel Ejection Above the Top of the Active Fuel Pin
+
+The equations presented in the preceding sections apply to all the
+cavity cells before the cavity reaches the top fuel cell and the upward
+axial fuel ejection is initiated. When the fuel ejection begins,
+however, a different situation is created at the top of the fuel pin,
+through the creation of a new cell of variable length, as illustrated in
+Figure 15.2.3. The presence of the axial fuel ejection and of the variable
+length space above the fuel pin require a special treatment of the top
+cell, as outlined below.
+
+[anchor: initiation-of-the-axial-fuel-ejection]
+
+### 15.2.5.1. Initiation of the Axial Fuel Ejection
+
+When PINACLE is initiated it models a bottled-up cavity, extending
+axially from the cell KK1 to KKMX. Only limited fuel relocation occurs
+during this period, as the pressure gradients in the cavity are very
+small. For the initiation of the axial fuel motion two conditions must
+be satisfied: 1.) The cavity must extend to the upper active
+
+Figure 15.2.3 Geometry Used in the Calculation of the Fuel Ejection Above the Top of the Active Fuel
+
+fuel cell, KCORE2, and 2.) the temperature of the top fuel pin surface
+must be higher than the fuel solidus temperature, i.e.:
+
+$$T_{\text{fu,tp}} > T_{\text{fu,sol}}$$ [eq 15.2-66]
+
+The temperature of the top fuel surface $T_{\text{fu,tp}}$ 
+is calculated as follows:
+
+if blanket pellets are present:
+
+$$\begin{split} T_{\text{fu,tp}} = T_{\text{fu}} \left( 1,\text{KCORE2} + 1 \right) \\
+ + \left( T_{\text{fu}}\left( 1,\text{KCORE2} \right) - T_{\text{fu}}\left( 1,\text{KCORE2} + 1 \right) \right) \cdot \text{CIPNTP}\end{split}$$ [eq 15.2-67]
+
+if no blanket pellets are present and the pin analyzed contains oxide
+fuel no axial temperature gradients are present at the fuel pin top
+and the constraint 15.2-55 is eliminated by using:
+
+$$T_{\text{fu,tp}} = T_{\text{fu,liq}}$$ [eq 15.2-68]
+
+if no blanket pellets are present and the pin analyzed contains metal
+fuel:
+
+$$T_{\text{fu,tp}} = T_{\text{Na,plenum}} + \left( T_{\text{fu}}\left( 1,\text{KCORE2} \right)
+ - T_{\text{Na,plenum}} \right) \cdot \text{CIPNTP}$$ [eq 15.2-69]
+
+where:
+
+CIPNTP is an input variable. The value 0.5, used
+in the TS-2 and M2 and M3 TREAT tests analyses has proven satisfactory
+in predicting the time of fuel motion onset
+
+ $T_{\text{fu}} \left( 1,\text{KCORE2} \right)$ = The fuel temperature in the axial cell
+KCORE2 and radial cell 1 (i.e. the central cell)
+
+After the initiation of the axial fuel ejection the PINACLE calculations
+are extended to the cell $\text{KKMXPN}$ :
+
+$$\text{KKMXPN} = \text{KCORE2} + 1$$ [eq 15.2-70]
+
+[anchor: mass-conservation-equation-for-the-top-cell]
+
+### 15.2.5.2. Mass Conservation Equation for the Top Cell
+
+In order to minimize numerical complications due to the variable length
+cell KKMXPN, the cell length used in the mass conservation equation is
+ $\Delta z_{\text{KKMXPN}}^{\text{REF}}$ the axial length of the
+segment KKMXPN (see Figure 15.2.3). The use of this fixed reference
+length allows the use of Eq. (15.2-47), unmodified, for the calculation of
+the $\rho_{\text{fu,ca,K}}^{n + 1}$ :
+
+$$\begin{split} {\rho'}_{\text{fuca,K}}^{n + 1} = {\rho'}_{\text{fuca,K}} - \left\lbrack \left( {\rho'} u \right)_{\text{fuca,K+1}} - \left( {\rho'} u \right)_{\text{fuca,K}} \right\rbrack \\
+ \cdot \frac{\Delta t_{\text{PN}}}{\Delta z_{\text{KKMXPN}}^{\text{REF}}} + S_{\text{K}}\end{split}$$ [eq 15.2-71]
+
+where:
+
+ $K = \text{KKMXPN} = \text{KCORE2} + 1$ 
+
+ $S_{\text{k}}$ = The integrated source term ${S'}_{\text{K}} \cdot \Delta t_{\text{PN}}$ ,
+which is always zero in the $\text{KCORE2} + 1$ cell
+
+ $\left( {\rho'} u \right)_{\text{fuca,K+1}}$ = The convective mass flux at the
+boundary $\text{KKMXPN} + 1$ is always zero
+
+$$\begin{split} \left( {\rho'} u \right)_{\text{fuca,K}} = \begin{cases}
+ {\rho'}_{\text{fuca,K-1}} \cdot u_{\text{K}} & \text{for } u_{\text{K}} > 0 \\
+ {\rho'}_{\text{fuca,K}} \cdot \frac{\Delta z_{\text{KKMXPN}}^{\text{REF}}}{\Delta z_{\text{KKMXPN}}} \cdot u_{\text{K}} \cdot \frac{\theta_{\text{K-1}}}{\theta_{\text{K}}} & \text{for } u_{\text{K}} < 0
+ \end{cases}\end{split}$$ [eq 15.2-72]
+
+Note that the definition of the convective mass flux is more complex
+when $u_{\text{K}} < 0$ . The smeared density ${\rho'}_{\text{fuca,K}}$ 
+is multiplied by the factor:
+
+$$\frac{\Delta z_{\text{KKMXPN}}^{\text{REF}}}{\Delta z_{\text{KKMXPN}}}$$
+
+To obtain the actual smeared density in the existing cell, and the
+velocity $u_{\text{K}}$ , which is defined at the boundary KKMXPN, but
+below the boundary, is multiplied by the factor.
+
+$$\frac{\theta_{K-1}}{\theta_{K}}$$
+
+To account for the abrupt area change present at the boundary $\text{KKMXPN} = \text{KCORE2} + 1$ .
+
+[anchor: the-energy-conservation-equation-for-the-top-cell]
+
+### 15.2.5.3. The Energy Conservation Equation for the Top Cell
+
+Due to the use of the reference cell
+ $\Delta z_{\text{KKMXPN}}^{\text{REF}}$ conservation equation
+15.2-43 remains virtually unchanged for the top cell $\text{KCORE2} + 1$ :
+
+$$\begin{split} e_{\text{fuca,K}}^{n + 1} = e_{\text{fuca,K}}^{n} - \left\lbrack \left( {\rho'}_{\text{fuca}} e_{\text{fuca}} u_{\text{fuca}} \right)_{\text{K+1}}^{n} - \left( {\rho'}_{\text{fuca}} e_{\text{fuca}} u_{\text{fuca}} \right)_{\text{K}}^{n} \right\rbrack \\
+ \cdot \frac{\Delta t_{\text{PN}}}{\Delta z_{\text{KKMXPN}}^{\text{REF}} \cdot {\rho'}_{\text{fuca,K}}} + e_{\text{fuca,K}}^{n} \cdot \left\lbrack \left( {\rho'}_{\text{fuca}} u_{\text{fuca}} \right)_{\text{K+1}}^{n} - \left( {\rho'}_{\text{fuca}} u_{\text{fuca}} \right)_{\text{K}}^{n} \right\rbrack \\
+ \cdot \frac{\Delta t_{\text{PN}}}{\Delta z_{\text{KKMXPN}}^{\text{REF}} \cdot {\rho'}_{\text{fuca,K}}} + \left\lbrack {S'}_{\text{fuca,me,K}}^{n} \cdot \left( e_{\text{fu,cabd,K}}^{n} - e_{\text{fuca,K}}^{n} \right) \right. \\ \left.
+ + Q_{\text{K}}^{n} {\rho'}_{\text{fuca,K}}^{n} - h_{\text{fuca,cabd,K}}^{n} \cdot \left( T_{\text{fuca,K}}^{n} - T_{\text{fu,cabd,K}}^{n} \right) \cdot \pi \cdot D_{\text{ca,K}}^{n} \right. \\ \left.
+ \cdot \frac{\text{NPRI}}{\text{AXMX}} \cdot \frac{\Delta z_{\text{KKMXPN}}}{\Delta z_{\text{KKMXPN}}^{\text{REF}}} \right\rbrack \cdot \frac{\Delta t_{\text{PN}}}{{\rho'}_{\text{fuca,K}}}\end{split}$$ [eq 15.2-73]
+
+where
+
+ $K = \text{KKMXPN} = \text{KCORE2} + 1$ 
+
+ ${S'}_{\text{fuca,me,K}}$ = The melting fuel source which is always zero in
+the top cell.
+
+ $\left( {\rho'}_{\text{fuca}} u_{\text{fuca}} \right)_{\text{K}}$ = The convective mass term
+explained in Section 15.2.5.2.
+
+ $\left( {\rho'}_{\text{fuca}} e_{\text{fuca}} u_{\text{fuca}} \right)_{\text{K+1}}$ = The
+convective energy term at boundary $\text{KKMXPN}+1$ and is always zero
+
+ $\left( {\rho'}_{\text{fuca}} e_{\text{fuca}} u_{\text{fuca}} \right)_{\text{K}}$ = The
+convective energy term at boundary KKMXPN and is defined below
+
+$$\begin{split} \left( {\rho'} e u \right)_{\text{fuca,K}} = \begin{cases}
+ \left( {\rho'}_{\text{fuca}} e_{\text{fuca}} \right)_{\text{K-1}} \cdot u_{\text{fuca,K}} & \text{for } u_{\text{fuca,K}} > 0 \\
+ {\rho'}_{\text{fuca,K}} \cdot \frac{\Delta z_{\text{KKMXPN}}^{\text{REF}}}{\Delta z_{\text{KKMXPN}}} \cdot e_{\text{fuca,K}} \cdot u_{\text{fuca,k}} \cdot \frac{\theta_{\text{K-1}}}{\theta_{\text{K}}} & \text{for } u_{\text{fuca,k}} < 0
+ \end{cases}\end{split}$$ [eq 15.2-74]
+
+The explanation of the correction terms
+ $\frac{\Delta z^{\text{REF}}}{\Delta z_{\text{KKMXPN}}}$ and
+ $\frac{\theta_{\text{K-1}}}{\theta_{\text{K}}}$ 
+present in the convective energy term when
+ $u_{\text{fuca,K}} < 0$ has been given in Section 15.2.5.2.
+Note also in Eq. (15.2-73) that the term describing the heat transfer
+between the molten fuel and the wall contains the correction factor:
+
+$$\frac{\Delta z_{\text{KKMXPN}}}{\Delta z_{\text{KKMXPN}}^{\text{REF}}}$$
+
+to account for the fact that the heat transfer surface is determined by
+the actual length of the top cell. Also for this top cell, the
+temperature $T_{\text{fu,cabd,K}}$ is set equal to the
+inner cladding temperature.
+
+[anchor: the-momentum-conservation-equation-for-the-top-cell]
+
+### 15.2.5.4. The Momentum Conservation Equation for the Top Cell
+
+The momentum conservation equation in the top cell is used to calculate
+the fuel velocity $u_{\text{fuca,K}}$ at cell boundary
+ $K = \text{KCORE2} + 1$ . Because of the presence of the abrupt area change
+and of the blanket pellet stack and/or liquid sodium it was necessary to
+write a separate momentum equation for the top cell, rather than using
+the momentum equation developed to calculate the new fuel velocity at
+all other locations.
+
+The geometry used to derive the momentum equation is illustrated in Figure 15.2.3. The momentum conservation cell is shown in Figure 15.2.3. The
+momentum conservation is written first in integral form.
+
+$$\begin{split} \Delta\left\lbrack u_{\text{fuca,K}} \cdot \rho_{\text{fufi}} \cdot A_{\text{ca,K-1}} \cdot \frac{\Delta z_{\text{K-1}}}{2} + u_{\text{fuca,K}} \cdot \frac{A_{\text{K-1}}}{A_{\text{K}}} \cdot \left( \rho_{\text{fufi}} A_{\text{ca,K}} \cdot \Delta z_{\text{KKMXPN}} \right. \right. \\ \left. \left.
+ + M_{\text{slug}} \cdot \text{NRPI} \right) \right\rbrack \big/ \Delta t_{\text{PN}} = - A_{\text{bk}} \cdot \left( P_{\text{PLENUM}} - P_{\text{K-1}} \right) + \left( \rho \cdot u^{2} \cdot A \right)_{\text{fuca,K}} \\
+ - g \left( \rho_{\text{fufi}} \cdot A_{\text{ca,K-1}} \cdot \frac{\Delta z_{\text{K-1}}}{2} + \rho_{\text{fufi}} A_{\text{ca,K}} \cdot \Delta z_{\text{KKMXPN}} \right) \\
+ - \rho_{\text{fufi}} u_{\text{fuca,K}} \left| u_{\text{fuca,K}} \right| \cdot A_{\text{K-1}} F_{\text{FRICTION,K-1}} \cdot \frac{\Delta z_{\text{K-1}}}{4D_{\text{ca,K-1}}} \\
+ - \rho_{\text{fufi}} u_{\text{fuca,K}} \left| u_{\text{fuca,K}} \right| \cdot A_{\text{K}} \left( \frac{A_{\text{K-1}}}{A_{\text{K}}} \right)^{2} \cdot F_{\text{FRICTION,K}} \cdot \frac{\Delta z_{\text{KKMXPN}}}{2 D_{\text{ca,K}}}\end{split}$$ [eq 15.2-75]
+
+Note that in writing Eq. (15.2-75) the blanket stack and/or liquid sodium
+was assumed to move with the same velocity as the fuel in the top cell
+ $\text{KCORE2} + 1$ . More will be said about this assumption later in this chapter.
+The mass of the fuel stack and or sodium slug is defined by the input
+variable FUSLMA. After dividing Eq. (15.2-75) by AXMX,
+multiplying by the number of pins NRPI, and using the definition of
+generalized smear densities and volume fractions we obtain:
+
+$$\begin{split} \frac{\Delta z_{\text{K-1}}}{2} \cdot \Delta \left\lbrack u_{\text{fuca,K}} \cdot {\rho'}_{\text{fufi,K-1}} \right\rbrack \big/ \Delta t_{\text{PN}} + \frac{\theta_{\text{ca,K-1}}}{\theta_{\text{ca,K}}} \cdot \Delta\left\lbrack u_{\text{fuca,K}} \left( {\rho'}_{\text{fufi,K}} \cdot \Delta z_{\text{KKMXPN}}^{\text{REF}} \right. \right. \\ \left. \left.
+ + \frac{M_{\text{slug}} \cdot \text{NRPI}}{\text{AXMX}} \right) \right\rbrack \big/ \Delta t_{\text{PN}} = - \theta_{\text{bk}} \cdot \left( P_{\text{PLENUM}} - P_{\text{K-1}} \right) + \left( \rho' u^{2} \right)_{\text{fufi,K}} \\
+ - g \left( {\rho'}_{\text{fufi},K-1} \frac{\Delta z_{K-1}}{2} + {\rho'}_{\text{fufi},K} \Delta z_{\text{KKMXPN}}^{\text{REF}} \right) \\
+ - {\rho'}_{\text{fufi,K-1}} \cdot u_{\text{fuca,K}} \cdot \left| u_{\text{fuca,K}} \right| \cdot F_{\text{FRICTION,K-1}} \cdot \frac{\Delta z_{\text{K-1}}}{4 \cdot D_{\text{ca,K-1}}} \\
+ - {\rho'}_{\text{fufi,K}} \cdot u_{\text{fuca,K}} \cdot \left| u_{\text{fuca,K}} \right| \cdot \left( \frac{\theta_{K-1}}{\theta_{K}} \right)^{2} \cdot F_{\text{FRICTION,K}} \cdot \frac{\Delta z_{\text{KKMXPN}}}{2 D_{\text{ca,K}}}\end{split}$$ [eq 15.2-76]
+
+The convective momentum flux
+ $\left( {\rho'} u^{2} \right)_{\text{fufi,K}}$ is calculated using
+Eq. (15.2-61) and the area fraction $\theta_{\text{bk}}$ at the abrupt area
+change is calculated as follows:
+
+$$\begin{split} \theta_{\text{bk}} = \begin{cases}
+ \theta_{\text{K}} & \text{if } u_{\text{K}} \geq 0 \text{ i.e. expansion} \\
+ 1.67 \frac{\theta_{\text{K}} \cdot \theta_{\text{K-1}}}{\theta_{\text{K}} + \theta_{\text{K-1}}} & \text{if } u_{\text{K}} < 0 \text{ i.e. contraction}
+ \end{cases}\end{split}$$ [eq 15.2-77]
+
+The friction factor $F_{\text{FRICTION}}$ is defined by Eq. (15.2-46) and
+15.2-39a. By using the identity:
+
+$$\Delta \left( u \rho' \right) = {\rho'}^{n + 1} \cdot \Delta u + u^{n} \cdot \Delta \rho'$$ [eq 15.2-78]
+
+Eq. (15.2-76) is now rearranged in the final form:
+
+$$\begin{split} \frac{\Delta u_{\text{fuca,K}}}{\Delta t_{\text{PN}}} \cdot {\rho'}_{\text{fufi,K-1}} \cdot \frac{\Delta z_{\text{K-1}}}{2} + {\rho'}_{\text{fufi,K}} \cdot \Delta z_{\text{KKMXPN}}^{\text{REF}} \cdot \frac{\theta_{\text{ca,K-1}}}{\theta_{\text{ca,K}}} + \frac{\theta_{\text{ca,K-1}}}{\theta_{\text{ca,K}}} \\
+ \cdot \frac{M_{\text{slug}} \cdot \text{NRPI}}{\text{AXMX}} \cdot C_{\text{TOP}} = - \theta_{\text{bk}} \cdot P_{\text{PLENUM}} \cdot C_{\text{TOP}} + P_{\text{K}} \left( 1 - C_{\text{TOP}} \right) - P_{\text{K-1}} \\
+ + \left( \rho' u^{2} \right)_{\text{fufi,K}} - g \left( {\rho'}_{\text{fufi},K-1} \frac{\Delta z_{K-1}}{2} + {\rho'}_{\text{fufi},K} \Delta z_{\text{KKMXPN}}^{\text{REF}} \right) \\
+ - {\rho'}_{\text{fufi,K-1}} \cdot u_{\text{fuca,K}} \cdot \left| u_{\text{fuca,K}} \right| \cdot F_{\text{FRICTION,K-1}} \cdot \frac{\Delta z_{\text{K-1}}}{4 \cdot D_{\text{ca,K-1}}} \\
+ - {\rho'}_{\text{fufi,K}} \cdot u_{\text{fuca,K}} \cdot \left| u_{\text{fuca,K}} \right| \cdot \left( \frac{\theta_{\text{K-1}}}{\theta_{\text{K}}} \right)^{2} \cdot F_{\text{FRICTION,K}} \cdot \frac{\Delta z_{\text{KKMXPN}}}{2 D_{\text{ca,K}}} \\\end{split}$$ [eq 15.2-79]
+
+Eq. (15.2-79) is used to calculate the change in velocity
+ $\Delta u_{\text{fufi,K}}$ at the top cavity boundary and thus determines the
+new fuel ejection velocity. Note that Eq. (15.2-79) contains the variable
+CTOP, which was not present in Eq. (15.2-76). This variable has
+initially the value 1, so the Eq. (15.2-79) is identical to Eq. (15.2-76).
+However, when the solid pellet stack reaches a rigid obstacle, i.e.,
+when $\Delta z_{\text{KKMXPN}} =$ FUSLDT, the variable
+ $C_{\text{TOP}}$ is set to zero.
+
+This has the effect of decoupling the slug from molten fuel motion. The
+slug is assumed to remain fixed in place. It cannot move upwards because
+of the rigid obstacle, such as dimples, and presumably it cannot move
+downwards because of fuel freezing and crust formation in the space
+underneath. When $C_{\text{TOP}} = 0$ the pressure difference used in the
+momentum equation thus becomes $P_{\text{K}} - P_{\text{K-1}}$ 
+rather than the $P_{\text{PLENUM}} - P_{\text{K-1}}$ used
+previously.
+
+[anchor: time-step-determination-for-the-pre-failure-in-pin-motion]
+
+## 15.2.6. Time-step Determination for the Pre-Failure In-Pin Motion
+
+The PINACLE time step $\Delta t_{\text{PN}}$ used in the numerical solution
+of all the in-pin and channel conservation equations is restricted by
+the sonic Courant condition for the in-pin flow. The determination of
+the PINACLE time step, $\Delta t_{\text{PN}}$ , is given at the end of the
+channel flow description in Section 15.3.1.3. In the present section,
+only the restriction imposed by the sonic Courant condition for the
+in-pin flow is described.
+
+The time-step for the in-pin motion is computed to be a fraction, 0.4,
+of the minimum time step based on the sonic Courant condition
+
+$$\Delta t_{\text{PN}} = 0.4 \cdot \min \left\lbrack \Delta z_{\text{K}}/\left( v_{\text{sonic,K}} \
+ + \left| u_{\text{fuca,K}} \right| \right) \right\rbrack_{\text{K=KK1,KKMX}}$$ [eq 15.2-80]
+
+The minimum in Eq. (15.2-80) is evaluated over all the axial cells of the
+molten fuel cavity. The sonic velocity, $v_{\text{sonic}}$ , is calculated
+from an expression for an adiabatic, homogeneous two-component
+gas-liquid mixture which is based on Eq. 27 in Reference [15-8].
+
+$$\begin{split} v_{\text{sonic}}^{2} = \frac{\gamma_{\text{fi}}P_{\text{fica}}}{\left\lbrack \alpha_{\text{fica}}^{2} \cdot \rho_{\text{fica}} + \alpha_{\text{vica}}\left( 1 - \alpha_{\text{fica}} \right) \rho_{\text{fuca}} \right\rbrack} \\
+ + \left\lbrack \left( 1 - \alpha_{\text{fica}} \right)^{2} \rho_{\text{fuca}} + \alpha_{\text{fica}} \left( 1 - \alpha_{\text{vica}} \right) \rho_{\text{fica}} \right\rbrack \gamma_{\text{fi}} P_{\text{fica}} K_{\text{fu}} \\\end{split}$$ [eq 15.2-81]
+
+where
+
+ $\alpha_{\text{fica}} = \frac{\theta_{\text{fica}}}{\theta_{\text{ca}}}$ = Void fraction in
+the cavity
+
+ $\gamma_{\text{fi}} = \frac{C_{\text{p,fi}}}{C_{\text{v,fi}}} = 1.4$ (value assumed in PINACLE)
+
+ $K_{\text{fu}} = \text{CMFU}$ = Input liquid fuel compressibility
+
+The above equation holds for adiabatic gas behavior, although the in-pin
+fission-gas treatment in PINACLE is isothermal (the gas temperature is
+assumed to be always equal to the fuel temperature). However, the sonic
+velocity for adiabatic gas behavior is higher than that for isothermal
+gas behavior, and thus, leads to a more conservative (i.e., smaller)
+time step. Moreover, if a pure gas flow were treated in sections of pins
+with a prefabricated central hole, the current time-step determination
+would actually be necessary.
+
+
+------------------------------------------------------------------------------
+[page: Part04/Ch15/implementation.html]
+------------------------------------------------------------------------------
+[anchor: computer-implementation]
+
+# 15.3. Computer Implementation
+
+[anchor: detailed-logic-flow-description]
+
+## 15.3.1. Detailed Logic Flow Description
+
+This section describes in detail the logical sequence of the solution
+method used in PINACLE. The structure of the PINACLE driver as well as
+initiation and interfacing considerations have been presented in Section 15.1.2. Some information about the interaction between LEVITATE models
+was presented in Section 15.1.2.1 and the method of solution for the
+molten cavity model was described in Section 15.2.1. This section will
+use, and occasionally repeat some of this information in order to
+present a comprehensive picture of the general solution method. Some
+considerations about data management and time-step selection are also
+presented.
+
+[anchor: data-management-considerations]
+
+### 15.3.1.1. Data Management Considerations
+
+Every time PINACLE begins calculations in a channel, the permanently
+stored information is retrieved from the data container and loaded in
+the common blocks. This operation is performed in the TSTHRM module. A
+number of arrays and other data, however, which can be calculated from
+the permanently stored variables, are not retained in the permanent
+storage. These data are recalculated in the routine PNSET2 every time
+PINACLE receives control in a certain channel, i.e., at the beginning of
+a heat transfer time step. These variables are stored in temporary
+common blocks, and kept only as long as PINACLE retains control in the
+channel. At the end of the heat transfer time step, when PINACLE returns
+control to TSTHRM, these variables are lost. Only the permanent common
+blocks are saved in the data container. This procedure is used in order
+to reduce the amount of storage required for SAS4A. The permanent
+PINACLE variables are stored in the block PLUC, which is also used by
+PLUTO2 and LEVITATE. Thus, when PLUTO2/LEVITATE are initiated, the
+cavity data calculated by PINACLE are automatically available for these
+models.
+
+[anchor: logic-flow-for-solution-advancement]
+
+### 15.3.1.2. Logic Flow for Solution Advancement
+
+As explained in Section 15.1.2.1 the PINACLE model describes the
+thermal-hydraulic events that occur inside the fuel pin cavity. During
+each time step PINACLE advances the solution by calculating the value of
+all variables at the end of the time step. The time-step selection is
+described in Section 15.2.6. The PINACLE calculation begins by advancing
+the solution for the radial cavity extension in each axial cell. This
+calculation is performed in the PN1PIN routine. This routine calculates
+the new fuel and fission gas masses in each axial cell and solves the
+mass conservation equations. Then the energy conservation equation is
+solved in each axial cell, providing the new fuel and fission gas
+temperature. Using the updated masses, temperatures and volumes, the
+PN1PIN subroutine calculates the new local pressures. The velocities are
+then calculated in the PN2PIN routine, which solves the momentum
+conservation equations for each staggered momentum cell. A separate
+momentum equation is used to describe the ejection of molten fuel into
+the upper plenum if this ejection has been initiated. PN2PIN also prints
+the regular PINACLE output if necessary.
+
+Using the fuel distribution at the end of each time step PINACLE then
+calculates the new channel fuel reactivity. At the end of each primary
+step the axial fuel mass distribution is returned to the FEEDBK routine,
+as explained in Section 15.1.3.3.3. Finally, when the end of the
+heat-transfer time step is reached, PINACLE calls the routine HTRVPN,
+which calculates the new temperatures in the solid fuel pin at all axial
+locations. These temperatures will be used in the next time step in the
+PN1PIN routine to calculate the new cavity diameter and the heat flux
+between the molten fuel and the cavity wall.
+
+[anchor: time-step-considerations]
+
+### 15.3.1.3. Time-step Considerations
+
+The PINACLE driver routine, PINACL is called by the SAS4A transient
+driver TSTHRM at the beginning of each heat-transfer time step during a
+primary loop time step. The primary time step is common for all SAS4A
+calculation channels and is always smaller than or equal to the main
+time step used in the point kinetics calculation.
+
+When in-pin fuel motion is detected in a given channel, the PINACLE
+time, TIMEPN, is set to zero in the CAVMOT routine. TIMEPN is initially
+advanced by adding the PINACLE minimum time step DTPNIN to the time
+TIMEPN. Subsequently, the time TIMEPN will be advanced by the time step
+calculated by PINACLE, as described below.
+
+A hydrodynamic time step DTPI, is calculated first for the in-pin
+hydrodynamic model, as outlined in Section 15.2.6. This time step is
+then compared with the present maximum value $1.10^{-3}$ s which is
+used to avoid numerical heat transfer instabilities. The smallest value
+is retained as the PINACLE time step. This value is further compared
+with the input minimum time step, DTPNIN and the larger value is
+retained. Finally, the PINACLE time step can be cut back if the newly
+determined time:
+
+$$t_{\text{PN}}^{n + 1} = t_{\text{PN}}^{n} + \Delta t$$
+
+exceeds the end of the heat-transfer time step. In this case, the new
+PINACLE time step will be reduced so that the new PINACLE time
+ $t_{\text{PN}}^{n + 1}$ will coincide with the end of the
+heat-transfer time step.
+
+As shown in the flow diagram 15.1-5, PINACLE retains control and
+advances the solution in a given channel until the end of a heat
+transfer time step is reached.
+
+[anchor: list-of-pinacle-routines]
+
+### 15.3.1.4. List of PINACLE Routines
+
+This section contains a list of all the subroutines that are part of the
+PINACLE model:
+
+ | 
+
+ | 
+Name
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+CAVMOT
+ | 
+ | 
+Decides when to initiate PINACLE calculations. This routine is called at the end of each heat transfer time step from DFORM3.
+ | 
+
+ | 
+PNINIT
+ | 
+ | 
+Sets several important PINACLE variables and calls the initialization routines PNIPT and PNSET. This routine is called from CAVMOT.
+ | 
+
+ | 
+PNINPT
+ | 
+ | 
+This routine is used together with PNSET to initialize the PINACLE variables. It is called from PNINIT.
+ | 
+
+ | 
+PNSET
+ | 
+ | 
+This routine is used, together with PNINPT, to initialize the PINACLE variables. It is called from PNINIT.
+ | 
+
+ | 
+PINACL
+ | 
+ | 
+PINACLE driver routine. It is called at the end of each heat transfer time step from TSTHRM.
+ | 
+
+ | 
+PN1PIN
+ | 
+ | 
+Solves the mass and energy conservation equations in the pin cavity. Also calculates the radial cavity expansion. It is called each PINACLE time step from PINACL.
+ | 
+
+ | 
+PN2PIN
+ | 
+ | 
+Solves the momentum conservation equations in the pin cavity. Also determines the next PINACLE hydrodynamic time-step and prints the regular PINACLE output. It is called every PINACLE time step from PINACL.
+ | 
+
+ | 
+HTRVPN
+ | 
+ | 
+Heat transfer routine active after PINACLE initiation. Calculates the transient temperatures in the solid fuel pin and cladding. It is called from PINACL at the end of each heat transfer time step.
+ | 
+
+[anchor: input-parameters-relevant-to-pinacle]
+
+## 15.3.2. Input Parameters Relevant to PINACLE
+
+The input parameters relevant to PINACLE are summarized in Table 15.3.1.
+The description of these parameters has also been included in the SAS4A
+input listing. Table 15.3.1 lists the recommended values for these
+parameters and the sections and equations where those parameters are
+mentioned in the text. The list of equations is not necessarily
+exhaustive, and some input parameters might appear in other equations,
+in addition to those listed in the table (e.g., AXMX appears in many
+places and it was not possible to list all occurrences).
+
+Table 15.3.1 PINACLE Input Description
+
+ | 
+
+ | 
+Input Loc.
+ | 
+ | 
+Var.
+ | 
+ | 
+Sect.
+ | 
+ | 
+Eq.
+ | 
+ | 
+Sug. Value (MKS)
+ | 
+ | 
+Comments
+ | 
+
+ | 
+
+ | 
+Block 1, INPCOM
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+
+ | 
+49
+ | 
+ | 
+INAPN
+ | 
+ | 
+15.2.3
+ | 
+ | | 
+ | 
+0
+ | 
+ | 
+If INAPN = 1 then PINACL will assume that small amounts of liquid sodium are present to each axial cell in the cavity. The sodium vapor pressure will be added to the local pressure, depending on the value of CINAPN (13/1286). This input is now provided for parametric studies. The modeling of the sodium field in the cavity will be added to PINACLE at a later time. If INAPN = 0 no sodium pressure is added to the cavity pressure.
+ | 
+
+ | 
+Block 13, PMATCM
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+
+ | 
+1277
+ | 
+ | 
+DTPNIN
+ | 
+ | 
+15.3.1.3
+ | 
+ | | 
+ | 
+ $2 \times 10^{-5}$ 
+ | 
+ | 
+Minimum time step.
+ | 
+
+ | 
+1279
+ | 
+ | 
+DTPNP
+ | 
+ | 
+15.3.3.1
+ | 
+ | | 
+ | 
+0.05
+ | 
+ | 
+Determines the time interval between PINACLE printouts.
+ | 
+
+ | 
+1286
+ | 
+ | 
+CINAPN
+ | 
+ | 
+15.2.3
+ | 
+ | 
+Eq. (15.2-39)
+ | 
+ | 
+1
+ | 
+ | 
+Determines the fraction of the sodium vapor pressure to be added to the local pressure. Can have values between 0 and 1. If CINAPN = 0 all the local sodium vapor pressure is added to the local pressure. If CINAPN = 1 then only the excess Pna (T:sub:na) - Plocal is added to the local pressure.
+ | 
+
+ | 
+1295
+ | 
+ | 
+CIPNTP
+ | 
+ | 
+15.2.5.1
+ | 
+ | 
+Eq. (15.2-69)
+ | 
+ | 
+0.5
+ | 
+ | 
+This variable controls the calculation of the fuel pin top boundary temperature, which is important in triggering the axial in-pin fuel relocation. Can vary between 0 and 1. If 1, the boundary temperature is the same as the temperature of the central top fuel mode. If 0, the boundary temperature is equal to the temperature of the material in the mode above the active fuel, i.e. sodium or blanket fuel central mode.
+ | 
+
+ | 
+1296
+ | 
+ | 
+ROGSPI
+ | 
+ | | 
+ | | 
+ | 
+17.74 for U‑Fissium
+ | 
+ | 
+Mass of fission gas generated in the fuel pin per unit volume of the original pin and percent burnup. Kg/m3 fuel/% B.U.
+ | 
+
+ | 
+Block 51, INPCHN
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+
+ | 
+190
+ | 
+ | 
+IPNPLT
+ | 
+ | 
+15.3.3.2
+ | 
+ | | 
+ | 
+1
+ | 
+ | 
+Controls the fuel distribution printer plot from PINACLE. Can be 0 or 1. If 1, the printer plot will be printed with each PINACLE printout.
+ | 
+
+ | 
+194
+ | 
+ | 
+IPNGO
+ | 
+ | 
+15.3.3.1
+ | 
+ | | 
+ | | 
+ | 
+The variables IPNGO, IPNSTP and IPNNEW can be used to obtain more frequent PINACLE output between the cycles IPNGO and IPNSTP. The PINACLE output will be printed every IPNNEW cycles.
+ | 
+
+ | 
+195
+ | 
+ | 
+IPNSTP
+ | 
+ | 
+15.3.3.1
+ | 
+ | | 
+ | | 
+ | | 
+
+ | 
+196
+ | 
+ | 
+IPNNEW
+ | 
+ | 
+15.3.3.1
+ | 
+ | | 
+ | | 
+ | | 
+
+ | 
+Block 65, FUELIN
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+
+ | 
+22
+ | 
+ | 
+FPINAC
+ | 
+ | 
+15.1.2.1
+ | 
+ | | 
+ | 
+0.2
+ | 
+ | 
+Controls the PINACLE initiation. The PINACLE calculations can only start in a channel where the maximum areal melt fraction (defined as FNMELT times the heat of fusion) is greater than FPINAC. See also CPINAC (65/23) and FNMELT (13/1169).
+ | 
+
+ | 
+23
+ | 
+ | 
+CPINAC
+ | 
+ | 
+15.1.2.1
+ | 
+ | | 
+ | 
+0.5
+ | 
+ | 
+In addition to the FPINAC condition, PINACLE will start only if there are at least 3 adjacent cells with a melt fraction larger than CPINAC * FPINAC.
+ | 
+
+ | 
+52
+ | 
+ | 
+FUSLDT
+ | 
+ | 
+15.2.5.4
+ | 
+ | | 
+ | 
+Geometry dependent
+ | 
+ | 
+Specified the length of possible free motion for the blanket fuel stack and/a liquid sodium. If only liquid sodium is present it should be set equal to the plenum length.
+ | 
+
+ | 
+53
+ | 
+ | 
+FUSLMA
+ | 
+ | 
+15.2.5.4
+ | 
+ | 
+Eq. (15.2-75)
+ | 
+ | | 
+ | 
+Specifies the mass of the blanket pellet stack and/or sodium which will have to be displaced when the axial fuel relocation begins. This mass refers to one pin only.
+ | 
+
+ | 
+54
+ | 
+ | 
+BURNFU
+ | 
+ | | 
+ | | 
+ | | 
+ | 
+Specifies the atom percent burnup for the fuel pins in the channel. It is used in the fission gas calculations when DEFORM-4 is not active.
+ | 
+
+[anchor: output-description]
+
+## 15.3.3. Output Description
+
+[anchor: regular-output]
+
+### 15.3.3.1. Regular Output
+
+The PINACLE output has been designed to provide the essential
+information about the fuel pins in the channel at a given point in time.
+The output is printed from PINACL and can be obtained at equal time
+intervals, by specifying the input integers IPNGO, IPNSTP and IPNNEW.
+The PINACLE output will then be printed between cycles IPNGO and IPNSTP
+every IPNNEW cycles.
+
+The regular PINACLE output is illustrated in Figure 15.3.1. The first line
+in the pin-related output contains the computational cycle number
+ICYCLE, the SAS4A channel number ICH and the current time, TIMEPN. This
+time is measured from the initiation of the in-pin fuel motion
+calculations in the given channel.
+
+The second line contains some summary information about the fuel pin
+cavity and the status of the axial fuel ejection above the active fuel
+column. All the masses in this line refer to the whole subassembly:
+
+ | 
+
+ | 
+Variable
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+FUSLDB
+ | 
+ | 
+Length of molten fuel column ejected above the active fuel pin, m.
+ | 
+
+ | 
+SMFUCA
+ | 
+ | 
+Total mass of molten fuel in the pin cavity, kg.
+ | 
+
+ | 
+SMFICA
+ | 
+ | 
+Total mass of free fission gas in the pin cavity, kg.
+ | 
+
+ | 
+SMFSCA
+ | 
+ | 
+Total mass of dissolved fission gas in the pin cavity, kg.
+ | 
+
+ | 
+SMFUME
+ | 
+ | 
+Total mass of pin fuel that has molten since PINACLE initiation, kg.
+ | 
+
+ | 
+SMFIME
+ | 
+ | 
+Total mass of free fission gas released to the cavity due to fuel melting, kg.
+ | 
+
+ | 
+SMFSRT
+ | 
+ | 
+Total mass of fission gas that was originally dissolved in the molten fuel but was released in the meantime, kg.
+ | 
+
+ | 
+TEPNTP
+ | 
+ | 
+Temperature of the active fuel column top interface. The axial fuel ejection of the fuel from the cavity into the plenum is initiated only after this temperature reaches the fuel solidus temperature, K.
+ | 
+
+ | 
+PRPLNM
+ | 
+ | 
+Current pressure in the pin plenum (Pa). If the blanket stack did not reach a rigid obstacle, i.e. FUSLDB < FUSLDT, the difference between this pressure and the pressure in the top cavity cell controls the axial fuel ejection.
+ | 
+
+Two groups of columns follow, providing more detailed information for
+all axial cells in the cavity. These columns are described below.
+Whenever masses are involved they refer to a single pin, rather than to
+a whole subassembly.
+
+Figure 15.3.1 Regular PINACLE Output
+
+First group of columns:
+
+ | 
+
+ | 
+Variable
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+K
+ | 
+ | 
+The number of the axial cell in the cavity. This number refers to the cavity grid, which differs from the channel grid by the integer IDIFF, i.e., K=I - IDIFF.
+ | 
+
+ | 
+DICA
+ | 
+ | 
+Diameter of the cavity, m.
+ | 
+
+ | 
+FUELSD
+ | 
+ | 
+Molten fuel density smeared over the cavity area, kg/m3.
+ | 
+
+ | 
+FUELM
+ | 
+ | 
+Molten fuel mass, kg.
+ | 
+
+ | 
+RHFUCA
+ | 
+ | 
+Physical density of the molten fuel, kg/m3.
+ | 
+
+ | 
+FISGSD
+ | 
+ | 
+Free fission-gas density, smeared over the cavity area, kg/m3.
+ | 
+
+ | 
+FISGM
+ | 
+ | 
+Free fission-gas mass, kg.
+ | 
+
+ | 
+FISGDM
+ | 
+ | 
+Dissolved fission-gas mass, kg.
+ | 
+
+ | 
+FNFIGB
+ | 
+ | 
+Fraction of the fission gas which is released instantaneously upon fuel melting. This fraction is currently an input constant, independent of the axial location.
+ | 
+
+ | 
+EGFUCA
+ | 
+ | 
+Enthalpy of the molten fuel in the cavity, J/kg.
+ | 
+
+ | 
+TEFUPI
+ | 
+ | 
+Temperature of the molten fuel, K.
+ | 
+
+The second group of columns:
+
+ | 
+
+ | 
+Variable
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+K
+ | 
+ | 
+The number of the axial cell in the cavity.
+ | 
+
+ | 
+ZZPI
+ | 
+ | 
+Axial location of the lower boundary of cell k, measured from the bottom of the pin, m.
+ | 
+
+ | 
+UFPI
+ | 
+ | 
+Velocity of the molten fuel/fission gas-mixture in the cavity, at the axial location ZZPI, m/s.
+ | 
+
+ | 
+PRCA
+ | 
+ | 
+Total pressure in the cavity, Pa.
+ | 
+
+ | 
+PRFIPI
+ | 
+ | 
+Partial pressure of fission gas in the cavity, Pa.
+ | 
+
+ | 
+PRFVPI
+ | 
+ | 
+Partial fuel vapor pressure in the cavity, Pa.
+ | 
+
+ | 
+FUVOFR
+ | 
+ | 
+Molten fuel volume fraction in the cavity.
+ | 
+
+ | 
+FUMESM
+ | 
+ | 
+Mass of fuel molten during the current time step, kg.
+ | 
+
+ | 
+FIMESM
+ | 
+ | 
+Mass of free fission gas added to cell K of cavity during the current time step, kg.
+ | 
+
+ | 
+FALRAT
+ | 
+ | 
+Failure ratio used to determine the initiation of cladding failure and switching to PLUTO2 or LEVITATE models. Cladding failure occurs when FALRAT ≥ 1 in any axial node.
+ | 
+
+ | 
+PRNACA
+ | 
+ | 
+Partial pressure of sodium vapor in the cavity, Pa.
+ | 
+
+Finally, a last summary line prints the fuel mass in all the pins in a
+subassembly and the total reactivity introduced by the molten fuel
+relocation calculated by PINACLE. The reactivity effect refers to the
+whole SAS4A channel, i.e., accounts for the number of assemblies grouped
+together in a SAS4A channel.
+
+[anchor: optional-output]
+
+### 15.3.3.2. Optional Output
+
+An optional printer plot of the axial fuel distribution in a channel can
+be obtained by setting the input IPNPLT = 1. This optional
+output is illustrated in Figure 15.3.2.
+
+This plot prints the linear fuel density in g/cm for each axial cell.
+Note that the cell numbers that appear on the left refer to the coolant
+channel mesh, not to the fuel pin mesh. The ordinate indicates the
+linear density at each axial location in g/cm/pin. It is generally
+labeled in increments of 0.5 g/cm. The symbol “T” indicates the total
+amount of fuel at each location, while the “P” indicates the amount of
+solid fuel at the same location. The difference between the “T” and “P”
+values is thus a measure of the amount of molten fuel present at the
+location. Finally, the original amount of fuel at each location is
+marked by a “0”. At locations where the total amount of fuel present “T”
+is the same as the original amount of fuel “0”, only the “T” appears.
+
+Figure 15.3.2 Optional PINACLE Output
+
+
+------------------------------------------------------------------------------
+[page: Part04/Ch15/future.html]
+------------------------------------------------------------------------------
+[anchor: future-directions-for-modeling-efforts]
+
+# 15.4. Future Directions for Modeling Efforts.
+
+[anchor: annular-molten-region]
+
+## 15.4.1. Annular Molten Region
+
+The current version of PINACLE models the formation of circular central
+cavity within the fuel pin and the subsequent fuel relocation inside
+this central cavity. Although the formation of such a central cavity is
+likely in U-F metal pins and oxide fuel pins, the situation is different
+for the U-Pu-Zr pins currently considered for the metal fuel core. In
+the U-Pu-Zr pins the material redistribution, particularly the Zr
+migration, leads to the formation of an annular Zr-depleted region, with
+a melting point significantly lower than the central and outer fuel
+regions. As the fuel pin temperature increases, the SAS4A calculations
+for U-Pu-Zr pins may indicate the formation of an annular molten cavity,
+due to the presence of this annular region with a low melting
+temperature.
+
+It is thus necessary to develop a PINACLE capability to treat the
+formation of an annular cavity and to model the hydrodynamic fuel
+relocation in an annular geometry. Furthermore, the heat transfer model
+HTRVPN will have to be changed to accommodate the heat transfer
+calculations in the central solid region and annular molten cavity. Once
+this capability is developed it will be possible to use the results
+calculated by the fuel redistribution modules, to obtain a more complete
+picture of the U-Pu-Zr fuel pin behavior during the accident.
+
+[anchor: new-moving-material-components]
+
+## 15.4.2. New Moving Material Components
+
+The current in-pin hydrodynamic model describes the relocation of one
+fuel component and two fission gas components, i.e., the free and
+dissolved fission gas. The specific characteristics of the metal-fuel
+pins will require the addition of several new material components, as
+outlined below.
+
+U-Pu-Zr fuel pins subjected to irradiation have a fuel composition that
+is dependent on both the radial and axial location. The composition of
+the molten fuel in the pin cavity will thus also depend on the initial
+location of the molten material, as well as on the time dependent in-pin
+material relocation and cavity extension. In order to describe this
+situation two new fuel material components will be needed in PINACLE,
+describing the Pu and Zr mass distribution, while the existing fuel
+material will be used for the U fuel component. Only one homogenized
+U-Pu-Zr composition will be present in the molten cavity at each axial
+location, but this composition will vary with the axial location.
+
+The metal-fuel porosity can be partially filled with small amounts of
+liquid sodium originating from the original bond sodium used to fill the
+fuel-cladding gap. As the fuel pin swells during irradiation and reaches
+the cladding, much of the sodium relocates in the space above the fuel
+column, but some of it might end up logged in the fuel porosity. The
+presence of this sodium is taken into account now only in the
+heat-transfer models, by using a modified solid fuel conductivity which
+takes into account the presence of the porosity partially filled with
+sodium. The sodium component, however, must be accounted for after the
+occurrence of fuel melting, which will require the addition of a moving
+Na component to the PINACLE hydrodynamic model. The presence of the
+liquid sodium in the molten cavity will directly affect the physical
+properties of the moving mixture. Although at the pressure levels
+prevailing in the bottled cavity the liquid sodium is not expected to
+have a major effect on the pressure, this situation can change after the
+pin failure when the cavity pressure drops rapidly and the sodium vapor
+pressure might play a significant role. Adding the liquid Na component
+to the PINACLE hydrodynamic model will allow the modeling of the
+prefailure in-pin axial sodium relocation and will provide the correct
+initial conditions for the postfailure LEVITATE calculations.
+
+A characteristic phenomenon in metal-fuel pins is the formation of a
+molten eutectic layer at the fuel cladding interface. Iron diffuses
+inwards into the fuel, leading to the formation of an alloy with a lower
+solidus temperature than the original fuel and thus to fuel
+liquefaction. This molten eutectic region progresses radially at the
+same time as the central molten fuel cavity. When the molten fuel region
+reaches the molten eutectic region the two molten components can mix and
+axial relocation of the molten eutectic is possible. This situation is
+not modeled currently. Although the formation of the cladding molten
+eutectic region is taken into account in the DEFORM-5 cladding failure
+calculations, the iron present in the molten fuel or cladding cannot
+relocate axially or mix with the molten fuel. A moving cladding material
+component will be needed in the PINACLE hydrodynamic model in order to
+model the molten fuel and cladding mixing and axial relocation. The fuel
+and cladding components interact chemically, resulting in a mixed molten
+alloy. The mixing and interaction of the fuel and cladding directly
+affects the physical properties of the molten moving mixture. The axial
+relocation of the molten cladding material itself is expected to have a
+small reactivity effect prior to cladding failure but, more importantly,
+it will provide the correct initial conditions for the postfailure fuel
+relocation, when rapid in-pin motion can lead to more significant
+reactivity effects due to in-pin cladding relocation.
+
+[anchor: inner-cladding-ablation]
+
+## 15.4.3. Inner Cladding Ablation
+
+In metal-fuel pins the molten material region can extend radially past
+the original inner cladding interface as the molten fuel region is
+connected to the molten eutectic region. At present, the molten cavity
+can extend only to the initial inner cladding interface and cladding
+ablation can occur only at the outer cladding interface, after the
+initiation of the postfailure fuel motion model LEVITATE. When the
+molten cladding moving component is implemented, a model describing the
+cladding ablation at the fuel-cladding interface will be necessary. This
+model will allow the radius to increase past the original inner cladding
+radius and will allow the mixing of the molten eutectic with the moving
+components in the pin cavity as needed.
+
+[anchor: composition-dependent-moving-mixture-properties]
+
+## 15.4.4. Composition-Dependent Moving Mixture Properties
+
+The physical properties of the molten mixture in the cavity are
+dependent on the material composition, i.e., the proportion of U, Pu, Zr
+and Fe in the mixture. The physical properties affected by the
+composition include the solidus and liquidus temperatures, the
+conductivity, specific heat and density. Composition dependent functions
+representing these physical properties will have to be implemented in
+the PINACLE routines.
+
+[anchor: fuel-freezing-in-the-plenum]
+
+## 15.4.5. Fuel Freezing in the Plenum
+
+The present model describes the radial heat-transfer between the fuel
+ejected above the fuel-pin and the cladding. The heat-transfer model
+will be expanded to describe the axial heat transfer between the molten
+fuel and the liquid sodium slug. A fuel freezing model describing the
+formation of a fuel crust in the gas plenum is already available in
+PINACLE. However, the accuracy of this model is limited by the fact that
+only one axial fuel cell, of variable length, is allowed above the
+molten fuel-pin. This limitation was introduced mainly because of the
+limited number of axial locations (24) available in SAS4A for the
+fuel-pin arrays. In the future the models describing the molten,
+heat-transfer and freezing of the ejected fuel will be expanded by
+allowing the fuel region to cover multiple axial cells located above the
+original fuel pin. A precondition for this development is an increase in
+the size of the SAS4A fuel-pin arrays.
+
+[anchor: initiation-of-axial-motion]
+
+## 15.4.6. Initiation of Axial Motion
+
+The results of the TREAT experiment analyses performed with PINACLE,
+such as TS-2, M2 and M3 series indicate that the temperature of the fuel
+pin top interface is an important element for the prediction of the time
+of onset of axial fuel ejection. However, it is likely that the pressure
+difference between the molten fuel cavity and the upper gas plenum also
+plays a role in the initiation of axial fuel ejection. The model
+describing the onset of fuel motion will be enhanced in the future to
+incorporate both the interface temperature and pressure difference
+effects.
+
+The timing of the in-pin molten fuel relocation initiation plays an
+important role in determining the accident sequence. If the in-pin fuel
+motion is initiated prior to cladding failure, a significant amount of
+negative reactivity is added at a high rate, causing a rapid decrease in
+power and reactivity. Thus, if cladding failure occurs later, it is
+likely to occur at considerably lower power and reactivity levels. The
+timing of the rapid in-pin fuel relocation initiation is determined by
+the breach of the solid fuel at the top of the pin, which separates the
+molten pressurized cavity from the gas plenum, usually at a lower
+pressure. This event is influenced both the temperature distribution
+near the top of the fuel pin and by the pressure difference between the
+molten cavity and the gas plenum.
+
+As present the fuel temperatures in the top axial fuel cell are used to
+determine the timing of the onset of rapid in-pin fuel relocation. Only
+a radial fuel distribution is calculated and any axial heat transfer is
+neglected. However more detailed two-dimensional calculations indicate
+that near the top of the fuel pin the axial heat transfer between the
+fuel and the molten sodium present above the fuel pin becomes an
+important element in determining the temperature distribution. Because
+the top of the solid fuel pin actually controls the onset of rapid
+in-pin molten fuel relocation, it is necessary to implement at
+two-dimensional temperature calculation in the top axial fuel cell.
+
+It is likely that the pressure difference between the molten cavity and
+the upper gas plenum also plays a role in the initiation of the axial
+fuel upward ejection. The current models do not take into account this
+pressure difference in the initiation of in-pin rapid fuel relocation,
+although the pressure difference is considered in the hydrodynamic
+models and plays an important role in determining the rate of fuel
+ejection after the onset of in-pin fuel relocation. The model describing
+the onset of rapid molten fuel motion will be enhanced in the future to
+incorporate the pressure difference effects in addition to the fuel
+temperature distribution.
+
+[anchor: fuel-blanket-and-sodium-slug-motion]
+
+## 15.4.7. Fuel Blanket and Sodium Slug Motion
+
+A separate momentum equation describing the motion of the fuel blanket
+stack and/or liquid sodium slug will be added. Currently, this stack is
+modeled as moving together with the molten fuel until it reaches a rigid
+obstacle. Afterwards, the stack is assumed immobile and the fuel
+ejection is governed by the pressure difference between the upper cavity
+cell and the cell above the fuel pin. Although the current treatment is
+physically justified and necessary, for numerical stability reasons,
+when the amount of molten fuel ejected is small, the addition of a
+separate momentum equation for the pellet stack and/or liquid sodium
+slug will significantly increase the flexibility of the model when
+calculating the ejection of larger amounts of molten fuel above the
+active fuel column.
+
+At present, the calculations describing the transient temperatures of
+the liquid sodium slug and fission gas plenum continue after the
+initiation of the rapid in-pin fuel relocation, ignoring the boundary
+heat-transfer changes due to the sodium slug relocation.
+
+In fact the sodium slug is moving upwards, and thus the surrounding
+cladding temperatures change, leading to different heat fluxes. In
+addition, the axial heat transfer occurring at the lower slug boundary
+between the liquid sodium and molten fuel is likely to be significant.
+In the case of the fission gas, the upward motion of the sodium slug
+causes a decrease of the fission gas volume and boundary area. While the
+volume decrease is now accounted for in the pressure calculations, the
+heat-transfer model must be modified to account for the changes in the
+cladding area in contact with the plenum gas.
+
+[anchor: pinacle-termination-upon-fuel-freezing-and-restart-upon-remelting]
+
+## 15.4.8. PINACLE Termination Upon Fuel Freezing and Restart Upon Remelting
+
+For the examination of transients with decreasing power levels after the
+initiation of PINACLE, the addition of the capability of modeling fuel
+freezing in the pin cavity will also be necessary. In order to allow the
+analysis of long transients even after PINACLE has been initiated, it is
+necessary to develop the capability of discontinuing the PINACLE
+calculations whenever the fuel in the pin cavity freezes again and
+restarting the PINACLE calculations at a later time if necessary. This
+will allow the SAS4A calculations to proceed with significantly larger
+time steps.
+
+
+------------------------------------------------------------------------------
+[page: Part04/Ch15/references.html]
+------------------------------------------------------------------------------
+[anchor: references]
+
+# 15.5. References
+
+15-1. A. M. Tentner et al., “The SAS4A LMFBR Whole Core Accident
+Analysis Code,” International Topical Meeting on Fast Reactor Safety,
+Knoxville, TN, April 1985.
+
+15-2. A. M. Tentner and H. U. Wider, “LEVITATE-A Mechanistic Model for
+the Analysis of Fuel and Cladding Dynamics Under LOF Conditions,” Intl.
+Mtg. on Fast Reactor Safety, Seattle, WA, 1979.
+
+15-3. H. U. Wider, “PLUTO2 - A Computer Code for the Analysis of
+Overpower Accidents in LMFBRs,” Trans. Am. Nucl. Soc., vol. 27, p.
+533, Nov. 1977.
+
+15-4. A. M. Tentner and D. J. Hill, “PINACLE - A Model of the
+Pre-Failure In-Pin Molten Fuel Relocations,” Trans. Am. Nucl. Soc.,
+Boston, MA, June 1985.
+
+15-5. Argonne National Laboratory, Unpublished information, 1975.
+
+15-6. R. B. Bird, W. E. Stewart, and E. N. Lightfoot, Transport
+Phenomena, John Wiley & Sons, Inc., New York, 1960.
+
+15-7. R. G. Deissler, “Analysis of Turbulent Heat Transfer, Mass
+Transfer, and Friction in Smooth Tubes at High Prandtl and Schmidt
+Numbers,” NACA Report 1210, 1955.
+
+15-8. R. E. Henry, M. A. Grolmes, and H. K. Fauske, “Pressure Pulse
+Propagation in Two-Phase One- and Two-Component Mixtures,” ANL-7792,
+Argonne National Laboratory, Argonne, Illinois, March 1971.
+
+15-9. W. R. Robinson et al., Unpublished information, Argonne National
+Laboratory, 1985.
+
+
+------------------------------------------------------------------------------
+[page: Part04/Ch15/nomenclature.html]
+------------------------------------------------------------------------------
+[anchor: nomenclature]
+
+# 15.6. Nomenclature
+
+ | 
+
+ | 
+Symbols
+ | 
+ | 
+Description
+ | 
+ | 
+Units
+ | 
+
+ | 
+
+ | 
+Superscripts
+ | 
+ | | 
+ | | 
+
+ | 
+l
+ | 
+ | 
+Linear
+ | 
+ | | 
+
+ | 
+n
+ | 
+ | 
+Time step n
+ | 
+ | | 
+
+ | 
+‘
+ | 
+ | 
+Prime always indicates that a quantity refers to a unit of generalized smear volume
+ | 
+ | | 
+
+ | 
+Subscripts
+ | 
+ | | 
+ | | 
+
+ | 
+ac
+ | 
+ | 
+Acoustic
+ | 
+ | | 
+
+ | 
+bk
+ | 
+ | 
+Lower boundary of node K
+ | 
+ | | 
+
+ | 
+ca
+ | 
+ | 
+Cavity
+ | 
+ | | 
+
+ | 
+cl
+ | 
+ | 
+Cladding
+ | 
+ | | 
+
+ | 
+fica
+ | 
+ | 
+Free fission gas in molten pin cavity
+ | 
+ | | 
+
+ | 
+fr
+ | 
+ | 
+Friction
+ | 
+ | | 
+
+ | 
+fsca
+ | 
+ | 
+Dissolved fission gas in the molten pin cavity
+ | 
+ | | 
+
+ | 
+fuca
+ | 
+ | 
+Mobile fuel in the molten pin cavity
+ | 
+ | | 
+
+ | 
+fufi
+ | 
+ | 
+Fuel and fission gas
+ | 
+ | | 
+
+ | 
+fvca
+ | 
+ | 
+Fuel vapor in the molten pin cavity
+ | 
+ | | 
+
+ | 
+i
+ | 
+ | 
+Axial coolant channel index, specific enthalpy
+ | 
+ | | 
+
+ | 
+if
+ | 
+ | 
+Interface
+ | 
+ | | 
+
+ | 
+K
+ | 
+ | 
+Axial pin or cavity index
+ | 
+ | | 
+
+ | 
+liq
+ | 
+ | 
+Liquidus
+ | 
+ | | 
+
+ | 
+me
+ | 
+ | 
+Melting, melt-in
+ | 
+ | | 
+
+ | 
+min
+ | 
+ | 
+Minimum
+ | 
+ | | 
+
+ | 
+max
+ | 
+ | 
+Maximum
+ | 
+ | | 
+
+ | 
+Na
+ | 
+ | 
+Sodium
+ | 
+ | | 
+
+ | 
+Nl
+ | 
+ | 
+Liquid sodium
+ | 
+ | | 
+
+ | 
+Nv
+ | 
+ | 
+Sodium vapor
+ | 
+ | | 
+
+ | 
+pin,pi
+ | 
+ | 
+Pin
+ | 
+ | | 
+
+ | 
+rl
+ | 
+ | 
+Dissolved fission-gas release
+ | 
+ | | 
+
+ | 
+S’
+ | 
+ | 
+Sink or source per unit of generalized smear volume
+ | 
+ | | 
+
+ | 
+sol
+ | 
+ | 
+Solidus
+ | 
+ | | 
+
+ | 
+un
+ | 
+ | 
+Uncompressed
+ | 
+ | | 
+
+ | 
+vg
+ | 
+ | 
+Vapor and gas
+ | 
+ | | 
+
+ | 
+vi
+ | 
+ | 
+Viscous
+ | 
+ | | 
+
+ | 
+z
+ | 
+ | 
+Axial location z
+ | 
+ | | 
+
+ | 
+Greek
+ | 
+ | | 
+ | | 
+
+ | 
+α
+ | 
+ | 
+Void fraction
+ | 
+ | | 
+
+ | 
+β
+ | 
+ | 
+Delayed neutron fraction
+ | 
+ | | 
+
+ | 
+γ
+ | 
+ | 
+Cp/C:sub:v
+ | 
+ | | 
+
+ | 
+δ
+ | 
+ | 
+Partial derivative
+ | 
+ | | 
+
+ | 
+Δ
+ | 
+ | 
+Derivative in finite differences
+ | 
+ | | 
+
+ | 
+κ
+ | 
+ | 
+Compressibility
+ | 
+ | 
+1/Pa
+ | 
+
+ | 
+π
+ | 
+ | 
+Circumference of a circle divided by its diameter
+ | 
+ | | 
+
+ | 
+ρ
+ | 
+ | 
+Theoretical density
+ | 
+ | 
+kg/m3
+ | 
+
+ | 
+ρ’
+ | 
+ | 
+Generalized linear density
+ | 
+ | 
+kg/m3
+ | 
+
+ | 
+σ
+ | 
+ | 
+Surface tension
+ | 
+ | 
+J/m2
+ | 
+
+ | 
+θ
+ | 
+ | 
+Generalized volume fraction
+ | 
+ | | 
+
+ | 
+Regular
+ | 
+ | | 
+ | | 
+
+ | 
+A
+ | 
+ | 
+Cross section area
+ | 
+ | 
+m2
+ | 
+
+ | 
+A’
+ | 
+ | 
+Interaction or surface area per unit of generalized smear volume
+ | 
+ | 
+1/m
+ | 
+
+ | 
+AXMX
+ | 
+ | 
+Input, reference cross section area; recommended input value is subassembly cross section area
+ | 
+ | 
+m2
+ | 
+
+ | 
+BFR
+ | 
+ | 
+Input, exponent of liquid friction coefficient
+ | 
+ | | 
+
+ | 
+BFRV
+ | 
+ | 
+Input, exponent of vapor friction coefficient
+ | 
+ | | 
+
+ | 
+C
+ | 
+ | 
+Specific heat
+ | 
+ | 
+J(kg·K)
+ | 
+
+ | 
+CDFU
+ | 
+ | 
+Input, fuel conductivity
+ | 
+ | 
+J(m·s·K)
+ | 
+
+ | 
+CDNL
+ | 
+ | 
+Input, liquid sodium conductivity
+ | 
+ | 
+J(m·s·K)
+ | 
+
+ | 
+CDVG
+ | 
+ | 
+Input, conductivity of sodium vapor
+ | 
+ | 
+J(m·s·K)
+ | 
+
+ | 
+CFCOFV
+ | 
+ | 
+Input, fuel vapor condensation coefficient
+ | 
+ | 
+J(m2·s·K)
+ | 
+
+ | 
+CIA3
+ | 
+ | 
+Input, constant in the Deissler heat-transfer-correlation
+ | 
+ | | 
+
+ | 
+CIFRFU
+ | 
+ | 
+Input part of the fuel friction calculation
+ | 
+ | | 
+
+ | 
+CIREFU
+ | 
+ | 
+Input, Reynolds number above which fully turbulent fuel flow is assumed for friction calculation
+ | 
+ | | 
+
+ | 
+CIRTFS
+ | 
+ | 
+Input, controls dissolved gas release
+ | 
+ | 
+1/s
+ | 
+
+ | 
+CMFU
+ | 
+ | 
+Input, liquid fuel compressibility
+ | 
+ | 
+1/Pa
+ | 
+
+ | 
+CPFU
+ | 
+ | 
+Input, fuel heat capacity
+ | 
+ | 
+J/(kg·K)
+ | 
+
+ | 
+D
+ | 
+ | 
+Diameter, hydraulic diameter
+ | 
+ | 
+m
+ | 
+
+ | 
+e
+ | 
+ | 
+Internal energy
+ | 
+ | 
+J/kg
+ | 
+
+ | 
+EGBBLY
+ | 
+ | 
+Input, internal fuel energy below which fuel freezing begins
+ | 
+ | 
+J/kg
+ | 
+
+ | 
+EGFULQ
+ | 
+ | 
+Input, internal fuel energy at the liquidus
+ | 
+ | 
+J/kg
+ | 
+
+ | 
+EGFUSO
+ | 
+ | 
+Input, internal fuel energy at the solidus
+ | 
+ | 
+J/kg
+ | 
+
+ | 
+EPCH
+ | 
+ | 
+Input, controls use of advanced pressure in in-pin calculation
+ | 
+ | | 
+
+ | 
+F
+ | 
+ | 
+Friction factor
+ | 
+ | | 
+
+ | 
+FNFUAN
+ | 
+ | 
+Input, controls when annular fuel flow in molten pin cavity is assumed
+ | 
+ | | 
+
+ | 
+FNMECA
+ | 
+ | 
+Fraction of node width of radial node on cavity boundaries which melts in per PINACLE time step
+ | 
+ | | 
+
+ | 
+FNMELT
+ | 
+ | 
+Input, controls location of cavity boundary
+ | 
+ | | 
+
+ | 
+FNPOE
+ | 
+ | 
+Relative power level
+ | 
+ | | 
+
+ | 
+FUELMS
+ | 
+ | 
+Initial fuel mass in radial fuel-pin node
+ | 
+ | 
+kg
+ | 
+
+ | 
+FUMASS
+ | 
+ | 
+Initial total fuel mass in an axial fuel node
+ | 
+ | 
+kg
+ | 
+
+ | 
+FUMS
+ | 
+ | 
+Current fuel mass in the radial fuel pin node on the cavity boundary
+ | 
+ | 
+kg
+ | 
+
+ | 
+g
+ | 
+ | 
+Gravity
+ | 
+ | 
+m/s2
+ | 
+
+ | 
+GAMSS
+ | 
+ | 
+Input, fraction of power going into direct heating of structure
+ | 
+ | | 
+
+ | 
+GAMTNC
+ | 
+ | 
+Input, fraction of power going into direct heating of coolant
+ | 
+ | | 
+
+ | 
+GAMTNE
+ | 
+ | 
+Input, fraction of power going in to direct heating of cladding
+ | 
+ | | 
+
+ | 
+h
+ | 
+ | 
+Heat-transfer coefficient
+ | 
+ | 
+J/(m2·s·K)
+ | 
+
+ | 
+H
+ | 
+ | 
+Heat-transfer coefficient times heat-transfer area
+ | 
+ | 
+J/(s·K)
+ | 
+
+ | 
+I
+ | 
+ | 
+Axial node index in coolant channel
+ | 
+ | | 
+
+ | 
+IDIFF
+ | 
+ | 
+Offset between pin and channel grid. The first pin node is at the same elevation as channel node IDIFF + 1
+ | 
+ | | 
+
+ | 
+k
+ | 
+ | 
+Conductivity
+ | 
+ | 
+J(m·s·K)
+ | 
+
+ | 
+K
+ | 
+ | 
+Axial index in the pin
+ | 
+ | | 
+
+ | 
+KKMX
+ | 
+ | 
+Uppermost node in the molten pin cavity
+ | 
+ | | 
+
+ | 
+KZPIN
+ | 
+ | 
+Coolant channel zone which contains the fuel pins
+ | 
+ | | 
+
+ | 
+KK1
+ | 
+ | 
+Lowermost node in the molten pin cavity
+ | 
+ | | 
+
+ | 
+L
+ | 
+ | 
+Length
+ | 
+ | 
+m
+ | 
+
+ | 
+NRPI
+ | 
+ | 
+Number of pins per subassembly
+ | 
+ | | 
+
+ | 
+NT
+ | 
+ | 
+Number of radial fuel pin nodes
+ | 
+ | | 
+
+ | 
+Nu
+ | 
+ | 
+Nusselt number
+ | 
+ | | 
+
+ | 
+P
+ | 
+ | 
+Pressure
+ | 
+ | 
+Pa
+ | 
+
+ | 
+PORFR
+ | 
+ | 
+Porosity fraction
+ | 
+ | | 
+
+ | 
+POW
+ | 
+ | 
+Input, power in highest rated axial fuel pin node
+ | 
+ | 
+W
+ | 
+
+ | 
+POWCOF
+ | 
+ | 
+Exponent in the exponential function which gives the power history during a neutron’s time step
+ | 
+ | | 
+
+ | 
+Pr
+ | 
+ | 
+Prandtl number
+ | 
+ | | 
+
+ | 
+PSHAPE
+ | 
+ | 
+Input, axial pin power shape
+ | 
+ | | 
+
+ | 
+PSHAPR
+ | 
+ | 
+Input, radial power shape in a pin
+ | 
+ | | 
+
+ | 
+Q
+ | 
+ | 
+Fission heat source
+ | 
+ | | 
+
+ | 
+r
+ | 
+ | 
+Radius
+ | 
+ | 
+W/kg
+ | 
+
+ | 
+R
+ | 
+ | 
+Gas constant or radius
+ | 
+ | 
+J/(kg·K)
+ | 
+
+ | 
+RETFG2
+ | 
+ | 
+Total fission gas mass in the radial fuel pin node at the cavity boundary before it began melting into the cavity
+ | 
+ | 
+kg
+ | 
+
+ | 
+Re
+ | 
+ | 
+Reynold’s number
+ | 
+ | | 
+
+ | 
+RGAS
+ | 
+ | 
+Input, gas constant for fission gas
+ | 
+ | 
+J(kg·K)
+ | 
+
+ | 
+S
+ | 
+ | 
+Mass sink or source
+ | 
+ | 
+kg/s
+ | 
+
+ | 
+S’
+ | 
+ | 
+Mass sink or source per unit of generalized smear volume
+ | 
+ | 
+kg/(m·s)
+ | 
+
+ | 
+St
+ | 
+ | 
+Stanton number
+ | 
+ | | 
+
+ | 
+t
+ | 
+ | 
+Time
+ | 
+ | 
+S
+ | 
+
+ | 
+T
+ | 
+ | 
+Temperature
+ | 
+ | 
+K
+ | 
+
+ | 
+u
+ | 
+ | 
+Velocity
+ | 
+ | 
+m/s
+ | 
+
+ | 
+VIFG
+ | 
+ | 
+Input, viscosity of fission gas
+ | 
+ | 
+kg/(m·s)
+ | 
+
+ | 
+VIFULQ
+ | 
+ | 
+Input, viscosity of liquid fuel
+ | 
+ | 
+kg/(m·s)
+ | 
+
+ | 
+VOLUME
+ | 
+ | 
+Volume
+ | 
+ | 
+m3
+ | 
+
+ | 
+z
+ | 
+ | 
+Axial coordinate
+ | 
+ | 
+m
+ |

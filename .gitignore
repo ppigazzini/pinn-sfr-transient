@@ -31,3 +31,11 @@ htmlcov/
 
 # Scratch / pasted logs (e.g. CI run logs saved locally)
 *.log
+
+# Concatenation of the mirrored manual chapters, written by
+# `tools/fetch_sas_manual.py --combined`. It duplicates docs/sas4a/ChNN.txt
+# exactly and exceeds the 1 MB file limit.
+/docs/sas4a/ALL.txt
+
+# Local working notes.
+/__DEV/
