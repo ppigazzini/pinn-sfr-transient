@@ -278,6 +278,47 @@ def vapour_source(T_c: Field, alpha: Field, q_wall: Field, p: AxialParams) -> Fi
     return latent_fraction(T_c, alpha, p) * q_wall / (lam * rho_v * p.A_c)
 
 
+def residual_scales(p: AxialParams) -> tuple[float, ...]:
+    """Natural time constant of each residual block [s].
+
+    Returns ``(tau_f, tau_cl, tau_s, tau_c, tau_alpha)``. The PINN divides each
+    equation by its own rate rather than by one global horizon, which is the
+    "non-dimensionalise the *equations*, not only the states" step that
+    ``docs/neural_network.md`` section 2 credits for making the 0D model trainable
+    at all, and that VS-PINN and the scale-aware-residual literature formalise.
+
+    The blocks' time constants are 0.58 s (fuel), 0.025 s (cladding), 0.107 s
+    (structure) and 0.113 s (coolant transit) against a 60 s horizon, so scaling
+    all four by ``t_end`` leaves ``t_end/tau`` spanning 104 to 2378 — a 23x
+    spread between residual blocks.
+
+    **Exposed as diagnostic information, NOT applied to the residuals — because
+    applying it provably does nothing.** Measured: rescaling each block by its
+    own time constant reproduced the previous result to every digit
+    (T_f 6.190e-2, T_cl 1.200e-1, T_s 3.165e-2, T_c 3.402e-2). Two independent
+    reasons, both structural rather than incidental:
+
+    * **Adam is scale-invariant.** It divides by a running estimate of the
+      gradient magnitude, so multiplying a loss term by a constant leaves the
+      update unchanged except through ``epsilon``.
+    * **The gradient-norm weighting already normalises per block**, setting
+      ``lambda_k = mean(g)/g_k``; any fixed constant on block ``k`` multiplies
+      ``g_k`` and is cancelled exactly at the next weight update.
+
+    So per-equation scaling — the standard advice for stiff multiscale PINNs, and
+    what makes the 0D model trainable where the states are *not* separately
+    weighted — is redundant once adaptive block weighting is active. Kept here
+    because the numbers are worth knowing when choosing a formulation; wiring it
+    into the residual would have been dead machinery.
+    """
+    geo = line_geometry(p)
+    tau_f = geo.C_f / (p.h_gap * geo.A_fe)
+    tau_cl = geo.C_cl / (p.h_clad_coolant * geo.A_ec)
+    tau_s = p.rho_s * p.c_s * p.t_struct / p.h_struct_coolant
+    tau_c = geo.C_c / (p.w_0 * p.c_c / p.H)  # advective transit over the height
+    return (tau_f, tau_cl, tau_s, tau_c, tau_c)
+
+
 # --- kinetics closure (milestone M6) ----------------------------------------
 N_GROUPS: int = 6
 """Delayed-neutron precursor groups (manual Eq. 4.3-1)."""
