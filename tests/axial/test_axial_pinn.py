@@ -22,6 +22,7 @@ from pinn_sfr_transient.axial import AxialParams
 from pinn_sfr_transient.axial.physics import (
     continuous_derivatives,
     line_geometry,
+    quasi_steady_void,
     residual_normalisation,
     residual_scales,
 )
@@ -141,7 +142,8 @@ def test_residual_is_the_shared_physics_to_machine_precision(model):
         1.0,
     )
     scales = [model.t_end / model.dT] * 4 + [model.t_end]
-    for k in range(5):
+    assert len(blocks) == model.n_blocks
+    for k in range(model.n_blocks):
         physical = (d_dt[:, k : k + 1] - scales[k] * rhs[k]).pow(2).squeeze(1)
         # Un-scale the network's block and it must be the physical residual.
         unscaled = blocks[k] / model.res_norm[k] ** 2
@@ -166,13 +168,13 @@ def test_variable_scaling_changes_the_loss_but_never_the_equation():
     zeta = torch.rand(64, 1, dtype=torch.float64, generator=gen)
     that = torch.rand(64, 1, dtype=torch.float64, generator=gen)
     b_on, b_off = on.residual_blocks(zeta, that), off.residual_blocks(zeta, that)
-    for k in range(5):
+    for k in range(on.n_blocks):
         np.testing.assert_allclose(
             b_on[k].detach().numpy(),
             (b_off[k] * on.res_norm[k] ** 2).detach().numpy(),
             rtol=1e-14,
         )
-    np.testing.assert_allclose(off.res_norm, np.ones(5))
+    np.testing.assert_allclose(off.res_norm[: off.n_blocks], np.ones(off.n_blocks))
 
 
 def test_variable_scaling_brings_every_block_to_the_same_order():
@@ -364,7 +366,7 @@ def test_closed_loop_power_starts_at_nominal(plan_a_model):
 def test_closed_loop_has_six_blocks_and_they_are_per_time(plan_a_model):
     that = torch.rand(16, 1, dtype=torch.float64)
     blocks = plan_a_model.closed_loop_blocks(that)
-    assert len(blocks) == 6  # four temperatures, void, precursors
+    assert len(blocks) == plan_a_model.n_blocks + 1  # fields + precursors
     assert all(b.shape == (16,) for b in blocks)
     assert all(bool(torch.isfinite(b).all()) for b in blocks)
 
@@ -421,7 +423,7 @@ def test_block_weighting_can_be_switched_off_by_the_ratio_knob(model):
     trainer = Trainer(model, cfg)
     for _ in range(5):
         trainer.update_block_weights(*trainer.collocation())
-    np.testing.assert_allclose(trainer.block_w.numpy(), np.ones(5))
+    np.testing.assert_allclose(trainer.block_w.numpy(), np.ones(model.n_blocks))
 
 
 def test_bounded_weights_preserves_ratios_below_the_cap():
@@ -459,3 +461,58 @@ def test_rar_is_disabled_under_feedback():
     trainer = Trainer(AxialPinn(AxialParams(), cfg), cfg)
     trainer.rar_refine()
     assert trainer.rar.numel() == 0
+
+
+# --- D-TH-3: the void eliminated algebraically ------------------------------
+def test_void_closure_removes_the_void_residual_block():
+    """QSSA drops the block whose normalised rate is 8.5e4; the other four remain."""
+    p = AxialParams()
+    on = AxialPinn(p, AxialTrainConfig(width=8, depth=2, void_closure=True))
+    off = AxialPinn(p, AxialTrainConfig(width=8, depth=2, void_closure=False))
+    assert on.n_blocks == 4
+    assert off.n_blocks == 5
+    gen = torch.Generator().manual_seed(0)
+    z, t = (torch.rand(32, 1, dtype=torch.float64, generator=gen) for _ in range(2))
+    assert len(on.residual_blocks(z, t)) == 4
+    assert len(off.residual_blocks(z, t)) == 5
+
+
+def test_void_closure_slaves_alpha_to_the_coolant_temperature():
+    """`alpha` is a function of the network's own `T_c`, not a free output."""
+    p = AxialParams()
+    m = AxialPinn(p, AxialTrainConfig(width=8, depth=2, void_closure=True))
+    gen = torch.Generator().manual_seed(1)
+    z, t = (torch.rand(48, 1, dtype=torch.float64, generator=gen) for _ in range(2))
+    state = m.normalised_state(z, t)
+    T_c = p.T_in + state[:, 3:4] * m.dT
+    np.testing.assert_allclose(
+        state[:, 4:5].detach().numpy(),
+        quasi_steady_void(T_c, p).detach().numpy(),
+        rtol=0.0,
+        atol=0.0,
+    )
+
+
+def test_void_closure_gives_the_hard_constraints_for_free():
+    """`b` underflows to exactly zero below saturation, so no gate is needed.
+
+    The initial condition and the inlet condition on `alpha` fall out of the
+    closure rather than being imposed, which is why the void head no longer
+    starts half open (the asymmetry a bias offset failed to fix).
+    """
+    p = AxialParams()
+    m = AxialPinn(p, AxialTrainConfig(width=8, depth=2, void_closure=True))
+    zeta = torch.linspace(0.0, 1.0, 33, dtype=torch.float64).reshape(-1, 1)
+    a0 = m.normalised_state(zeta, torch.zeros_like(zeta))[:, 4].detach()
+    assert float(a0.abs().max()) == 0.0
+    that = torch.linspace(0.0, 1.0, 33, dtype=torch.float64).reshape(-1, 1)
+    a_in = m.normalised_state(torch.zeros_like(that), that)[:, 4].detach()
+    assert float(a_in.abs().max()) == 0.0
+
+
+def test_void_closure_is_differentiable_where_the_switch_is_off():
+    """`sqrt(b)` was the first choice and returns NaN: `b` is exactly 0 on 85% of the domain."""
+    p = AxialParams()
+    T = torch.tensor([700.0, 900.0, 1169.0, 1200.0], dtype=torch.float64, requires_grad=True)
+    (grad,) = torch.autograd.grad(quasi_steady_void(T, p).sum(), T)
+    assert bool(torch.isfinite(grad).all())
