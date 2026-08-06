@@ -23,6 +23,7 @@ import jax.numpy as jnp
 
 from pinn_sfr_transient.axial import AxialParams
 from pinn_sfr_transient.axial import pinn_jax as pj
+from pinn_sfr_transient.axial.physics import quasi_steady_void
 from pinn_sfr_transient.axial.reference import steady_profile
 
 TINY = pj.AxialTrainConfig(width=16, depth=2, n_colloc=128, adam_iters=3, lbfgs_iters=2)
@@ -139,8 +140,9 @@ def test_residual_blocks_are_finite(model):
     rng = np.random.default_rng(0)
     zeta = jnp.asarray(rng.random((64, 1)))
     that = jnp.asarray(rng.random((64, 1)))
-    blocks = pj.residual_blocks(model, p, zeta, that, pj.AxialTrainConfig())
-    assert len(blocks) == 5
+    cfg = pj.AxialTrainConfig()
+    blocks = pj.residual_blocks(model, p, zeta, that, cfg)
+    assert len(blocks) == pj.n_field_blocks(cfg)
     assert all(bool(np.isfinite(np.asarray(b)).all()) for b in blocks)
 
 
@@ -150,7 +152,7 @@ def test_closed_loop_blocks_are_per_time():
     p = AxialParams()
     that, zeta_q, weights = pj._collocation(p, cfg, jax.random.PRNGKey(1))
     blocks = pj.closed_loop_blocks(model, p, that, zeta_q, weights, cfg)
-    assert len(blocks) == 6
+    assert len(blocks) == pj.n_field_blocks(cfg) + 1  # fields + precursors
     assert all(b.shape == (that.shape[0],) for b in blocks)
 
 
@@ -237,3 +239,75 @@ def test_rar_is_disabled_under_feedback():
     p = AxialParams()
     pts = pj._rar_points(model, p, cfg, jax.random.PRNGKey(2), jnp.ones(6))
     assert len(pts) == 3  # the Plan A tuple, unchanged
+
+
+# --- N1: the two backends must expose the same model ------------------------
+@pytest.mark.parametrize(
+    "kw", [{}, {"void_closure": False}, {"front_net": True}, {"feedback": True, "n_time": 8}]
+)
+def test_block_structure_matches_the_torch_backend(kw):
+    """A knob that exists in one backend and not the other is a silent model fork.
+
+    The void closure and the front network landed in torch first; this is what
+    stops the parity table in `docs/axial_nn.md` being measured on two different
+    models again.
+    """
+    pytest.importorskip("torch")
+    from pinn_sfr_transient.axial import pinn_torch as pt
+
+    j_cfg = pj.AxialTrainConfig(width=16, depth=2, **kw)
+    t_cfg = pt.AxialTrainConfig(width=16, depth=2, **kw)
+    t_model = pt.AxialPinn(AxialParams(), t_cfg)
+    j_model = pj.AxialPinn(j_cfg, jax.random.PRNGKey(0))
+
+    n_j = pj.n_field_blocks(j_cfg) + (1 if pj.uses_front(j_cfg) else 0)
+    assert n_j == t_model.n_blocks
+    assert j_model.mlp.layers[0].in_features == t_model.net.net[0].in_features
+    assert pj.uses_front(j_cfg) == t_model.use_front
+
+
+def test_the_two_backends_share_every_default():
+    """Defaults that drift make every cross-backend number a comparison of schedules."""
+    pytest.importorskip("torch")
+    from pinn_sfr_transient.axial import pinn_torch as pt
+
+    j, t = pj.AxialTrainConfig(), pt.AxialTrainConfig()
+    for name in (
+        "width",
+        "depth",
+        "n_colloc",
+        "adam_iters",
+        "lbfgs_iters",
+        "lr",
+        "causal_eps",
+        "causal_chunks",
+        "weight_update_every",
+        "weight_momentum",
+        "weight_max_ratio",
+        "residual_scaling",
+        "void_closure",
+        "front_net",
+        "front_frac",
+        "t_train_frac",
+        "feedback",
+        "n_time",
+        "seed",
+    ):
+        assert getattr(j, name) == getattr(t, name), name
+
+
+def test_void_closure_agrees_across_backends():
+    """`quasi_steady_void` is shared source; assert the dispatch really is shared.
+
+    Absolute, not relative. The closure cubes a `tanh`, and the two libm
+    implementations saturate at marginally different arguments, so just outside
+    the switch one backend returns exactly zero while the other returns ~1e-7 —
+    a relative difference of 1 on a quantity that is physically zero. Measured
+    maximum absolute disagreement over 600-1400 K is 9.5e-7.
+    """
+    torch = pytest.importorskip("torch")
+    p = AxialParams()
+    T = np.linspace(600.0, 1400.0, 101)
+    j = np.asarray(quasi_steady_void(jnp.asarray(T), p))
+    t = quasi_steady_void(torch.tensor(T, dtype=torch.float64), p).numpy()
+    np.testing.assert_allclose(j, t, rtol=0.0, atol=1e-5)

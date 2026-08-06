@@ -39,14 +39,17 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from pinn_sfr_transient.axial import sodium
 from pinn_sfr_transient.axial.config import AxialParams
 from pinn_sfr_transient.axial.physics import (
     N_GROUPS,
+    boiling_fraction,
     continuous_derivatives,
     kinetics_weights,
     line_geometry,
     precursor_derivatives,
     prompt_jump_power,
+    quasi_steady_void,
     reactivity,
     residual_normalisation,
 )
@@ -70,6 +73,7 @@ if TYPE_CHECKING:
 FIELDS: tuple[str, ...] = ("T_f", "T_cl", "T_s", "T_c", "alpha")
 N_TEMPS: int = 4
 _ALPHA_GATE: float = 10.0
+_FRONT_MAX: float = 1.25
 _NEWTON_ITERS: int = 5
 _EXP_BOUND: float = 4.0
 """Bound on the exponent of the multiplicative ansatz; see the torch twin."""
@@ -112,6 +116,12 @@ class AxialTrainConfig:
     weight_max_ratio: float = 1.0
     # Variable scaling per residual block; see the torch twin.
     residual_scaling: bool = True
+    # Eliminate the void algebraically (D-TH-3); see the torch twin.
+    void_closure: bool = True
+    # Front-position network (M8 option 2). Measured worse on every metric; see
+    # the torch twin for the table.
+    front_net: bool = False
+    front_frac: float = 0.25
 
     # RAR keeps a FIXED count so `jit` never recompiles (the torch twin grows an
     # unbounded reservoir instead — same idea, framework-appropriate form).
@@ -135,11 +145,13 @@ class AxialPinn(eqx.Module):
 
     mlp: eqx.nn.MLP
     kin: eqx.nn.MLP | None
+    front: eqx.nn.MLP | None
 
     def __init__(self, cfg: AxialTrainConfig, key: jax.Array) -> None:
-        k_field, k_kin = jax.random.split(key)
+        k_field, k_kin, k_front = jax.random.split(key, 3)
+        use_front = bool(cfg.front_net and cfg.void_closure)
         self.mlp = eqx.nn.MLP(
-            in_size=2,
+            in_size=3 if use_front else 2,
             out_size=len(FIELDS),
             width_size=cfg.width,
             depth=cfg.depth,
@@ -157,6 +169,20 @@ class AxialPinn(eqx.Module):
                 key=k_kin,
             )
             if cfg.feedback
+            else None
+        )
+        # Front-position network: one input, one output, so it is cheap next to
+        # the field network. Off by default, like the torch twin.
+        self.front = (
+            eqx.nn.MLP(
+                in_size=1,
+                out_size=1,
+                width_size=max(8, cfg.width // 4),
+                depth=2,
+                activation=jnp.tanh,
+                key=k_front,
+            )
+            if use_front
             else None
         )
 
@@ -203,8 +229,17 @@ def theta0(p: AxialParams, zeta: jax.Array) -> jax.Array:
 
 
 # --- ansatz -----------------------------------------------------------------
+def front_position(model: AxialPinn, that: jax.Array) -> jax.Array:
+    """Predicted front height in ``(0, _FRONT_MAX)``; above 1 means "no front yet"."""
+    return _FRONT_MAX * jax.nn.sigmoid(model.front(that))
+
+
 def normalised_state(
-    model: AxialPinn, p: AxialParams, zeta: jax.Array, that: jax.Array
+    model: AxialPinn,
+    p: AxialParams,
+    zeta: jax.Array,
+    that: jax.Array,
+    cfg: AxialTrainConfig | None = None,
 ) -> jax.Array:
     """``theta(zeta, t_hat)`` with every hard constraint satisfied identically.
 
@@ -218,11 +253,23 @@ def normalised_state(
     The additive form it replaced let the optimiser drive ``T_f`` negative while
     the loss fell, which made the logarithmic Doppler of Eq. 4.5-3 return NaN.
     """
-    raw = model.mlp(jnp.concatenate([zeta, that]))
+    cfg = cfg or AxialTrainConfig()
+    use_front = bool(cfg.front_net and cfg.void_closure and model.front is not None)
+    x = (
+        jnp.concatenate([zeta, that, zeta - front_position(model, that)])
+        if use_front
+        else (jnp.concatenate([zeta, that]))
+    )
+    raw = model.mlp(x)
     base = theta0(p, zeta)
     temps = base[:N_TEMPS] * _bounded_exp(that * raw[:N_TEMPS])
-    gate = jnp.tanh(_ALPHA_GATE * that) * jnp.tanh(_ALPHA_GATE * zeta)
-    alpha = gate * jax.nn.sigmoid(raw[-1:])
+    if cfg.void_closure:
+        # `b` underflows to exactly zero below saturation, so the void-free
+        # initial and inlet conditions fall out of the closure -- no gate needed.
+        alpha = quasi_steady_void(p.T_in + temps[3:4] * (p.P_0 / (p.w_0 * p.c_c)), p)
+    else:
+        gate = jnp.tanh(_ALPHA_GATE * that) * jnp.tanh(_ALPHA_GATE * zeta)
+        alpha = gate * jax.nn.sigmoid(raw[-1:])
     return jnp.concatenate([temps, alpha])
 
 
@@ -237,7 +284,11 @@ def precursors(model: AxialPinn, that: jax.Array) -> jax.Array:
 
 
 def state_and_grads(
-    model: AxialPinn, p: AxialParams, zeta: jax.Array, that: jax.Array
+    model: AxialPinn,
+    p: AxialParams,
+    zeta: jax.Array,
+    that: jax.Array,
+    cfg: AxialTrainConfig | None = None,
 ) -> tuple[jax.Array, jax.Array, jax.Array]:
     """``(theta, d theta/d t_hat, d theta/d zeta)`` at a batch of points.
 
@@ -247,7 +298,7 @@ def state_and_grads(
     """
 
     def one(z: jax.Array, h: jax.Array) -> tuple[jax.Array, jax.Array, jax.Array]:
-        f = lambda a, b: normalised_state(model, p, a, b)  # noqa: E731
+        f = lambda a, b: normalised_state(model, p, a, b, cfg)  # noqa: E731
         theta, d_dt = jax.jvp(lambda b: f(z, b), (h,), (jnp.ones_like(h),))
         _, d_dz = jax.jvp(lambda a: f(a, h), (z,), (jnp.ones_like(z),))
         return theta, d_dt, d_dz
@@ -259,6 +310,35 @@ def state_and_grads(
 def horizon(p: AxialParams, cfg: AxialTrainConfig) -> float:
     """End of the trained window [s]; ``t_hat = 1`` maps here, not to ``p.t_end``."""
     return float(p.t_end) * cfg.t_train_frac
+
+
+def front_residual(
+    model: AxialPinn, p: AxialParams, that: jax.Array, cfg: AxialTrainConfig
+) -> jax.Array:
+    """Squared interface residual, masked by the outlet superheat switch.
+
+    ``[T_c(z_f, t) - T_sat - dT_sup] / dT``. Before onset the condition has no
+    solution to pin, so the mask -- the network's own outlet temperature through
+    ``boiling_fraction`` -- switches it off. Nothing here consults the reference.
+    """
+    dT = p.P_0 / (p.w_0 * p.c_c)
+    z_f = jax.vmap(lambda h: front_position(model, h))(that)
+    state_at = jax.vmap(lambda a, b: normalised_state(model, p, a, b, cfg))
+    T_c_front = p.T_in + state_at(z_f, that)[:, 3:4] * dT
+    T_c_top = p.T_in + state_at(jnp.ones_like(that), that)[:, 3:4] * dT
+    mask = boiling_fraction(T_c_top, p)
+    T_boil = sodium.saturation_temperature(p.p_system) + p.dT_superheat
+    return ((mask * (T_c_front - T_boil) / dT) ** 2).squeeze(1)
+
+
+def uses_front(cfg: AxialTrainConfig) -> bool:
+    """Report whether the front-position network is active."""
+    return bool(cfg.front_net and cfg.void_closure)
+
+
+def n_field_blocks(cfg: AxialTrainConfig) -> int:
+    """Field residual blocks: four when the void is closed algebraically, else five."""
+    return N_TEMPS if cfg.void_closure else len(FIELDS)
 
 
 def _norm(p: AxialParams, cfg: AxialTrainConfig) -> tuple[float, ...]:
@@ -274,7 +354,7 @@ def residual_blocks(
     """Plan B blocks: prescribed power, scattered ``(zeta, t)`` collocation."""
     dT = p.P_0 / (p.w_0 * p.c_c)
     t_end = horizon(p, cfg)
-    theta, d_dt, d_dz = state_and_grads(model, p, zeta, that)
+    theta, d_dt, d_dz = state_and_grads(model, p, zeta, that, cfg)
     temps = tuple(p.T_in + theta[:, k : k + 1] * dT for k in range(N_TEMPS))
     fields = (*temps, theta[:, N_TEMPS : N_TEMPS + 1])
     rhs = continuous_derivatives(
@@ -289,10 +369,13 @@ def residual_blocks(
     )
     scales = [t_end / dT] * N_TEMPS + [t_end]
     nrm = _norm(p, cfg)
-    return tuple(
+    blocks = [
         (((d_dt[:, k : k + 1] - scales[k] * rhs[k]) * nrm[k]) ** 2).squeeze(1)
-        for k in range(len(FIELDS))
-    )
+        for k in range(n_field_blocks(cfg))
+    ]
+    if uses_front(cfg):
+        blocks.append(front_residual(model, p, that, cfg))
+    return tuple(blocks)
 
 
 def closed_loop_blocks(  # noqa: PLR0913, PLR0917 - the tensor grid needs all of them
@@ -318,7 +401,7 @@ def closed_loop_blocks(  # noqa: PLR0913, PLR0917 - the tensor grid needs all of
     zeta = jnp.tile(zeta_q, (n_t, 1))
     t_rep = jnp.repeat(that, n_z, axis=0)
 
-    theta, d_dt, d_dz = state_and_grads(model, p, zeta, t_rep)
+    theta, d_dt, d_dz = state_and_grads(model, p, zeta, t_rep, cfg)
     temps = tuple(p.T_in + theta[:, k : k + 1] * dT for k in range(N_TEMPS))
     fields = (*temps, theta[:, N_TEMPS : N_TEMPS + 1])
 
@@ -345,8 +428,10 @@ def closed_loop_blocks(  # noqa: PLR0913, PLR0917 - the tensor grid needs all of
     nrm = _norm(p, cfg)
     blocks = [
         (((d_dt[:, k : k + 1] - scales[k] * rhs[k]) * nrm[k]) ** 2).reshape(n_t, n_z).mean(1)
-        for k in range(len(FIELDS))
+        for k in range(n_field_blocks(cfg))
     ]
+    if uses_front(cfg):
+        blocks.append(front_residual(model, p, that, cfg))
     # Precursors carry their own rate per group, `t_end * lambda_i`.
     c_norm = 1.0 / (t_end * jnp.asarray(p.lambda_i)) if cfg.residual_scaling else 1.0
     blocks.append((((dc - t_end * precursor_derivatives(c, power, p)) * c_norm) ** 2).mean(1))
@@ -401,7 +486,7 @@ def _block_grad_norms(
     model: AxialPinn, p: AxialParams, cfg: AxialTrainConfig, pts: tuple
 ) -> jax.Array:
     """Gradient norm of each residual block [Wang, Teng & Perdikaris 2021]."""
-    n = len(FIELDS) + (1 if cfg.feedback else 0)
+    n = n_field_blocks(cfg) + (1 if uses_front(cfg) else 0) + (1 if cfg.feedback else 0)
     norms = []
     for k in range(n):
         grads = eqx.filter_grad(lambda m, k=k: _blocks(m, p, cfg, pts)[k].mean())(model)
@@ -482,7 +567,7 @@ def train(
     key, k_model = jax.random.split(key)
     model = AxialPinn(cfg, k_model)
 
-    n_blocks = len(FIELDS) + (1 if cfg.feedback else 0)
+    n_blocks = n_field_blocks(cfg) + (1 if uses_front(cfg) else 0) + (1 if cfg.feedback else 0)
     w = jnp.ones(n_blocks)
     sched = optax.cosine_decay_schedule(cfg.lr, decay_steps=max(1, cfg.adam_iters), alpha=0.1)
     optimizer = optax.adam(sched)
@@ -570,11 +655,12 @@ def predict(
 ) -> tuple[FloatArray, ...]:
     """Evaluate on a ``(zeta, t)`` grid, returning physical fields ``(n_z, n_t)``."""
     dT = p.P_0 / (p.w_0 * p.c_c)
-    t_end = horizon(p, cfg or AxialTrainConfig())
+    cfg = cfg or AxialTrainConfig()
+    t_end = horizon(p, cfg)
     zz, tt = np.meshgrid(zeta, t, indexing="ij")
     z = jnp.asarray(zz.reshape(-1, 1))
     h = jnp.asarray((tt / t_end).reshape(-1, 1))
-    theta = jax.vmap(lambda a, b: normalised_state(model, p, a, b))(z, h)
+    theta = jax.vmap(lambda a, b: normalised_state(model, p, a, b, cfg))(z, h)
     out = [np.asarray(p.T_in + theta[:, k] * dT).reshape(zz.shape) for k in range(N_TEMPS)]
     out.append(np.asarray(theta[:, N_TEMPS]).reshape(zz.shape))
     return tuple(out)
@@ -585,14 +671,15 @@ def predict_power(
 ) -> tuple[FloatArray, FloatArray]:
     """Normalised power and net reactivity on a time grid (Plan A only)."""
     dT = p.P_0 / (p.w_0 * p.c_c)
-    t_end = horizon(p, cfg or AxialTrainConfig())
+    cfg = cfg or AxialTrainConfig()
+    t_end = horizon(p, cfg)
     zeta_q = jnp.asarray(p.zeta_nodes().reshape(-1, 1))
     w_D, w_void = (jnp.asarray(x) for x in kinetics_weights(p))
     that = jnp.asarray((np.asarray(t) / t_end).reshape(-1, 1))
     n_t, n_z = that.shape[0], zeta_q.shape[0]
     zeta = jnp.tile(zeta_q, (n_t, 1))
     t_rep = jnp.repeat(that, n_z, axis=0)
-    theta = jax.vmap(lambda a, b: normalised_state(model, p, a, b))(zeta, t_rep)
+    theta = jax.vmap(lambda a, b: normalised_state(model, p, a, b, cfg))(zeta, t_rep)
     T_f = p.T_in + theta[:, 0].reshape(n_t, n_z) * dT
     alpha = theta[:, N_TEMPS].reshape(n_t, n_z)
     T_f0 = p.T_in + jax.vmap(lambda z: theta0(p, z))(zeta_q)[:, 0] * dT
