@@ -300,24 +300,22 @@ def residual_scales(p: AxialParams) -> tuple[float, ...]:
     number: it is a property of the *equation*, present in the reference solver
     too, where Radau simply absorbs it. See ``docs/axial_nn.md`` section 6.
 
-    **Exposed as diagnostic information, NOT applied to the residuals — because
-    applying it provably does nothing.** Measured: rescaling each block by its
-    own time constant reproduced the previous result to every digit
-    (T_f 6.190e-2, T_cl 1.200e-1, T_s 3.165e-2, T_c 3.402e-2). Two independent
-    reasons, both structural rather than incidental:
+    **Applied to the residuals (see** :func:`residual_normalisation` **), and the
+    reason that changed is worth stating.** REPORT-01 D39 proved per-equation
+    scaling was a no-op here, and the proof was sound *under its premise*:
+    ``lambda_k = mean(g)/g_k`` is unbounded, so any fixed constant on block ``k``
+    multiplies ``g_k`` and is cancelled exactly at the next weight update; Adam
+    then absorbs the remaining global factor.
 
-    * **Adam is scale-invariant.** It divides by a running estimate of the
-      gradient magnitude, so multiplying a loss term by a constant leaves the
-      update unchanged except through ``epsilon``.
-    * **The gradient-norm weighting already normalises per block**, setting
-      ``lambda_k = mean(g)/g_k``; any fixed constant on block ``k`` multiplies
-      ``g_k`` and is cancelled exactly at the next weight update.
-
-    So per-equation scaling — the standard advice for stiff multiscale PINNs, and
-    what makes the 0D model trainable where the states are *not* separately
-    weighted — is redundant once adaptive block weighting is active. Kept here
-    because the numbers are worth knowing when choosing a formulation; wiring it
-    into the residual would have been dead machinery.
+    That premise no longer holds. The adaptive weights are now clamped to a
+    bounded ratio, because unbounded they ran to 5e6 and made every field worse
+    (``docs/axial_nn.md`` section 7.2.1). A cap of ``R`` can undo at most ``R^2``
+    of imbalance, and the spread above is **813x** — eight times what a cap of 10
+    can reach. So the fixed part of the imbalance has to come out analytically,
+    leaving the bounded adaptive weighting to handle only what varies during
+    training. Static non-dimensionalisation plus bounded adaptive correction is
+    the VS-PINN prescription [Ko & Park, JCP 529 113860 (2025)] and the
+    multi-magnitude loss framework of [Wang et al., JCP 504 113112 (2024)].
     """
     geo = line_geometry(p)
     tau_f = geo.C_f / (p.h_gap * geo.A_fe)
@@ -329,6 +327,28 @@ def residual_scales(p: AxialParams) -> tuple[float, ...]:
     lam, rho_v = sodium.latent_heat(T_sat), sodium.vapor_density(T_sat)
     tau_alpha = float(lam) * float(rho_v) * p.A_c * p.H / p.P_0
     return (tau_f, tau_cl, tau_s, tau_c, tau_alpha)
+
+
+def residual_normalisation(p: AxialParams) -> tuple[float, ...]:
+    """Factor each field residual is multiplied by before squaring — ``tau_k / t_end``.
+
+    Variable scaling in the sense of VS-PINN [Ko & Park, *JCP* 529 113860
+    (2025)]: divide every equation by its own characteristic rate so each
+    residual block is O(1) and no block dominates the loss through its units
+    alone. It is the per-block form of the non-dimensionalisation that
+    ``docs/neural_network.md`` section 2 credits for making the 0D model
+    trainable at all.
+
+    In normalised time a block's derivative is of order ``t_end / tau_k``, so
+    multiplying by ``tau_k / t_end`` brings it to order one. The void block is
+    what forces the issue: ``t_end / tau_alpha = 8.5e4`` against 104 for the fuel
+    (:func:`residual_scales`), because sodium vaporises a node in 0.71 ms.
+
+    The precursor block is handled separately in the backends, per group, since
+    each delayed-neutron group carries its own ``lambda_i`` and the spread within
+    the block is itself two orders of magnitude.
+    """
+    return tuple(tau / p.t_end for tau in residual_scales(p))
 
 
 # --- kinetics closure (milestone M6) ----------------------------------------

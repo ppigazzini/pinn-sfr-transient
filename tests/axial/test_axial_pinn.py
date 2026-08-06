@@ -19,7 +19,12 @@ import pytest
 torch = pytest.importorskip("torch")
 
 from pinn_sfr_transient.axial import AxialParams
-from pinn_sfr_transient.axial.physics import continuous_derivatives, line_geometry
+from pinn_sfr_transient.axial.physics import (
+    continuous_derivatives,
+    line_geometry,
+    residual_normalisation,
+    residual_scales,
+)
 from pinn_sfr_transient.axial.pinn_torch import (
     AxialPinn,
     AxialTrainConfig,
@@ -110,6 +115,12 @@ def test_residual_is_the_shared_physics_to_machine_precision(model):
     discretises — and asserts the network's internal one matches. If these ever
     diverge, the PINN and its ground truth are solving different problems, and no
     accuracy number would mean anything.
+
+    Variable scaling multiplies block `k` by `res_norm[k]` before squaring, so
+    the identity to check is that dividing it back out recovers the physics
+    exactly. That is the point of the scaling: it changes the *loss*, never the
+    equation. This test caught the scaling landing on the residual before the
+    scaling was checked against the physics, which is what it exists for.
     """
     p = AxialParams()
     gen = torch.Generator().manual_seed(0)
@@ -131,10 +142,53 @@ def test_residual_is_the_shared_physics_to_machine_precision(model):
     )
     scales = [model.t_end / model.dT] * 4 + [model.t_end]
     for k in range(5):
-        expected = (d_dt[:, k : k + 1] - scales[k] * rhs[k]).pow(2).squeeze(1)
+        physical = (d_dt[:, k : k + 1] - scales[k] * rhs[k]).pow(2).squeeze(1)
+        # Un-scale the network's block and it must be the physical residual.
+        unscaled = blocks[k] / model.res_norm[k] ** 2
         np.testing.assert_allclose(
-            blocks[k].detach().numpy(), expected.detach().numpy(), rtol=0.0, atol=0.0
+            unscaled.detach().numpy(), physical.detach().numpy(), rtol=1e-14, atol=0.0
         )
+
+
+def test_variable_scaling_changes_the_loss_but_never_the_equation():
+    """Scaling is a reweighting: the residual's *zero set* must be untouched.
+
+    Two models with identical weights, one scaled and one not, must have blocks
+    that differ by exactly `res_norm ** 2` — so a state that annihilates one
+    annihilates the other. Anything else would mean the scaling had altered the
+    physics rather than the optimisation.
+    """
+    p = AxialParams()
+    on = AxialPinn(p, AxialTrainConfig(width=8, depth=2, residual_scaling=True))
+    off = AxialPinn(p, AxialTrainConfig(width=8, depth=2, residual_scaling=False))
+    off.load_state_dict(on.state_dict())  # same weights, different scaling
+    gen = torch.Generator().manual_seed(3)
+    zeta = torch.rand(64, 1, dtype=torch.float64, generator=gen)
+    that = torch.rand(64, 1, dtype=torch.float64, generator=gen)
+    b_on, b_off = on.residual_blocks(zeta, that), off.residual_blocks(zeta, that)
+    for k in range(5):
+        np.testing.assert_allclose(
+            b_on[k].detach().numpy(),
+            (b_off[k] * on.res_norm[k] ** 2).detach().numpy(),
+            rtol=1e-14,
+        )
+    np.testing.assert_allclose(off.res_norm, np.ones(5))
+
+
+def test_variable_scaling_brings_every_block_to_the_same_order():
+    """The whole point: 813x of spread in the natural rates becomes O(1) per block.
+
+    `residual_normalisation` is `tau_k / t_end`, and a block's normalised
+    derivative is of order `t_end / tau_k`, so the product is order one. Without
+    it the void block carries a term of order 8.5e4 against 104 for the fuel.
+    """
+    p = AxialParams()
+    tau = residual_scales(p)
+    nrm = residual_normalisation(p)
+    rates = [p.t_end / t for t in tau]
+    assert max(rates) / min(rates) > 500.0  # the raw spread is severe
+    scaled = [r * n for r, n in zip(rates, nrm, strict=True)]
+    np.testing.assert_allclose(scaled, np.ones(5), rtol=1e-12)
 
 
 def _shape(p, zeta):

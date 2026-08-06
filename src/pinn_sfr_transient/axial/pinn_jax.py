@@ -48,6 +48,7 @@ from pinn_sfr_transient.axial.physics import (
     precursor_derivatives,
     prompt_jump_power,
     reactivity,
+    residual_normalisation,
 )
 from pinn_sfr_transient.axial.reference import solve_reference
 
@@ -104,8 +105,10 @@ class AxialTrainConfig:
     causal_chunks: int = 32
     weight_update_every: int = 250
     weight_momentum: float = 0.9
-    # Bound on the block-weight spread; see the torch twin for the measurement.
-    weight_max_ratio: float = 10.0
+    # Bound on the block-weight spread; off by default, see the torch twin.
+    weight_max_ratio: float = 1.0
+    # Variable scaling per residual block; see the torch twin.
+    residual_scaling: bool = True
 
     # RAR keeps a FIXED count so `jit` never recompiles (the torch twin grows an
     # unbounded reservoir instead — same idea, framework-appropriate form).
@@ -250,8 +253,13 @@ def state_and_grads(
 
 
 # --- residuals --------------------------------------------------------------
+def _norm(p: AxialParams, cfg: AxialTrainConfig) -> tuple[float, ...]:
+    """Per-block variable scaling, or ones when it is switched off."""
+    return residual_normalisation(p) if cfg.residual_scaling else (1.0,) * len(FIELDS)
+
+
 def residual_blocks(
-    model: AxialPinn, p: AxialParams, zeta: jax.Array, that: jax.Array
+    model: AxialPinn, p: AxialParams, zeta: jax.Array, that: jax.Array, cfg: AxialTrainConfig
 ) -> tuple[jax.Array, ...]:
     """Plan B blocks: prescribed power, scattered ``(zeta, t)`` collocation."""
     dT = p.P_0 / (p.w_0 * p.c_c)
@@ -269,13 +277,20 @@ def residual_blocks(
         1.0,
     )
     scales = [p.t_end / dT] * N_TEMPS + [p.t_end]
+    nrm = _norm(p, cfg)
     return tuple(
-        ((d_dt[:, k : k + 1] - scales[k] * rhs[k]) ** 2).squeeze(1) for k in range(len(FIELDS))
+        (((d_dt[:, k : k + 1] - scales[k] * rhs[k]) * nrm[k]) ** 2).squeeze(1)
+        for k in range(len(FIELDS))
     )
 
 
-def closed_loop_blocks(
-    model: AxialPinn, p: AxialParams, that: jax.Array, zeta_q: jax.Array, weights: tuple
+def closed_loop_blocks(  # noqa: PLR0913 - the tensor grid needs all of them
+    model: AxialPinn,
+    p: AxialParams,
+    that: jax.Array,
+    zeta_q: jax.Array,
+    weights: tuple,
+    cfg: AxialTrainConfig,
 ) -> tuple[jax.Array, ...]:
     """Plan A blocks: power is an output of the prompt-jump closure.
 
@@ -315,11 +330,14 @@ def closed_loop_blocks(
         jnp.repeat(power, n_z, axis=0),
     )
     scales = [p.t_end / dT] * N_TEMPS + [p.t_end]
+    nrm = _norm(p, cfg)
     blocks = [
-        ((d_dt[:, k : k + 1] - scales[k] * rhs[k]) ** 2).reshape(n_t, n_z).mean(1)
+        (((d_dt[:, k : k + 1] - scales[k] * rhs[k]) * nrm[k]) ** 2).reshape(n_t, n_z).mean(1)
         for k in range(len(FIELDS))
     ]
-    blocks.append(((dc - p.t_end * precursor_derivatives(c, power, p)) ** 2).mean(1))
+    # Precursors carry their own rate per group, `t_end * lambda_i`.
+    c_norm = 1.0 / (p.t_end * jnp.asarray(p.lambda_i)) if cfg.residual_scaling else 1.0
+    blocks.append((((dc - p.t_end * precursor_derivatives(c, power, p)) * c_norm) ** 2).mean(1))
     return tuple(blocks)
 
 
@@ -327,8 +345,8 @@ def closed_loop_blocks(
 def _blocks(model: AxialPinn, p: AxialParams, cfg: AxialTrainConfig, pts: tuple) -> tuple:
     if cfg.feedback:
         that, zeta_q, weights = pts
-        return closed_loop_blocks(model, p, that, zeta_q, weights)
-    return residual_blocks(model, p, pts[0], pts[1])
+        return closed_loop_blocks(model, p, that, zeta_q, weights, cfg)
+    return residual_blocks(model, p, pts[0], pts[1], cfg)
 
 
 def causal_loss(
@@ -424,7 +442,7 @@ def _rar_points(
     if cfg.feedback:
         return _collocation(p, cfg, key)
     pool = jax.random.uniform(key, (cfg.rar_pool, 2))
-    blocks = residual_blocks(model, p, pool[:, 0:1], pool[:, 1:2])
+    blocks = residual_blocks(model, p, pool[:, 0:1], pool[:, 1:2], cfg)
     e = sum(w[k] * blocks[k] for k in range(len(blocks)))
     top = jnp.argsort(e)[-cfg.rar_keep :]
     return pool[top, 0:1], pool[top, 1:2]
@@ -467,7 +485,7 @@ def train(
         # — which resamples every step — reached ~0.06 on the identical budget.
         key, ck = jax.random.split(key)
         pts = _merge(_collocation(p, cfg, ck), rar, feedback=cfg.feedback)
-        if it and it % cfg.weight_update_every == 0:
+        if cfg.weight_max_ratio > 1.0 and it and it % cfg.weight_update_every == 0:
             gn = _block_grad_norms(model, p, cfg, pts)
             target = bounded_weights(gn.mean() / (gn + 1e-12), cfg.weight_max_ratio)
             w = cfg.weight_momentum * w + (1.0 - cfg.weight_momentum) * target
