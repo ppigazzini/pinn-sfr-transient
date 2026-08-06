@@ -176,19 +176,44 @@ def test_variable_scaling_changes_the_loss_but_never_the_equation():
 
 
 def test_variable_scaling_brings_every_block_to_the_same_order():
-    """The whole point: 813x of spread in the natural rates becomes O(1) per block.
+    """23x of spread in the blocks' natural rates becomes O(1) each.
 
     `residual_normalisation` is `tau_k / t_end`, and a block's normalised
-    derivative is of order `t_end / tau_k`, so the product is order one. Without
-    it the void block carries a term of order 8.5e4 against 104 for the fuel.
+    derivative is of order `t_end / tau_k`, so the product is order one.
+
+    The spread is 23x and not the 813x an earlier version of this test asserted:
+    that number came from normalising the void by its *source* rate, which is
+    160x faster than its transport and active on under 4% of the domain. Doing
+    so left a spurious void costing 3.9e-5 against 1.0 at the front, and the
+    network voided the whole channel — see `vaporisation_time`.
     """
     p = AxialParams()
     tau = residual_scales(p)
     nrm = residual_normalisation(p)
     rates = [p.t_end / t for t in tau]
-    assert max(rates) / min(rates) > 500.0  # the raw spread is severe
+    assert 20.0 < max(rates) / min(rates) < 30.0
     scaled = [r * n for r, n in zip(rates, nrm, strict=True)]
     np.testing.assert_allclose(scaled, np.ones(5), rtol=1e-12)
+
+
+def test_a_shorter_training_horizon_rescales_normalised_time_consistently():
+    """`t_train_frac` moves `t_hat = 1`, so every scale that references it must move.
+
+    Training over the model's validity window rather than the full `t_end` is a
+    scope decision (72% of the 60 s horizon lies past the sodium property range
+    under prescribed power). It only works if the residual normalisation follows
+    the trained horizon rather than the parameter.
+    """
+    p = AxialParams()
+    frac = 0.275
+    m = AxialPinn(p, AxialTrainConfig(width=8, depth=2, t_train_frac=frac))
+    assert m.t_end == pytest.approx(p.t_end * frac)
+    np.testing.assert_allclose(m.res_norm, residual_normalisation(p, m.t_end), rtol=1e-14)
+    # t = 0 is still exactly the steady state, and the inlet is still pinned.
+    zeta = np.linspace(0.0, 1.0, 9)
+    np.testing.assert_allclose(
+        m.predict(zeta, np.array([0.0]))[3], steady_profile(p, zeta)[3][:, None], atol=1e-9
+    )
 
 
 def _shape(p, zeta):

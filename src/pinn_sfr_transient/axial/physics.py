@@ -288,17 +288,15 @@ def residual_scales(p: AxialParams) -> tuple[float, ...]:
     at all, and that VS-PINN and the scale-aware-residual literature formalise.
 
     The blocks' time constants are 0.58 s (fuel), 0.025 s (cladding), 0.107 s
-    (structure), 0.113 s (coolant transit) and **7.1e-4 s (void)** against a 60 s
-    horizon, so ``t_end/tau`` spans 104 to **8.5e4** — a 800x spread between
-    residual blocks, almost all of it the void.
+    (structure) and 0.113 s (coolant transit, and the void, which is advected at
+    the same velocity) against a 60 s horizon, so ``t_end/tau`` spans 104 to 2378
+    — a 23x spread between residual blocks.
 
-    **The void entry used to repeat the coolant transit time**, 0.113 s, which is
-    160x too slow. The vapour source fills a node in
-    ``lambda rho_v A_c H / P_0 = 7.1e-4 s`` — ``d alpha/dt`` reaches ~1400 /s —
-    so in normalised time the void residual carries a term of order 8.5e4 where
-    every other block is order 1e2 to 1e3. That is the M4 problem stated in one
-    number: it is a property of the *equation*, present in the reference solver
-    too, where Radau simply absorbs it. See ``docs/axial_nn.md`` section 6.
+    **These are the rates that govern each block's *dynamics*, which is what a
+    residual must be normalised by.** The void equation additionally carries a
+    source 160x faster than its own transport (:func:`vaporisation_time`), but
+    that term is active only inside the boiling front. Normalising by it instead
+    was measured to destroy the model — see that function.
 
     **Applied to the residuals (see** :func:`residual_normalisation` **), and the
     reason that changed is worth stating.** REPORT-01 D39 proved per-equation
@@ -322,14 +320,42 @@ def residual_scales(p: AxialParams) -> tuple[float, ...]:
     tau_cl = geo.C_cl / (p.h_clad_coolant * geo.A_ec)
     tau_s = p.rho_s * p.c_s * p.t_struct / p.h_struct_coolant
     tau_c = geo.C_c / (p.w_0 * p.c_c / p.H)  # advective transit over the height
-    # Void: the time for the wall heat to vaporise one node's worth of liquid.
+    # The void is advected at the liquid velocity, so its DYNAMICAL rate is the
+    # same transit time as the coolant. Its *source* is 160x faster
+    # (:func:`vaporisation_time`) but only inside the front, which is why that
+    # number must not be the one used to normalise — see below.
+    return (tau_f, tau_cl, tau_s, tau_c, tau_c)
+
+
+def vaporisation_time(p: AxialParams) -> float:
+    """Time for the wall heat to vaporise one node's worth of liquid [s].
+
+    ``lambda rho_v A_c H / P_0`` — about **0.71 ms**, so ``d alpha/dt`` reaches
+    ~1400 /s inside the boiling front against an advective 8.8 /s. That 160x is
+    the real stiffness of the void equation, and it is why the front is nearly a
+    discontinuity in time. It is *diagnostic only*.
+
+    **It must not be used to normalise the void residual, and doing so was a
+    defect.** The two rates live in the same equation but not in the same place:
+    vaporisation acts only where ``T_c > T_sat + DTS``, which is under 4% of the
+    domain for most of the transient, while advection acts everywhere. Normalise
+    by the vaporisation time and the front residual becomes O(1) while the
+    advective residual that holds ``alpha = 0`` in the subcooled bulk collapses to
+    **3.9e-5** — so a network that voids the entire channel from ``t = 0`` pays
+    almost nothing. Measured, that is exactly what happened: void at 0.25 s at
+    the channel inlet, against a reference identically zero until 10.75 s.
+
+    Below saturation ``boiling_fraction`` underflows to *exactly* zero (``tanh``
+    saturates in float64), so there the void equation is pure advection and, with
+    a zero initial condition and a zero inlet condition, ``alpha == 0`` is its
+    unique solution. The physics is unambiguous; only the loss was indifferent.
+    """
     T_sat = sodium.saturation_temperature(p.p_system)
     lam, rho_v = sodium.latent_heat(T_sat), sodium.vapor_density(T_sat)
-    tau_alpha = float(lam) * float(rho_v) * p.A_c * p.H / p.P_0
-    return (tau_f, tau_cl, tau_s, tau_c, tau_alpha)
+    return float(lam) * float(rho_v) * p.A_c * p.H / p.P_0
 
 
-def residual_normalisation(p: AxialParams) -> tuple[float, ...]:
+def residual_normalisation(p: AxialParams, t_end: float | None = None) -> tuple[float, ...]:
     """Factor each field residual is multiplied by before squaring — ``tau_k / t_end``.
 
     Variable scaling in the sense of VS-PINN [Ko & Park, *JCP* 529 113860
@@ -347,8 +373,13 @@ def residual_normalisation(p: AxialParams) -> tuple[float, ...]:
     The precursor block is handled separately in the backends, per group, since
     each delayed-neutron group carries its own ``lambda_i`` and the spread within
     the block is itself two orders of magnitude.
+
+    ``t_end`` defaults to ``p.t_end`` but must be the *trained* horizon when that
+    differs (``AxialTrainConfig.t_train_frac``), since it is normalised time the
+    residual is expressed in.
     """
-    return tuple(tau / p.t_end for tau in residual_scales(p))
+    horizon = p.t_end if t_end is None else t_end
+    return tuple(tau / horizon for tau in residual_scales(p))
 
 
 # --- kinetics closure (milestone M6) ----------------------------------------
