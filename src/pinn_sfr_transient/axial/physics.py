@@ -246,7 +246,11 @@ def boiling_fraction(T_c: Field, p: AxialParams) -> Field:
 
 
 def latent_fraction(T_c: Field, alpha: Field, p: AxialParams) -> Field:
-    """Fraction of the wall heat that becomes vapour, ``b (1 - alpha)``.
+    """Signed fraction of the wall heat that changes phase.
+
+    ``b (1 - alpha) - condensation (1 - b) alpha``: positive where liquid
+    vaporises, negative where vapour condenses. With ``condensation = 0`` the
+    second term vanishes and this is the vaporisation-only form.
 
     ``b`` is the superheat switch of :func:`boiling_fraction`; the ``(1 - alpha)``
     factor shuts the source off as a node empties, so the void cannot leave
@@ -261,7 +265,15 @@ def latent_fraction(T_c: Field, alpha: Field, p: AxialParams) -> Field:
     vapour; that the node keeps the liquid heat capacity is a documented
     simplification which M5's film and dryout model replaces.
     """
-    return boiling_fraction(T_c, p) * (1.0 - alpha)
+    b = boiling_fraction(T_c, p)
+    vaporise = b * (1.0 - alpha)
+    # Condensation is the negative branch of the same film heat flow (section
+    # 12.5): vapour present in a region that is no longer superheated shrinks.
+    # `(1 - b)` is the not-superheated switch and `alpha` the vapour available, so
+    # the term vanishes as the node empties of vapour and `alpha` cannot go
+    # negative. Zero by default -- see `AxialParams.condensation`.
+    condense = p.condensation * (1.0 - b) * alpha
+    return vaporise - condense
 
 
 def quasi_steady_void(T_c: Field, p: AxialParams) -> Field:

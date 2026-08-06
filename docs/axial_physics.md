@@ -191,6 +191,28 @@ This is the deviation a reviewer will challenge first. It is deliberate, and M8
 proposes a single-bubble two-interface case as the direct comparison against
 §12.5 where Chapter 12 *is* tractable.
 
+### D-TH-3 — Condensation present but off by default *(settled — experimental)*
+
+**Departs from:** §12.5. **Status: implemented, disabled.**
+
+The manual determines the rate of vapour *formation and condensation* from one
+film heat flow, condensation being its negative branch — "Condensation in cooler
+regions can cause a vapor bubble to shrink" — and carries an adjustable
+condensation coefficient. Omitting it was an **unregistered** deviation until
+Rev 6; `AxialParams.condensation` now implements it, defaulting to 0.0.
+
+**Measured inert in this scenario, and the reason is structural.** Condensation
+needs the film heat flow to reverse. Vapour only ever exists where dryout has
+already driven the cladding *hotter* than the coolant, so `q_ec > 0` everywhere
+`α > 0` (minimum +1168 W/m) and the net wall heat never changes sign. At
+`condensation = 1.0` the voided length moves 0.3% and `α` stays monotone along a
+characteristic to 1e-6. Energy conservation is unaffected (5.1e-5).
+
+Condensation is what the multi-bubble slug-ejection model of D-TH-1 needs, where
+bubbles expand into cooler regions above and below the boiling zone. In a single
+Eulerian channel that terminates at dryout six seconds after onset, there is no
+cooler region for the vapour to reach.
+
 ### D-TH-2 — Axially uniform flow after voiding *(open — M4)*
 
 **Departs from:** §12.2. **Status: open.**

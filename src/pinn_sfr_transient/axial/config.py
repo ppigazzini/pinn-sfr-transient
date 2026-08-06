@@ -132,6 +132,17 @@ class AxialParams:
     dT_superheat: float = 10.0  # DTS: superheat for the first bubble [K]
     dT_superheat_later: float = 3.0  # DTSI: subsequent bubbles [K]
     dT_smooth: float = 2.0  # logistic width making the onset differentiable [K]
+    # Condensation coefficient (manual section 12.5, "the condensation
+    # coefficient"). Section 12.5 determines the rate of vapour *formation and
+    # condensation* from one film heat flow, condensation being its negative
+    # branch: "Condensation in cooler regions can cause a vapor bubble to shrink."
+    #
+    # **EXPERIMENTAL, default 0.0 = off.** At zero the vapour source is
+    # non-negative, so `alpha` is monotone along a characteristic and slaved to
+    # `T_c` -- which is what makes the algebraic closure D-TH-3 valid and the
+    # front-position network redundant. Switching it on restores the void as a
+    # genuine differential unknown and inverts both of those conclusions.
+    condensation: float = 0.0
 
     # --- Flow (manual Eq. 5.3-61 analogue; see deviation D-FLOW-1) ---------
     tau_pump: float = 5.0  # coast-down time constant [s]
@@ -176,6 +187,11 @@ class AxialParams:
 
     def _validate(self) -> None:
         """Reject configurations that are geometrically or physically impossible."""
+        self._validate_geometry()
+        self._validate_ranges()
+
+    def _validate_geometry(self) -> None:
+        """Reject impossible radii and meshes."""
         if not self.r_fo < self.r_ci < self.r_co:
             radii = f"{self.r_fo}, {self.r_ci}, {self.r_co}"
             msg = f"radii must satisfy r_fo < r_ci < r_co, got {radii}"
@@ -203,6 +219,9 @@ class AxialParams:
         if self.n_axial < 2:
             msg = f"n_axial must be >= 2, got {self.n_axial}"
             raise ValueError(msg)
+
+    def _validate_ranges(self) -> None:
+        """Reject coefficients outside their physical range."""
         fractions = {"f_nc": self.f_nc, "gamma_c": self.gamma_c, "emissivity": self.emissivity}
         for name, value in fractions.items():
             if not 0.0 <= value <= 1.0:
@@ -211,9 +230,11 @@ class AxialParams:
         if not 0.0 < self.zeta_sign < 1.0:
             msg = f"zeta_sign must lie in (0, 1), got {self.zeta_sign}"
             raise ValueError(msg)
-        if self.gamma_2 < 0.0:
-            msg = f"gamma_2 must be >= 0, got {self.gamma_2}"
-            raise ValueError(msg)
+        non_negative = {"gamma_2": self.gamma_2, "condensation": self.condensation}
+        for name, value in non_negative.items():
+            if value < 0.0:
+                msg = f"{name} must be >= 0, got {value}"
+                raise ValueError(msg)
         if self.alpha_D_flooded > 0.0 or self.alpha_D_voided > 0.0:
             msg = "Doppler coefficients must be <= 0 (negative feedback)"
             raise ValueError(msg)

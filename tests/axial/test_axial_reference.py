@@ -26,6 +26,7 @@ from pinn_sfr_transient.axial.physics import (
     film_coefficient,
     flow_fraction,
     kinetics_weights,
+    latent_fraction,
     make_rhs,
     nodal_power,
     node_geometry,
@@ -603,3 +604,46 @@ def test_sparsity_covers_the_feedback_couplings():
         y[k] += 1e-4 * max(1.0, abs(y0[k]))
         touched = np.abs(rhs(1.0, y) - f0) > 0.0
         assert np.all(pattern[touched, k] == 1), f"missing sparsity entry in column {k}"
+
+
+# --- condensation (manual section 12.5, experimental) -----------------------
+def test_condensation_is_off_by_default_so_the_vapour_source_cannot_be_negative():
+    """At `condensation = 0` the void is monotone along a characteristic.
+
+    That monotonicity is what makes `alpha` slaved to `T_c`, which is the premise
+    of the algebraic closure D-TH-3.
+    """
+    p = AxialParams()
+    assert p.condensation == 0.0
+    T_c = np.linspace(600.0, 1400.0, 41)
+    alpha = np.linspace(0.0, 0.99, 41)
+    assert bool((latent_fraction(T_c, alpha, p) >= 0.0).all())
+
+
+def test_condensation_makes_the_phase_change_signed():
+    """Vapour in a region that is no longer superheated must be able to shrink."""
+    p = AxialParams(condensation=1.0)
+    subcooled, voided = np.array([700.0]), np.array([0.8])
+    assert latent_fraction(subcooled, voided, p).item() < 0.0
+    # ... and it still vanishes as the vapour runs out, so alpha cannot go negative.
+    assert latent_fraction(subcooled, np.array([0.0]), p).item() == 0.0
+
+
+def test_condensation_preserves_the_energy_balance():
+    """The signed fraction is removed from the sensible term and no more."""
+    p = AxialParams(condensation=1.0)
+    assert energy_balance(solve_reference(p, n_out=241), p) < 1e-4
+
+
+def test_condensation_is_inert_in_this_scenario():
+    """Correct physics, no effect here — and the reason is measurable.
+
+    Condensation needs the film heat flow to reverse (the manual: `Q_e`, `Q_s`
+    negative). Vapour only ever exists where dryout has driven the cladding
+    *hotter* than the coolant, so the cladding branch never reverses and the net
+    wall heat stays positive. Voided length moves by 0.3%.
+    """
+    base = solve_reference(AxialParams(n_axial=80), n_out=161)
+    cond = solve_reference(AxialParams(n_axial=80, condensation=1.0), n_out=161)
+    assert abs(cond.voided_length.max() - base.voided_length.max()) < 0.02
+    assert cond.onset()[0] == pytest.approx(base.onset()[0], abs=0.5)
