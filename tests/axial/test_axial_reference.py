@@ -21,19 +21,24 @@ import pytest
 
 from pinn_sfr_transient.axial import AxialParams, sodium
 from pinn_sfr_transient.axial.physics import (
+    N_GROUPS,
     coolant_capacity,
+    decay_heat_derivatives,
     derivatives,
     film_coefficient,
     flow_fraction,
     kinetics_weights,
     latent_fraction,
     make_rhs,
+    n_decay,
     nodal_power,
     node_geometry,
     prompt_jump_power,
     reactivity,
+    reactivity_components,
     residual_normalisation,
     residual_scales,
+    total_power,
     vaporisation_time,
 )
 from pinn_sfr_transient.axial.reference import (
@@ -647,3 +652,84 @@ def test_condensation_is_inert_in_this_scenario():
     cond = solve_reference(AxialParams(n_axial=80, condensation=1.0), n_out=161)
     assert abs(cond.voided_length.max() - base.voided_length.max()) < 0.02
     assert cond.onset()[0] == pytest.approx(base.onset()[0], abs=0.5)
+
+
+# --- Annex A, N3: the void worth can be exercised ----------------------------
+def test_default_parameters_never_sample_the_void_worth_positive():
+    """D49: `max rho/beta = 0` is about where the channel boils, not stability."""
+    traj = solve_reference(AxialParams(n_axial=80), n_out=161, feedback=True)
+    assert not traj.void_worth_is_exercised()
+    assert traj.rho_void.min() < 0.0
+
+
+def test_the_alternative_set_does_sample_it_positive():
+    """Objective 2 needs a set in which the positive branch exists at all."""
+    p = AxialParams.with_positive_void_worth(n_axial=80)
+    assert p.zeta_sign > 0.96  # above the onset location
+    traj = solve_reference(p, n_out=161, feedback=True)
+    assert traj.void_worth_is_exercised()
+    assert traj.rho_void.max() / p.beta_eff > 0.01
+
+
+# --- Annex A, N4: decay heat -------------------------------------------------
+def test_decay_heat_is_off_by_default():
+    assert AxialParams().decay_fraction == 0.0
+    assert n_decay(AxialParams()) == 0
+
+
+def test_decay_heat_adds_states_and_keeps_the_steady_state_exact():
+    """`psi_t = psi_f + psi_h` must still give exactly 1 at nominal."""
+    p = AxialParams(n_axial=40, decay_fraction=0.065)
+    assert n_decay(p) == 3
+    y0 = steady_state_vector(p)
+    assert y0.size == 5 * p.n_axial + N_GROUPS + 3
+    assert np.max(np.abs(make_rhs(p)(0.0, y0))) < 1e-8
+    assert p.steady_decay_heat(1.0).sum() == pytest.approx(0.065, rel=1e-12)
+
+
+def test_decay_heat_removes_the_zero_power_attractor():
+    """With `psi_f = 0` the total power is still positive — the point of §4.4.
+
+    Without it, `P = c = 0` is an exact solution of the whole coupled system,
+    which is the collapse mode REPORT-01 §5.2 exists to diagnose.
+    """
+    p = AxialParams(decay_fraction=0.065)
+    h = p.steady_decay_heat(1.0)
+    assert total_power(0.0, h, p) == pytest.approx(0.065, rel=1e-12)
+    assert total_power(1.0, h, p) == pytest.approx(1.0, rel=1e-12)
+
+
+def test_decay_heat_groups_relax_toward_their_share_of_fission_power():
+    p = AxialParams(decay_fraction=0.065)
+    h_eq = p.steady_decay_heat(1.0)
+    np.testing.assert_allclose(decay_heat_derivatives(h_eq, 1.0, p), 0.0, atol=1e-18)
+    assert bool((decay_heat_derivatives(np.zeros(3), 1.0, p) > 0).all())
+
+
+# --- Annex A, N7: axial expansion feedback -----------------------------------
+def test_axial_expansion_is_off_by_default_and_must_be_stabilising():
+    """D-FB-3: omitting it over-predicts the excursion, so its sign is load-bearing."""
+    assert AxialParams().alpha_expansion == 0.0
+    with pytest.raises(ValueError, match="alpha_expansion must be <= 0"):
+        AxialParams(alpha_expansion=1e-6)
+
+
+def test_axial_expansion_leaves_the_nominal_state_exactly_critical():
+    """Linear in `T_f - T_f0`, so it vanishes at nominal and needs no offset."""
+    p = AxialParams(n_axial=40, alpha_expansion=-1e-6)
+    T_f0 = steady_state(p)[0]
+    w_D, w_void = kinetics_weights(p)
+    doppler, void = reactivity_components(T_f0, np.zeros_like(T_f0), T_f0, w_D, w_void, p)
+    assert abs(float(doppler)) < 1e-15
+    assert abs(float(void)) < 1e-15
+
+
+def test_axial_expansion_adds_negative_reactivity_as_the_fuel_heats():
+    off = AxialParams(n_axial=40)
+    on = AxialParams(n_axial=40, alpha_expansion=-1e-6)
+    T_f0 = steady_state(off)[0]
+    w_D, w_void = kinetics_weights(off)
+    zero = np.zeros_like(T_f0)
+    d_off = float(reactivity_components(T_f0 * 1.3, zero, T_f0, w_D, w_void, off)[0])
+    d_on = float(reactivity_components(T_f0 * 1.3, zero, T_f0, w_D, w_void, on)[0])
+    assert d_on < d_off

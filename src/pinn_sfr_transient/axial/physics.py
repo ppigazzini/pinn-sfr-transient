@@ -464,6 +464,11 @@ def reactivity_components(  # noqa: PLR0913, PLR0917 - two feedbacks, each with 
     self-limiting" when the void worth had simply never been sampled with a
     positive sign — see :meth:`AxialTrajectory.void_worth_is_exercised`.
 
+    The first return value carries **both** fuel-temperature mechanisms: the
+    logarithmic Doppler and the linear axial expansion of section 4.5.4, which is
+    negative and therefore stabilising. They share the axial weight because the
+    manual evaluates both on the radial mass-averaged fuel temperature.
+
     * **Doppler, logarithmic** — ``delta_k_D = alpha_D ln(T_f/T_f0)`` (Eq. 4.5-3,
       integrated from ``T_f d(delta_k)/dT_f = alpha_D``), with ``alpha_D`` itself
       interpolated between its flooded and voided values (section 4.5.3), so
@@ -478,6 +483,9 @@ def reactivity_components(  # noqa: PLR0913, PLR0917 - two feedbacks, each with 
     """
     xp = _xp(T_f)
     doppler = (w_D * p.alpha_D(alpha) * xp.log(T_f / T_f0)).sum(-1)
+    # Axial fuel expansion (section 4.5.4): linear in the fuel temperature rise,
+    # negative, and zero at nominal so it needs no criticality offset either.
+    doppler = doppler + p.alpha_expansion * (w_D * (T_f - T_f0)).sum(-1)
     return doppler, (w_void * alpha).sum(-1)
 
 
@@ -529,6 +537,27 @@ def prompt_jump_power(c: Field, rho: Field, p: AxialParams, floor: float = 0.05)
     if getattr(c, "ndim", 1) > 1:
         weighted = weighted.reshape(-1, 1)
     return weighted / gap
+
+
+def decay_heat_derivatives(h: Field, power_fission: Field, p: AxialParams) -> Field:
+    """``dh_j/dt = lambda_j (f_d a_j psi_f - h_j)`` — manual section 4.4 in group form.
+
+    Each group relaxes toward its equilibrium share of the fission power on its own
+    decay constant. The slowest is hours, so ``psi_h`` outlives any prompt-jump
+    transient — which is exactly why it removes the zero-power attractor.
+    """
+    lam = _like(h, p.lambda_i[: len(p.decay_lambda)] * 0.0 + p.decay_lambda)
+    weight = _like(h, p.decay_fraction * p.decay_weight)
+    return lam * (weight * power_fission - h)
+
+
+def total_power(power_fission: Field, h: Field, p: AxialParams) -> Field:
+    """``psi_t = psi_f + psi_h`` — manual Eq. 4.2-2.
+
+    The fission channel carries ``1 - decay_fraction`` so the nominal total is
+    exactly one and no criticality retuning is needed.
+    """
+    return (1.0 - p.decay_fraction) * power_fission + h.sum(-1)
 
 
 def precursor_derivatives(c: Field, power: Field, p: AxialParams) -> Field:
@@ -645,7 +674,12 @@ def continuous_derivatives(  # noqa: PLR0913, PLR0917 - five coupled fields plus
     )
 
 
-def unpack(y: Field, n: int) -> tuple[Any, ...]:
+def n_decay(p: AxialParams) -> int:
+    """Decay-heat groups carried in the state vector; zero when decay heat is off."""
+    return len(p.decay_lambda) if p.decay_fraction > 0.0 else 0
+
+
+def unpack(y: Field, n: int, n_h: int = 0) -> tuple[Any, ...]:
     """Split a flat state vector into the five fields plus the precursor vector.
 
     Layout: ``[T_f, T_cl, T_s, T_c, alpha]`` of length ``n`` each, then the six
@@ -655,7 +689,10 @@ def unpack(y: Field, n: int) -> tuple[Any, ...]:
     kinetics in the first place.
     """
     fields = tuple(y[k * n : (k + 1) * n] for k in range(N_FIELDS))
-    return (*fields, y[N_FIELDS * n :])
+    kin = N_FIELDS * n
+    if n_h == 0:
+        return (*fields, y[kin:])
+    return (*fields, y[kin : kin + N_GROUPS], y[kin + N_GROUPS :])
 
 
 def kinetics_weights(p: AxialParams) -> tuple[Field, Field]:
@@ -693,15 +730,23 @@ def make_rhs(
     n = p.n_axial
     w_D, w_void = kinetics_weights(p)
 
+    n_h = n_decay(p)
+
     def rhs(t: float, y: FloatArray) -> FloatArray:
-        T_f, T_cl, T_s, T_c, alpha, c = unpack(y, n)
+        T_f, T_cl, T_s, T_c, alpha, c, *rest = unpack(y, n, n_h)
+        h = rest[0] if rest else None
         if T_f0 is None:
             # Plan B (M2/M3): power is prescribed, the precursors just decay.
-            power = amplitude(t) if amplitude is not None else 1.0
+            fission = amplitude(t) if amplitude is not None else 1.0
         else:
             # Plan A (M6): power is an OUTPUT, closed by the prompt jump.
-            power = prompt_jump_power(c, reactivity(T_f, alpha, T_f0, w_D, w_void, p), p)
+            fission = prompt_jump_power(c, reactivity(T_f, alpha, T_f0, w_D, w_void, p), p)
+        # The fields see psi_t = psi_f + psi_h (Eq. 4.2-2); the kinetics see psi_f.
+        power = fission if h is None else total_power(fission, h, p)
         d = derivatives(t, T_f, T_cl, T_s, T_c, alpha, p, geo, f_nodes, power)
-        return np.concatenate([*d, precursor_derivatives(c, power, p)])
+        tail = [precursor_derivatives(c, fission, p)]
+        if h is not None:
+            tail.append(decay_heat_derivatives(h, fission, p))
+        return np.concatenate([*d, *tail])
 
     return rhs

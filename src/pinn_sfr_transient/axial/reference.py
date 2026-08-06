@@ -38,10 +38,12 @@ from pinn_sfr_transient.axial.physics import (
     flow_rate,
     kinetics_weights,
     make_rhs,
+    n_decay,
     nodal_power,
     node_geometry,
     prompt_jump_power,
     reactivity_components,
+    total_power,
     unpack,
 )
 
@@ -179,7 +181,10 @@ def steady_state(p: AxialParams) -> tuple[FloatArray, ...]:
     T_f = _fuel_from_flux(q_fuel, T_cl, geo.A_fe, p)
     # Subcooled everywhere, so void-free; and c_i = 1 makes P(0) = 1 exactly,
     # since sum(beta_i) / (beta - 0) = 1. No criticality offset is needed.
-    return T_f, T_cl, T_s, T_c, np.zeros_like(T_c), np.ones(N_GROUPS)
+    tail = [np.ones(N_GROUPS)]
+    if n_decay(p):
+        tail.append(p.steady_decay_heat(1.0))
+    return (T_f, T_cl, T_s, T_c, np.zeros_like(T_c), *tail)
 
 
 def _fuel_from_flux(q: FloatArray, T_cl: FloatArray, area: float, p: AxialParams) -> FloatArray:
@@ -246,7 +251,7 @@ def jacobian_sparsity(p: AxialParams, *, feedback: bool = False) -> Any:  # noqa
     fails in a way that looks like a stiff-solver problem rather than a bug.
     """
     n = p.n_axial
-    size = N_FIELDS * n + N_GROUPS
+    size = N_FIELDS * n + N_GROUPS + n_decay(p)
     m = np.zeros((size, size), dtype=np.int8)
     f, cl, st, c, a = 0, n, 2 * n, 3 * n, 4 * n
     j = np.arange(n)
@@ -339,7 +344,7 @@ def solve_reference(  # noqa: PLR0913 - solver knobs are clearer flat than bundl
         msg = f"reference integration failed: {sol.message}"
         raise RuntimeError(msg)
 
-    T_f, T_cl, T_s, T_c, alpha, c = unpack(sol.y, p.n_axial)
+    T_f, T_cl, T_s, T_c, alpha, c, *rest = unpack(sol.y, p.n_axial, n_decay(p))
     if feedback:
         w_D, w_void = kinetics_weights(p)
         parts = [
@@ -349,7 +354,8 @@ def solve_reference(  # noqa: PLR0913 - solver knobs are clearer flat than bundl
         rho_doppler = np.array([d for d, _ in parts])
         rho_void = np.array([v for _, v in parts])
         rho = p.rho_ext + rho_doppler + rho_void
-        power = np.array([prompt_jump_power(c[:, i], rho[i], p) for i in range(sol.t.size)])
+        fission = np.array([prompt_jump_power(c[:, i], rho[i], p) for i in range(sol.t.size)])
+        power = fission if not rest else total_power(fission, rest[0].T, p)
     else:
         amp = amplitude if amplitude is not None else (lambda _t: 1.0)
         power = np.array([amp(float(t)) for t in sol.t])

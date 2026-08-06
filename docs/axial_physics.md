@@ -213,6 +213,34 @@ bubbles expand into cooler regions above and below the boiling zone. In a single
 Eulerian channel that terminates at dryout six seconds after onset, there is no
 cooler region for the vapour to reach.
 
+### D-KIN-3 — Decay heat, three groups not twenty-three *(settled)*
+
+**Departs from:** §4.4. **Status: implemented, `decay_fraction = 0.0` by default.**
+
+`ψ_t = ψ_f + ψ_h` (Eq. 4.2-2). The fission channel carries `1 − decay_fraction`,
+so the nominal total is exactly one and no criticality retuning is needed. Three
+groups spanning seconds to hours reproduce the *shape* of the ANS standard rather
+than its full table.
+
+**This removes the zero-power attractor.** At `decay_fraction = 0` the homogeneous
+kinetics have no source and `P = c = 0` is an exact solution of the whole coupled
+system — the collapse mode REPORT-01 §5.2 exists to diagnose. Non-zero, `ψ_h` does
+not vanish when `ψ_f` does: measured, `total_power(0, h) = 0.065`.
+
+### D-FB-4 — Axial fuel expansion *(settled)*
+
+**Departs from:** §4.5.4. **Status: implemented, `alpha_expansion = 0.0` by default.**
+
+Fuel lengthening lowers the axial power density and leaks more neutrons, so the
+coefficient is negative and the mechanism stabilising. Omitting it was
+**non-conservative** — the model over-predicts the excursion (D-FB-3). Linear in
+`T_f − T_f0` on the same radial mass-average as Doppler, so it vanishes at nominal
+and needs no offset. Measured at `−1e-6 /K` and a 30 % fuel-temperature rise, it
+adds 0.083 `β` of negative reactivity: −0.4498 `β` becomes −0.5329 `β`.
+
+Radial core expansion and control-rod-drive expansion remain unimplemented, so
+D-FB-3 narrows rather than closes.
+
 ### D-TH-2 — Axially uniform flow after voiding *(open — M4)*
 
 **Departs from:** §12.2. **Status: open.**
