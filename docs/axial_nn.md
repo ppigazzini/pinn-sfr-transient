@@ -7,10 +7,11 @@ training recipe, the two backends, and **what has actually been measured** —
 including the results that came out badly, which are most of them.
 
 > **Status.** The network trains, satisfies every hard constraint exactly, and
-> reproduces the reference to **3–12% relative `L2`** against an acceptance bar of
-> 1%. It does **not** meet that bar. Section 6 documents a bug hunt that found the
-> bar itself is partly unsound, and section 5 documents five standard remedies
-> that all made the fit *worse*. None of this is presented as a working result.
+> does **not** meet the 1% bar. Current Plan B: `T_f` 0.137, `T_cl` 0.189,
+> `T_s` 0.075, `T_c` 0.075 (§7.2.5); current Plan A: 0.250 relative `L2` on
+> `P(t)` (§7.5). The boiling front does now form, `max α = 1.0000` against the
+> reference's 1.0000, since the void was eliminated algebraically (§7.2.3–§7.2.4).
+> None of this is presented as a working result.
 
 ---
 
@@ -134,6 +135,16 @@ between RAR refreshes, where the 0D twin (and torch) resample every step. Fixing
 that did **not** close the accuracy gap, so the gap remains open.
 
 ## 5. Measured results
+
+> **Provenance (Annex A, N8).** Every number in §5 and §7.1–§7.2 was measured on
+> the **pre-D-TH-3 formulation**: the void solved as a differential unknown, block
+> weights unbounded, no per-block residual scaling, and the full 60 s horizon.
+> All four have since changed. Treat §5 and §7.1–§7.2 as a record of how the
+> model got here, not as current accuracy. The current numbers are §7.2.3
+> (variable scaling), §7.2.4 (the phantom void), §7.2.5 (the re-ablation, which
+> **retracts half of D38**) and §7.5 (Plan A). Where a §5 conclusion has been
+> overturned the later section says so explicitly.
+
 
 All at **3000 Adam + 300 L-BFGS**, seed 0, relative `L2` against the reference,
 unless stated. The acceptance bar is `1e-2`.
