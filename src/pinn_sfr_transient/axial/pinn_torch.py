@@ -94,9 +94,78 @@ class AxialTrainConfig:
     feedback: bool = False
     n_time: int = 128  # collocation times when feedback is on
 
+    # --- remedies for the moving front (all measured in docs/axial_nn.md) ----
+    # Time-window curriculum: train [0, w t_end] for growing w. Causal weighting
+    # re-weights an already-global problem; windowing makes the problem itself
+    # local in time, which is the stronger form of the same idea and the standard
+    # treatment for long horizons with a front (jaxpi2's time-windowed training).
+    n_windows: int = 1
+    # Random Fourier feature embedding of the inputs, against spectral bias
+    # [Tancik et al. 2020; Wang, Wang & Perdikaris 2021]. 0 disables.
+    fourier_features: int = 0
+    fourier_scale: float = 2.0
+    # Two-encoder "modified MLP" [Wang, Teng & Perdikaris 2021], the architecture
+    # jaxpi uses by default; multiplicative interactions carry the inputs to every
+    # layer instead of letting them wash out with depth.
+    modified_mlp: bool = False
+
+    # Pseudo-time stepping against spurious solutions
+    # [Wang, Koohy, Lu & Perdikaris, arXiv:2604.23528]. 0 disables.
+    pts_every: int = 0
+    pts_dtau: float = 1.0
+    pts_growth: float = 1.5
+
     device: str = "cpu"
     seed: int = 0
     log_every: int = 1000
+
+
+class FourierEmbedding(nn.Module):
+    """Random Fourier features, ``x -> [sin(2 pi B x), cos(2 pi B x)]``.
+
+    A plain MLP is spectrally biased toward smooth functions, which is the wrong
+    prior for a boiling front that moves through the domain. Lifting the inputs
+    into a random Fourier basis restores the high frequencies
+    [Tancik et al. 2020; Wang, Wang & Perdikaris 2021].
+    """
+
+    def __init__(self, n_in: int, n_features: int, scale: float) -> None:
+        super().__init__()
+        self.register_buffer("B", torch.randn(n_in, n_features, dtype=torch.float64) * scale)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        proj = 2.0 * np.pi * (x @ self.B)
+        return torch.cat([torch.sin(proj), torch.cos(proj)], dim=-1)
+
+
+class ModifiedMLP(nn.Module):
+    """Two-encoder MLP of [Wang, Teng & Perdikaris 2021], as used by jaxpi.
+
+    Two encoders ``U`` and ``V`` are computed once from the input and mixed into
+    every hidden layer, ``h <- (1 - z) * U + z * V``. The inputs therefore reach
+    the last layer undiminished, which a plain feed-forward stack cannot manage
+    at depth.
+    """
+
+    def __init__(self, n_in: int, n_out: int, width: int, depth: int) -> None:
+        super().__init__()
+        self.u = nn.Linear(n_in, width)
+        self.v = nn.Linear(n_in, width)
+        self.first = nn.Linear(n_in, width)
+        self.hidden = nn.ModuleList([nn.Linear(width, width) for _ in range(depth - 1)])
+        self.out = nn.Linear(width, n_out)
+        for m in [self.u, self.v, self.first, self.out, *self.hidden]:
+            k = m.in_features**-0.5
+            nn.init.uniform_(m.weight, -k, k)
+            nn.init.uniform_(m.bias, -k, k)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        u, v = torch.tanh(self.u(x)), torch.tanh(self.v(x))
+        h = torch.tanh(self.first(x))
+        for layer in self.hidden:
+            z = torch.tanh(layer(h))
+            h = (1.0 - z) * u + z * v
+        return self.out(h)
 
 
 class MLP(nn.Module):
@@ -134,7 +203,19 @@ class AxialPinn(nn.Module):
         self.p = p
         self.cfg = cfg
         torch.manual_seed(cfg.seed)  # before init: nn.init draws from the global RNG
-        self.net = MLP(len(FIELDS), cfg.width, cfg.depth).to(cfg.device).double()
+        n_in = 2
+        self.embed: nn.Module | None = None
+        if cfg.fourier_features:
+            self.embed = (
+                FourierEmbedding(2, cfg.fourier_features, cfg.fourier_scale).to(cfg.device).double()
+            )
+            n_in = 2 * cfg.fourier_features
+        core = (
+            ModifiedMLP(n_in, len(FIELDS), cfg.width, cfg.depth)
+            if cfg.modified_mlp
+            else MLP(len(FIELDS), cfg.width, cfg.depth, n_in=n_in)
+        )
+        self.net = core.to(cfg.device).double()
         # Precursors are functions of time alone, so they get their own smaller
         # one-input network rather than a head on the (zeta, t) field network.
         kin = MLP(N_GROUPS, cfg.width // 2, 2, n_in=1) if cfg.feedback else None
@@ -205,7 +286,8 @@ class AxialPinn(nn.Module):
         is correct: its only coupling is to the coolant, held at ``T_in`` there by
         the inlet condition.
         """
-        raw = self.net(torch.cat([zeta, that], dim=1))
+        x = torch.cat([zeta, that], dim=1)
+        raw = self.net(self.embed(x) if self.embed is not None else x)
         temps = self.theta0(zeta)[:, :N_TEMPS] * _bounded_exp(that * raw[:, :N_TEMPS])
         gate = torch.tanh(_ALPHA_GATE * that) * torch.tanh(_ALPHA_GATE * zeta)
         alpha = gate * torch.sigmoid(raw[:, N_TEMPS : N_TEMPS + 1])
@@ -417,6 +499,10 @@ class Trainer:
         n_blocks = len(FIELDS) + (1 if cfg.feedback else 0)
         self.block_w = torch.ones(n_blocks, dtype=torch.float64, device=self.dev)
         self.rar = torch.empty(0, 2, dtype=torch.float64, device=self.dev)
+        # Pseudo-time stepping state: the anchor is the previous pseudo-step's
+        # solution, held fixed while the network takes an implicit step toward it.
+        self.pts_anchor: tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None = None
+        self.pts_dtau = cfg.pts_dtau
 
     def _blocks(self, zeta: torch.Tensor, that: torch.Tensor) -> tuple[torch.Tensor, ...]:
         """Residual blocks for whichever plan is active."""
@@ -424,19 +510,24 @@ class Trainer:
             return self.model.closed_loop_blocks(that)
         return self.model.residual_blocks(zeta, that)
 
-    def collocation(self) -> tuple[torch.Tensor, torch.Tensor]:
+    def collocation(self, t_max: float = 1.0) -> tuple[torch.Tensor, torch.Tensor]:
         """Uniform points over ``(zeta, t_hat)``, clustered early, plus the RAR reservoir."""
         if self.cfg.feedback:
             # Plan A collocates in TIME only: the axial direction is the fixed
             # quadrature the reactivity integral needs (section 3.5a).
-            that = torch.rand(self.cfg.n_time, 1, dtype=torch.float64, device=self.dev)
-            early = torch.rand(self.cfg.n_time // 2, 1, dtype=torch.float64, device=self.dev) * 0.4
+            that = torch.rand(self.cfg.n_time, 1, dtype=torch.float64, device=self.dev) * t_max
+            early = (
+                torch.rand(self.cfg.n_time // 2, 1, dtype=torch.float64, device=self.dev)
+                * 0.4
+                * t_max
+            )
             allt = torch.cat([that, early], dim=0)
             return allt, allt
         n = self.cfg.n_colloc
         pts = torch.rand(n, 2, dtype=torch.float64, device=self.dev)
+        pts[:, 1] *= t_max
         early = torch.rand(n // 2, 2, dtype=torch.float64, device=self.dev)
-        early[:, 1] *= 0.4  # fastest dynamics live in the first 40% of the horizon
+        early[:, 1] *= 0.4 * t_max  # fastest dynamics live early in the window
         allp = (
             torch.cat([pts, early, self.rar], dim=0)
             if self.rar.numel()
@@ -448,17 +539,58 @@ class Trainer:
         blocks = self._blocks(zeta, that)
         return sum(self.block_w[k] * blocks[k] for k in range(len(blocks)))
 
-    def causal_loss(self, zeta: torch.Tensor, that: torch.Tensor) -> torch.Tensor:
-        """Time-chunked loss with causal weights [Wang, Sankaran & Perdikaris 2024]."""
+    def pseudo_time_step(self, t_max: float = 1.0) -> None:
+        """Re-anchor the pseudo-time step and relax it [arXiv:2604.23528].
+
+        Plain residual minimisation is free to sit in any low-residual basin,
+        including ones no physical solution occupies — the paper's central point,
+        and something this model has already been bitten by once (``T_f`` driven
+        negative while the loss fell). Pseudo-time stepping instead solves the
+        implicit-Euler problem
+
+        ``(u - u_prev) / dtau + R(u) = 0``
+
+        which adds a proximal pull toward the previous iterate. A jump to a
+        distant spurious basin costs ``||u - u_prev||^2 / dtau``, so the optimiser
+        has to *walk* to a solution rather than teleport to one. ``dtau`` grows
+        each step, so the anchor relaxes and the limit recovers ordinary residual
+        minimisation.
+
+        The anchor points are **resampled** at every step: the paper is explicit
+        that pseudo-time stepping and resampling work together, since a fixed
+        anchor set is one more thing to overfit.
+        """
+        zeta, that = self.collocation(t_max)
+        with torch.no_grad():
+            state = self.model.normalised_state(zeta, that).detach()
+        self.pts_anchor = (zeta.detach(), that.detach(), state)
+        self.pts_dtau *= self.cfg.pts_growth
+
+    def _pts_penalty(self) -> torch.Tensor:
+        """Proximal term ``||u - u_prev||^2 / dtau``; zero when the anchor is unset."""
+        if self.pts_anchor is None:
+            return torch.zeros((), dtype=torch.float64, device=self.dev)
+        zeta, that, prev = self.pts_anchor
+        now = self.model.normalised_state(zeta, that)
+        return (now - prev).pow(2).mean() / self.pts_dtau
+
+    def causal_loss(
+        self, zeta: torch.Tensor, that: torch.Tensor, t_max: float = 1.0
+    ) -> torch.Tensor:
+        """Time-chunked loss with causal weights [Wang, Sankaran & Perdikaris 2024].
+
+        The chunks span the *current window*, not the whole horizon, so causal
+        weighting keeps its resolution as the window grows.
+        """
         e = self._pointwise(zeta, that)
         chunks = self.cfg.causal_chunks
-        idx = torch.clamp((that.reshape(-1) * chunks).long(), max=chunks - 1)
+        idx = torch.clamp((that.reshape(-1) / max(t_max, 1e-12) * chunks).long(), max=chunks - 1)
         losses = torch.stack(
             [e[idx == m].mean() if bool((idx == m).any()) else e.sum() * 0.0 for m in range(chunks)]
         )
         with torch.no_grad():
             w = torch.exp(-self.cfg.causal_eps * (torch.cumsum(losses, 0) - losses))
-        return (w * losses).mean()
+        return (w * losses).mean() + self._pts_penalty()
 
     def update_block_weights(self, zeta: torch.Tensor, that: torch.Tensor) -> None:
         """Balance the four blocks by gradient norm [Wang, Teng & Perdikaris 2021]."""
@@ -479,14 +611,19 @@ class Trainer:
             self.block_w = m * self.block_w + (1.0 - m) * target
 
     @torch.no_grad()
-    def rar_refine(self) -> None:
+    def rar_refine(self, t_max: float = 1.0) -> None:
         """Append the worst-residual candidates to the reservoir [Wu et al. 2023]."""
         if self.cfg.feedback:
             return  # Plan A's collocation is a tensor grid; RAR would break the quadrature
         pool = torch.rand(self.cfg.rar_pool, 2, dtype=torch.float64, device=self.dev)
+        pool[:, 1] *= t_max
         e = self._pointwise(pool[:, 0:1], pool[:, 1:2])
         top = torch.topk(e, min(self.cfg.rar_add, e.numel())).indices
         self.rar = torch.cat([self.rar, pool[top]], dim=0)[-self.cfg.rar_cap :]
+
+    def _reset_rar(self) -> None:
+        """Drop the reservoir when the window grows; its points are stale."""
+        self.rar = torch.empty(0, 2, dtype=torch.float64, device=self.dev)
 
     def train(self, *, verbose: bool = True) -> AxialPinn:
         """Run the full schedule and return the trained model."""
@@ -496,18 +633,28 @@ class Trainer:
             opt, T_max=max(1, cfg.adam_iters), eta_min=cfg.lr * 0.1
         )
         for it in range(cfg.adam_iters):
+            # Time-window curriculum: the horizon opens from `1/n_windows` to 1
+            # over training, so the network solves a short transient first and
+            # extends it. Causal weighting *re-weights* a globally posed problem;
+            # windowing makes the problem itself local in time, which is the
+            # stronger form of the same idea. With `n_windows = 1` this is a
+            # no-op and the schedule is the original one.
+            stage = min(int(it / cfg.adam_iters * cfg.n_windows) + 1, cfg.n_windows)
+            t_max = stage / cfg.n_windows
             if it and it % cfg.weight_update_every == 0:
-                self.update_block_weights(*self.collocation())
+                self.update_block_weights(*self.collocation(t_max))
             if it and it % cfg.rar_every == 0:
-                self.rar_refine()
+                self.rar_refine(t_max)
+            if cfg.pts_every and it % cfg.pts_every == 0:
+                self.pseudo_time_step(t_max)
             opt.zero_grad()
-            loss = self.causal_loss(*self.collocation())
+            loss = self.causal_loss(*self.collocation(t_max), t_max)
             loss.backward()
             opt.step()
             sched.step()
             if verbose and it % cfg.log_every == 0:
                 w = [f"{v:.1e}" for v in self.block_w.tolist()]
-                print(f"[adam {it:6d}] loss={loss.item():.3e} w=[{','.join(w)}]")
+                print(f"[adam {it:6d}] t<={t_max:.2f} loss={loss.item():.3e} w=[{','.join(w)}]")
         if cfg.lbfgs_iters > 0:
             self._lbfgs(verbose=verbose)
         return self.model
