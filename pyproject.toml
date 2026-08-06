@@ -227,6 +227,12 @@ unused-ignore-comment = "ignore"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra -q --cov --cov-report=term-missing"
+filterwarnings = [
+    # PyTorch references torch.jit.script internally and flags it as unsupported
+    # on Python 3.14. This project never calls it. The axial PINN tests raise the
+    # warning 18 times per run; silence it.
+    "ignore:`torch.jit.script` is not supported in Python 3.14:DeprecationWarning",
+]
 
 [tool.coverage.run]
 source = ["pinn_sfr_transient"]
