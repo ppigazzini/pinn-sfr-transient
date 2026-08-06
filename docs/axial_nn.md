@@ -307,14 +307,75 @@ scored against a converged ruler — the M7.5 item. Note that the temperatures w
 **not** the thing the ruler was hiding: they are 4–98% wrong, far above the
 reference's own 5e-3.
 
-**The gradient-norm block weights diverge, and that is the remaining suspect made
-measurable.** Final weights from the same six runs: `w(T_f)` reaches
-**3.1e5 to 6.2e6** while `w(α)` pins at **0.451** in four of six runs, identical
-to three digits across independent seeds. The scheme sets `λ_k = mean(g)/g_k`
-with no normalisation and momentum 0.9, so nothing bounds the weights and they
-grow monotonically through training — the reported loss rises from 2.1e2 to 2.4e5
-for that reason alone, not because the fit is worsening. That is where the next
-diagnosis should go.
+**The gradient-norm block weights diverge** — `w(T_f)` reaches 3.1e5 to 6.2e6
+while `w(α)` pins at 0.451, identical to three digits across independent seeds.
+That was §7.2's last untested suspect. It has now been tested; see §7.2.1.
+
+### 7.2.1 The block weighting was the variance
+
+Four weighting variants × three seeds, torch, Plan B, 3000 Adam + 300 L-BFGS,
+scored against `n_axial = 160`. Only *ratios* between block weights can matter —
+Adam is scale-invariant to a global factor, which is the same argument REPORT-01
+D39 uses against fixed per-equation scaling — so the intervention is bounding the
+spread, not the magnitude. `clipN` renormalises the target to unit geometric mean
+and clamps it to `[1/N, N]`; `none` switches the weighting off entirely.
+
+| variant | T_f | T_cl | T_s | T_c | `T_f` seed spread | weight spread |
+|---|---|---|---|---|---|---|
+| `none` | **0.117** | **0.140** | 0.043 | **0.033** | **1.13×** | 1 |
+| `clip10` | 0.130 | 0.142 | **0.041** | 0.034 | 1.20× | 1.9e1 |
+| `clip100` | 0.110 | 0.174 | 0.061 | 0.049 | 2.22× | 2.0e2 |
+| `current` (unbounded) | 0.376 | 0.242 | 0.062 | 0.093 | **10.4×** | up to 5.0e6 |
+
+Read the last two columns first. **The 12.5× seed variance of §7.1 was not a
+property of this model — it was the block weighting.** Bound the spread and it
+collapses to 1.1–1.2×, and *every field improves*: `T_c` by 2.8×, `T_f` by 3.2×,
+`T_cl` by 1.7×. The ordering is monotone in the cap, which is the same statement
+as "the weighting itself is doing the damage".
+
+The mechanism is a positive feedback with nothing to stop it. `λ_k = mean(g)/g_k`
+hands a block whose gradient falls — because it is being fitted — an ever-larger
+weight, which makes the loss even more about that block. `w(T_f)` running to 1e6
+while `w(α)` sits at 0.451 means the void residual was being suppressed by six to
+seven orders of magnitude relative to the fuel.
+
+**Adopted:** `weight_max_ratio`, default **10.0**, in both backends.
+`weight_max_ratio = 1.0` disables the weighting and measures the same to within
+seed noise; 10.0 keeps the mechanism live where it helps. This is the first
+change in this document to *improve* the fit, and unlike the six that failed it
+was proposed by a measurement rather than to a measurement.
+
+**It does not fix the void.** `max α` stays at 0.000–0.004 in every well-behaved
+variant against a reference maximum of 1.0. The single run that ever reached
+α ≈ 0.99 is `current`/seed 2 — simultaneously the *worst* temperature run
+(`T_f` 0.63) and a 2.4× over-prediction of voided length (0.92 m against 0.38 m).
+The boiling front switching on is not a success mode here; it is the same
+instability wearing a different hat.
+
+### 7.2.2 Why the void does not form — a number, not a technique
+
+The void residual sits at ~1e11–1e12 in every non-boiling run, four to six orders
+above every other block, and no weighting scheme moves it. That is not a training
+pathology, it is the equation:
+
+```math
+\Gamma = \frac{q''_{wall}}{\lambda\,\rho_v\,A_c}
+       = \frac{5.0\times10^{4}}{3.873\times10^{6} \times 0.2738 \times 3.34\times10^{-5}}
+       \approx 1.4\times10^{3}\ \mathrm{s^{-1}}
+```
+
+A node fills with vapour in **0.71 ms**, against a 60 s horizon. In normalised
+time `dα/dt̂` must reach **8.5e4**, where every other block's normalised rate is
+1e2 to 1e3. Squared, that is the 1e10 residual floor observed. The network is
+being asked to represent a near-discontinuity in `t̂` with a smooth `tanh` MLP,
+and `residual_scales` had been hiding it by reporting the *coolant transit time*,
+0.113 s, for the void block — 160× too slow. Corrected, and pinned by
+`test_void_block_time_constant_is_the_vaporisation_time_not_the_transit_time`.
+
+This is the same stiffness argument that justified the prompt-jump approximation
+for the kinetics (D-KIN-1, a factor ~2300), applied to the block that actually
+limits this model now — and it points at a formulation change, not a remedy from
+§7.3. Nothing has been changed on the strength of it yet.
 
 ### 7.2 Backend parity
 
