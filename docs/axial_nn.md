@@ -227,7 +227,85 @@ Two consequences:
   the solver: everything `axial_physics.md` §5 claims about the reference — exact
   steady state, energy conservation, convergence orders — was verified and stands.
 
-## 7. What to do next
+## 7. M7 — hardening and backend parity
+
+M7 asks for three things: a multi-seed table, every performance claim measured at
+a stated config, and torch and JAX statistically indistinguishable. **None of the
+three is satisfied.** What exists is below; `TBD` marks a number that has not been
+measured, not one that has been measured and omitted.
+
+### 7.1 Multi-seed study
+
+Five seeds, torch, Plan B, 3000 Adam + 300 L-BFGS, **additive ansatz** (i.e. before
+the §2 fix), scored against the `n_axial = 40` reference:
+
+| seed | T_f | T_cl | T_s | T_c |
+|---|---|---|---|---|
+| 0 | 0.156 | 0.374 | 0.278 | 0.177 |
+| 1 | 0.212 | 0.285 | 0.184 | 0.142 |
+| 2 | 0.200 | 0.290 | 0.162 | 0.230 |
+| 3 | 0.187 | 0.237 | 0.130 | 0.173 |
+| 4 | 0.141 | 0.193 | 0.071 | 0.032 |
+| **spread** | 1.5× | 1.9× | 3.9× | 7.2× |
+
+No lucky seed: every seed fails the bar on every field, so the failure was
+systematic rather than variance. **This table is superseded** — it predates both
+the positivity fix and the discovery that the reference is unconverged in `α`
+(§6.4). It is kept because it is the only multi-seed evidence that exists.
+
+**Post-fix multi-seed table: TBD.** Only seed 0 was measured after the fix
+(§5.1); the 3-seed × 2-backend run scored against a converged reference was
+launched and did not complete.
+
+### 7.2 Backend parity
+
+| | T_f | T_cl | T_s | T_c | config |
+|---|---|---|---|---|---|
+| torch | 0.062 | 0.120 | 0.032 | 0.034 | seed 0, post-fix, ref `n=40` |
+| jax | 0.243 | 0.328 | 0.323 | 0.197 | seed 0, post-fix, ref `n=40` |
+| **ratio** | **3.9×** | **2.7×** | **10×** | **5.8×** | |
+
+**The two backends are not statistically indistinguishable — they differ by 3–10×
+on a single seed.** The M7 acceptance criterion is therefore failed, not merely
+unmeasured. Two candidate causes have been tested and rejected:
+
+* *frozen collocation* — JAX trained on a fixed set between RAR refreshes where
+  torch resamples every step. Real divergence from the 0D convention, fixed, and
+  it changed nothing (0.243 → 0.243).
+* *a dead L-BFGS polish* — `optax.lbfgs` does run and does reduce the loss
+  (7.4e3 → 3.4e1), and JAX accuracy with and without it is the same.
+
+Remaining suspects, untested: the gradient-norm block weights settling to
+different values in the two backends, and the causal-chunk reduction (torch masks
+versus JAX `bincount`). **Multi-seed parity statistics: TBD.**
+
+### 7.3 Optimiser bake-off
+
+**TBD — not started.** The plan called for SSBroyden/SSBFGS
+([arXiv:2501.16371](https://arxiv.org/abs/2501.16371)) first, since they drop into
+the same schedule slot as L-BFGS with no new machinery, then NysNewton-CG
+([ICML 2024](https://proceedings.mlr.press/v235/rathore24a.html)). Deferred
+deliberately: with the reference unconverged in `α` and the two backends 3–10×
+apart, an optimiser comparison would be measuring the ruler.
+
+### 7.4 Pseudo-time stepping
+
+Implemented (`pts_every`, `pts_dtau`, `pts_growth`) and smoke-tested; **accuracy
+TBD** — the ablation run was killed before its three configurations finished.
+
+### 7.5 GPU timing
+
+**TBD — not started.**
+
+### 7.6 What M7 did deliver
+
+The JAX twin itself (`axial/pinn_jax.py`), sharing the residual functions with the
+torch backend and satisfying every hard constraint exactly. It has already earned
+its cost twice: it showed the pre-fix failure was *not* backend-specific, which
+implicated the formulation; and the post-fix divergence exposed the frozen
+collocation bug. Both are findings a single backend could not have produced.
+
+## 8. What to do next
 
 In order, and none of it is "add another method":
 
@@ -241,3 +319,6 @@ In order, and none of it is "add another method":
 
 Until (1) and (2) are done, no accuracy number from this model should be quoted,
 and none is quoted in this repository outside this document.
+
+Everything marked `TBD` above is measurable with the code as it stands; none of it
+needs new development, only compute and a corrected reference.

@@ -15,13 +15,12 @@ about 286x here.
    The **default numeric values are representative placeholders**, chosen to be
    order-of-magnitude correct for an oxide-fuelled SFR pin cell. They are not
    taken from a specific reactor. Chapter 2 of the manual (the input-deck
-   reference) is the place to source a consistent, realistic set; that is
-   milestone M2 work. Nothing downstream should quote these as physical
-   predictions.
+   reference) is the place to source a consistent, realistic set. Nothing
+   downstream should quote these as physical predictions.
 
-Milestone status: **M0**. This module is the parameter container and the axial
-shape functions. The derived-exact steady state (M2), the residuals (M2/M4) and
-the kinetics closure (M6) are deliberately absent.
+This module is the parameter container and the axial shape functions; the
+residuals live in ``physics``, the solver in ``reference``, and the networks in
+``pinn_torch`` / ``pinn_jax``.
 """
 
 from __future__ import annotations
@@ -66,17 +65,19 @@ class AxialParams:
     gamma_2: float = 0.5
     t_struct: float = 2.0e-3  # structure (duct) wall thickness [m]
 
-    # --- Material properties (constant; sodium is M1's job) ----------------
+    # --- Material properties (fuel/cladding/structure constant) ------------
     rho_f: float = 9.70e3  # fuel density [kg/m^3]
     c_f: float = 330.0  # fuel specific heat [J/kg-K]
     rho_cl: float = 7.80e3  # cladding density [kg/m^3]
     c_cl: float = 550.0  # cladding specific heat [J/kg-K]
     rho_s: float = 7.80e3  # structure density [kg/m^3]
     c_s: float = 550.0  # structure specific heat [J/kg-K]
-    # Coolant properties are held CONSTANT at M2 (deviation D-TH-3): the defaults
-    # below are the section 12.13 correlations evaluated at `T_ref_props`, which
-    # keeps the steady state analytically exact for solver verification. M4
-    # replaces them with the temperature-dependent forms from `axial.sodium`.
+    # Coolant properties are held CONSTANT: the defaults below are the section
+    # 12.13 correlations evaluated at `T_ref_props`, which keeps the steady state
+    # analytically exact and so usable as a verification oracle. Still constant --
+    # `axial.sodium` supplies the temperature-dependent forms, and
+    # `physics.coolant_capacity` records why substituting them into this
+    # temperature-form energy equation breaks conservation.
     T_ref_props: float = 700.0  # reference temperature for the frozen properties [K]
     rho_c: float = 849.09  # = sodium.liquid_density(700 K) [kg/m^3]
     c_c: float = 1272.29  # = sodium.liquid_heat_capacity(700 K) [J/kg-K]
@@ -117,7 +118,11 @@ class AxialParams:
     # leakage dominates. `zeta_sign` is the sign-change height.
     zeta_sign: float = 0.80
     delta_sign: float = 0.05
-    rho_ext: float = 0.0  # external insertion; criticality offset is M2's job
+    # External insertion. No criticality offset is needed: at nominal
+    # ln(T_f/T_f0) = 0 and alpha = 0, so both reactivity integrals vanish
+    # identically and the reactor is exactly critical -- a free consequence of the
+    # logarithmic Doppler that the 0D model has to fake with a fitted offset.
+    rho_ext: float = 0.0
 
     # --- Boiling onset (manual section 12.4) -------------------------------
     p_system: float = 1.01325e5  # system pressure setting T_sat via Eq. 12.13-4 [Pa]
