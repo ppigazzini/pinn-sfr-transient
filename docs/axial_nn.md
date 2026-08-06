@@ -555,6 +555,10 @@ same **budget**. JAX defaulted to 3000 Adam / 300 L-BFGS / RAR every 1000 agains
 torch's 8000 / 500 / 2000, so the default-configuration comparison was never
 like-for-like. The defaults now match.
 
+> **Superseded.** The table below predates the algebraic void closure, and for a
+> period the closure existed in torch only — so it compares two different
+> models. Re-measure before quoting (Annex A, N1 and N8).
+
 **Post-fix parity, seed 0, 3000 Adam + 300 L-BFGS, scored against `n = 160`:**
 
 | | T_f | T_cl | T_s | T_c |
