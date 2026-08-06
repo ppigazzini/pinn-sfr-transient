@@ -616,3 +616,46 @@ and none is quoted in this repository outside this document.
 
 Everything marked `TBD` above is measurable with the code as it stands; none of it
 needs new development, only compute and a corrected reference.
+
+### 7.2.5 N6 — re-ablated against the algebraic closure, and D38 is half wrong
+
+Every remedy in §7.2.x was measured against the *old* formulation: differential
+void, unbounded block weights, no residual scaling. All of that has changed, so
+D38's conclusion — "the §7 remedy list is not applicable here, and applying it
+hurt" — was re-tested. Seven arms × two seeds, 3000 Adam + 300 L-BFGS, reference
+`n = 160`, on top of the current defaults:
+
+| arm | T_f | T_cl | T_s | T_c | `L_void` | `max α` | mean ΔT |
+|---|---|---|---|---|---|---|---|
+| base | 0.1376 | 0.1886 | 0.0749 | 0.0751 | 0.1805 | 1.0000 | — |
+| `n_windows=4` | 0.1385 | 0.1895 | 0.0751 | 0.0752 | 0.1830 | 1.0000 | +0.4% |
+| **`fourier_features=32`** | 0.1286 | 0.1787 | 0.0600 | 0.0604 | **0.1878** | 0.9696 | **−12.8%** |
+| **`modified_mlp`** | **0.1270** | **0.1786** | **0.0509** | **0.0521** | 0.1121 | 0.9919 | **−18.9%** |
+| `weight_max_ratio=10` | 0.1409 | 0.1927 | 0.0789 | 0.0804 | 0.1632 | 1.0000 | +4.3% |
+| `causal_eps=5` | 0.1938 | 0.2625 | 0.1591 | 0.1598 | **0.0000** | **0.0000** | +76.3% |
+| `pts_every=500` | 0.2112 | 0.2822 | 0.1829 | 0.1834 | **0.0000** | **0.0000** | +97.9% |
+| reference | — | — | — | — | 0.3812 | 1.0000 | |
+
+**D38 is retracted for the two architecture remedies and confirmed for the loss
+ones.** The modified MLP — jaxpi's default, previously recorded as *3.3× worse* —
+is now the best arm on all four temperatures, by 19%. Fourier features,
+previously 0.255, now improve every field by 13% *and* move voided length toward
+the reference. Time windowing is neutral. Causal weighting and pseudo-time
+stepping remain catastrophic, and now visibly so: under both the boiling front
+never forms at all, `max α = 0.0000`.
+
+The reading that survives is narrower than D38's and more useful. A remedy aimed
+at **representation** — spectral bias, depth — was being masked by a formulation
+whose loss was dominated by a block carrying a normalised rate of 8.5e4. Remove
+that (D-TH-3) and the representation remedies pay. A remedy aimed at
+**reweighting** the loss was, and remains, harmful here, because the imbalance it
+targets is now removed analytically rather than adaptively.
+
+**This is the first time in this project that adding something helped.** Every
+prior improvement — the algebraic closure, bounding the block weights, truncating
+the horizon — was a subtraction.
+
+Not yet adopted as defaults. The modified MLP buys the best temperatures and the
+*worst* voided length of the three working arms (0.1121 against the base 0.1805,
+reference 0.3812), so it trades the front for the fields; Fourier improves both.
+The combination is untested.
