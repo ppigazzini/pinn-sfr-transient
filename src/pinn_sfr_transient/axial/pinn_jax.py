@@ -367,14 +367,22 @@ def _collocation(p: AxialParams, cfg: AxialTrainConfig, key: jax.Array) -> tuple
     return allp[:, 0:1], allp[:, 1:2]
 
 
+def _merge(base: tuple, rar: tuple | None, *, feedback: bool) -> tuple:
+    """Append the RAR points to a freshly drawn base set, keeping the size constant."""
+    if rar is None or feedback:
+        return base
+    return (jnp.concatenate([base[0], rar[0]]), jnp.concatenate([base[1], rar[1]]))
+
+
 def _rar_points(
     model: AxialPinn, p: AxialParams, cfg: AxialTrainConfig, key: jax.Array, w: jax.Array
 ) -> tuple:
-    """Replace the collocation set with its worst-residual subset [Wu et al. 2023].
+    """Select the worst-residual points from a fresh pool [Wu et al. 2023].
 
-    A *fixed* count, so shapes stay static and ``jit`` never recompiles. Disabled
-    under feedback, where the axial direction is a quadrature rule that cannot
-    absorb arbitrary points.
+    A *fixed* count, so shapes stay static and ``jit`` never recompiles; the
+    caller appends them to a freshly drawn base set each step. Disabled under
+    feedback, where the axial direction is a quadrature rule that cannot absorb
+    arbitrary points.
     """
     if cfg.feedback:
         return _collocation(p, cfg, key)
@@ -382,11 +390,7 @@ def _rar_points(
     blocks = residual_blocks(model, p, pool[:, 0:1], pool[:, 1:2])
     e = sum(w[k] * blocks[k] for k in range(len(blocks)))
     top = jnp.argsort(e)[-cfg.rar_keep :]
-    base = _collocation(p, cfg, key)
-    return (
-        jnp.concatenate([base[0], pool[top, 0:1]]),
-        jnp.concatenate([base[1], pool[top, 1:2]]),
-    )
+    return pool[top, 0:1], pool[top, 1:2]
 
 
 # --- training ---------------------------------------------------------------
@@ -413,15 +417,22 @@ def train(
         updates, opt_state = optimizer.update(grads, opt_state, params)
         return eqx.apply_updates(model, updates), opt_state, loss
 
-    key, k = jax.random.split(key)
-    pts = _collocation(p, cfg, k)
+    rar: tuple | None = None
     for it in range(cfg.adam_iters):
+        if it and it % cfg.rar_every == 0:
+            key, rk = jax.random.split(key)
+            rar = _rar_points(model, p, cfg, rk, w)
+        # FRESH points every step, plus the fixed-size RAR set. The count is
+        # constant so the jitted step never recompiles. Resampling is not a
+        # detail: training on a frozen set is the collocation-overfitting mode of
+        # arXiv:2605.30910, and holding the set fixed between RAR refreshes is
+        # what made this backend stall at ~0.24 relative L2 while the torch twin
+        # — which resamples every step — reached ~0.06 on the identical budget.
+        key, ck = jax.random.split(key)
+        pts = _merge(_collocation(p, cfg, ck), rar, feedback=cfg.feedback)
         if it and it % cfg.weight_update_every == 0:
             gn = _block_grad_norms(model, p, cfg, pts)
             w = cfg.weight_momentum * w + (1.0 - cfg.weight_momentum) * (gn.mean() / (gn + 1e-12))
-        if it and it % cfg.rar_every == 0:
-            key, k = jax.random.split(key)
-            pts = _rar_points(model, p, cfg, k, w)
         model, opt_state, loss = step(model, opt_state, pts, w)
         if verbose and it % cfg.log_every == 0:
             print(f"[adam {it:6d}] loss={float(loss):.3e}")
