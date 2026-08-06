@@ -10,10 +10,10 @@ Everything a reader needs to install, run, train, extend, and troubleshoot
 
 | Tool | Version | Needed for |
 |---|---|---|
-| Python | ≥ 3.12 | everything (uv can install it for you); 3.12 matches Colab |
+| Python | ≥ 3.13 | everything (uv can install it for you) |
 | [uv](https://docs.astral.sh/uv/) | ≥ 0.6 | project & environment management |
 | git | any recent | cloning / version control |
-| PyTorch | ≥ 2.12 | only the PINN (`pinn_torch`) — optional extra |
+| PyTorch | ≥ 2.13 | only the PINN (`pinn_torch`) — optional extra |
 | DeepXDE | ≥ 1.11 | only the DeepXDE variant — optional extra |
 
 Install uv (one line; nothing else is required globally):
@@ -48,9 +48,9 @@ framework has a `-cpu` and a `-gpu` build; the two builds of one framework are
 **mutually exclusive**, but PyTorch and JAX can be installed together:
 
 ```bash
-uv sync --extra torch-cpu                  # PyTorch ≥ 2.12, CPU-only wheel (small)
+uv sync --extra torch-cpu                  # PyTorch ≥ 2.13, CPU-only wheel (small)
 uv sync --extra jax-cpu                    # JAX (Equinox + Optax), CPU-only
-uv sync --extra torch-gpu                  # CUDA PyTorch; both -gpu builds train ~5x faster on a Colab T4
+uv sync --extra torch-gpu                  # CUDA PyTorch; both -gpu builds train ~5x faster on an NVIDIA T4
 uv sync --extra deepxde --extra torch-cpu  # DeepXDE + a torch backend
 ```
 
@@ -151,8 +151,8 @@ uv run pre-commit install
 Two from-scratch backends solve the *same* normalized residuals (no data —
 physics only), then print the relative-L2 error against the held-out reference.
 Generate the reference first (`uv run pinn-sfr reference`). Both backends train on
-the *same* optimisation budget and fit comparably; a GPU speeds them up ~5× on a
-Colab T4 (about a minute, vs several on CPU — varies a lot by instance).
+the *same* optimisation budget and fit comparably; a GPU speeds them up ~5× on an
+NVIDIA T4 (about a minute, vs several on CPU — varies a lot by machine).
 `docs/neural_network.md` §9 compares the two (they are equally first-class).
 
 ### 5.1 PyTorch
@@ -213,7 +213,7 @@ uv run python -m pinn_sfr_transient.pinn_jax
 Functional implementation — an Equinox model (immutable PyTree) trained with
 Optax (`optax.adam` then `optax.lbfgs`), same recipe *and same budget* as §5.1. On
 a GPU runtime XLA compiles and runs the whole step on the GPU, several times faster
-than CPU on a Colab T4; the CPU wall-clock varies a lot by Colab instance. (Use a
+than CPU on an NVIDIA T4; the CPU wall-clock varies a lot by machine. (Use a
 GPU, not a TPU: TPUs lack the required float64.)
 
 ### 5.3 DeepXDE variant
@@ -266,11 +266,10 @@ still reaches voiding.
   finish in seconds.
 * The PINN is a tiny MLP (~17k parameters, 1-D input, ~4k-point batches) trained
   in **float64**. Memory use is well under 1 GB.
-* A GPU helps here: on a Colab T4 **both** backends train ~5× faster than on its
-  (modest) CPU. The margin is smaller than for an fp32 workload — float64 is
+* A GPU helps here: on an NVIDIA T4 **both** backends train ~5× faster than on a
+  modest CPU. The margin is smaller than for an fp32 workload — float64 is
   throttled to ≈1/32–1/64 of FP32 on consumer NVIDIA GPUs — so a strong desktop
-  CPU can stay competitive with a gaming GPU, but Colab's CPU is not, so the GPU
-  wins clearly there.
+  CPU can stay competitive with a gaming GPU.
 
 To use a GPU, set `device="cuda"` (or `"mps"` on Apple Silicon) in `TrainConfig`
 and install the CUDA build with `uv sync --extra torch-gpu` (the `torch-cpu` and

@@ -295,7 +295,7 @@ def residual_blocks(
     )
 
 
-def closed_loop_blocks(  # noqa: PLR0913 - the tensor grid needs all of them
+def closed_loop_blocks(  # noqa: PLR0913, PLR0917 - the tensor grid needs all of them
     model: AxialPinn,
     p: AxialParams,
     that: jax.Array,

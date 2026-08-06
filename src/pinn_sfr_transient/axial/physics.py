@@ -387,7 +387,7 @@ N_GROUPS: int = 6
 """Delayed-neutron precursor groups (manual Eq. 4.3-1)."""
 
 
-def reactivity_components(  # noqa: PLR0913 - two feedbacks, each with its own axial weight
+def reactivity_components(  # noqa: PLR0913, PLR0917 - two feedbacks, each with its own axial weight
     T_f: Field,
     alpha: Field,
     T_f0: Field,
@@ -420,7 +420,7 @@ def reactivity_components(  # noqa: PLR0913 - two feedbacks, each with its own a
     return doppler, (w_void * alpha).sum(-1)
 
 
-def reactivity(  # noqa: PLR0913 - two feedbacks, each with its own axial weight
+def reactivity(  # noqa: PLR0913, PLR0917 - two feedbacks, each with its own axial weight
     T_f: Field,
     alpha: Field,
     T_f0: Field,
@@ -476,7 +476,7 @@ def precursor_derivatives(c: Field, power: Field, p: AxialParams) -> Field:
 
 
 # --- the coupled right-hand side -------------------------------------------
-def derivatives(  # noqa: PLR0913 - five coupled fields plus the driving terms
+def derivatives(  # noqa: PLR0913, PLR0917 - five coupled fields plus the driving terms
     t: Field,
     T_f: Field,
     T_cl: Field,
@@ -533,7 +533,7 @@ def derivatives(  # noqa: PLR0913 - five coupled fields plus the driving terms
     )
 
 
-def continuous_derivatives(  # noqa: PLR0913 - five coupled fields plus the driving terms
+def continuous_derivatives(  # noqa: PLR0913, PLR0917 - five coupled fields plus the driving terms
     t: Field,
     T_f: Field,
     T_cl: Field,

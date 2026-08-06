@@ -14,9 +14,10 @@ JAX/Equinox+Optax, and DeepXDE) learn the same non-dimensionalised residuals.
 
 ## Environment
 
-- **Python >= 3.12** (so it installs on Google Colab), managed with **uv**. Every
+- **Python >= 3.13**, managed with **uv**. Google Colab is *not* a target (the
+  axial PINN needs tens of minutes of CPU per run). Every
   module uses `from __future__ import annotations` for portability across
-  3.12-3.14 (e.g. `TYPE_CHECKING`-only names in runtime annotations).
+  3.13-3.14 (e.g. `TYPE_CHECKING`-only names in runtime annotations).
 - Core deps (`numpy`, `scipy`, `matplotlib`) are always installed. The three
   deep-learning backends are **optional extras** and import-guarded: importing
   `pinn_torch` / `pinn_jax` / `pinn_deepxde` without the extra raises `SystemExit`,
@@ -104,7 +105,7 @@ Broken inline LaTeX is a recurring problem — GitHub's renderer is strict. Rule
 ## CI / commits
 
 - `.github/workflows/test.yml` runs the suite on push/PR: a torch job (coverage
-  gate, Python 3.14), a JAX job (Python 3.12), and a core-only job (Python 3.12,
+  gate, Python 3.14), a JAX job (Python 3.13), and a core-only job (Python 3.13,
   verifies the import guards). Actions are pinned to a full commit SHA with the
   version in a trailing comment — keep that pattern when adding or bumping actions.
 - `pre-commit` runs ruff on commit and ty + pytest on push. Run
