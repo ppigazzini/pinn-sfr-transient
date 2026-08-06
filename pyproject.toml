@@ -168,6 +168,8 @@ known-first-party = ["pinn_sfr_transient"]
     "ANN",     # type annotations optional in tests (incl. pytest fixtures)
     "SLF001",  # tests deliberately exercise private members
     "E402",    # `importorskip` for an optional backend must precede its imports
+    "PLC0415", # ... and a cross-backend test must import the OTHER backend lazily,
+               #     so a job without it skips rather than errors at collection
     "INP001",  # tests/ is a collection dir, not an importable package
 ]
 "src/pinn_sfr_transient/pinn_deepxde.py" = [
@@ -200,6 +202,7 @@ exclude = [
     # Same reason as the 0D backend above: `torch.func.jvp` returns a tuple whose
     # arity ty cannot infer, and `requires_grad_` is missing from the stubs.
     "src/pinn_sfr_transient/axial/pinn_torch.py",
+    "src/pinn_sfr_transient/axial/pinn_jax.py",
 ]
 
 [tool.ty.rules]
@@ -224,7 +227,7 @@ source = ["pinn_sfr_transient"]
 branch = true
 # Optional backends not installed in the coverage job (the torch job): exclude
 # them so they don't drag the total. The JAX backend is covered by its own job.
-omit = ["*/pinn_deepxde.py", "*/pinn_jax.py"]
+omit = ["*/pinn_deepxde.py", "*/pinn_jax.py", "*/axial/pinn_jax.py"]
 
 [tool.coverage.report]
 show_missing = true
