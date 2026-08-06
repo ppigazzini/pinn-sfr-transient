@@ -41,7 +41,7 @@ from pinn_sfr_transient.axial.physics import (
     nodal_power,
     node_geometry,
     prompt_jump_power,
-    reactivity,
+    reactivity_components,
     unpack,
 )
 
@@ -73,6 +73,8 @@ class AxialTrajectory:
     c: FloatArray  # delayed-neutron precursors, shape (6, n_time)
     power: FloatArray  # normalised power P(t)/P_0
     rho: FloatArray  # net reactivity, absolute units — never dollars
+    rho_doppler: FloatArray  # Doppler component of `rho` (Eq. 4.5-3)
+    rho_void: FloatArray  # coolant-density/void component of `rho` (Eq. 4.5-25)
     flow: FloatArray  # mass flow rate w(t) [kg/s]
     H: float = 1.0  # active height [m], for the voided-length integral
     stopped_early: bool = False  # True if the run hit the validity limit
@@ -106,6 +108,29 @@ class AxialTrajectory:
         anything approaching 1 is outside the approximation, not a result.
         """
         return float(self.rho.max() / self._beta)
+
+    def void_worth_is_exercised(self, tol: float = 1e-6) -> bool:
+        """Report whether the void feedback ever inserted **positive** reactivity.
+
+        The sodium void worth changes sign near the top of the core, and boiling
+        starts at the top because that is where the coolant is hottest. If the
+        voided region never reaches below that sign change, every void
+        contribution is negative and the transient is self-limiting for a reason
+        that has nothing to do with the physics under study — the positive void
+        feedback this project exists to examine is simply never sampled.
+
+        Measured with the shipped defaults this is **False**: all voiding sits
+        above ``zeta_sign``, the void component spans -0.036 to 0 in units of
+        ``beta``, and :attr:`peak_rho_over_beta` is exactly 0. Report it
+        alongside the tripwire so a null result is never mistaken for a
+        stabilising one.
+
+        ``tol`` is a fraction of ``beta``, because the void integral picks up
+        positive values of order 1e-20 from the first few steps — roundoff in a
+        positive-worth cell whose ``alpha`` is numerically zero. A bare ``> 0``
+        answers "yes" to noise.
+        """
+        return bool(np.any(self.rho_void > tol * self._beta))
 
     _beta: float = 3.5e-3
 
@@ -317,14 +342,20 @@ def solve_reference(  # noqa: PLR0913 - solver knobs are clearer flat than bundl
     T_f, T_cl, T_s, T_c, alpha, c = unpack(sol.y, p.n_axial)
     if feedback:
         w_D, w_void = kinetics_weights(p)
-        rho = np.array(
-            [reactivity(T_f[:, i], alpha[:, i], T_f0, w_D, w_void, p) for i in range(sol.t.size)]
-        )
+        parts = [
+            reactivity_components(T_f[:, i], alpha[:, i], T_f0, w_D, w_void, p)
+            for i in range(sol.t.size)
+        ]
+        rho_doppler = np.array([d for d, _ in parts])
+        rho_void = np.array([v for _, v in parts])
+        rho = p.rho_ext + rho_doppler + rho_void
         power = np.array([prompt_jump_power(c[:, i], rho[i], p) for i in range(sol.t.size)])
     else:
         amp = amplitude if amplitude is not None else (lambda _t: 1.0)
         power = np.array([amp(float(t)) for t in sol.t])
         rho = np.zeros_like(power)
+        rho_doppler = np.zeros_like(power)
+        rho_void = np.zeros_like(power)
     return AxialTrajectory(
         t=sol.t,
         zeta=p.zeta_nodes(),
@@ -336,6 +367,8 @@ def solve_reference(  # noqa: PLR0913 - solver knobs are clearer flat than bundl
         c=c,
         power=power,
         rho=rho,
+        rho_doppler=rho_doppler,
+        rho_void=rho_void,
         flow=flow_rate(sol.t, p),
         H=p.H,
         _beta=p.beta_eff,
@@ -368,13 +401,20 @@ def energy_balance(
     property being tested. That convergence is checked separately, by
     ``test_discrete_power_converges_to_the_nominal_rating``.
 
+    **The amplitude comes from the trajectory, not from a default of one.**
+    ``traj.power`` is the normalised power actually delivered — the prescribed
+    ``amplitude`` sampled on the output grid under Plan B, and the prompt-jump
+    output under Plan A. Defaulting to one silently mis-stated the closed-loop
+    balance as **0.382** where the true figure is 1.5e-5, because feedback drives
+    the power down to 0.498 of nominal. Pass ``amplitude`` only to override.
+
     Returns the absolute closure error divided by the total energy delivered.
     """
     geo = node_geometry(p)
     f_nodes = p.power_shape(p.zeta_nodes())
     q_fuel, q_cool = nodal_power(1.0, f_nodes, p)
     p_discrete = float((q_fuel + q_cool).sum())
-    amp = np.ones_like(traj.t) if amplitude is None else np.array([amplitude(t) for t in traj.t])
+    amp = traj.power if amplitude is None else np.array([amplitude(t) for t in traj.t])
 
     # Sensible storage in the four materials, plus the LATENT heat locked up in
     # the vapour. Omitting the latent term would make the balance fail the moment

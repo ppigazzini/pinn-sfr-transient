@@ -324,18 +324,21 @@ N_GROUPS: int = 6
 """Delayed-neutron precursor groups (manual Eq. 4.3-1)."""
 
 
-def reactivity(  # noqa: PLR0913 - two feedbacks, each with its own axial weight
+def reactivity_components(  # noqa: PLR0913 - two feedbacks, each with its own axial weight
     T_f: Field,
     alpha: Field,
     T_f0: Field,
     w_D: Field,
     w_void: Field,
     p: AxialParams,
-) -> Field:
-    """Net reactivity from the axial fields (manual section 4.5).
+) -> tuple[Any, Any]:
+    """Return the two reactivity integrals separately, as ``(doppler, void)``.
 
-    Two mechanisms, both as the manual writes them and both as axial *integrals*
-    rather than lumped coefficients:
+    Split out from :func:`reactivity` because the *net* number hides which
+    mechanism produced it. Reporting ``max rho/beta = 0`` without the split led
+    this project to read a purely negative void term as "the closed loop is
+    self-limiting" when the void worth had simply never been sampled with a
+    positive sign — see :meth:`AxialTrajectory.void_worth_is_exercised`.
 
     * **Doppler, logarithmic** — ``delta_k_D = alpha_D ln(T_f/T_f0)`` (Eq. 4.5-3,
       integrated from ``T_f d(delta_k)/dT_f = alpha_D``), with ``alpha_D`` itself
@@ -347,13 +350,30 @@ def reactivity(  # noqa: PLR0913 - two feedbacks, each with its own axial weight
       onset.
 
     ``w_D`` and ``w_void`` are the per-segment weights times the axial cell width,
-    so the sums are quadratures. **No criticality offset is needed**: at nominal
-    ``T_f = T_f0`` and ``alpha = 0``, so both terms vanish identically and the
-    reactor is exactly critical — a free consequence of the logarithmic form.
+    so the sums are quadratures.
     """
     xp = _xp(T_f)
-    doppler = w_D * p.alpha_D(alpha) * xp.log(T_f / T_f0)
-    return p.rho_ext + doppler.sum(-1) + (w_void * alpha).sum(-1)
+    doppler = (w_D * p.alpha_D(alpha) * xp.log(T_f / T_f0)).sum(-1)
+    return doppler, (w_void * alpha).sum(-1)
+
+
+def reactivity(  # noqa: PLR0913 - two feedbacks, each with its own axial weight
+    T_f: Field,
+    alpha: Field,
+    T_f0: Field,
+    w_D: Field,
+    w_void: Field,
+    p: AxialParams,
+) -> Field:
+    """Net reactivity from the axial fields (manual section 4.5).
+
+    The sum of :func:`reactivity_components` and the external insertion.
+    **No criticality offset is needed**: at nominal ``T_f = T_f0`` and
+    ``alpha = 0``, so both integrals vanish identically and the reactor is
+    exactly critical — a free consequence of the logarithmic form.
+    """
+    doppler, void = reactivity_components(T_f, alpha, T_f0, w_D, w_void, p)
+    return p.rho_ext + doppler + void
 
 
 def prompt_jump_power(c: Field, rho: Field, p: AxialParams, floor: float = 0.05) -> Field:

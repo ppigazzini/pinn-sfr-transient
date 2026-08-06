@@ -34,6 +34,9 @@ from pinn_sfr_transient.config import _BETA_I_U235, _LAMBDA_I, FloatArray
 
 type Scalar = float | FloatArray
 
+_MIN_VOID_SHAPE_NORM: float = 1e-3
+"""Smallest usable mean of the void-worth shape; below it the normalisation blows up."""
+
 
 def _midpoints(n: int) -> FloatArray:
     """``n`` midpoint-rule abscissae on ``[0, 1]``."""
@@ -159,6 +162,17 @@ class AxialParams:
         # (deprecated there): the numpy floor is 1.26 so the package installs on
         # Colab without upgrading its numpy in-kernel.
         self.void_shape_norm = float(np.mean(self._void_shape(_midpoints(20001))))
+        # The shape changes sign, so its mean can be driven arbitrarily close to
+        # zero by `zeta_sign` — at which point `void_worth` explodes to keep the
+        # requested net. Catch that here rather than in a silently absurd worth.
+        if abs(self.void_shape_norm) < _MIN_VOID_SHAPE_NORM:
+            msg = (
+                f"void worth shape nearly integrates to zero "
+                f"(mean {self.void_shape_norm:.2e}) at zeta_sign={self.zeta_sign}; "
+                f"the positive and negative lobes cancel, so `void_worth_net` "
+                f"cannot be normalised"
+            )
+            raise ValueError(msg)
 
     def _validate(self) -> None:
         """Reject configurations that are geometrically or physically impossible."""
@@ -288,5 +302,19 @@ class AxialParams:
         return self.alpha_D_flooded + (self.alpha_D_voided - self.alpha_D_flooded) * a
 
     def steady_precursors(self, power: float = 1.0) -> FloatArray:
-        """Steady-state normalised precursor concentrations for the given power."""
-        return self.beta_i * power / (self.Lambda * self.lambda_i)
+        """Steady-state **normalised** precursor concentrations for the given power.
+
+        The axial model carries ``c_i = C_i / C_{i,0}`` with
+        ``C_{i,0} = beta_i / (Lambda lambda_i)``, so ``dc_i/dt = lambda_i (P - c_i)``
+        (Eq. 4.3-1 in normalised form) is steady exactly when ``c_i == P``. Every
+        group therefore sits at the same value, and at nominal power
+        ``P = sum(beta_i) / beta = 1``.
+
+        This previously returned the *absolute* ``C_i`` — the 0D model's
+        convention, where the precursors are unnormalised — which is about
+        ``5e4`` times too large for this model's state vector. It was never
+        called, because :func:`~pinn_sfr_transient.axial.reference.steady_state`
+        writes ``np.ones(N_GROUPS)`` directly, so the two definitions are now
+        pinned against each other in the tests rather than left to drift.
+        """
+        return np.full(self.lambda_i.shape, power, dtype=np.float64)
