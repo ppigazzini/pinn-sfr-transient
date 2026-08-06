@@ -305,12 +305,12 @@ was fit poorly ($L_2 \approx 0.3$); matching the init closed the gap. Both also
 seed the network before
 initialisation, so a run is reproducible from `cfg.seed` (PyTorch's init used to
 be drawn from entropy, which made roughly one run in four land in a bad basin).
-**A GPU speeds up both backends** ~5× on a Colab T4 — roughly a minute, down from
-several on its CPU — and both fit well there. The float64 this stiff problem needs
-is throttled on consumer GPUs (≈1/32–1/64 of FP32), so the margin is smaller than
-for an fp32 workload, but the T4 still clearly beats Colab's modest CPU. (PyTorch on a consumer GPU used to *diverge* here — that turned out to
-be the init bug above, not float64.) The CPU wall-clock varies a lot by Colab
-instance (we have seen anywhere from ~5 to ~13 min for the same workload), so treat
+**A GPU speeds up both backends** ~5× on an NVIDIA T4 — roughly a minute, down from
+several on a modest CPU — and both fit well there. The float64 this stiff problem
+needs is throttled on consumer GPUs (≈1/32–1/64 of FP32), so the margin is smaller
+than for an fp32 workload, but the T4 still clearly beats a modest CPU. (PyTorch on a consumer GPU used to *diverge* here — that turned out to
+be the init bug above, not float64.) The CPU wall-clock varies a lot by machine
+(we have seen anywhere from ~5 to ~13 min for the same workload), so treat
 any CPU figure as a rough guide — the cell prints the actual time. Use a **GPU, not
 a TPU**: TPUs do not support the
 required float64 (JAX falls back to CPU on a TPU runtime; torch cannot use a TPU).

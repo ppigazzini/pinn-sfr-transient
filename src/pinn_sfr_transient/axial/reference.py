@@ -437,21 +437,11 @@ def energy_balance(
         u_out * traj.alpha[-1] * sodium.vapor_density(T_sat) * sodium.latent_heat(T_sat) * p.A_c
     )
     net = amp * p_discrete - traj.flow * p.c_c * (traj.T_out - p.T_in) - latent_out
-    delivered = _trapezoid(amp * p_discrete, traj.t)
-    return float(abs((stored[-1] - stored[0]) - _trapezoid(net, traj.t)) / delivered)
+    delivered = np.trapezoid(amp * p_discrete, traj.t)
+    return float(abs((stored[-1] - stored[0]) - np.trapezoid(net, traj.t)) / delivered)
 
 
 def clad_coolant_heat(traj: AxialTrajectory, p: AxialParams) -> FloatArray:
     """Total cladding-to-coolant heat flow at each time [W] (diagnostic)."""
     geo = node_geometry(p)
     return clad_coolant_flux(traj.T_cl, traj.T_c, geo, p).sum(axis=0)
-
-
-def _trapezoid(y: FloatArray, x: FloatArray) -> float:
-    """Trapezoidal integral.
-
-    Hand-rolled because ``np.trapezoid`` needs numpy >= 2.0 and ``np.trapz`` is
-    deprecated there, while this package's floor is 1.26 so it installs on Colab
-    without upgrading numpy in the running kernel.
-    """
-    return float(0.5 * np.sum((y[1:] + y[:-1]) * np.diff(x)))

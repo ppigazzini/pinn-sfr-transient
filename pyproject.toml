@@ -3,9 +3,11 @@ name = "pinn-sfr-transient"
 version = "0.0.1"
 description = "Physics-Informed Neural Network for the SFR Unprotected-Loss-of-Flow transient (point kinetics + lumped thermal-hydraulics + positive sodium void feedback)."
 readme = "README.md"
-# 3.12 is the floor so the package installs on Google Colab (currently 3.12.x);
-# tested on 3.12 (min) and 3.14 in CI.
-requires-python = ">=3.12"
+# 3.13 is the floor; tested on 3.13 (min) and 3.14 in CI. **Google Colab support
+# was dropped deliberately** — the axial PINN needs tens of minutes of CPU per
+# run, so a hosted 3.12 runtime was never going to be the place to train it, and
+# holding the floor there cost a numpy-1.x compatibility shim for no benefit.
+requires-python = ">=3.13"
 license = "BlueOak-1.0.0"
 license-files = ["LICENSE"]
 authors = [{ name = "Pasquale Pigazzini", email = "pasquale.pigazzini@gmail.com" }]
@@ -14,7 +16,6 @@ keywords = ["pinn", "scientific-machine-learning", "nuclear", "sfr", "point-kine
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
-    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Physics",
@@ -22,15 +23,15 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    # Floors are deliberately conservative (the code only uses long-stable
-    # solve_ivp / numpy / matplotlib APIs). Keeping them at or below the stack
-    # Google Colab pre-installs means `pip install` there does NOT upgrade
-    # numpy/scipy in the running kernel — an in-session upgrade corrupts the
-    # numpy/scipy ABI (`ImportError: cannot import name '_center'`). uv/CI still
-    # resolve to the latest versions.
-    "numpy>=1.26",
-    "scipy>=1.11",
-    "matplotlib>=3.7",
+    # Floors track the current release rather than the oldest workable one. The
+    # conservative floors this replaced existed to match Google Colab's
+    # pre-installed stack, which is no longer a target; `uv.lock` pins the exact
+    # resolution for reproducibility, so a high floor costs nothing and rules out
+    # a class of "works on my resolution" bug. numpy >= 2 also lets the package
+    # use `np.trapezoid` instead of carrying its own copy.
+    "numpy>=2.5.1",
+    "scipy>=1.18",
+    "matplotlib>=3.11.1",
 ]
 
 [project.optional-dependencies]
@@ -38,22 +39,22 @@ dependencies = [
 # builds are mutually exclusive (see [tool.uv] conflicts); the two frameworks can
 # coexist (e.g. `--extra torch-cpu --extra jax-cpu`).
 #
-# PyTorch backend (torch >= 2.12; CPython 3.12-3.14):
+# PyTorch backend (torch >= 2.13; CPython 3.13-3.14):
 #   uv sync --extra torch-cpu   # small CPU-only wheel from the PyTorch CPU index
 #   uv sync --extra torch-gpu   # CUDA build from PyPI (large: pulls the nvidia stack)
-torch-cpu = ["torch>=2.12.1"]
-torch-gpu = ["torch>=2.12.1"]
+torch-cpu = ["torch>=2.13"]
+torch-gpu = ["torch>=2.13"]
 # JAX backend (Equinox model + Optax optimisers). jax's CUDA wheels are on PyPI,
 # so no custom index is needed:
 #   uv sync --extra jax-cpu     # CPU-only jaxlib
 #   uv sync --extra jax-gpu     # CUDA jaxlib (pulls the nvidia stack)
-jax-cpu = ["jax>=0.4.34", "equinox>=0.11", "optax>=0.2.4"]
-jax-gpu = ["jax[cuda12]>=0.4.34", "equinox>=0.11", "optax>=0.2.4"]
+jax-cpu = ["jax>=0.11", "equinox>=0.13.8", "optax>=0.2.8"]
+jax-gpu = ["jax[cuda12]>=0.11", "equinox>=0.13.8", "optax>=0.2.8"]
 # DeepXDE variant — needs a torch backend, so combine with one:
 #   uv sync --extra deepxde --extra torch-cpu
 deepxde = ["deepxde>=1.15"]
 # Interactive walkthrough notebooks (notebooks/).
-notebook = ["jupyterlab>=4.6", "ipykernel>=7.3"]
+notebook = ["jupyterlab>=4.6.2", "ipykernel>=7.3"]
 
 [project.urls]
 Homepage = "https://github.com/ppigazzini/pinn-sfr-transient"
@@ -66,14 +67,14 @@ pinn-sfr = "pinn_sfr_transient.cli:main"
 # PEP 735 development dependency group (installed by `uv sync`).
 [dependency-groups]
 dev = [
-    "ruff>=0.15",
-    "ty>=0.0.51",
-    "pre-commit>=4.6",
-    "pytest>=9.1",
+    "ruff>=0.16.1",
+    "ty>=0.0.69",
+    "pre-commit>=4.6.1",
+    "pytest>=9.1.1",
     "pytest-cov>=7.1",
     # Strips notebook outputs on commit so figure binaries are never committed
     # (they live once under docs/img/); pulls in nbformat for notebook tooling.
-    "nbstripout>=0.8",
+    "nbstripout>=0.9.1",
 ]
 
 [build-system]
@@ -113,7 +114,7 @@ torch = [{ index = "pytorch-cpu", extra = "torch-cpu" }]
 # ----------------------------------------------------------------------------
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py313"
 src = ["src", "tests"]
 # Notebooks use compact, idiomatic cell style (inline imports, semicolons in
 # plotting cells); lint the package, not the teaching notebook.
@@ -136,6 +137,12 @@ ignore = [
     # --- Deliberate, user-facing console output (CLI summary + training logs) -
     "T201",  # print
 
+    # --- Licensing: the project states its licence once, in SPDX form ----------
+    # PEP 639 `license = "BlueOak-1.0.0"` plus `license-files` is the single
+    # source of truth (see the note by the classifiers). Per-file copyright
+    # headers would be a second, drifting copy of it.
+    "CPY001",  # missing-copyright-notice
+
     # --- Domain/third-party conventions --------------------------------------
     "FBT003",   # boolean positional in *calls* (e.g. torch `requires_grad_(True)`)
     "ERA001",   # "commented-out code" misfires on math derivations written as comments
@@ -143,7 +150,7 @@ ignore = [
 
     # --- Annotations -----------------------------------------------------------
     # Every module uses `from __future__ import annotations` (portable across
-    # 3.12-3.14); keep dataclass/annotation imports at module scope rather than
+    # 3.13-3.14); keep dataclass/annotation imports at module scope rather than
     # forcing them into TYPE_CHECKING blocks.
     "TC001",
     "TC002",
@@ -184,7 +191,7 @@ docstring-code-format = true
 # ty  (type checker)
 # ----------------------------------------------------------------------------
 [tool.ty.environment]
-python-version = "3.12"
+python-version = "3.13"
 
 [tool.ty.src]
 # Type-check the package source. Tests lean on dynamic fixtures, monkeypatching

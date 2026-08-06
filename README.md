@@ -30,8 +30,8 @@ The PINN has **two equally first-class backends** — PyTorch and JAX — solvin
 same residuals (compared in [`docs/neural_network.md`](docs/neural_network.md) §9).
 Each is an optional extra with a CPU build (small, recommended) and a CUDA build
 (`-gpu`). Both train on the *same* optimisation budget and fit comparably; a GPU
-speeds them up ~5× on a Colab T4 (about a minute, vs several on CPU — varies by
-instance):
+speeds them up ~5× on an NVIDIA T4 (about a minute, vs several on CPU — varies by
+machine):
 
 ```bash
 uv sync --extra torch-cpu  && uv run python -m pinn_sfr_transient.pinn_torch    # PyTorch

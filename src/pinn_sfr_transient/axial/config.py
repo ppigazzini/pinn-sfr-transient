@@ -158,9 +158,9 @@ class AxialParams:
         rel = _BETA_I_U235 / _BETA_I_U235.sum()
         self.beta_i = rel * self.beta_eff
         # Normalisation making `void_worth` integrate to `void_worth_net`.
-        # Midpoint rule, not `np.trapezoid` (numpy >= 2.0 only) or `np.trapz`
-        # (deprecated there): the numpy floor is 1.26 so the package installs on
-        # Colab without upgrading its numpy in-kernel.
+        # Midpoint rule on purpose, not `np.trapezoid`: the shape vanishes at
+        # both endpoints, where the trapezoid rule spends its two samples, and
+        # the midpoint rule is the same order for half the evaluations.
         self.void_shape_norm = float(np.mean(self._void_shape(_midpoints(20001))))
         # The shape changes sign, so its mean can be driven arbitrarily close to
         # zero by `zeta_sign` — at which point `void_worth` explodes to keep the

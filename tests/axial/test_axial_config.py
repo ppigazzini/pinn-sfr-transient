@@ -18,7 +18,7 @@ from pinn_sfr_transient.config import SFRParams
 
 
 def _midpoint_integral(f, n=20001):
-    """Integral over [0, 1] by the midpoint rule (numpy-1.26 safe)."""
+    """Integral over [0, 1] by the midpoint rule."""
     zeta = (np.arange(n, dtype=np.float64) + 0.5) / n
     return float(np.mean(f(zeta)))
 
