@@ -457,6 +457,25 @@ prescribed. Extending it needs a second network for the precursors (functions of
 acceptance criterion "reference and PINN agree on peak power and time" is
 therefore **unverified**.
 
+### 6.5 The reference is not converged in the void fraction
+
+Found during the M7 bug hunt, and it changes how every PINN number must be read:
+
+| reference `n = 40` vs `n = 320` | T_f | T_cl | T_c | **alpha** |
+|---|---|---|---|---|
+| relative `L2` | 5.1e-3 | 7.2e-3 | 5.4e-3 | **1.03e-1** |
+
+The temperatures are converged to ~5e-3, but the **void fraction is ~10% wrong at
+`n_axial = 40`** — first-order upwind with a front spanning 2–6 cells. The M2
+convergence study measured its orders on the **non-boiling** case, so this went
+unmeasured; that is a gap in the test design, not in the solver. Everything §5
+claims about the reference — exact steady state, energy conservation, convergence
+orders — was verified on that basis and stands.
+
+Consequence: score the PINN against `n_axial >= 160`, and judge `α` on voided
+length and onset rather than a pointwise norm across an unconverged front. See
+[`axial_nn.md`](axial_nn.md) §6.
+
 ## 7. Known gaps and honest limits
 
 **Two energy-conservation defects, both found by the balance check:**
@@ -490,4 +509,5 @@ this model should be quoted as a physical prediction.
 | **M4** | Boiling onset and void field | **done** |
 | **M5** | Film / dryout heat path (§12.5.1) | **done** |
 | **M6** | Prompt-jump kinetics closure — Plan B → Plan A | **reference done; PINN not extended** |
-| M7–M9 | Hardening, Chapter 12 comparison, parametric sweep | not started |
+| **M7** | Hardening, seeds, JAX port | see [`axial_nn.md`](axial_nn.md) |
+| M8–M9 | Chapter 12 single-bubble comparison, parametric sweep | not started |
