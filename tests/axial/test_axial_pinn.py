@@ -27,6 +27,7 @@ from pinn_sfr_transient.axial.physics import (
     residual_scales,
 )
 from pinn_sfr_transient.axial.pinn_torch import (
+    FIELDS,
     AxialPinn,
     AxialTrainConfig,
     Trainer,
@@ -210,7 +211,10 @@ def test_a_shorter_training_horizon_rescales_normalised_time_consistently():
     frac = 0.275
     m = AxialPinn(p, AxialTrainConfig(width=8, depth=2, t_train_frac=frac))
     assert m.t_end == pytest.approx(p.t_end * frac)
-    np.testing.assert_allclose(m.res_norm, residual_normalisation(p, m.t_end), rtol=1e-14)
+    # res_norm carries one extra entry for the interface block; compare the fields.
+    np.testing.assert_allclose(
+        m.res_norm[: len(FIELDS)], residual_normalisation(p, m.t_end), rtol=1e-14
+    )
     # t = 0 is still exactly the steady state, and the inlet is still pinned.
     zeta = np.linspace(0.0, 1.0, 9)
     np.testing.assert_allclose(
@@ -516,3 +520,48 @@ def test_void_closure_is_differentiable_where_the_switch_is_off():
     T = torch.tensor([700.0, 900.0, 1169.0, 1200.0], dtype=torch.float64, requires_grad=True)
     (grad,) = torch.autograd.grad(quasi_steady_void(T, p).sum(), T)
     assert bool(torch.isfinite(grad).all())
+
+
+# --- M8 option 2: the front-position network (measured worse; kept as a knob) --
+def test_front_network_adds_an_interface_block_and_a_level_set_input():
+    """`z_f(t)` gives a fifth block and a third network input, `phi = zeta - z_f`."""
+    p = AxialParams()
+    off = AxialPinn(p, AxialTrainConfig(width=16, depth=2))
+    on = AxialPinn(p, AxialTrainConfig(width=16, depth=2, front_net=True))
+    assert not off.use_front
+    assert on.use_front
+    assert (off.n_blocks, on.n_blocks) == (4, 5)
+    assert off.net.net[0].in_features == 2
+    assert on.net.net[0].in_features == 3
+
+
+def test_front_network_keeps_every_hard_constraint():
+    """The extra input channel must not loosen the IC, the inlet, or the void bound."""
+    p = AxialParams()
+    m = AxialPinn(p, AxialTrainConfig(width=16, depth=2, front_net=True))
+    zeta = np.linspace(0.0, 1.0, 17)
+    np.testing.assert_allclose(
+        m.predict(zeta, np.array([0.0]))[3], steady_profile(p, zeta)[3][:, None], atol=1e-9
+    )
+    np.testing.assert_allclose(m.predict(np.array([0.0]), np.linspace(0, 20, 5))[3], p.T_in, atol=0)
+    a = m.predict(zeta, np.linspace(0, 20, 5))[4]
+    assert a.min() >= 0.0
+    assert a.max() <= 1.0
+
+
+def test_front_position_can_leave_the_channel_to_mean_no_front():
+    """Before onset there is no interface to pin, so `z_f` must be free to exceed 1."""
+    p = AxialParams()
+    m = AxialPinn(p, AxialTrainConfig(width=16, depth=2, front_net=True))
+    z_f = m.front_position(torch.linspace(0, 1, 21, dtype=torch.float64).reshape(-1, 1)).detach()
+    assert float(z_f.min()) > 0.0
+    assert float(z_f.max()) < 1.25 + 1e-12
+
+
+def test_front_residual_is_masked_off_while_the_outlet_is_subcooled():
+    """The interface condition has no solution before the channel top boils."""
+    p = AxialParams()
+    m = AxialPinn(p, AxialTrainConfig(width=16, depth=2, front_net=True))
+    # Untrained: the outlet sits at the steady profile, far below saturation.
+    r = m.front_residual(torch.zeros(8, 1, dtype=torch.float64)).detach()
+    assert float(r.abs().max()) == 0.0
