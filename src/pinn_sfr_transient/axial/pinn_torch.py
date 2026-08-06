@@ -36,9 +36,11 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from pinn_sfr_transient.axial import sodium
 from pinn_sfr_transient.axial.config import AxialParams
 from pinn_sfr_transient.axial.physics import (
     N_GROUPS,
+    boiling_fraction,
     continuous_derivatives,
     kinetics_weights,
     line_geometry,
@@ -129,6 +131,30 @@ class AxialTrainConfig:
     # prompt neutron mode. Removes a residual block whose normalised rate is 8.5e4
     # and lets the front appear analytically where `T_c` crosses saturation.
     void_closure: bool = True
+
+    # Milestone M8, option 2: a second network for the front position `z_f(t)`,
+    # following Chang, Lin & Lai (arXiv:2512.14010). Requires `void_closure`,
+    # under which the front IS the level set `T_c = T_sat + DTS`, so the front
+    # network adds no new information -- its value is mechanical:
+    #   * a dedicated, localised residual for a front the field residual averages
+    #     over a domain in which it occupies 2%;
+    #   * `phi = zeta - z_f(t)` as a third network input, which is what lets `T_c`
+    #     carry a kink at the front -- the mechanism that attacks `T_c`, and `T_c`
+    #     is now what bounds the front's accuracy;
+    #   * collocation concentrated on the front, which RAR cannot supply because it
+    #     samples by residual magnitude and the front residual is small everywhere.
+    # It also makes onset time and location direct network outputs, which is the
+    # form the M4 acceptance criteria ask for.
+    # **Default off: measured worse on every metric.** Three seeds against
+    # option 1 alone: T_f +1.6%, T_cl +1.3%, T_s +2.8%, T_c +3.0%, onset time
+    # +2.1%, voided length -27%, and `max alpha` fell from 1.0000 to 0.92 because
+    # one seed's front only half formed. The prediction that motivated it holds
+    # against it: under `void_closure` the interface condition is *implied* by
+    # `T_c`, so the block adds a competing loss term and no information, and the
+    # three mechanical benefits do not pay for it. Kept as a knob with the
+    # measurement, like the other remedies in `docs/axial_nn.md`.
+    front_net: bool = False
+    front_frac: float = 0.25  # share of collocation drawn near the predicted front
 
     # Residual-based adaptive refinement [Wu et al. 2023]
     rar_every: int = 2000
@@ -252,11 +278,13 @@ class AxialPinn(nn.Module):
         self.p = p
         self.cfg = cfg
         torch.manual_seed(cfg.seed)  # before init: nn.init draws from the global RNG
-        n_in = 2
+        n_in = 3 if (cfg.front_net and cfg.void_closure) else 2
         self.embed: nn.Module | None = None
         if cfg.fourier_features:
             self.embed = (
-                FourierEmbedding(2, cfg.fourier_features, cfg.fourier_scale).to(cfg.device).double()
+                FourierEmbedding(n_in, cfg.fourier_features, cfg.fourier_scale)
+                .to(cfg.device)
+                .double()
             )
             n_in = 2 * cfg.fourier_features
         core = (
@@ -269,6 +297,14 @@ class AxialPinn(nn.Module):
         # one-input network rather than a head on the (zeta, t) field network.
         kin = MLP(N_GROUPS, cfg.width // 2, 2, n_in=1) if cfg.feedback else None
         self.kin = kin.to(cfg.device).double() if kin is not None else None
+        # Front-position network: t_hat -> z_f. One input, one output, so it is
+        # cheap next to the field network.
+        self.use_front = bool(cfg.front_net and cfg.void_closure)
+        self.front = (
+            MLP(1, max(8, cfg.width // 4), 2, n_in=1).to(cfg.device).double()
+            if self.use_front
+            else None
+        )
         self.geo = line_geometry(p)
         # Fixed axial quadrature for the reactivity integrals (deviation note
         # section 3.5a of the plan): RAR may add arbitrary points to the field
@@ -281,11 +317,15 @@ class AxialPinn(nn.Module):
         # `p.t_end` — see `AxialTrainConfig.t_train_frac`.
         self.t_end = float(p.t_end) * cfg.t_train_frac
         # Variable scaling per residual block; ones when disabled.
-        # The void block is absent when it is closed algebraically.
-        self.n_blocks = N_TEMPS if cfg.void_closure else len(FIELDS)
+        # The void block is absent when it is closed algebraically; the interface
+        # block replaces it when the front network is on.
+        self.n_fields = N_TEMPS if cfg.void_closure else len(FIELDS)
+        self.n_blocks = self.n_fields + (1 if self.use_front else 0)
         self.res_norm: tuple[float, ...] = (
             residual_normalisation(p, self.t_end) if cfg.residual_scaling else (1.0,) * len(FIELDS)
         )
+        # The interface residual is already dimensionless and O(1).
+        self.res_norm = (*self.res_norm, 1.0)
         # Precursors carry their own rate per group, `t_end * lambda_i`.
         lam = torch.tensor(p.lambda_i, dtype=torch.float64)
         self.c_norm = 1.0 / (self.t_end * lam) if cfg.residual_scaling else torch.ones_like(lam)
@@ -346,7 +386,12 @@ class AxialPinn(nn.Module):
         is correct: its only coupling is to the coolant, held at ``T_in`` there by
         the inlet condition.
         """
-        x = torch.cat([zeta, that], dim=1)
+        if self.use_front:
+            # Signed distance to the front. A field that is kinked in (zeta, t) is
+            # smooth in phi, which is what lets `T_c` carry the kink at all.
+            x = torch.cat([zeta, that, zeta - self.front_position(that)], dim=1)
+        else:
+            x = torch.cat([zeta, that], dim=1)
         raw = self.net(self.embed(x) if self.embed is not None else x)
         temps = self.theta0(zeta)[:, :N_TEMPS] * _bounded_exp(that * raw[:, :N_TEMPS])
         if self.cfg.void_closure:
@@ -358,6 +403,33 @@ class AxialPinn(nn.Module):
             gate = torch.tanh(_ALPHA_GATE * that) * torch.tanh(_ALPHA_GATE * zeta)
             alpha = gate * torch.sigmoid(raw[:, N_TEMPS : N_TEMPS + 1])
         return torch.cat([temps, alpha], dim=1)
+
+    def front_position(self, that: torch.Tensor) -> torch.Tensor:
+        """Predicted front height ``z_f(t_hat)``, in normalised height.
+
+        Mapped into ``(0, _FRONT_MAX)`` so the network can place the front *above*
+        the channel, which is how it says "no front yet" — the state for the first
+        third of this transient. Values above one are never evaluated as a field
+        position; they only switch the interface residual off through its mask.
+        """
+        return _FRONT_MAX * torch.sigmoid(self.front(that))
+
+    def front_residual(self, that: torch.Tensor) -> torch.Tensor:
+        """Squared interface residual ``[T_c(z_f, t) - T_sat - dT_sup] / dT``.
+
+        Masked by ``b(T_c(1, t))``, the superheat switch at the channel outlet: a
+        front exists inside the channel only once the top is boiling, and before
+        that the condition has no solution to pin. The mask is the network's own
+        output, so nothing here consults the reference.
+        """
+        p = self.p
+        z_f = self.front_position(that)
+        T_c_front = self.p.T_in + self.normalised_state(z_f, that)[:, 3:4] * self.dT
+        top = torch.ones_like(that)
+        T_c_top = self.p.T_in + self.normalised_state(top, that)[:, 3:4] * self.dT
+        mask = boiling_fraction(T_c_top, p)
+        T_boil = sodium.saturation_temperature(p.p_system) + p.dT_superheat
+        return (mask * (T_c_front - T_boil) / self.dT).pow(2).squeeze(1)
 
     def state_and_grads(
         self, zeta: torch.Tensor, that: torch.Tensor
@@ -425,8 +497,10 @@ class AxialPinn(nn.Module):
             .pow(2)
             .reshape(n_t, n_z)
             .mean(1)
-            for k in range(self.n_blocks)
+            for k in range(self.n_fields)
         ]
+        if self.use_front:
+            blocks.append(self.front_residual(that))
 
         # Precursors: dc_i/dt_hat = t_end * lambda_i (P - c_i), Eq. 4.3-1 in
         # normalised time. Averaged over the six groups, as the 0D model does.
@@ -457,10 +531,13 @@ class AxialPinn(nn.Module):
         # so it only picks up the time scale. `res_norm` then divides each block
         # by its own characteristic rate so all five are O(1) (variable scaling).
         scales = [self.t_end / self.dT] * N_TEMPS + [self.t_end]
-        return tuple(
+        blocks = [
             ((d_dt[:, k : k + 1] - scales[k] * rhs[k]) * self.res_norm[k]).pow(2).squeeze(1)
-            for k in range(self.n_blocks)
-        )
+            for k in range(self.n_fields)
+        ]
+        if self.use_front:
+            blocks.append(self.front_residual(that))
+        return tuple(blocks)
 
     @torch.no_grad()
     def predict_power(self, t: FloatArray) -> tuple[FloatArray, FloatArray]:
@@ -495,6 +572,9 @@ class AxialPinn(nn.Module):
         fields = self.to_physical(self.normalised_state(z, h))
         return tuple(f.cpu().numpy().reshape(zz.shape) for f in fields)
 
+
+_FRONT_MAX: float = 1.25
+"""Upper bound on the predicted front height; above 1.0 means "no front in the channel"."""
 
 _ALPHA_GATE: float = 10.0
 """Sharpness of the void gate; large enough to saturate away from the boundaries."""
@@ -655,12 +735,26 @@ class Trainer:
         pts[:, 1] *= t_max
         early = torch.rand(n // 2, 2, dtype=torch.float64, device=self.dev)
         early[:, 1] *= 0.4 * t_max  # fastest dynamics live early in the window
-        allp = (
-            torch.cat([pts, early, self.rar], dim=0)
-            if self.rar.numel()
-            else torch.cat([pts, early], dim=0)
-        )
+        parts = [pts, early, *([self.rar] if self.rar.numel() else [])]
+        if self.model.use_front and self.cfg.front_frac > 0.0:
+            parts.append(self._front_points(int(n * self.cfg.front_frac), t_max))
+        allp = torch.cat(parts, dim=0)
         return allp[:, 0:1], allp[:, 1:2]
+
+    @torch.no_grad()
+    def _front_points(self, n: int, t_max: float) -> torch.Tensor:
+        """Collocation clustered on the predicted front.
+
+        RAR cannot supply these: it samples by residual magnitude, and once the
+        void is closed algebraically the field residual is small *everywhere*,
+        including across the front. The front's own position is the only signal
+        left that says where the interesting 2% of the domain is.
+        """
+        that = torch.rand(n, 1, dtype=torch.float64, device=self.dev) * t_max
+        z_f = self.model.front_position(that)
+        spread = 0.05 * torch.randn(n, 1, dtype=torch.float64, device=self.dev)
+        zeta = (z_f + spread).clamp(0.0, 1.0)
+        return torch.cat([zeta, that], dim=1)
 
     def _anchor_points(self, t_max: float) -> tuple[torch.Tensor, torch.Tensor]:
         """Build a genuine ``(zeta, t_hat)`` pair for the pseudo-time anchor.
