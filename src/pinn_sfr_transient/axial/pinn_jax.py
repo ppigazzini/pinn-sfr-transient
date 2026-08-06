@@ -73,10 +73,10 @@ _NEWTON_ITERS: int = 5
 _EXP_BOUND: float = 4.0
 """Bound on the exponent of the multiplicative ansatz; see the torch twin."""
 
-_ALPHA_BIAS: float = 4.0
-"""Offset making the void head start near zero rather than near one half.
+"""The void head starts at ``sigmoid(0) ~ 0.5``, as in the torch twin.
 
-Must match the torch twin, where the measurement behind the value is recorded.
+Biasing it toward zero was tried and measured away; the torch module records the
+numbers and ``docs/axial_nn.md`` section 7.1 the table.
 """
 
 
@@ -214,7 +214,7 @@ def normalised_state(
     base = theta0(p, zeta)
     temps = base[:N_TEMPS] * _bounded_exp(that * raw[:N_TEMPS])
     gate = jnp.tanh(_ALPHA_GATE * that) * jnp.tanh(_ALPHA_GATE * zeta)
-    alpha = gate * jax.nn.sigmoid(raw[-1:] - _ALPHA_BIAS)
+    alpha = gate * jax.nn.sigmoid(raw[-1:])
     return jnp.concatenate([temps, alpha])
 
 

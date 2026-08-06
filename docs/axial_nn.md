@@ -83,22 +83,23 @@ The exponent is bounded, `exp(S·tanh(x/S))` with `S = 4`, so it cannot overflow
 the reference needs at most a 9.6× growth in excess temperature against the `e⁴ ≈ 55×`
 allowed, so the ceiling never binds and `tanh` stays in its linear region.
 
-**The void half of the ansatz carried the opposite defect, and it was the mirror
-image of the one above.** The temperatures start *exactly* on the steady profile,
-because `exp(0) = 1`. The void started at `sigmoid(raw) ≈ 0.5` at every interior
-point, because the output layer is initialised `U(±1/√width)` — while the
-reference `α` is identically zero over ~96% of the channel and over all of
-`t < 10.8 s`. So iteration zero began roughly 50× too voided everywhere, and the
-void is not an inert output: it degrades `film_coefficient` (halving `h_ec` and
-`h_sc`), shifts `α_D` between its flooded and voided values, and enters the
-reactivity integral of Eq. 4.5-25. The fix is one constant — `sigmoid(raw − 4)`,
-so `α ≈ 0.018` at initialisation with the local gradient still at 0.018, nowhere
-near the saturated tail. Identical in both backends and asserted equal between
-them.
+**The void half of the ansatz carries the mirror-image asymmetry — and the
+obvious cure was measured and rejected.** The temperatures start *exactly* on the
+steady profile, because `exp(0) = 1`. The void starts at `sigmoid(raw) ≈ 0.5` at
+every interior point, because the output layer is initialised `U(±1/√width)` —
+while the reference `α` is identically zero over ~96% of the channel and over all
+of `t < 10.8 s`. Iteration zero therefore begins roughly 50× too voided
+everywhere, and `α` is not an inert output: it degrades `film_coefficient`
+(halving `h_ec` and `h_sc`), shifts `α_D` between its flooded and voided values,
+and enters Eq. 4.5-25.
 
-This is the same failure as the additive-temperature one — an ansatz that makes
-an unphysical region cheap to sit in — found the same way, by asking what the
-untrained network actually predicts rather than by trying another remedy.
+The asymmetry is real. The one-constant cure, `sigmoid(raw − 4)` so that
+`α ≈ 0.018` at initialisation, is not: see §7.1 for the three-seed table. It is
+**reverted**, and this paragraph is what survives, because the measurement is
+worth more than the change would have been. This is the sixth remedy in this
+document to be proposed on a sound argument and then fail its ablation, and the
+first one proposed by an audit rather than by the literature — which does not
+make it different.
 
 **Admissibility, checked before adopting**: `θ₀ ≥ 0` for all four fields, zero only
 at `ζ = 0` for the coolant and structure — exactly where the boundary condition
@@ -270,9 +271,50 @@ systematic rather than variance. **This table is superseded** — it predates bo
 the positivity fix and the discovery that the reference is unconverged in `α`
 (§6.4). It is kept because it is the only multi-seed evidence that exists.
 
-**Post-fix multi-seed table: TBD.** Only seed 0 was measured after the fix
-(§5.1); the 3-seed × 2-backend run scored against a converged reference was
-launched and did not complete.
+**Post-fix multi-seed table, scored against `n_axial = 160`** — three seeds,
+torch, Plan B, 3000 Adam + 300 L-BFGS, multiplicative ansatz, with and without
+the void-head bias of §2:
+
+| bias | seed | T_f | T_cl | T_s | T_c | `max α` |
+|---|---|---|---|---|---|---|
+| 0 | 0 | 0.078 | 0.117 | 0.036 | 0.038 | 0.0008 |
+| 0 | 1 | 0.454 | 0.173 | 0.084 | 0.088 | 0.0000 |
+| 0 | 2 | 0.978 | 0.389 | 0.082 | 0.215 | 0.9916 |
+| 4 | 0 | 0.156 | 0.165 | 0.099 | 0.118 | 0.0000 |
+| 4 | 1 | 0.137 | 0.243 | 0.123 | 0.143 | 0.9917 |
+| 4 | 2 | 0.253 | 0.272 | 0.087 | 0.110 | 0.0000 |
+| **mean, bias 0** | | **0.503** | 0.226 | **0.068** | **0.114** | |
+| **mean, bias 4** | | **0.182** | 0.227 | 0.103 | 0.124 | |
+
+Three things, in order of how much they matter:
+
+1. **Seed variance dominates everything else.** `T_f` at bias 0 spans 0.078 to
+   0.978 — a **12.5× spread on three seeds**. Any single-seed comparison in this
+   model, including several already in this document, is measuring noise. This is
+   also why the earlier one-seed read of the bias ablation looked decisive and
+   was not.
+2. **The void field is bimodal, not inaccurate.** `max α` is either ~0 or ~0.99
+   against a reference maximum of 1.0 — the boiling front either switches on or
+   never appears, two seeds out of six getting it. That is a training bistability,
+   and it is not something an accuracy metric can describe. `L_void` is
+   correspondingly 0.000 m or ~0.04 m against the reference's 0.381 m.
+3. **The void-head bias does not earn its place.** It improves the `T_f` mean and
+   cuts its spread to 1.8×, and it is neutral-to-worse on the other three fields.
+   Reverted (§2).
+
+Reproduced with `ref n_axial = 160`, so unlike §7.1's superseded table this one is
+scored against a converged ruler — the M7.5 item. Note that the temperatures were
+**not** the thing the ruler was hiding: they are 4–98% wrong, far above the
+reference's own 5e-3.
+
+**The gradient-norm block weights diverge, and that is the remaining suspect made
+measurable.** Final weights from the same six runs: `w(T_f)` reaches
+**3.1e5 to 6.2e6** while `w(α)` pins at **0.451** in four of six runs, identical
+to three digits across independent seeds. The scheme sets `λ_k = mean(g)/g_k`
+with no normalisation and momentum 0.9, so nothing bounds the weights and they
+grow monotonically through training — the reported loss rises from 2.1e2 to 2.4e5
+for that reason alone, not because the fit is worsening. That is where the next
+diagnosis should go.
 
 ### 7.2 Backend parity
 
@@ -309,9 +351,19 @@ same **budget**. JAX defaulted to 3000 Adam / 300 L-BFGS / RAR every 1000 agains
 torch's 8000 / 500 / 2000, so the default-configuration comparison was never
 like-for-like. The defaults now match.
 
-Still untested: the gradient-norm block weights settling to different values.
-**Post-fix parity numbers and multi-seed statistics: TBD** — both are compute,
-not development.
+**Post-fix parity, seed 0, 3000 Adam + 300 L-BFGS, scored against `n = 160`:**
+
+| | T_f | T_cl | T_s | T_c |
+|---|---|---|---|---|
+| torch | 0.133 | 0.167 | 0.089 | 0.114 |
+| jax | 0.172 | 0.219 | 0.112 | 0.103 |
+| **ratio** | 1.29× | 1.31× | 1.26× | 0.90× |
+
+**3–10× has become 0.9–1.3×.** The two backends also start from near-identical
+losses (2.098e2 against 2.054e2). Given §7.1's 12.5× seed spread, one seed cannot
+establish "statistically indistinguishable" and this table does not claim it —
+but the systematic gap that made D40 a defect is gone. Multi-seed parity
+statistics remain TBD; that is compute, not development.
 
 ### 7.3 Optimiser bake-off
 
