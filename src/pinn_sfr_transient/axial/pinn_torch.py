@@ -180,19 +180,33 @@ class AxialPinn(nn.Module):
 
         Three constraints, none of them in the loss:
 
-        * initial condition — the ``t_hat`` factor makes ``t = 0`` exact;
-        * coolant inlet — the extra ``zeta`` pins ``T_c(0, t) = T_in``;
+        * initial condition — ``exp(0) = 1``, so ``t = 0`` is exact;
+        * **positivity** — ``theta_0 >= 0`` and the exponential is positive, so
+          every temperature stays at or above the inlet, ``T >= T_in``;
+        * coolant inlet — ``theta_c0(0) = 0``, so the multiplicative form pins
+          ``T_c(0, t) = T_in`` for free, with no separate gate;
         * void — the fifth column is a **sigmoid**, so ``alpha`` cannot leave
           ``[0, 1)`` for any weights, and its own gate enforces both that the
           channel starts void-free and that no void crosses the subcooled inlet.
           The void equation is advective with ``u > 0`` and so, like the coolant
           temperature, admits exactly one upstream condition.
+
+        **The multiplicative form replaced an additive one, and that was a
+        formulation fix rather than a refactor.** With ``theta = theta_0 + t_hat
+        N`` nothing bounded the temperatures below: measured, the optimiser drove
+        ``T_f`` from 722 K to -1 K over 115 iterations *while the loss fell*, and
+        the logarithmic Doppler of Eq. 4.5-3 then returned NaN. The residual was
+        perfectly content in that nonphysical region — the spurious-solution mode
+        of arXiv:2604.23528, and exactly what REPORT-01 section 5.2 item 8 says to
+        parameterise away. Constraining the ansatz to the physical manifold
+        removes the region rather than penalising it.
+
+        The structure is pinned to ``T_in`` at ``zeta = 0`` as a side effect, which
+        is correct: its only coupling is to the coolant, held at ``T_in`` there by
+        the inlet condition.
         """
         raw = self.net(torch.cat([zeta, that], dim=1))
-        temps = (
-            self.theta0(zeta)[:, :N_TEMPS]
-            + torch.cat([that.expand(-1, 3), that * zeta], dim=1) * raw[:, :N_TEMPS]
-        )
+        temps = self.theta0(zeta)[:, :N_TEMPS] * _bounded_exp(that * raw[:, :N_TEMPS])
         gate = torch.tanh(_ALPHA_GATE * that) * torch.tanh(_ALPHA_GATE * zeta)
         alpha = gate * torch.sigmoid(raw[:, N_TEMPS : N_TEMPS + 1])
         return torch.cat([temps, alpha], dim=1)
@@ -332,17 +346,33 @@ class AxialPinn(nn.Module):
 _ALPHA_GATE: float = 10.0
 """Sharpness of the void gate; large enough to saturate away from the boundaries."""
 
+_EXP_BOUND: float = 4.0
+"""Bound on the exponent of the multiplicative ansatz.
+
+``exp(S tanh(x/S))`` equals ``exp(x)`` for small ``x`` but saturates at
+``exp(+/-S)``, so the ansatz cannot overflow however hard the optimiser pushes.
+``S = 4`` allows a factor ``e^4 ~ 55`` on the steady excess temperature; the
+reference needs at most 9.6, so the bound never binds and ``tanh`` stays in its
+linear region where the gradient is healthy.
+"""
+
+
+def _bounded_exp(x: torch.Tensor) -> torch.Tensor:
+    """``exp`` with a smooth ceiling and floor — see :data:`_EXP_BOUND`."""
+    return torch.exp(_EXP_BOUND * torch.tanh(x / _EXP_BOUND))
+
 
 def _precursors(model: AxialPinn, that: torch.Tensor) -> torch.Tensor:
     """``c_i(t_hat)`` with ``c(0) = 1`` exact and ``c > 0`` guaranteed.
 
-    ``c = exp(t_hat * N(t_hat))`` does both at once: the ``t_hat`` factor pins the
-    initial condition for any weights, and the exponential makes the precursors
-    positive by construction. Positivity matters because it is what makes
+    ``c = exp(t_hat N(t_hat))``, bounded by :func:`_bounded_exp`, does both: the
+    ``t_hat`` factor pins the initial condition for any weights, and the
+    exponential makes the precursors positive by construction. Positivity is
+    what makes
     ``P = sum(beta_i c_i)/(beta - rho)`` unable to reach zero — the collapse mode
     that REPORT-01 section 5.2 spends its length on.
     """
-    return torch.exp(that * model.kin(that))
+    return _bounded_exp(that * model.kin(that))
 
 
 def _power_shape(p: AxialParams, zeta: torch.Tensor) -> torch.Tensor:
