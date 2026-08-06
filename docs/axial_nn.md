@@ -659,3 +659,41 @@ Not yet adopted as defaults. The modified MLP buys the best temperatures and the
 *worst* voided length of the three working arms (0.1121 against the base 0.1805,
 reference 0.3812), so it trades the front for the fields; Fourier improves both.
 The combination is untested.
+
+## 7.5 N5 — Plan A measured end to end
+
+M6 shipped the prompt-jump closure in the network and never scored it; §6.4 said
+so and marked the acceptance criterion unverified. It is now measured. Quadrature
+at `n_axial = 80` and `n_time = 64` to keep the tensor grid near Plan B's cost;
+the ruler is a separate `n = 160` closed-loop reference, so training resolution
+and scoring resolution are independent. 3000 Adam + 300 L-BFGS, seed 0, 681 s.
+
+| quantity | PINN | reference |
+|---|---|---|
+| `P(0)` | **1.000000** | 1.000000 |
+| peak power | **1.0000** | 1.0000 |
+| minimum power | 0.5380 | 0.5021 |
+| relative `L2` on `P(t)` | **0.2497** | — |
+| `max ρ/β` (tripwire) | **+0.0000** | +0.0000 |
+| `min ρ/β` | −0.1558 | −0.2052 |
+| `T_f`, `T_cl`, `T_c` | 0.1668, 0.2033, 0.1094 | — |
+
+**What passes.** `P(0) = 1` to six figures, because the closure is hard-constrained
+rather than penalised: `c(0) = 1` and `ρ(0) = 0` give `P = Σβᵢ/β` by construction.
+Peak power matches exactly — though that is nearly free here, since feedback only
+ever removes reactivity, so the peak sits at `t = 0`. The pole tripwire agrees
+exactly: both report `max ρ/β = +0.0000`, and the network independently
+reproduces the D49 result that the void never inserts positive reactivity.
+
+**What fails.** The power *trajectory* is 25% off against a 1% bar, and both the
+power drop and the reactivity swing are under-predicted — `min ρ/β` −0.156
+against −0.205, so the network finds 24% less negative feedback than the
+reference does. The temperatures are worse than Plan B's (0.167 against 0.137 on
+`T_f`), which is expected: Plan A adds six precursor unknowns and an axial
+integral coupling every node to every other.
+
+**So M6's acceptance criterion is failed, not unverified.** The two agree on peak
+power and on the tripwire; they do not agree on the trajectory, and the
+reactivity balance does not close to tolerance.
+
+Single seed. Given §7.1's history, that is a measurement and not a statistic.

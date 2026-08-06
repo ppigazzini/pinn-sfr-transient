@@ -172,6 +172,13 @@ class AxialParams:
     condensation: float = 0.0
 
     # --- Flow (manual Eq. 5.3-61 analogue; see deviation D-FLOW-1) ---------
+    # Let vapour generation accelerate the mixture, so the flow acquires a
+    # z-dependence after voiding starts (deviation D-TH-2). Eq. 3.9-1 states
+    # w = w(t) independent of z, and states its own validity limit: incompressible
+    # liquid, one slug filling the channel. That fails the moment vapour forms,
+    # because vaporising a kilogram of sodium multiplies its volume by
+    # rho_l/rho_v ~ 3100. **EXPERIMENTAL, default False = the Eq. 3.9-1 form.**
+    flow_expansion: bool = False
     tau_pump: float = 5.0  # coast-down time constant [s]
     f_nc: float = 0.15  # natural-circulation floor, fraction of nominal
     w_0: float = 0.25  # nominal coolant mass flow per pin [kg/s]
