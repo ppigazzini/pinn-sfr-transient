@@ -26,6 +26,7 @@ residuals live in ``physics``, the solver in ``reference``, and the networks in
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 
@@ -127,6 +128,32 @@ class AxialParams:
     # logarithmic Doppler that the 0D model has to fake with a fitted offset.
     rho_ext: float = 0.0
 
+    # Axial fuel expansion feedback (manual section 4.5.4). Fuel lengthening
+    # lowers the axial power density and leaks more neutrons, so the coefficient
+    # is NEGATIVE and the mechanism is stabilising. Omitting it was
+    # non-conservative -- the model over-predicts the excursion (D-FB-3).
+    # Evaluated on the same radial mass-average as Doppler, per axial segment.
+    alpha_expansion: float = 0.0  # [1/K]; -1e-6 is a representative metal-fuel value
+
+    # --- Decay heat (manual Eq. 4.2-2, section 4.4) ------------------------
+    # `psi_t = psi_f + psi_h`: total power is fission plus decay. `decay_fraction`
+    # is `psi_h` at nominal, so at steady state `psi_t = 1` exactly with no
+    # retuning. Three groups spanning seconds to hours, the shape of the ANS
+    # standard rather than its full 23-group table (deviation D-KIN-3).
+    #
+    # **This removes the zero-power attractor.** With `decay_fraction = 0` the
+    # homogeneous kinetics have no source and `P = c = 0` is an exact solution of
+    # the whole coupled system -- the mode REPORT-01 section 5.2 spends its length
+    # on. With it non-zero, `psi_h` does not vanish when `psi_f` does. Typical
+    # fission-product decay heat immediately after shutdown is 6-7% of nominal.
+    decay_fraction: float = 0.0
+    decay_lambda: FloatArray = field(
+        default_factory=lambda: np.array([1.772e-1, 5.774e-3, 7.671e-5], dtype=np.float64)
+    )
+    decay_weight: FloatArray = field(
+        default_factory=lambda: np.array([0.55, 0.31, 0.14], dtype=np.float64)
+    )
+
     # --- Boiling onset (manual section 12.4) -------------------------------
     p_system: float = 1.01325e5  # system pressure setting T_sat via Eq. 12.13-4 [Pa]
     dT_superheat: float = 10.0  # DTS: superheat for the first bubble [K]
@@ -172,6 +199,8 @@ class AxialParams:
         # Midpoint rule on purpose, not `np.trapezoid`: the shape vanishes at
         # both endpoints, where the trapezoid rule spends its two samples, and
         # the midpoint rule is the same order for half the evaluations.
+        # Decay-group weights are a partition of `decay_fraction`.
+        self.decay_weight = self.decay_weight / self.decay_weight.sum()
         self.void_shape_norm = float(np.mean(self._void_shape(_midpoints(20001))))
         # The shape changes sign, so its mean can be driven arbitrarily close to
         # zero by `zeta_sign` — at which point `void_worth` explodes to keep the
@@ -235,6 +264,12 @@ class AxialParams:
             if value < 0.0:
                 msg = f"{name} must be >= 0, got {value}"
                 raise ValueError(msg)
+        if self.alpha_expansion > 0.0:
+            msg = f"alpha_expansion must be <= 0 (stabilising), got {self.alpha_expansion}"
+            raise ValueError(msg)
+        if not 0.0 <= self.decay_fraction < 1.0:
+            msg = f"decay_fraction must lie in [0, 1), got {self.decay_fraction}"
+            raise ValueError(msg)
         if self.alpha_D_flooded > 0.0 or self.alpha_D_voided > 0.0:
             msg = "Doppler coefficients must be <= 0 (negative feedback)"
             raise ValueError(msg)
@@ -321,6 +356,30 @@ class AxialParams:
         # `void_fraction` is a torch or JAX array that must stay differentiable.
         a = _xp(void_fraction).clip(void_fraction, 0.0, 1.0)
         return self.alpha_D_flooded + (self.alpha_D_voided - self.alpha_D_flooded) * a
+
+    @classmethod
+    def with_positive_void_worth(cls, **kwargs: Any) -> AxialParams:  # noqa: ANN401
+        """Parameters under which the void feedback is actually sampled positive.
+
+        At the shipped defaults ``zeta_sign = 0.80`` sits *below* the boiling
+        onset at ``zeta ~ 0.96``, and the mixture void advects upward only, so
+        every void contribution is negative and ``max rho/beta`` is identically
+        zero (deviation register, D49). That is an artefact of where the channel
+        boils, not a statement about stability, and it makes Objective 2
+        unanswerable: scaling ``void_worth_net`` scales a term that is
+        non-positive everywhere.
+
+        Moving the sign change above the onset location samples the positive
+        branch instead. **Neither set is more correct** — a real core has its
+        reversal near the axial blanket, which is what the default represents.
+        This one exists so the positive-feedback question can be asked at all,
+        and any result from it must say which set produced it.
+        """
+        return cls(zeta_sign=0.995, delta_sign=0.02, **kwargs)
+
+    def steady_decay_heat(self, power: float = 1.0) -> FloatArray:
+        """Steady-state decay-heat group powers, summing to ``decay_fraction``."""
+        return self.decay_fraction * self.decay_weight * power
 
     def steady_precursors(self, power: float = 1.0) -> FloatArray:
         """Steady-state **normalised** precursor concentrations for the given power.
