@@ -101,8 +101,11 @@ class AxialTrainConfig:
     lbfgs_iters: int = 500
     lr: float = 1e-3
 
-    causal_eps: float = 1.0
+    # Dimensionless: the prefix sum is normalised by the total. See the torch twin.
+    causal_eps: float = 0.0
     causal_chunks: int = 32
+    # Fraction of `p.t_end` trained over — a scope decision; see the torch twin.
+    t_train_frac: float = 1.0
     weight_update_every: int = 250
     weight_momentum: float = 0.9
     # Bound on the block-weight spread; off by default, see the torch twin.
@@ -253,9 +256,16 @@ def state_and_grads(
 
 
 # --- residuals --------------------------------------------------------------
+def horizon(p: AxialParams, cfg: AxialTrainConfig) -> float:
+    """End of the trained window [s]; ``t_hat = 1`` maps here, not to ``p.t_end``."""
+    return float(p.t_end) * cfg.t_train_frac
+
+
 def _norm(p: AxialParams, cfg: AxialTrainConfig) -> tuple[float, ...]:
     """Per-block variable scaling, or ones when it is switched off."""
-    return residual_normalisation(p) if cfg.residual_scaling else (1.0,) * len(FIELDS)
+    if not cfg.residual_scaling:
+        return (1.0,) * len(FIELDS)
+    return residual_normalisation(p, horizon(p, cfg))
 
 
 def residual_blocks(
@@ -263,11 +273,12 @@ def residual_blocks(
 ) -> tuple[jax.Array, ...]:
     """Plan B blocks: prescribed power, scattered ``(zeta, t)`` collocation."""
     dT = p.P_0 / (p.w_0 * p.c_c)
+    t_end = horizon(p, cfg)
     theta, d_dt, d_dz = state_and_grads(model, p, zeta, that)
     temps = tuple(p.T_in + theta[:, k : k + 1] * dT for k in range(N_TEMPS))
     fields = (*temps, theta[:, N_TEMPS : N_TEMPS + 1])
     rhs = continuous_derivatives(
-        that * p.t_end,
+        that * t_end,
         *fields,
         d_dz[:, 3:4] * dT / p.H,
         d_dz[:, 4:5] / p.H,
@@ -276,7 +287,7 @@ def residual_blocks(
         _power_shape(p, zeta),
         1.0,
     )
-    scales = [p.t_end / dT] * N_TEMPS + [p.t_end]
+    scales = [t_end / dT] * N_TEMPS + [t_end]
     nrm = _norm(p, cfg)
     return tuple(
         (((d_dt[:, k : k + 1] - scales[k] * rhs[k]) * nrm[k]) ** 2).squeeze(1)
@@ -301,6 +312,7 @@ def closed_loop_blocks(  # noqa: PLR0913 - the tensor grid needs all of them
     causal weighting wants.
     """
     dT = p.P_0 / (p.w_0 * p.c_c)
+    t_end = horizon(p, cfg)
     w_D, w_void = weights
     n_t, n_z = that.shape[0], zeta_q.shape[0]
     zeta = jnp.tile(zeta_q, (n_t, 1))
@@ -320,7 +332,7 @@ def closed_loop_blocks(  # noqa: PLR0913 - the tensor grid needs all of them
     power = prompt_jump_power(c, rho.reshape(-1, 1), p)
 
     rhs = continuous_derivatives(
-        t_rep * p.t_end,
+        t_rep * t_end,
         *fields,
         d_dz[:, 3:4] * dT / p.H,
         d_dz[:, 4:5] / p.H,
@@ -329,15 +341,15 @@ def closed_loop_blocks(  # noqa: PLR0913 - the tensor grid needs all of them
         _power_shape(p, zeta),
         jnp.repeat(power, n_z, axis=0),
     )
-    scales = [p.t_end / dT] * N_TEMPS + [p.t_end]
+    scales = [t_end / dT] * N_TEMPS + [t_end]
     nrm = _norm(p, cfg)
     blocks = [
         (((d_dt[:, k : k + 1] - scales[k] * rhs[k]) * nrm[k]) ** 2).reshape(n_t, n_z).mean(1)
         for k in range(len(FIELDS))
     ]
     # Precursors carry their own rate per group, `t_end * lambda_i`.
-    c_norm = 1.0 / (p.t_end * jnp.asarray(p.lambda_i)) if cfg.residual_scaling else 1.0
-    blocks.append((((dc - p.t_end * precursor_derivatives(c, power, p)) * c_norm) ** 2).mean(1))
+    c_norm = 1.0 / (t_end * jnp.asarray(p.lambda_i)) if cfg.residual_scaling else 1.0
+    blocks.append((((dc - t_end * precursor_derivatives(c, power, p)) * c_norm) ** 2).mean(1))
     return tuple(blocks)
 
 
@@ -347,6 +359,17 @@ def _blocks(model: AxialPinn, p: AxialParams, cfg: AxialTrainConfig, pts: tuple)
         that, zeta_q, weights = pts
         return closed_loop_blocks(model, p, that, zeta_q, weights, cfg)
     return residual_blocks(model, p, pts[0], pts[1], cfg)
+
+
+def causal_weights(losses: jax.Array, eps: float) -> jax.Array:
+    """``exp(-eps * prefix / total)`` — causal weights, normalised so ``eps`` is unitless.
+
+    The un-normalised form makes ``eps`` carry the reciprocal units of the loss,
+    so variable scaling silently switched causality off (the ramp collapsed to a
+    2% tilt). See the torch twin for the measurement.
+    """
+    prefix = jnp.cumsum(losses) - losses
+    return jnp.exp(-eps * prefix / (losses.sum() + 1e-30))
 
 
 def causal_loss(
@@ -370,7 +393,7 @@ def causal_loss(
     counts = jnp.bincount(idx, length=cfg.causal_chunks)
     sums = jnp.bincount(idx, weights=e, length=cfg.causal_chunks)
     losses = sums / jnp.maximum(counts, 1)
-    cw = jax.lax.stop_gradient(jnp.exp(-cfg.causal_eps * (jnp.cumsum(losses) - losses)))
+    cw = jax.lax.stop_gradient(causal_weights(losses, cfg.causal_eps))
     return (cw * losses).mean()
 
 
@@ -539,25 +562,33 @@ def _lbfgs_polish(  # noqa: PLR0913 - polish needs the model, params, points and
 
 # --- inference --------------------------------------------------------------
 def predict(
-    model: AxialPinn, p: AxialParams, zeta: FloatArray, t: FloatArray
+    model: AxialPinn,
+    p: AxialParams,
+    zeta: FloatArray,
+    t: FloatArray,
+    cfg: AxialTrainConfig | None = None,
 ) -> tuple[FloatArray, ...]:
     """Evaluate on a ``(zeta, t)`` grid, returning physical fields ``(n_z, n_t)``."""
     dT = p.P_0 / (p.w_0 * p.c_c)
+    t_end = horizon(p, cfg or AxialTrainConfig())
     zz, tt = np.meshgrid(zeta, t, indexing="ij")
     z = jnp.asarray(zz.reshape(-1, 1))
-    h = jnp.asarray((tt / p.t_end).reshape(-1, 1))
+    h = jnp.asarray((tt / t_end).reshape(-1, 1))
     theta = jax.vmap(lambda a, b: normalised_state(model, p, a, b))(z, h)
     out = [np.asarray(p.T_in + theta[:, k] * dT).reshape(zz.shape) for k in range(N_TEMPS)]
     out.append(np.asarray(theta[:, N_TEMPS]).reshape(zz.shape))
     return tuple(out)
 
 
-def predict_power(model: AxialPinn, p: AxialParams, t: FloatArray) -> tuple[FloatArray, FloatArray]:
+def predict_power(
+    model: AxialPinn, p: AxialParams, t: FloatArray, cfg: AxialTrainConfig | None = None
+) -> tuple[FloatArray, FloatArray]:
     """Normalised power and net reactivity on a time grid (Plan A only)."""
     dT = p.P_0 / (p.w_0 * p.c_c)
+    t_end = horizon(p, cfg or AxialTrainConfig())
     zeta_q = jnp.asarray(p.zeta_nodes().reshape(-1, 1))
     w_D, w_void = (jnp.asarray(x) for x in kinetics_weights(p))
-    that = jnp.asarray((np.asarray(t) / p.t_end).reshape(-1, 1))
+    that = jnp.asarray((np.asarray(t) / t_end).reshape(-1, 1))
     n_t, n_z = that.shape[0], zeta_q.shape[0]
     zeta = jnp.tile(zeta_q, (n_t, 1))
     t_rep = jnp.repeat(that, n_z, axis=0)
@@ -571,9 +602,11 @@ def predict_power(model: AxialPinn, p: AxialParams, t: FloatArray) -> tuple[Floa
     return np.asarray(power).ravel(), np.asarray(rho).ravel()
 
 
-def relative_l2(model: AxialPinn, p: AxialParams, traj: object) -> dict[str, float]:
+def relative_l2(
+    model: AxialPinn, p: AxialParams, traj: object, cfg: AxialTrainConfig | None = None
+) -> dict[str, float]:
     """Relative ``L2`` per temperature field, plus the absolute voided-length error."""
-    fields = predict(model, p, traj.zeta, traj.t)  # type: ignore[attr-defined]
+    fields = predict(model, p, traj.zeta, traj.t, cfg)  # type: ignore[attr-defined]
     ref = (traj.T_f, traj.T_cl, traj.T_s, traj.T_c)  # type: ignore[attr-defined]
     out = {
         name: float(np.linalg.norm(f - r) / np.linalg.norm(r))
@@ -591,7 +624,7 @@ def main() -> None:
     model, p, cfg = train()
     traj = solve_reference(p, n_out=201, feedback=cfg.feedback)
     print("\nRelative L2 vs the reference:")
-    for k, v in relative_l2(model, p, traj).items():
+    for k, v in relative_l2(model, p, traj, cfg).items():
         print(f"  {k:18s}: {v:.3e}")
 
 

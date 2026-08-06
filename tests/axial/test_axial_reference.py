@@ -31,7 +31,9 @@ from pinn_sfr_transient.axial.physics import (
     node_geometry,
     prompt_jump_power,
     reactivity,
+    residual_normalisation,
     residual_scales,
+    vaporisation_time,
 )
 from pinn_sfr_transient.axial.reference import (
     energy_balance,
@@ -522,21 +524,29 @@ def test_doppler_dominates_the_reactivity_balance(plan_a):
     assert float(rebuilt) == pytest.approx(plan_a.rho[i], rel=1e-12)
 
 
-def test_void_block_time_constant_is_the_vaporisation_time_not_the_transit_time():
-    """The void entry used to repeat the coolant transit time — 160x too slow.
+def test_void_block_is_normalised_by_transport_not_by_its_source():
+    """The void's *dynamical* rate is advection; its source is 160x faster but local.
 
-    The wall heat fills a node with vapour in `lambda rho_v A_c H / P_0`, about
-    0.7 ms, so `d alpha/dt` reaches ~1400 /s. Against a 60 s horizon that is a
-    normalised term of order 8.5e4 where every other block is 1e2 to 1e3, which
-    is the M4 problem stated in one number. Reporting 0.113 s there hid it.
+    Normalising the residual by the vaporisation time made a spurious void in the
+    subcooled bulk cost 3.9e-5 against 1.0 at the front, and the network duly
+    voided the whole channel from t = 0. The block must be scaled by the rate
+    that governs it everywhere — the same transit time as the coolant.
     """
     p = AxialParams()
     tau = residual_scales(p)
+    assert tau[4] == pytest.approx(tau[3], rel=1e-12)  # advected with the liquid
+
+
+def test_vaporisation_time_is_reported_but_never_used_to_normalise():
+    """The 160x source stiffness is real and diagnostic; it is not the scaling."""
+    p = AxialParams()
     T_sat = sodium.saturation_temperature(p.p_system)
     expected = sodium.latent_heat(T_sat) * sodium.vapor_density(T_sat) * p.A_c * p.H / p.P_0
-    assert tau[4] == pytest.approx(expected, rel=1e-12)
-    assert tau[4] < 1e-3
-    assert tau[4] < tau[3] / 100.0  # and it is nothing like the coolant transit
+    assert vaporisation_time(p) == pytest.approx(expected, rel=1e-12)
+    assert vaporisation_time(p) < 1e-3
+    # 160x faster than the transport, and NOT what the normalisation uses.
+    assert vaporisation_time(p) < residual_scales(p)[4] / 100.0
+    assert residual_normalisation(p)[4] != pytest.approx(vaporisation_time(p) / p.t_end)
 
 
 def test_reactivity_components_sum_to_the_net(plan_a):

@@ -439,12 +439,86 @@ is judged on voided length and onset rather than on temperature `L2` — but it
 must be stated in those terms rather than reported as a clean win.
 
 **Residual and trajectory error have decoupled**, which is worth flagging on its
-own: a 1e6× reduction in residual bought ~25% in `T_f` and cost 2× in `T_c`. That
-is the signature the 2026 spurious-solution and overfitting work describes
-([arXiv:2604.23528](https://arxiv.org/abs/2604.23528),
-[arXiv:2605.30910](https://arxiv.org/abs/2605.30910)) and that REPORT-01 §5.2
-items 9–10 anticipate. The next diagnosis belongs there — specifically, why the
-front over-runs — and not in another architecture.
+own: a 1e6× reduction in residual bought ~25% in `T_f` and cost 2× in `T_c`.
+
+### 7.2.4 The "over-running front" was a phantom, and §7.2.3 caused it
+
+§7.2.3 reported `L_void` over-predicted by 2.1× and called it a front 2× too
+long. **That reading was wrong.** Plotting `α(ζ,t)` against the reference instead
+of comparing scalars:
+
+| t [s] | `L_ref` | `L_pinn` | `max α_ref` | `max α_pinn` |
+|---|---|---|---|---|
+| 1.25 | 0.000 | 0.125 | 0.000 | 0.181 |
+| 5.00 | 0.000 | 0.459 | 0.000 | 0.626 |
+| 10.00 | 0.000 | 0.697 | 0.000 | 0.885 |
+| 12.50 | 0.225 | 0.757 | 1.000 | 0.933 |
+
+Onset: reference **10.75 s at ζ = 0.96** (the top, where the coolant is hottest);
+network **0.25 s at ζ = 0.05** (the inlet). There is no front. There is a smooth
+channel-wide void ramp starting at `t = 0`, and its integral merely happens to
+pass through a plausible-looking number.
+
+**The cause is the normalisation §7.2.3 introduced.** The void equation carries
+*two* rates, and they do not live in the same place:
+
+| term | rate | where it acts |
+|---|---|---|
+| vaporisation `Γ = q''/(λ ρ_v A_c)` | 1412 /s | inside the front only, <4% of the domain |
+| advection `u/H` | 8.8 /s | everywhere |
+
+§7.2.3 normalised the block by the *vaporisation* time, which is correct at the
+front and 160× too small everywhere else. The advective residual that pins
+`α = 0` through the subcooled bulk collapses to **3.9e-5** against 1.0 at the
+front, so voiding the entire channel from `t = 0` costs the optimiser essentially
+nothing. Below saturation `boiling_fraction` underflows to *exactly* zero, so
+there the void equation is pure advection and `α ≡ 0` is its **unique** solution
+given a zero initial and inlet condition. The physics was never ambiguous; the
+loss was indifferent.
+
+**Fix: normalise by the rate that governs the block's dynamics — transport, not
+its source.** Three seeds, torch, Plan B, 3000 Adam + 300 L-BFGS, `n = 160`.
+`PHANTOM` is `max L_void` over the window where the reference has not yet boiled
+at all, so its true value is exactly zero:
+
+| variant | T_f | T_cl | T_s | T_c | **PHANTOM** | onset |
+|---|---|---|---|---|---|---|
+| `vap` (§7.2.3) | 0.113 | 0.157 | 0.118 | 0.096 | **0.701 m** | 0.25 s @ ζ=0.05 |
+| `adv` | 0.223 | 0.298 | 0.197 | 0.197 | **0.0038 m** | — |
+| **`adv_h`** | 0.145 | 0.197 | **0.084** | **0.085** | **0.0016 m** | — |
+| `adv_hc` | 0.184 | 0.249 | 0.146 | 0.146 | 0.0048 m | 2.5 s @ ζ=0.99 |
+
+**The phantom void falls 440×**, from 0.70 m to 0.0016 m. `adv_h` adds the
+horizon truncation below and is the most *reproducible* result this model has
+produced: `T_f` = 0.1439 / 0.1449 / 0.1449 across three seeds, a spread of 1.007×.
+
+**The training horizon was the second cause.** With prescribed power the channel
+leaves the §12.13 property range at 16.5 s and the reference stops there by
+design (D-SCOPE-1). Training to `t_end = 60 s` asks the network to satisfy
+residuals over 72% of a horizon where the model does not apply, and one smooth
+function of `t̂` carries that state back to `t = 0`. `t_train_frac` truncates it;
+`adv_h` beats `adv` on all four fields. This is not using the reference in the
+loss — the horizon is a property of the model's validity range, not of its
+solution.
+
+**Causal weighting was a third finding, and a negative one.** The un-normalised
+`exp(−ε·prefix)` makes `ε` carry the reciprocal units of the loss, so §7.2.3's
+1e10 change in loss scale silently switched causality off: the ramp measured
+1.000 → 0.977 across all 32 chunks, a 2% tilt where it had been a hard cutoff.
+The formulation is now scale-free — `exp(−ε·prefix/total)`, so `ε` is
+dimensionless and sets the ramp's log dynamic range. But with causality genuinely
+restored, `adv_hc` is *worse* than `adv_h` on every field. It does put the void in
+the right **place** (ζ ≈ 0.99 against the reference's 0.96) while getting the time
+wrong, which is a real if small clue. Default `causal_eps = 0.0`.
+
+**What remains, stated without decoration: the front still does not form.**
+`L_void` is 0.002 m against the reference's 0.381 m. The network now correctly
+keeps `α = 0` where the physics says it must, and fails to raise it where the
+physics says it should. That is the honest M4 problem, and §7.2.2's number is
+why: `dα/dt̂` must reach 8.5e4 inside a front spanning a few percent of the
+domain. It is a resolution problem, not a weighting one, and the remedies for it
+are the free-boundary and level-set formulations of REPORT-01 §7.4 — a
+formulation change, which is M8's subject, not another loss term.
 
 ### 7.2 Backend parity
 

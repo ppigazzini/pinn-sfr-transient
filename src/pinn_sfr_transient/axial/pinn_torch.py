@@ -74,9 +74,34 @@ class AxialTrainConfig:
     lbfgs_iters: int = 500
     lr: float = 1e-3
 
-    # Causal temporal weighting [Wang, Sankaran & Perdikaris 2024]
-    causal_eps: float = 1.0
+    # Causal temporal weighting [Wang, Sankaran & Perdikaris 2024]. `causal_eps`
+    # is DIMENSIONLESS — the prefix sum is normalised by the total (see
+    # `_causal_weights`), so it sets the ramp's log dynamic range and survives a
+    # change in the loss scale. It did not before, and `residual_scaling` moved
+    # that scale by ~1e10 and switched causality off without saying so.
+    # Default 0.0 (off): measured, causality costs accuracy on every field here
+    # (`docs/axial_nn.md` section 7.2.4). Non-zero re-enables it meaningfully.
+    causal_eps: float = 0.0
     causal_chunks: int = 32
+
+    # Fraction of `AxialParams.t_end` the network is trained over.
+    #
+    # **A scope decision, not a fitting knob.** With prescribed power the channel
+    # reaches the top of the section 12.13 sodium property range at ~16.5 s and
+    # the reference solver stops there, by design (deviation D-SCOPE-1: no
+    # melting, no cladding motion, no relocation). Training to `t_end = 60 s`
+    # therefore asks the network to satisfy residuals over a region where the
+    # model itself does not apply — 72% of the horizon — and because the ansatz
+    # is one smooth function of `t_hat`, the fully-voided state it settles on
+    # there propagates back to `t = 0`. Measured: void at t = 0.25 s at the
+    # channel *inlet*, against a reference that is identically zero until 10.75 s
+    # and then boils at the top.
+    #
+    # This does not use the reference in the loss (REPORT-01 section 4.1). The
+    # horizon is a property of the model's validity range, not of its solution.
+    # Plan A needs no truncation: with feedback the transient is self-limiting
+    # and completes 60 s inside the property range.
+    t_train_frac: float = 1.0
 
     # Gradient-norm adaptive block weights [Wang, Teng & Perdikaris 2021]
     weight_update_every: int = 250
@@ -244,10 +269,12 @@ class AxialPinn(nn.Module):
         self.w_D, self.w_void = (torch.tensor(w, dtype=torch.float64) for w in kinetics_weights(p))
         self.zeta_q = torch.tensor(p.zeta_nodes().reshape(-1, 1), dtype=torch.float64)
         self.dT = p.P_0 / (p.w_0 * p.c_c)  # nominal core rise, the temperature scale
-        self.t_end = float(p.t_end)
+        # `t_hat = 1` is the end of the TRAINED horizon, which need not be
+        # `p.t_end` — see `AxialTrainConfig.t_train_frac`.
+        self.t_end = float(p.t_end) * cfg.t_train_frac
         # Variable scaling per residual block; ones when disabled.
         self.res_norm: tuple[float, ...] = (
-            residual_normalisation(p) if cfg.residual_scaling else (1.0,) * len(FIELDS)
+            residual_normalisation(p, self.t_end) if cfg.residual_scaling else (1.0,) * len(FIELDS)
         )
         # Precursors carry their own rate per group, `t_end * lambda_i`.
         lam = torch.tensor(p.lambda_i, dtype=torch.float64)
@@ -493,6 +520,31 @@ def _bounded_exp(x: torch.Tensor) -> torch.Tensor:
     return torch.exp(_EXP_BOUND * torch.tanh(x / _EXP_BOUND))
 
 
+def _causal_weights(losses: torch.Tensor, eps: float) -> torch.Tensor:
+    """Causal temporal weights ``exp(-eps * prefix / total)`` [Wang, Sankaran & Perdikaris 2024].
+
+    A chunk is down-weighted by how much residual is still outstanding *before*
+    it, so the network is not rewarded for fitting late times until the early
+    ones are right.
+
+    **The prefix sum is normalised by the total, which the original formulation
+    does not do, and here it is not optional.** ``exp(-eps * prefix)`` treats
+    ``eps`` as carrying the reciprocal units of the loss, so the ramp is only
+    meaningful while the loss stays near the scale ``eps`` was tuned at. Variable
+    scaling (``residual_scaling``) moved that scale by about ten orders of
+    magnitude, and the weighting silently went inert: measured, the ramp spanned
+    1.000 to 0.977 across all 32 chunks — a 2% tilt where it had been a hard
+    cutoff. The network was then free to fit late times first, which is exactly
+    what it did.
+
+    Normalised, ``eps`` is dimensionless and directly interpretable: the last
+    chunk starts at about ``exp(-eps)`` relative to the first, whatever the loss
+    magnitude, and the ramp relaxes on its own as the early residuals fall.
+    """
+    prefix = torch.cumsum(losses, 0) - losses
+    return torch.exp(-eps * prefix / (losses.sum() + 1e-30))
+
+
 def _bounded_weights(target: torch.Tensor, cap: float) -> torch.Tensor:
     """Renormalise block weights to unit geometric mean, then clamp to ``[1/cap, cap]``.
 
@@ -664,7 +716,7 @@ class Trainer:
             [e[idx == m].mean() if bool((idx == m).any()) else e.sum() * 0.0 for m in range(chunks)]
         )
         with torch.no_grad():
-            w = torch.exp(-self.cfg.causal_eps * (torch.cumsum(losses, 0) - losses))
+            w = _causal_weights(losses, self.cfg.causal_eps)
         return (w * losses).mean() + self._pts_penalty()
 
     def update_block_weights(self, zeta: torch.Tensor, that: torch.Tensor) -> None:
