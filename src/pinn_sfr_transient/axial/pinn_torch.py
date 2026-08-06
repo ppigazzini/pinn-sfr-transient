@@ -290,7 +290,7 @@ class AxialPinn(nn.Module):
         raw = self.net(self.embed(x) if self.embed is not None else x)
         temps = self.theta0(zeta)[:, :N_TEMPS] * _bounded_exp(that * raw[:, :N_TEMPS])
         gate = torch.tanh(_ALPHA_GATE * that) * torch.tanh(_ALPHA_GATE * zeta)
-        alpha = gate * torch.sigmoid(raw[:, N_TEMPS : N_TEMPS + 1])
+        alpha = gate * torch.sigmoid(raw[:, N_TEMPS : N_TEMPS + 1] - _ALPHA_BIAS)
         return torch.cat([temps, alpha], dim=1)
 
     def state_and_grads(
@@ -428,6 +428,23 @@ class AxialPinn(nn.Module):
 _ALPHA_GATE: float = 10.0
 """Sharpness of the void gate; large enough to saturate away from the boundaries."""
 
+_ALPHA_BIAS: float = 4.0
+"""Offset making the void head start near **zero** rather than near one half.
+
+The output layer is initialised ``U(+/-1/sqrt(width))``, so a bare
+``sigmoid(raw)`` sits at ~0.5 at every interior point on iteration zero. The
+reference void field is identically zero over ~96% of the channel and over all
+of ``t < 10.8 s``, so the network began ~50x too voided everywhere — and the void
+is not an inert output: it degrades ``film_coefficient``, shifts ``alpha_D``
+between its flooded and voided values, and enters the reactivity integral. The
+temperatures, by contrast, start *exactly* on the steady profile because their
+ansatz is multiplicative with ``exp(0) = 1``. That asymmetry was unintended.
+
+``sigmoid(-4) = 0.018`` starts the void field essentially empty while leaving the
+local gradient at 0.018 — small but nowhere near the saturated tail, so the head
+can still open quickly when the residual asks it to.
+"""
+
 _EXP_BOUND: float = 4.0
 """Bound on the exponent of the multiplicative ansatz.
 
@@ -535,6 +552,22 @@ class Trainer:
         )
         return allp[:, 0:1], allp[:, 1:2]
 
+    def _anchor_points(self, t_max: float) -> tuple[torch.Tensor, torch.Tensor]:
+        """Build a genuine ``(zeta, t_hat)`` pair for the pseudo-time anchor.
+
+        Under Plan A :meth:`collocation` returns *times* in both slots, because
+        the residual there needs only the time axis — the axial direction is the
+        fixed quadrature. Feeding that pair straight to ``normalised_state``
+        evaluated the ansatz with times standing in for ``zeta``, so the proximal
+        term pulled toward a state on the wrong manifold. Rebuild the tensor grid
+        the Plan A state is actually defined on.
+        """
+        zeta, that = self.collocation(t_max)
+        if not self.cfg.feedback:
+            return zeta, that
+        n_z = self.model.zeta_q.shape[0]
+        return self.model.zeta_q.repeat(that.shape[0], 1), that.repeat_interleave(n_z, dim=0)
+
     def _pointwise(self, zeta: torch.Tensor, that: torch.Tensor) -> torch.Tensor:
         blocks = self._blocks(zeta, that)
         return sum(self.block_w[k] * blocks[k] for k in range(len(blocks)))
@@ -560,7 +593,7 @@ class Trainer:
         that pseudo-time stepping and resampling work together, since a fixed
         anchor set is one more thing to overfit.
         """
-        zeta, that = self.collocation(t_max)
+        zeta, that = self._anchor_points(t_max)
         with torch.no_grad():
             state = self.model.normalised_state(zeta, that).detach()
         self.pts_anchor = (zeta.detach(), that.detach(), state)

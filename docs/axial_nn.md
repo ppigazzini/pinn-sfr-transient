@@ -57,7 +57,7 @@ c_i = \exp\!\big(\hat t\, N_{c,i}(\hat t)\big)
 | Initial condition | `exp(0) = 1` | exact, `0.0` |
 | **Positivity `T ≥ T_in`** | `θ₀ ≥ 0` times a positive exponential | exact under ×50 adversarial weights |
 | Coolant inlet `T_c(0,t) = T_in` | `θ_c0(0) = 0`, so it falls out of the same form | exact, `0.0`, **no separate gate** |
-| Void `α ∈ [0,1)`, void-free start, none at inlet | gated sigmoid | exact by construction |
+| Void `α ∈ [0,1)`, void-free start, none at inlet | gated, **biased** sigmoid | exact by construction |
 | Precursors `c(0) = 1`, `c > 0` | bounded exponential | exact |
 
 Nothing is penalised, so the objective is pure physics and there is one fewer
@@ -82,6 +82,23 @@ physical manifold removes the region rather than penalising it.
 The exponent is bounded, `exp(S·tanh(x/S))` with `S = 4`, so it cannot overflow;
 the reference needs at most a 9.6× growth in excess temperature against the `e⁴ ≈ 55×`
 allowed, so the ceiling never binds and `tanh` stays in its linear region.
+
+**The void half of the ansatz carried the opposite defect, and it was the mirror
+image of the one above.** The temperatures start *exactly* on the steady profile,
+because `exp(0) = 1`. The void started at `sigmoid(raw) ≈ 0.5` at every interior
+point, because the output layer is initialised `U(±1/√width)` — while the
+reference `α` is identically zero over ~96% of the channel and over all of
+`t < 10.8 s`. So iteration zero began roughly 50× too voided everywhere, and the
+void is not an inert output: it degrades `film_coefficient` (halving `h_ec` and
+`h_sc`), shifts `α_D` between its flooded and voided values, and enters the
+reactivity integral of Eq. 4.5-25. The fix is one constant — `sigmoid(raw − 4)`,
+so `α ≈ 0.018` at initialisation with the local gradient still at 0.018, nowhere
+near the saturated tail. Identical in both backends and asserted equal between
+them.
+
+This is the same failure as the additive-temperature one — an ansatz that makes
+an unphysical region cheap to sit in — found the same way, by asking what the
+untrained network actually predicts rather than by trying another remedy.
 
 **Admissibility, checked before adopting**: `θ₀ ≥ 0` for all four fields, zero only
 at `ζ = 0` for the coolant and structure — exactly where the boundary condition
@@ -265,9 +282,21 @@ launched and did not complete.
 | jax | 0.243 | 0.328 | 0.323 | 0.197 | seed 0, post-fix, ref `n=40` |
 | **ratio** | **3.9×** | **2.7×** | **10×** | **5.8×** | |
 
-**The two backends are not statistically indistinguishable — they differ by 3–10×
-on a single seed.** The M7 acceptance criterion is therefore failed, not merely
-unmeasured. Two candidate causes have been tested and rejected:
+**The table above is superseded and must be re-measured — the cause was found.**
+It was produced with a JAX backend that applied causal weighting along the
+**wrong axis**.
+
+`causal_loss` read the chunking variable as `pts[0]`. Under Plan A the
+collocation tuple really is `(that, zeta_q, weights)`, so that was right. Under
+Plan B — the regime the parity table was measured in — `_collocation` returns
+`(zeta, that)`, so the loss was chunked by **axial position**: the causal ramp
+`exp(−ε Σ L)` ran *up the channel* instead of forward in time, penalising the top
+of the core for the residual accumulated below it. The torch twin was always
+correct. Fixed, and pinned by
+`test_causal_weighting_chunks_on_time_not_on_zeta`, which also asserts the two
+backends agree on the reduction itself.
+
+Two other candidate causes had been tested and rejected, and both stand:
 
 * *frozen collocation* — JAX trained on a fixed set between RAR refreshes where
   torch resamples every step. Real divergence from the 0D convention, fixed, and
@@ -275,9 +304,14 @@ unmeasured. Two candidate causes have been tested and rejected:
 * *a dead L-BFGS polish* — `optax.lbfgs` does run and does reduce the loss
   (7.4e3 → 3.4e1), and JAX accuracy with and without it is the same.
 
-Remaining suspects, untested: the gradient-norm block weights settling to
-different values in the two backends, and the causal-chunk reduction (torch masks
-versus JAX `bincount`). **Multi-seed parity statistics: TBD.**
+A third contributor was found alongside it: the two configs did not carry the
+same **budget**. JAX defaulted to 3000 Adam / 300 L-BFGS / RAR every 1000 against
+torch's 8000 / 500 / 2000, so the default-configuration comparison was never
+like-for-like. The defaults now match.
+
+Still untested: the gradient-norm block weights settling to different values.
+**Post-fix parity numbers and multi-seed statistics: TBD** — both are compute,
+not development.
 
 ### 7.3 Optimiser bake-off
 

@@ -449,6 +449,32 @@ from two axial integrals — logarithmic Doppler (Eq. 4.5-3, with the flooded↔
 Closing the loop is **stabilising**: less power, later onset, cooler cladding, and
 the run no longer leaves its own validity range.
 
+**But `max ρ/β = 0.0000` is an artefact of *where* the channel boils, not a
+statement about stability.** The void worth changes sign at `zeta_sign = 0.80`
+(§3, D-FB-1) and boiling starts at ζ ≈ 0.96–0.99, because that is where the
+coolant is hottest. The mixture void field advects **upward only**, so the voided
+region can never reach the positive-worth part of the core. Measured over the
+whole closed-loop transient:
+
+| component | min [ρ/β] | max [ρ/β] |
+|---|---|---|
+| Doppler | −0.181 | 0.000 |
+| coolant density / void | −0.036 | **+8.8e-23** (i.e. zero) |
+
+Every void contribution is negative, so the net reactivity can only fall and the
+pole is unreachable *by construction rather than by physics*. The consequence is
+sharp: **the positive sodium-void feedback this project exists to examine is
+never exercised at the shipped defaults**, and Objective 2 — "does tuning
+`α_void` capture both regimes?" — cannot be answered by scaling
+`void_worth_net`, because that scales a term which is identically ≤ 0.
+
+`AxialTrajectory.rho_doppler`, `AxialTrajectory.rho_void` and
+`AxialTrajectory.void_worth_is_exercised` now report this on every run, so a null
+result can no longer be read as a stabilising one. Exercising the positive branch
+needs `zeta_sign` above the onset location, or a void field that can propagate
+downward — which is slug ejection, i.e. D-TH-1. **That is a parameter and scope
+decision for the owner, not one taken here.**
+
 **The stopwatch test passes.** The report's §5.2 predicted that under the
 prompt-jump closure no delayed-neutron tail can decay faster than
 `1/λ₁ = 80.6 s`, at any reactivity. Measured tail: **260 s**. A faster tail would
@@ -493,6 +519,20 @@ length and onset rather than a pointwise norm across an unconverged front. See
 
 Neither was visible in the trajectories, which looked entirely plausible
 throughout. This is the argument for conservation checks over eyeball validation.
+
+**A third, in the check itself.** `energy_balance` defaulted its amplitude to
+one. That is correct for Plan B and wrong for Plan A, where feedback drives the
+power down to 0.498 of nominal: the closure read **0.382** against a true
+1.5e-5. No test exercised the feedback trajectory, so a diagnostic built to
+detect conservation defects was itself reporting one. It now takes the amplitude
+from `traj.power`, which is the delivered power in both plans.
+
+**And one in the parameter container.** `AxialParams.steady_precursors` returned
+the *absolute* `C_i = β_i P / (Λ λ_i)` — the 0D model's convention — where this
+model's state is the normalised `c_i = C_i / C_{i,0}`, about 5e4 times smaller.
+Dormant, because `reference.steady_state` writes `np.ones(N_GROUPS)` directly,
+and the only test asserted proportionality in `P`, which holds either way. The
+two definitions are now pinned against each other.
 
 ## 8. Parameter provenance
 

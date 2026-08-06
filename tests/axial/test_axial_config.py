@@ -12,6 +12,8 @@ import numpy as np
 import pytest
 
 from pinn_sfr_transient.axial import AxialParams
+from pinn_sfr_transient.axial.physics import precursor_derivatives
+from pinn_sfr_transient.axial.reference import steady_state
 from pinn_sfr_transient.config import SFRParams
 
 
@@ -44,6 +46,31 @@ def test_delayed_neutron_data_matches_the_0d_model():
 def test_steady_precursors_scale_with_power():
     p = AxialParams()
     np.testing.assert_allclose(p.steady_precursors(2.0), 2.0 * p.steady_precursors(1.0))
+
+
+def test_steady_precursors_are_normalised_not_absolute():
+    """``c_i = C_i / C_{i,0}``, so every group sits at the power, not at ``C_i``.
+
+    Returning the absolute ``beta_i P / (Lambda lambda_i)`` — the 0D model's
+    convention — is about 5e4 times too large for this state vector, and would
+    put ``P(0)`` nowhere near one if it were ever used as an initial condition.
+    """
+    p = AxialParams()
+    np.testing.assert_allclose(p.steady_precursors(1.0), np.ones(6))
+    np.testing.assert_allclose(p.steady_precursors(0.5), np.full(6, 0.5))
+
+
+def test_steady_precursors_match_the_solver_initial_condition():
+    """The config's answer and the one the reference actually integrates agree."""
+    p = AxialParams()
+    np.testing.assert_allclose(p.steady_precursors(1.0), steady_state(p)[-1])
+
+
+def test_steady_precursors_annihilate_the_precursor_equation():
+    """``dc_i/dt = lambda_i (P - c_i)`` is steady exactly when ``c_i == P``."""
+    p = AxialParams()
+    d = precursor_derivatives(p.steady_precursors(1.0), 1.0, p)
+    np.testing.assert_allclose(d, np.zeros(6), atol=1e-15)
 
 
 # --- mesh ------------------------------------------------------------------
@@ -150,6 +177,7 @@ def test_alpha_D_stays_negative_over_the_void_range():
         ({"zeta_sign": 0.0}, r"zeta_sign must lie in \(0, 1\)"),
         ({"gamma_2": -1.0}, "gamma_2 must be >= 0"),
         ({"alpha_D_flooded": 1e-3}, "Doppler coefficients must be <= 0"),
+        ({"zeta_sign": 0.5, "delta_sign": 100.0}, "nearly integrates to zero"),
     ],
 )
 def test_invalid_configurations_are_rejected(kwargs, match):

@@ -154,6 +154,87 @@ def test_closed_loop_blocks_are_per_time():
     assert all(b.shape == (that.shape[0],) for b in blocks)
 
 
+def test_causal_weighting_chunks_on_time_not_on_zeta():
+    """D40: the JAX loss chunked Plan B by axial position, so the ramp ran up the channel.
+
+    Both plans are checked, because which member of the collocation tuple holds
+    time depends on the plan — that is exactly what made the original
+    `pts[0]` wrong under Plan B and right under Plan A.
+
+    The probe puts every point in one time chunk but spreads them over all of
+    `zeta`. Chunking on time then leaves a single non-empty chunk; chunking on
+    `zeta` spreads the loss across many. Comparing the loss against a version
+    with `zeta` shuffled isolates it: shuffling `zeta` must not move a
+    time-chunked loss at all.
+    """
+    p = AxialParams()
+    cfg = pj.AxialTrainConfig(width=8, depth=2, causal_chunks=32)
+    model = pj.AxialPinn(cfg, jax.random.PRNGKey(0))
+    rng = np.random.default_rng(0)
+    zeta = rng.random((256, 1))
+    that = np.full((256, 1), 0.01)  # all inside chunk 0
+    w = jnp.ones(5)
+    base = float(pj.causal_loss(model, p, cfg, (jnp.asarray(zeta), jnp.asarray(that)), w))
+    shuffled = jnp.asarray(rng.permutation(zeta))
+    moved = float(pj.causal_loss(model, p, cfg, (shuffled, jnp.asarray(that)), w))
+    assert moved == pytest.approx(base, rel=1e-12)
+
+
+def test_causal_weighting_matches_the_torch_backend():
+    """The two backends must agree on the causal weights for the same points.
+
+    A direct cross-check of the reduction the parity study flagged as an
+    untested suspect (torch masks versus JAX `bincount`).
+    """
+    torch = pytest.importorskip("torch")
+    from pinn_sfr_transient.axial import pinn_torch as pt
+
+    rng = np.random.default_rng(1)
+    that = rng.random((128, 1))
+    e = rng.random(128)
+
+    chunks = 8
+    idx = np.clip((that.reshape(-1) * chunks).astype(int), 0, chunks - 1)
+    j_losses = np.asarray(
+        jnp.bincount(jnp.asarray(idx), weights=jnp.asarray(e), length=chunks)
+        / jnp.maximum(jnp.bincount(jnp.asarray(idx), length=chunks), 1)
+    )
+    t_e = torch.tensor(e)
+    t_idx = torch.tensor(idx)
+    t_losses = np.asarray(
+        torch.stack(
+            [
+                t_e[t_idx == m].mean() if bool((t_idx == m).any()) else t_e.sum() * 0.0
+                for m in range(chunks)
+            ]
+        )
+    )
+    np.testing.assert_allclose(j_losses, t_losses, rtol=1e-14)
+    assert pt._ALPHA_BIAS == pj._ALPHA_BIAS  # and the two ansatzes stay identical
+    assert pt._ALPHA_GATE == pj._ALPHA_GATE
+    assert pt._EXP_BOUND == pj._EXP_BOUND
+
+
+def test_void_head_starts_near_empty_not_half_voided():
+    """The reference void field is zero over ~96% of the channel; so must the ansatz be.
+
+    Without the bias the sigmoid sits at ~0.5 at initialisation, which is not an
+    inert output: it degrades the film coefficient, shifts `alpha_D` and enters
+    the reactivity integral, all before a single gradient step.
+    """
+    p = AxialParams()
+    cfg = pj.AxialTrainConfig(width=16, depth=2)
+    model = pj.AxialPinn(cfg, jax.random.PRNGKey(0))
+    zeta = np.linspace(0.0, 1.0, 41).reshape(-1, 1)
+    that = np.full_like(zeta, 0.5)
+    theta = jax.vmap(lambda a, b: pj.normalised_state(model, p, a, b))(
+        jnp.asarray(zeta), jnp.asarray(that)
+    )
+    alpha = np.asarray(theta[:, 4])
+    assert alpha.max() < 0.05
+    assert np.all(alpha >= 0.0)
+
+
 def test_rar_is_disabled_under_feedback():
     """The axial direction is a quadrature rule; RAR would break it."""
     cfg = pj.AxialTrainConfig(width=8, depth=2, feedback=True, n_time=8)

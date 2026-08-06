@@ -73,6 +73,12 @@ _NEWTON_ITERS: int = 5
 _EXP_BOUND: float = 4.0
 """Bound on the exponent of the multiplicative ansatz; see the torch twin."""
 
+_ALPHA_BIAS: float = 4.0
+"""Offset making the void head start near zero rather than near one half.
+
+Must match the torch twin, where the measurement behind the value is recorded.
+"""
+
 
 def _bounded_exp(x: jax.Array) -> jax.Array:
     """``exp`` with a smooth ceiling and floor, so the ansatz cannot overflow."""
@@ -86,8 +92,12 @@ class AxialTrainConfig:
     width: int = 64
     depth: int = 5
     n_colloc: int = 4000
-    adam_iters: int = 3000
-    lbfgs_iters: int = 300
+    # Budget knobs match the torch twin exactly. They did not — 3000/300/1000
+    # against 8000/500/2000 — so the default-configuration comparison the parity
+    # study rests on was never a like-for-like one. Anything measured across
+    # backends must be at an identical budget or it is measuring the schedule.
+    adam_iters: int = 8000
+    lbfgs_iters: int = 500
     lr: float = 1e-3
 
     causal_eps: float = 1.0
@@ -97,7 +107,7 @@ class AxialTrainConfig:
 
     # RAR keeps a FIXED count so `jit` never recompiles (the torch twin grows an
     # unbounded reservoir instead — same idea, framework-appropriate form).
-    rar_every: int = 1000
+    rar_every: int = 2000
     rar_pool: int = 20000
     rar_keep: int = 400
 
@@ -203,7 +213,8 @@ def normalised_state(
     raw = model.mlp(jnp.concatenate([zeta, that]))
     base = theta0(p, zeta)
     temps = base[:N_TEMPS] * _bounded_exp(that * raw[:N_TEMPS])
-    alpha = jnp.tanh(_ALPHA_GATE * that) * jnp.tanh(_ALPHA_GATE * zeta) * jax.nn.sigmoid(raw[-1:])
+    gate = jnp.tanh(_ALPHA_GATE * that) * jnp.tanh(_ALPHA_GATE * zeta)
+    alpha = gate * jax.nn.sigmoid(raw[-1:] - _ALPHA_BIAS)
     return jnp.concatenate([temps, alpha])
 
 
@@ -321,10 +332,20 @@ def _blocks(model: AxialPinn, p: AxialParams, cfg: AxialTrainConfig, pts: tuple)
 def causal_loss(
     model: AxialPinn, p: AxialParams, cfg: AxialTrainConfig, pts: tuple, w: jax.Array
 ) -> jax.Array:
-    """Time-chunked loss with causal weights [Wang, Sankaran & Perdikaris 2024]."""
+    """Time-chunked loss with causal weights [Wang, Sankaran & Perdikaris 2024].
+
+    The chunking variable is **time**, and which member of ``pts`` holds it
+    depends on the plan: Plan A collocates in time only, so ``pts = (that, ...)``,
+    while Plan B collocates over ``(zeta, t)`` and ``_collocation`` returns them
+    in that order. Reading ``pts[0]`` unconditionally chunked the Plan B loss by
+    **axial position**, which made the causal ramp run up the channel instead of
+    forward in time — the cause of the 3-10x backend disagreement recorded as D40
+    in ``docs/axial_nn.md`` section 7.2, where "the causal-chunk reduction" was
+    listed as an untested suspect. The torch twin was always correct.
+    """
     blocks = _blocks(model, p, cfg, pts)
     e = sum(w[k] * blocks[k] for k in range(len(blocks)))
-    that = pts[0]
+    that = pts[0] if cfg.feedback else pts[1]
     idx = jnp.clip((that.reshape(-1) * cfg.causal_chunks).astype(int), 0, cfg.causal_chunks - 1)
     counts = jnp.bincount(idx, length=cfg.causal_chunks)
     sums = jnp.bincount(idx, weights=e, length=cfg.causal_chunks)

@@ -172,6 +172,22 @@ def test_energy_balance_converges_to_zero_not_to_a_floor():
     assert err[2] < 1e-4
 
 
+def test_energy_balance_uses_the_trajectory_power_not_a_default_of_one():
+    """The closed loop delivers ~0.5 of nominal, so a hard-coded amplitude is wrong.
+
+    `energy_balance` used to default `amp = 1`, which mis-stated the Plan A
+    closure as 0.382 — a number that reads as a catastrophic conservation defect
+    when the discretisation is in fact conserving to 1.5e-5. No test covered the
+    feedback trajectory, so it went unnoticed.
+    """
+    p = AxialParams()
+    traj = solve_reference(p, n_out=241, feedback=True)
+    assert traj.power.min() < 0.6  # the amplitude really does move
+    assert energy_balance(traj, p) < 1e-4
+    # Forcing the old behaviour reproduces the bad number, so this is the cause.
+    assert energy_balance(traj, p, amplitude=lambda _t: 1.0) > 0.1
+
+
 # --- risk R6: the single upstream boundary condition stays valid ------------
 def test_flow_never_reverses(traj):
     """Eq. 3.9-1 admits one upstream BC; a sign change would invalidate the model."""
@@ -503,6 +519,33 @@ def test_doppler_dominates_the_reactivity_balance(plan_a):
     i = len(plan_a.t) // 2
     rebuilt = reactivity(plan_a.T_f[:, i], plan_a.alpha[:, i], T_f0, w_D, w_void, p)
     assert float(rebuilt) == pytest.approx(plan_a.rho[i], rel=1e-12)
+
+
+def test_reactivity_components_sum_to_the_net(plan_a):
+    """The reported split is the same quantity the solver integrated, not a re-derivation."""
+    p = AxialParams()
+    np.testing.assert_allclose(
+        p.rho_ext + plan_a.rho_doppler + plan_a.rho_void, plan_a.rho, rtol=1e-14
+    )
+
+
+def test_void_feedback_is_never_positive_at_the_shipped_defaults(plan_a):
+    """`max rho/beta = 0` is an artefact of *where* the channel boils, not stability.
+
+    Boiling starts at the top of the channel because that is where the coolant is
+    hottest, and the void field can only advect upward. With `zeta_sign = 0.80`
+    the voided region therefore never reaches the positive-worth part of the
+    core, so the coolant/void term is negative for the whole transient and the
+    positive sodium-void feedback this project exists to study is never sampled.
+    Pinned here so it is a stated property rather than an unnoticed one; raising
+    `zeta_sign` above the onset location is what would exercise it.
+    """
+    p = AxialParams()
+    assert not plan_a.void_worth_is_exercised()
+    assert plan_a.rho_void.max() / p.beta_eff < 1e-6  # roundoff only, never physical
+    assert plan_a.rho_void.min() / p.beta_eff < -1e-3  # the term is active, just negative
+    voided = plan_a.alpha.max(axis=1) > 1e-2
+    assert plan_a.zeta[voided].min() > p.zeta_sign
 
 
 def test_prompt_jump_pole_is_clamped_not_crossed():
