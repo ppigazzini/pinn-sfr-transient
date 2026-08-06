@@ -139,7 +139,7 @@ def test_residual_blocks_are_finite(model):
     rng = np.random.default_rng(0)
     zeta = jnp.asarray(rng.random((64, 1)))
     that = jnp.asarray(rng.random((64, 1)))
-    blocks = pj.residual_blocks(model, p, zeta, that)
+    blocks = pj.residual_blocks(model, p, zeta, that, pj.AxialTrainConfig())
     assert len(blocks) == 5
     assert all(bool(np.isfinite(np.asarray(b)).all()) for b in blocks)
 
@@ -149,7 +149,7 @@ def test_closed_loop_blocks_are_per_time():
     model = pj.AxialPinn(cfg, jax.random.PRNGKey(0))
     p = AxialParams()
     that, zeta_q, weights = pj._collocation(p, cfg, jax.random.PRNGKey(1))
-    blocks = pj.closed_loop_blocks(model, p, that, zeta_q, weights)
+    blocks = pj.closed_loop_blocks(model, p, that, zeta_q, weights, cfg)
     assert len(blocks) == 6
     assert all(b.shape == (that.shape[0],) for b in blocks)
 

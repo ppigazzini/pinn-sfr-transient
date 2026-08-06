@@ -339,11 +339,11 @@ weight, which makes the loss even more about that block. `w(T_f)` running to 1e6
 while `w(α)` sits at 0.451 means the void residual was being suppressed by six to
 seven orders of magnitude relative to the fuel.
 
-**Adopted:** `weight_max_ratio`, default **10.0**, in both backends.
-`weight_max_ratio = 1.0` disables the weighting and measures the same to within
-seed noise; 10.0 keeps the mechanism live where it helps. This is the first
-change in this document to *improve* the fit, and unlike the six that failed it
-was proposed by a measurement rather than to a measurement.
+**Adopted:** `weight_max_ratio` in both backends, **default 1.0 — i.e. off**.
+That default is set by §7.2.3, not by this table: once variable scaling removes
+the *static* imbalance, the adaptive part is worse than nothing on all four
+fields. This is the first change in this document to *improve* the fit, and
+unlike the six that failed it was proposed by a measurement rather than to one.
 
 **It does not fix the void.** `max α` stays at 0.000–0.004 in every well-behaved
 variant against a reference maximum of 1.0. The single run that ever reached
@@ -374,8 +374,77 @@ and `residual_scales` had been hiding it by reporting the *coolant transit time*
 
 This is the same stiffness argument that justified the prompt-jump approximation
 for the kinetics (D-KIN-1, a factor ~2300), applied to the block that actually
-limits this model now — and it points at a formulation change, not a remedy from
-§7.3. Nothing has been changed on the strength of it yet.
+limits this model now. §7.2.3 acts on it.
+
+### 7.2.3 Variable scaling — the void equation now gets solved
+
+The fix is the one the stiff-PINN literature prescribes and that this repo
+already applies globally: **divide each equation by its own characteristic rate**
+so every residual block is O(1). VS-PINN [Ko & Park, *JCP* **529** 113860 (2025)]
+formulates it as variable scaling with an NTK justification; [Wang et al., *JCP*
+**504** 113112 (2024)] as a practical framework for multi-magnitude loss terms.
+`docs/neural_network.md` §2 already credits the *global* form of exactly this for
+making the 0D model trainable — §7.2.2 simply shows it was never applied per
+block, where the spread is 813×.
+
+`residual_normalisation(p) = tau_k / t_end`, applied to the residual before
+squaring. It changes the loss and provably not the equation — the residual's zero
+set is untouched, asserted by
+`test_variable_scaling_changes_the_loss_but_never_the_equation` and by the
+un-scaling now built into the consistency test.
+
+Three variants × three seeds, torch, Plan B, 3000 Adam + 300 L-BFGS, `n = 160`
+reference. `on`/`off` is variable scaling, the number is `weight_max_ratio`:
+
+| variant | T_f | T_cl | T_s | T_c | `max α` | `L_void` | `T_f` spread |
+|---|---|---|---|---|---|---|---|
+| `off_10` | 0.128 | 0.141 | **0.041** | **0.034** | ~0.000 | **0.000 m** | 1.21× |
+| `on_10` | 0.099 | 0.139 | 0.091 | 0.083 | 0.976 | 0.801 m | 1.09× |
+| **`on_1`** | **0.091** | **0.128** | 0.077 | 0.068 | 0.960 | 0.794 m | 1.31× |
+
+(reference `L_void` = 0.381 m)
+
+**The equations are now actually being solved.** Converting the blocks back to
+physical units — the scaling is exact, so this is a like-for-like comparison —
+the residual falls by four to six orders of magnitude on *every* block:
+
+| block | `off_10` | `on_1` | drop |
+|---|---|---|---|
+| `T_f` | 3.1e6 | 1.6e0 | 2.0e6× |
+| `T_cl` | 3.1e7 | 1.6e3 | 1.9e4× |
+| `T_s` | 3.1e5 | 2.6e1 | 1.2e4× |
+| `T_c` | 4.9e6 | 4.7e1 | 1.0e5× |
+| **`α`** | **5.7e11** | **3.1e5** | **1.9e6×** |
+
+**And the boiling front forms — in 6 of 6 scaled runs against 0 of 6 unscaled.**
+`max α` goes from ~0 to 0.96–0.98 and is reproducible to three digits across
+seeds. M4's mechanism is being represented for the first time.
+
+**Adaptive weighting is now harmful, and consistently.** `on_1` beats `on_10` on
+all four fields. That is the expected result rather than a surprise: once the
+static imbalance is removed analytically, the adaptive scheme has nothing left to
+correct and only injects noise. Hence `weight_max_ratio = 1.0` as the default.
+
+**What it does not fix, and this is now the sharpest open problem.** `L_void`
+over-predicts by **2.1×** — 0.79 m against the reference's 0.381 m — and `T_s`
+and `T_c` get *worse* (0.041 → 0.077, 0.034 → 0.068). Those two facts are the
+same fact: the void field now exists, it is too long, and a voided node degrades
+`film_coefficient`, so the void's error propagates into the structure and coolant
+temperatures. Before, the network predicted no void at all and the temperatures
+were free to fit the non-boiling part cleanly.
+
+That trade is worth taking — a model that produces a front 2× too long is nearer
+the physics than one that produces none, and REPORT-01 §4.1 is explicit that `α`
+is judged on voided length and onset rather than on temperature `L2` — but it
+must be stated in those terms rather than reported as a clean win.
+
+**Residual and trajectory error have decoupled**, which is worth flagging on its
+own: a 1e6× reduction in residual bought ~25% in `T_f` and cost 2× in `T_c`. That
+is the signature the 2026 spurious-solution and overfitting work describes
+([arXiv:2604.23528](https://arxiv.org/abs/2604.23528),
+[arXiv:2605.30910](https://arxiv.org/abs/2605.30910)) and that REPORT-01 §5.2
+items 9–10 anticipate. The next diagnosis belongs there — specifically, why the
+front over-runs — and not in another architecture.
 
 ### 7.2 Backend parity
 

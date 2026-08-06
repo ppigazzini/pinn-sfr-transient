@@ -45,6 +45,7 @@ from pinn_sfr_transient.axial.physics import (
     precursor_derivatives,
     prompt_jump_power,
     reactivity,
+    residual_normalisation,
 )
 from pinn_sfr_transient.axial.reference import solve_reference
 
@@ -82,12 +83,19 @@ class AxialTrainConfig:
     weight_momentum: float = 0.9
     # Largest factor by which any block weight may depart from the geometric mean,
     # so the spread between the most- and least-weighted block is bounded by its
-    # square. **Measured, not chosen**: unbounded (the original scheme) the
-    # weights ran to 3.1e5-6.2e6 on `T_f` against 0.451 on the void, and every
-    # field was worse for it — see `docs/axial_nn.md` section 7.2. 1.0 disables
-    # the weighting entirely, which measures the same as 10.0 to within seed
-    # noise; 10.0 keeps the mechanism live where it is useful.
-    weight_max_ratio: float = 10.0
+    # square. **Measured, not chosen**, twice: unbounded, the weights ran to
+    # 3.1e5-6.2e6 on `T_f` against 0.451 on the void and every field was worse
+    # for it; and once `residual_scaling` removes the *static* imbalance the
+    # adaptive part is worse than nothing on all four fields. So the default is
+    # off. Values > 1 re-enable it, bounded. See `docs/axial_nn.md` section 7.2.
+    weight_max_ratio: float = 1.0
+    # Variable scaling: divide each residual block by its own characteristic rate
+    # so all blocks are O(1) [Ko & Park, JCP 529 113860 (2025)]. The natural rates
+    # span 813x here (`physics.residual_scales`), almost all of it the void, which
+    # is 8x beyond what `weight_max_ratio` can undo — so the fixed part has to
+    # come out analytically. REPORT-01 D39 measured this as a no-op, correctly,
+    # back when the adaptive weights were unbounded and cancelled it.
+    residual_scaling: bool = True
 
     # Residual-based adaptive refinement [Wu et al. 2023]
     rar_every: int = 2000
@@ -237,6 +245,13 @@ class AxialPinn(nn.Module):
         self.zeta_q = torch.tensor(p.zeta_nodes().reshape(-1, 1), dtype=torch.float64)
         self.dT = p.P_0 / (p.w_0 * p.c_c)  # nominal core rise, the temperature scale
         self.t_end = float(p.t_end)
+        # Variable scaling per residual block; ones when disabled.
+        self.res_norm: tuple[float, ...] = (
+            residual_normalisation(p) if cfg.residual_scaling else (1.0,) * len(FIELDS)
+        )
+        # Precursors carry their own rate per group, `t_end * lambda_i`.
+        lam = torch.tensor(p.lambda_i, dtype=torch.float64)
+        self.c_norm = 1.0 / (self.t_end * lam) if cfg.residual_scaling else torch.ones_like(lam)
 
     # -- normalisation ------------------------------------------------------
     def to_physical(self, theta: torch.Tensor) -> tuple[torch.Tensor, ...]:
@@ -363,14 +378,17 @@ class AxialPinn(nn.Module):
         # the natural shape for causal weighting, which chunks in time.
         scales = [self.t_end / self.dT] * N_TEMPS + [self.t_end]
         blocks = [
-            (d_dt[:, k : k + 1] - scales[k] * rhs[k]).pow(2).reshape(n_t, n_z).mean(1)
+            ((d_dt[:, k : k + 1] - scales[k] * rhs[k]) * self.res_norm[k])
+            .pow(2)
+            .reshape(n_t, n_z)
+            .mean(1)
             for k in range(len(FIELDS))
         ]
 
         # Precursors: dc_i/dt_hat = t_end * lambda_i (P - c_i), Eq. 4.3-1 in
         # normalised time. Averaged over the six groups, as the 0D model does.
         d_phys = precursor_derivatives(c, power, self.p)
-        blocks.append((dc - self.t_end * d_phys).pow(2).mean(1))
+        blocks.append(((dc - self.t_end * d_phys) * self.c_norm).pow(2).mean(1))
         return tuple(blocks)
 
     def residual_blocks(self, zeta: torch.Tensor, that: torch.Tensor) -> tuple[torch.Tensor, ...]:
@@ -393,10 +411,12 @@ class AxialPinn(nn.Module):
             1.0,
         )
         # Temperatures are scaled by t_end/dT; the void is already dimensionless,
-        # so it only picks up the time scale.
+        # so it only picks up the time scale. `res_norm` then divides each block
+        # by its own characteristic rate so all five are O(1) (variable scaling).
         scales = [self.t_end / self.dT] * N_TEMPS + [self.t_end]
         return tuple(
-            (d_dt[:, k : k + 1] - scales[k] * rhs[k]).pow(2).squeeze(1) for k in range(len(FIELDS))
+            ((d_dt[:, k : k + 1] - scales[k] * rhs[k]) * self.res_norm[k]).pow(2).squeeze(1)
+            for k in range(len(FIELDS))
         )
 
     @torch.no_grad()
@@ -712,7 +732,9 @@ class Trainer:
             # no-op and the schedule is the original one.
             stage = min(int(it / cfg.adam_iters * cfg.n_windows) + 1, cfg.n_windows)
             t_max = stage / cfg.n_windows
-            if it and it % cfg.weight_update_every == 0:
+            # Skip the gradient-norm pass entirely when weighting is off: it costs
+            # one backward per block and the answer is known to be ones.
+            if cfg.weight_max_ratio > 1.0 and it and it % cfg.weight_update_every == 0:
                 self.update_block_weights(*self.collocation(t_max))
             if it and it % cfg.rar_every == 0:
                 self.rar_refine(t_max)
