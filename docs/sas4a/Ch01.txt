@@ -1,0 +1,567 @@
+==============================================================================
+CHAPTER 1. Introduction
+source: https://sas-doc.nse.anl.gov/latest/Part01/Ch01/Ch01.html   (ANL/NSE-SAS/5.8.1)
+scope: context: code overview
+==============================================================================
+[anchor: introduction]
+
+# 1. Introduction
+
+The SAS4A/SASSYS-1 computer code is developed by Argonne National
+Laboratory for thermal, hydraulic, and neutronic analysis of power and
+flow transients in liquid-metal-cooled nuclear reactors (LMRs). SAS4A
+was developed to analyze severe core disruption accidents with coolant
+boiling and fuel melting and relocation, initiated by a very low
+probability coincidence of an accident precursor and failure of one or
+more safety systems. SASSYS‑1, originally developed to address
+loss-of-decay-heat-removal accidents, has evolved into a tool for margin
+assessment in design basis accident (DBA) analysis and for consequence
+assessment in beyond-design-basis accident (BDBA) analysis.
+
+SAS4A contains detailed, mechanistic models of transient thermal,
+hydraulic, neutronic, and mechanical phenomena to describe the response
+of the reactor core, its coolant, fuel elements, and structural members
+to accident conditions. The core channel models in SAS4A provide the
+capability to analyze the initial phase of core disruptive accidents,
+through coolant heat-up and boiling, fuel element failure, and fuel
+melting and relocation. Originally developed to analyze oxide fuel clad
+with stainless steel, the models in SAS4A have been extended and
+specialized to metallic fuel with advanced alloy cladding.
+
+SASSYS‑1 provides the capability to perform a detailed thermal/hydraulic
+simulation of the primary and secondary sodium coolant circuits and the
+balance-of-plant steam/water circuit. These sodium and steam circuit
+models include component models for heat exchangers, pumps, valves,
+turbines, and condensers, and thermal/hydraulic models of pipes and
+plena. SASSYS‑1 also contains a plant protection and control system
+modeling capability, which provides digital representations of reactor,
+pump, and valve controllers and their response to input signal changes.
+
+1.1. SAS4A/SASSYS-1 Background
+
+1.2. SAS4A/SASSYS-1 Version 5
+
+1.3. Documentation Overview
+
+1.4. References
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch01/background.html]
+------------------------------------------------------------------------------
+[anchor: sas-background]
+
+# 1.1. SAS4A/SASSYS-1 Background
+
+In the late 1960s, the then U.S. Atomic Energy Commission gave
+development of a liquid-metal-cooled fast reactor (LMR) a high priority,
+and the development of the Fast Flux Test Facility (FFTF) became a
+cornerstone of that program. To provide adequate support for the FFTF
+and for the expected LMRs to follow, a major base technology program was
+established which provided a continuous stream of experimental
+information and design correlations. This experimental data would either
+confirm design choices or prove the need for design modifications. At
+the time, the “tremendous amount of data and experience pertaining to
+thermal design” of LMRs was recognized as providing the technical
+foundation for the future commercial development of LMRs.[1‑1]
+
+Along with the generation of experimental data came the development of
+safety analysis methods that used that data in correlations for
+mechanistic, probabilistic, or phenomenological models. These models
+were developed for a variety of needs ranging from individual
+components, such as heat exchangers, pumps, or containment barriers, to
+whole core or even whole-plant dynamics. A major portion of the overall
+technical effort since that time has been allocated to safety
+considerations, and the SAS4A/SASSYS-1 safety analysis code is the
+result of that dedication.
+
+Perhaps the strongest factor that influenced early fast reactor safety
+analysis was the concern over the possibility of core compaction
+followed by an energetic core disassembly — the so-called Bethe-Tait
+accident.[1‑2] In the late 1960s, the Hanford Engineering Development
+Laboratory (HEDL) began developing the MELT code[1‑3,1‑4] to evaluate
+the initiating phase of hypothetical core disruption accidents (HCDA) as
+part of the FFTF project. The MELT series of codes has the capability to
+model the transient behavior of several representative fuel pins
+(channels) within a reactor core to allow for incoherency in the
+accident sequence. By 1978 MELT had evolved into the MELT-IIIB code.[
+1‑4]
+
+Around the same time that development on MELT began, Argonne National
+Laboratory began developing the SAS series of codes.[1‑5-1‑9] Like MELT,
+SAS has the capability to model the transient behavior of several
+representative channels to evaluate the initiating phase of HCDAs. SAS1A
+originated from a sodium boiling model and includes single- and
+two-phase coolant flow dynamics, fuel and cladding thermal expansion and
+deformation, molten fuel dynamics, and a point kinetics model with
+reactivity feedback. By 1974, SAS evolved to the SAS2A computer
+code[1‑6] which included a detailed multiple slug and bubble coolant
+boiling model which greatly enhanced the ability to simulate the
+initiating phases of loss-of-flow (LOF) and transient overpower (TOP)
+accidents up to the point of cladding failure and fuel and cladding
+melting.
+
+The SAS3A code [1‑7] added mechanistic models of fuel and cladding
+melting and relocation. This version of the code was used extensively
+for analysis of accidents in the licensing of FFTF. In anticipation of
+LOF and TOP analysis requirements for licensing of the Clinch River
+Breeder Reactor Plant (CRBRP), new fuel element deformation, disruption,
+and material relocation models were written for the SAS4A version of the
+code,[1‑8] which saw extensive validation against TREAT M-Series test
+data. In addition, a variant of SAS4A, named SASSYS-1, was developed
+with the capability to model ex-reactor coolant systems to permit the
+analysis of accident sequences involving or initiated by loss of heat
+removal or other coolant system events. This allows the simulation of
+whole-plant dynamics feedback for both shutdown and off-normal
+conditions, which have been validated against EBR-II Shutdown Heat
+Removal Test (SHRT) data and data from the FFTF LOF tests.
+
+Although SAS4A and SASSYS‑1 are generally portrayed as two computer
+codes, they have always shared a common code architecture, the same data
+management strategy, and the same core channel representation.
+Subsequently, the two code branches were merged into a single code
+referred to as SAS4A/SASSYS-1. Version 2.1 of the SAS4A/SASSYS-1 code
+[1‑10,1‑11] was distributed to Germany, France, and Japan in the late
+1980s, and it serves as a common tool for international oxide fuel model
+developments.
+
+Beyond the release of SAS4A/SASSYS-1 v 2.1, revisions to SAS4A/SASSYS-1
+continued throughout the Integral Fast Reactor (IFR) program between
+1984 and 1994,[1‑12] culminating with the completion of SAS4A/SASSYS-1 v
+3.0 in 1994.[1‑13] During this time, the modeling emphasis shifted
+towards metallic fuel and accident prevention by means of inherent
+safety mechanisms. This resulted in 1) addition of new models and
+modification of existing models to treat metallic fuel, its properties,
+behavior, and accident phenomena, and 2) addition and validation of new
+capabilities for calculating whole-plant design basis transients, with
+emphasis on the EBR-II reactor and plant [1‑14], the IFR prototype. The
+whole-plant dynamics capability of the SASSYS-1 component plays a vital
+role in predicting passive safety feedback. Without it, meaningful
+boundary conditions for the core channel models are not available, and
+accident progression is not reliably predicted.
+
+By the mid 1990s, SAS4A/SASSYS-1 v 3.1 had been completed as a
+significant maintenance update, but it was not released until
+2012.[1‑15]
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch01/version5.html]
+------------------------------------------------------------------------------
+[anchor: sas-version-5]
+
+# 1.2. SAS4A/SASSYS-1 Version 5
+
+In the time since the development of Version 3, several modeling
+additions and enhancements have been made to meet U.S. Department of
+Energy programmatic needs. Significant among these are
+
+Detailed sub-channel models for whole-core analyses to resolve
+intra-assembly temperature and flow distributions [1‑9]
+
+3D visualization capabilities for sub-channel results.
+
+Extended decay-heat models to support long-term transients and
+complex, actinide-bearing fuels.
+
+Support for coupling with external CFD simulations to resolve flow
+distribution and thermal stratification effects.
+
+Treatment of axial expansion feedback from assembly duct walls
+
+Support for spatial kinetics (requires DIF3D-K)
+
+Extension of the control-system model to include sinusoidal functions
+that can be used to represent seismic oscillation effects.
+
+Addition for heavy liquid-metal coolants (lead and lead-bismuth
+eutectic)
+
+Support for user-defined coolant properties
+
+Detailed steam-generator model updates
+
+New electromagnetic pump modeling capabilities
+
+Several bug fixes and other enhancements
+
+In addition to the above, a major restructuring of the code has been
+completed to adapt all source files to free-form source format and new
+model developments are being implemented using modern object-oriented
+practices.
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch01/doc_overview.html]
+------------------------------------------------------------------------------
+[anchor: documentation-overview]
+
+# 1.3. Documentation Overview
+
+The rest of this manual contains details of the modeling capabilities of
+SAS4A/SASSYS-1. The chapter organization shown in Table 1.3.1 reflects
+the major model delineations. Each chapter provides in-depth
+descriptions of the models, including model formulations, solution
+techniques, and input descriptions. It is critical that users understand
+the relationships between their model input and the model formulations
+given in this manual. Failure to understand these relationships can
+result in broken models and misleading results.
+
+SAS4A/SASSYS-1 provides a detailed, multiple-channel thermal/hydraulic
+treatment of the reactor core. Each channel represents a fuel pin, its
+cladding, the associated coolant, and a fraction of the subassembly duct
+wall. Other positioning hardware, such as wire wraps or grid spacers, is
+usually lumped into the structure field with the duct wall. Within a
+channel, the flow is assumed to be one-dimensional in the axial
+direction, and the temperature field in the fuel, cladding, coolant, and
+structure is assumed to be two-dimensional in the radial and axial
+directions. Usually, a channel represents an average fuel element in a
+subassembly or a group of subassemblies. A channel may also represent
+pins in blanket or control subassemblies. Alternately, a single channel
+may also be used to represent the hottest pin in an assembly, or any
+other subset of a subassembly. The axial extent of a channel covers the
+entire length of a subassembly, including the core, the axial blankets,
+the fission gas plenum and the spaces above and below the pin/cladding
+geometry. Different channels may be used to account for radial and
+azimuthal design geometry, power, coolant flow, and burnup variations
+within the reactor core.
+
+Table 1.3.1 Organization of the SAS4A/SASSYS-1 Manual
+ | 
+
+ | 
+Chapter
+ | 
+ | 
+Subject
+ | 
+
+ | 
+
+ | 
+1
+ | 
+ | 
+Introduction (this chapter)
+ | 
+
+ | 
+2
+ | 
+ | 
+SAS4A/SASSYS-1 User’s Guide
+ | 
+
+ | 
+3
+ | 
+ | 
+Pin Heat Transfer and Single‑Phase Coolant Thermal/Hydraulics Model
+ | 
+
+ | 
+4
+ | 
+ | 
+Reactor Point Kinetics and Reactivity Feedback Models
+ | 
+
+ | 
+5
+ | 
+ | 
+PRIMAR‑4: Primary and Intermediate Loop Thermal/Hydraulics Model
+ | 
+
+ | 
+6
+ | 
+ | 
+Plant Control and Protection Systems Model
+ | 
+
+ | 
+7
+ | 
+ | 
+Balance‑of‑Plant Thermal Hydraulics Model
+ | 
+
+ | 
+8
+ | 
+ | 
+DEFORM‑4 Oxide Fuel and Cladding Mechanics Model
+ | 
+
+ | 
+9
+ | 
+ | 
+MFUEL Metallic Fuel Performance Model
+ | 
+
+ | 
+10
+ | 
+ | 
+SSCOMP Metal Fuel Characterization Model
+ | 
+
+ | 
+11
+ | 
+ | 
+FPIN2 Metal Fuel and Cladding Mechanics Model
+ | 
+
+ | 
+12
+ | 
+ | 
+TSBOIL Two‑Phase Coolant Thermal/Hydraulics Model
+ | 
+
+ | 
+13
+ | 
+ | 
+CLAP Molten Cladding Dynamics Model
+ | 
+
+ | 
+14
+ | 
+ | 
+PLUTO2 Fuel‑Coolant Interaction Model
+ | 
+
+ | 
+15
+ | 
+ | 
+PINACLE In‑Pin Fuel Relocation Model
+ | 
+
+ | 
+16
+ | 
+ | 
+LEVITATE Fuel Relocation Model
+ | 
+
+Chapter 2 contains a general user’s guide for SAS4A/SASSYS-1, including
+a complete description of the standard input file. Although Chapter 2
+includes a summary description of every input parameter, it is essential
+that users consult the relevant chapters to understand the relationship
+between the input and the model formulations.
+
+Chapter 3 contains the description of the formulation for the
+SAS4A/SASSYS-1 pin heat transfer and single-phase coolant
+thermal/hydraulics model. The subassembly-to-subassembly heat transfer
+model has been improved, and axial conduction in the coolant has been
+added. A sub-channel model has been introduced to provide accurate
+predictions of intra-assembly temperature and flow distributions.[1‑16]
+This modeling addition is being validated with results from the EBR-II
+Shutdown Heat Removal Tests [1‑17] as part of an International Atomic
+Energy Agency Coordinated Research Project.[1‑18]
+
+Chapter 4 contains the description of the formulation for the
+SAS4A/SASSYS-1 reactor point kinetics, decay heat, and reactivity
+feedback models. A new addition to this module is the ability to
+represent more detailed decay heat characteristics in multiple regions
+of the core. This module provides the reactor power level to the core
+thermal/hydraulics models for determination of the heating rate in the
+fuel, and receives core materials temperature and geometry information
+to calculate the reactivity feedbacks employed in the solution of the
+point kinetics equations.
+
+Chapter 5 presents a full description of the formulation for the
+PRIMAR‑4 sodium loops thermal/hydraulic model. This model provides
+boundary coolant pressure and flow conditions for the core channel
+models, including transient heat losses through normal and emergency
+heat removal systems and the transient performance of pumps. PRIMAR‑4
+includes the option for multiple core inlet and outlet coolant plena,
+permitting exact representation of the actual EBR-II coolant systems
+geometry. Compressible volumes in PRIMAR‑4 may also be coupled with
+external computational fluid dynamics simulations to better represent
+flow and temperature distributions during transients.
+
+The plant control and protection system model described in Chapter 6 is
+mostly unchanged from prior versions of SASSYS‑1, except for the
+addition a sinusoidal function to represent oscillations in
+control-system signals.
+
+The balance-of-plant (BOP) model described in Chapter 7 was implemented
+to permit 1) improved simulation of EBR-II design basis transients, 2)
+whole-plant analysis of IFR designs for optimization of advanced reactor
+control system strategies, and 3) core temperature margin assessments in
+unprotected accident sequences (i.e. beyond design basis accidents
+(BDBA) and anticipated transients without scram (ATWS)). In these latter
+sequences, core response depends strongly upon the performance of the
+balance-of-plant, because the core neutronic and thermal/ hydraulic
+behavior is determined by the availability of heat sinks outside the
+core. The BOP model couples to PRIMAR‑4 at the steam generator.
+
+Chapter 8 provides a description of the DEFORM‑4 fuel element behavior
+model for stainless steel-clad oxide fuel, which is unchanged from prior
+versions of SAS4A/SASSYS-1.
+
+Chapter 9 contains the description of the MFUEL model, which treats
+the irradiation and transient behavior of U-Pu-Zr based metal fuel with HT-9 and D4 cladding.
+It includes physical phenomena unique to metallic fuel, such
+as fuel/cladding chemical interactions.
+The description of DEFORM-5, which was deprecated in Version 5.7, has been moved to the appendix
+of Chapter 9.
+
+The SSCOMP model described in Chapter 10 reflects available metal fuel
+material properties evaluations recorded in the IFR Material Properties
+Handbook [1‑19]. An efficient correlation technique has been implemented
+in all SAS4A/SASSYS-1 material properties routines that accurately
+generates the data from the IFR Handbook for use in all the modules of
+the code. It is planned to revise the material migration capability in
+SSCOMP for ternary fuel, to add models for fission gas generation and
+release, swelling, and all other phenomena needed to describe the
+transition from cold, clean, unirradiated conditions to hot irradiated
+conditions.
+
+Chapter 11 contains the description of the FPIN2 metal fuel pin
+mechanics model [1‑20]. FPIN2 is a validated model for metal fuel pin
+transient behavior. Unlike DEFORM‑5, which treats only the cladding
+response, FPIN2 provides a finite-element solution of the fuel and
+cladding mechanics equations for the elastic/plastic response, including
+fission gas pressurization and migration, molten cavity formation and
+growth, and fuel/cladding chemical interaction and cladding thinning.
+The interface between SAS4A/SASSYS-1 and FPIN2 has been designed to
+permit stand-alone execution of FPIN2 for direct verification or to
+replace the FPIN2 thermal/hydraulics calculation with the SAS4A/SASSYS-1
+counterparts for coupled calculations. The application for this model is
+design basis analysis of driver and experimental fuel elements in EBR-II
+for the purpose of margin-to-failure assessments.
+
+The TSBOIL module for liquid metal coolant boiling and two-phase
+thermal/hydraulics calculations has been retained intact from previous
+versions of SAS4A/SASSYS-1. The current model includes a set of
+modifications to describe the sudden release of non-condensable fission
+gas from a cladding rupture in the upper fission gas plenum of metal
+fuel elements and the subsequent plenum blow-down and liquid coolant
+expulsion. This option has been used to assess the safety implications
+of long-term fuel element irradiations in EBR-II [1‑21].
+
+The CLAP and PLUTO2 models described in Chapter 13 and Chapter 14 are relevant
+only to oxide fuel, and have remained unchanged since the previous
+documentation.
+
+The PINACLE model described in Chapter 15 and the LEVITATE model
+described in Chapter 16 have been upgraded for applications to metallic
+fuel [1‑22]. The model enhancements added to PINACLE and LEVITATE for
+metal fuel include fuel/cladding and fuel/structure chemical
+interactions and fission gas generation and migration with fuel
+swelling. Preliminary analyses of TREAT M-Series in-pile metal fuel
+tests have been completed [1‑23], and applications to severe accident
+sequences in metal-fueled IFR cores have been completed and documented
+[1‑24].
+
+
+------------------------------------------------------------------------------
+[page: Part01/Ch01/references.html]
+------------------------------------------------------------------------------
+[anchor: references]
+
+# 1.4. References
+
+1-1. Y. S. Tang, R. D. Coffield, Jr., R. A. Markley, “Thermal Analysis
+of Liquid Metal Fast Breeder Reactors,” Westinghouse Electric
+Corporation, Madison, Pennsylvania, American Nuclear Society
+Publications, 1978.
+
+1-2. H. A. Bethe and J. H. Tait, “An Estimate of the Order of Magnitude
+of the Explosion When the Core of a Fast Reactor Collapses,” RHM-56-113,
+April 1956.
+
+1-3. A. E. Waltar, A. Padilla, Jr., and R. J. Shields, “MELT-II, A
+Two-Dimensional Neutronics-Heat Transfer Program for Fast Reactor Safety
+Analysis,” Unpublished information, Hanford Engineering Development
+Laboratory, 1972.
+
+1-4. K. K. Tabb, C. H. Lewis, L. D. O’Dell, A. Padilla, Jr., D. E.
+Smith, and N. P. Wilburn, “MELT-IIIB: An Updated Version of the MELT
+Code,” Unpublished information, Hanford Engineering Development
+Laboratory, April 1979.
+
+1-5. J. C. Carter, et al., “SAS1A, A Computer Code for the Analysis of
+Fast-Reactor Power and Flow Transients,” ANL-7606, Argonne National
+Laboratory, October 1970.
+
+1-6. F. E. Dunn, et al., “The SAS2A LMFBR Accident-Analysis Computer
+Code,” ANL-8138, Argonne National Laboratory, October 1974.
+
+1-7. M. G. Stevenson, W. R. Bohl, F. E. Dunn, T. J. Heames, G. Hoppner,
+and L. L. Smith, “Current Status and Experimental Basis of the SAS LMFBR
+Accident Analysis Code System,” Proc. Fast Reactor Safety Meeting,
+American Nuclear Society, CONF-740401-P3, pp. 1303-3121, Beverly Hills,
+CA, April 2-4, 1974.
+
+1-8. J. E. Cahalan, A. M. Tentner, and E. E. Morris, “Advanced LMR
+Safety Analysis Capabilities in the SASSYS-1 and SAS4A Computer Codes,”
+Proceedings of the International Topical Meeting on Advanced Reactors
+Safety, American Nuclear Society, Vol. 2, pp. 1038-1045, Pittsburgh,
+PA, April 17-21, 1994.
+
+1-9. F. E. Dunn, J. E. Cahalan, D. Hahn, H. Y. Jeong, “Whole Core
+Sub-Channel Analysis Verification with EBR-II SHRT-17 Test,” Proc. 2006
+Int’l Congress on Advances in Nuclear Power Plants, Reno, NV, June 6-8,
+2006.
+
+1-10. G. Birgersson, et al., Unpublished information, Argonne National
+Laboratory, 1988.
+
+1-11. F. E. Dunn, et al., Unpublished information, Argonne National
+Laboratory, 1987.
+
+1-12. C. E. Till, “Fast Reactor Directions: The LMR Integral Fast
+Reactor Program at Argonne,” Proceedings of the International Fast
+Reactor Safety Meeting, Snowbird, Utah, August 12-16, 1990.
+
+1-13. Argonne National Laboratory, Unpublished information, 1996.
+
+1-14. J. Sackett, et al., “EBR-II Test Programs,” Proceedings of the
+International Fast Reactor Safety Meeting, Snowbird, Utah, August 12-16,
+1990.
+
+1-15. T. H. Fanning, ed., “The SAS4A/SASSYS-1 Safety Analysis Code
+System,” ANL/NE-12/4, Nuclear Engineering Division, Argonne National
+Laboratory, January 31, 2012.
+
+1-16. F. E. Dunn, Unpublished information, Argonne National Laboratory,
+1993.
+
+1-17. D. Mohr, et al., “Loss-Of-Primary-Flow-Without-Scram Tests:
+Pretest Predictions and Preliminary Results,” Nuclear Engineering and
+Design, 101, 1987.
+
+1-. T. Sofu and L. L. Briggs, “Benchmark Specifications for EBR-II
+Shutdown Heat Removal Tests,” Proc. Int’l Congress on Advances in
+Nuclear Power Plants, ICAPP 2012, Chicago, IL, June 24-28, 2012.
+
+1-19. IFR Properties Evaluation Working Group, “Handbook of Properties
+of Metallic Fuels,” Argonne National Laboratory, Idaho Falls, Idaho,
+June, 1988.
+
+1-20. T. H. Hughes and J. M. Kramer, “The FPIN2 Code - An Application of
+the Finite Element Method to the Analysis of the Transient Response of
+Oxide and Metal Fuel Elements,” Conference on the Science and Technology
+of Fast Reactor Safety, British Nuclear Energy Society, Guernsey, May
+12-16, 1986.
+
+1-21. J. P. Herzog and K. J. Miles, Unpublished information, Argonne
+National Laboratory, 1989.
+
+1-22. A. M. Tentner, Unpublished information, Argonne National
+Laboratory, April, 1993.
+
+1-23. A. M. Tentner and Kalimullah, Unpublished information, Argonne
+National Laboratory, 1993.
+
+1-24. E. E. Morris and A. M Tentner, Unpublished information, Argonne
+National Laboratory, 1994.

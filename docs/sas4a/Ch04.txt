@@ -1,0 +1,6092 @@
+==============================================================================
+CHAPTER 4. Reactor Point Kinetics, Decay Heat, and Reactivity Feedback
+source: https://sas-doc.nse.anl.gov/latest/Part02/Ch04/Ch04.html   (ANL/NSE-SAS/5.8.1)
+scope: core: point kinetics (4.2, 4.6.1), delayed neutrons (4.3), ANS decay heat (4.4), eight reactivity feedback mechanisms (4.5)
+==============================================================================
+[anchor: reactor-point-kinetics-decay-heat-and-reactivity-feedback]
+
+# 4. Reactor Point Kinetics, Decay Heat, and Reactivity Feedback
+
+4.1. Introduction
+
+4.2. Reactor Power
+
+4.3. Delayed-Neutron Precursors
+
+4.4. Decay Heat
+
+4.4.1. The ANS Decay Heat Power Standard
+
+4.4.2. Implementation
+
+4.5. Net Reactivity
+
+4.5.1. User-Programmed Reactivity
+
+4.5.2. Control System Reactivity
+
+4.5.3. Fuel Doppler Feedback Reactivity
+
+4.5.4. Fuel, Cladding, and Structure Axial Expansion Feedback Reactivity
+
+4.5.5. Coolant Density Feedback Reactivity
+
+4.5.6. Radial Expansion Feedback Reactivity
+
+4.5.7. Control Rod Drive Expansion Feedback Reactivity
+
+4.5.8. Fuel and Cladding Relocation Feedback Reactivity
+
+4.5.9. EBR-II Reactivity Feedback model
+
+4.6. Solution Methods
+
+4.6.1. Point Kinetics
+
+4.6.2. Specified Power History
+
+4.7. Code Organization and Data Flow
+
+4.8. Input/Output Description
+
+4.9. References
+
+4.10. Nomenclature
+
+4.11. Appendices
+
+4.11.1. Appendix 4.1: Steady-State Power Normalization in SAS4A/SASSYS-1
+
+
+------------------------------------------------------------------------------
+[page: Part02/Ch04/introduction.html]
+------------------------------------------------------------------------------
+[anchor: introduction]
+
+# 4.1. Introduction
+
+The purpose of the SAS4A/SASSYS-1 reactor point kinetics, decay heat,
+and reactivity feedback models is to provide an estimate of the reactor
+power level to be used in the prediction of energy deposition in the
+fuel. Reactor material temperature changes and relocations determine the
+reactivity, which in turn determines the reactor power level and the
+rate of heating of the reactor materials.
+
+The SAS4A/SASSYS-1 reactor point kinetics, and reactivity feedback
+models are based on concepts used in the SAS3A [4-1] computer code. A
+time-independent reactor power spatial shape is assumed, along with a
+space-independent (point) reactor kinetics model. However, the decay
+heat model in SAS4A/SASSYS-1 has been rewritten for version 5.0.
+First-order perturbation theory is used to predict reactivity feedback
+effects associated with material density changes. Fuel temperature
+(Doppler) effects are calculated assuming a logarithmic dependence on
+the local absolute temperature ratio, with a linearly dependent
+variation of the local Doppler coefficient on the coolant void fraction.
+
+The fundamental basis for the assumptions of a time-independent power
+distribution, point kinetics, and first-order perturbation theory is the
+underlying supposition that the reactor neutron flux distribution is
+invariant in time. This means that in the transient simulation, the
+effects of changes in the reactor environment (geometry, dimensions,
+temperature and density distributions) on the neutron flux shape are
+neglected. This significantly reduces the complexity and computational
+expense of the overall neutronics model, with some loss of accuracy. In
+general, this inaccuracy can be expected to be significant mainly in the
+estimate of the reactivity feedback accompanying large-scale fuel
+material relocations, and large-scale fuel relocation is usually not
+included in a SAS4A/SASSYS-1 case.
+
+The sections that follow describe the mathematical formulations for the
+total reactor power, delayed-neutron precursors, decay heat, and net
+reactivity. The numerical solution methods are described in Section 4.6,
+and subsequent sections provide details on code organization, data flow,
+input, and output.
+
+
+------------------------------------------------------------------------------
+[page: Part02/Ch04/power.html]
+------------------------------------------------------------------------------
+[anchor: reactor-power]
+
+# 4.2. Reactor Power
+
+At any time $t$ , the local power production at position
+ $\overrightarrow{r}$ is assumed to be given by the space-time
+separated function:
+
+$$Q\left( \overrightarrow{r},t \right) = \psi_{\text{t}}\left( t \right)S\left( \overrightarrow{r} \right)$$ [eq 4.2-1]
+
+where $\psi_{\text{t}}\left( t \right)$ is the dimensionless, normalized
+power amplitude and $S\left( \overrightarrow{r} \right)$ is the
+steady-state reactor power in watts being produced in an axial node at
+location $\overrightarrow{r}$ . In terms of input quantities,
+ $S\left( \overrightarrow{r} \right)$ is given by the product of
+POW and PSHAPE. Initially, the power amplitude has a value of unity and
+ $S\left( \overrightarrow{r} \right)$ is normalized to the total
+steady-state reactor power. Appendix 4.1 contains a description of the
+internal normalization of PSHAPE performed by SAS4A/SASSYS-1. The
+time-dependent power amplitude is assumed to be made up of the sum of
+two components:
+
+$$\psi_{\text{t}}\left( t \right) = \psi_{\text{f}}\left( t \right) + \psi_{\text{h}}\left( t \right)$$ [eq 4.2-2]
+
+where $\psi_{\text{h}}\left( t \right)$ comes from the decay of fission
+and capture products. These two components have been separated to allow
+the simulation of both short- and long-term transients.
+
+The direct fission component of the power amplitude is given by
+
+$$\psi_{\text{f}}\left( t \right) = \psi_{\text{f}}\left( 0 \right)\phi\left( t \right)$$ [eq 4.2-3]
+
+where $\phi \left( t \right)$ is the dimensionless, normalized fission power
+amplitude given by the point reactor kinetics model:
+
+$$\dot{\phi}\left( t \right) = \phi\left( t \right)\frac{\delta k\left( t \right) - \beta}{\Lambda} + \sum_{\text{i}}{\lambda_{\text{i}}C_{\text{i}}\left( t \right)}$$ [eq 4.2-4]
+
+with the initial condition $\phi\left( 0 \right) = 1$ .
+
+In Eq. (4.2-4), $\delta k \left( t \right)$ is the net reactivity,
+ $\beta$ is the total effective delayed-neutron fraction,
+ $\Lambda$ is the effective prompt neutron generation time, and
+ $\lambda_{\text{i}}$ is the decay constant for the delayed-neutron
+precursor isotope whose normalized population is
+ $C_{\text{i}}\left( t \right)$ . The physical interpretation of the terms
+in the point reactor kinetics equation is made by Henry [4-2] and also
+by Bell and Glasstone [4-3].
+
+
+------------------------------------------------------------------------------
+[page: Part02/Ch04/delayed-neutrons.html]
+------------------------------------------------------------------------------
+[anchor: delayed-neutron-precursors]
+
+# 4.3. Delayed-Neutron Precursors
+
+The net rate of change of the delayed-neutron precursor population is
+given by
+
+$${\dot{C}}_{\text{i}}\left( t \right) = \frac{\beta_{\text{i}}\phi\left( t \right)}{\Lambda} - \lambda_{\text{i}}C_{\text{i}}\left( t \right)$$ [eq 4.3-1]
+
+where $\beta_{\text{i}}$ is the effective delayed-neutron fraction for
+precursor $i$ , and the initial, normalized steady precursor
+population is given by
+
+$$C_{\text{i}}\left( 0 \right) = \frac{\beta_{\text{i}}}{\lambda_{\text{i}}\Lambda}$$ [eq 4.3-2]
+
+In terms of the individual precursor delayed-neutron fractions, the
+total effective delayed-neutron fraction is given as
+
+$$\beta = \sum_{\text{i}}\beta_{\text{i}}$$ [eq 4.3-3]
+
+The number of delayed neutron precursors is entered in input variable
+NDELAY, the effective delayed neutron
+fractions are entered in input array BETADN, and the delayed neutron precursor
+decay constants are entered in input array DECCON. The prompt neutron
+lifetime is entered in input variable GENTIM.
+
+
+------------------------------------------------------------------------------
+[page: Part02/Ch04/decay-heat.html]
+------------------------------------------------------------------------------
+[anchor: decay-heat]
+
+# 4.4. Decay Heat
+
+A more detailed decay heat model has been developed for SAS4A/SASSYS-1
+version 5.0 that allows greater flexibility than the previous model and
+can more accurately represent decay heat during long term transients.
+The key features of the new model include extending the number of
+exponential terms that can be used to represent decay heat from six to
+24, the inclusion of built-in decay heat parameters from the most recent
+ANS decay heat power standard, the ability to mix multiple user-supplied
+and/or built-in decay heat curves within a single region, and the
+inclusion of a pre-defined non-decay-heat region.
+
+In the following sections, the ANS decay heat standard is described,
+along with how it is applied to the SAS4A/SASSYS-1 decay heat model. The
+implementation of the new model with multiple decay heat curves per
+region is also discussed in this section, while a detailed description
+of existing and new input related to the updated decay heat model is
+provided in Section 4.8.
+
+[anchor: the-ans-decay-heat-power-standard]
+
+## 4.4.1. The ANS Decay Heat Power Standard
+
+The American Nuclear Society (ANS) has published a standard for decay
+heat power in light water reactors.[4-4] For over 25 years, an extension
+to the standard has been planned to address fast reactor fuel cycles. In
+the absence of any such extension, the standard for light-water reactors
+is used for incorporation into the new decay heat model.
+
+In the standard, decay heat power is defined for each of four different
+fissionable isotopes in terms of 23-term exponential functions:
+
+$$f(t) = \sum_{\text{n} = 1}^{23}{\alpha_{\text{n}}e^{- \lambda_{\text{n}}t}} \quad \text{(MeV/Fission-s)}$$ [eq 4.4-1]
+
+where $\alpha_{\text{n}}$ is the immediate contribution (in MeV/s) of
+exponential term $n$ to the decay power resulting from one fission
+event, $\lambda_{\text{n}}$ is the decay constant for term $n$ , and $t$ is time
+in seconds after the fission event. The standard currently defines decay
+heat power for thermal fission in U-235 and Pu-239, fast fission in
+U-238, and thermal fission in Pu-241.
+
+The ANS standard defines a method for calculating the decay heat power,
+after shutdown, which results from a known reactor power history.
+Although not stated in the standard, the method given makes an implicit
+assumption that the ratio between total power and fission power is fixed
+when calculating the number of fissions for a given power level. This is
+not precisely correct, especially for fresh fuel at the start of
+irradiation. An examination of the parameters given for U-235 suggest
+that it takes over ten hours of steady-state operation to reach 90% of
+the equilibrium decay power, and roughly 3½ months to reach 98%. At a
+fixed total power, then, the fission power will depend on the current
+level of the decay heat power. The standard avoids the issue by defining
+decay heat power on a per-fission basis, leaving it up to the user of
+the standard to provide an appropriate value for the recoverable energy
+per fission.
+
+In light of this discrepancy and in consideration of the fact that
+SAS4A/SASSYS-1 performs decay heat calculations based on fission power
+(not total power) the methods prescribed in the ANS standard are
+modified so that they can be adapted for use in SAS4A/SASSYS-1.
+Furthermore, the standard describes “adjustments” that can be made to
+the calculated decay heat power to account for neutron capture in
+fission products. Because these adjustments are specific to a
+thermal-spectrum reactor, they are not accounted for here. In addition,
+the standard describes a method for including contributions from U-239
+and Np-239 decay heat power. Because a fast reactor generally has a
+significant quantity of actinides contributing to decay heat power, this
+adjustment is also not accounted for here. Instead, user-supplied decay
+heat curves can be combined with the ANS standard curves to accomplish
+the same task in a manner that is relevant to the problem being solved.
+
+[anchor: energy-per-fission]
+
+### 4.4.1.1. Energy per Fission
+
+The total recoverable energy per fission, $Q_{\text{t}}$ , in a
+fissionable isotope consists of “prompt” fission energy, $Q_{\text{f}}$ ,
+and the energy from complete decay of fission products, $Q_{\text{d}}$ :
+
+$$Q_{\text{t}} = Q_{\text{f}} + Q_{\text{d}} \quad \text{(MeV)}$$ [eq 4.4-2]
+
+The energy from decay of fission products can be calculated by
+integrating Eq. (4.4-1) over all time:
+
+$$Q_{\text{d}} = \sum_{\text{n} = 1}^{23}\frac{\alpha_{\text{n}}}{\lambda_{\text{n}}} \quad \text{(MeV)}$$ [eq 4.4-3]
+
+If the total recoverable energy per fission is known (or input by the
+user) then the prompt energy per fission can be determined as
+ $Q_{\text{f}} = Q_{\text{t}} - Q_{\text{d}}$ . A useful term, to be used later, is the
+ratio of the decay energy to the prompt energy,
+
+$$\beta_{\text{d}} = \frac{Q_{\text{d}}}{Q_{\text{f}}} = \sum_{\text{n} = 1}^{23}\beta_{\text{n}} = \sum_{\text{n} = 1}^{23}\frac{\alpha_{\text{n}}}{\lambda_{\text{n}}Q_{\text{f}}}$$ [eq 4.4-4]
+
+Therefore, $\beta_{\text{d}}$ is the total decay heat yield per unit fission
+heat. Note that for user-defined decay heat parameters, values for
+ $\beta_{\text{n}}$ and $\lambda_{\text{n}}$ are defined by user input.
+
+[anchor: number-of-fissions]
+
+### 4.4.1.2. Number of Fissions
+
+Eq. (4.4-1) gives the decay heat power as a function of time after a single
+fission event. The fission rate at time $t'$ can be written as
+
+$$F\left( t' \right) = P_{0}\frac{P_{\text{f}}\left( t' \right)}{Q_{\text{f}}K} \quad \text{(Fissions/s)}$$ [eq 4.4-5]
+
+where $P_0$ is the nominal reactor power (Watts), ${\text{f}}$ 
+is the relative fission power normalized to the nominal reactor power,
+and $K = 1.602177 \times 10^{-13}$ J/MeV. The total number of fission
+events between time $t'$ and $t' + \text{dt}$ is then
+
+$$F\left( t' \right)\text{dt} = P_{0}\frac{P_{\text{f}}\left( t' \right)}{Q_{\text{f}}K}\text{dt}' \quad \text{(Fissions)}$$ [eq 4.4-6]
+
+[anchor: decay-power]
+
+### 4.4.1.3. Decay Power
+
+The relative decay power at time $t > t'$ resulting from the
+fissions represented by Eq. (4.4-1) can be calculated by combining
+Eq. (4.4-6) with Eq. (4.4-1):
+
+$$P_{\text{d}}\left( t \right) = \frac{P_{\text{f}}\left( t' \right)}{Q_{\text{f}}}f\left( t - t' \right)\text{dt}' \quad \left( t > t' \right)$$ [eq 4.4-7]
+
+where $P_{\text{d}}$ is the relative decay power normalized to the
+nominal reactor power, $P_0$ . The total decay power at time $t$ 
+from all fissions prior to time $t$ can be determined by integrating the
+above equation:
+
+$$P_{\text{d}}\left( t \right) = \int_{- \infty}^{t}{\frac{P_{\text{f}}\left( t' \right)}{Q_{\text{f}}}f\left( t - t' \right)\text{dt}'}$$ [eq 4.4-8]
+
+Note that Eq. (4.4-8) is similar in form to Equation (3) given in the ANS
+standard, with the exception that the ratio of total power to total
+recoverable energy, $P_{\text{t}} / Q_{\text{t}}$ , is used in the ANS
+standard. The equation in the standard inaccurately calculates the
+fission rate in fresh fuel shortly after startup. While this is likely
+to be a very small error in most calculations, SAS4A/SASSYS-1 evaluates
+decay heat in terms of the fission power and the correct form of
+Eq. (4.4-8) is more convenient.
+
+[anchor: contributions-from-multiple-isotopes]
+
+### 4.4.1.4. Contributions from Multiple Isotopes
+
+In the preceding sections, a single fissionable isotope is implied. The
+determination of decay heat power contributions from multiple
+fissionable isotopes is straightforward. If $x_{\text{i}}$ represents the
+fraction of the total fission power from isotope $i$ , then the
+normalized fission power from isotope $i$ is written as
+
+$$P_{\text{fi}} = x_{\text{i}}P_{\text{f}}$$ [eq 4.4-9]
+
+and the decay power from isotope $i$ is
+
+$$P_{\text{di}}\left( t \right) = x_{\text{i}}\int_{- \infty}^{t}{\frac{P_{\text{f}}\left( t' \right)}{Q_{\text{f}}}f\left( t - t' \right)\text{dt}'}$$ [eq 4.4-10]
+
+Here, $f_{\text{i}} \left( t \right)$ represents the decay heat parameters for
+isotope $i$ .
+
+In practice (as described in the next section on “Implementation”) the
+decay heat power from isotope $i$ is calculated using the normalized
+fission power only, as shown in Eq. (4.4-8), such that
+
+$$P_{\text{di}}'\left( t \right) = \int_{- \infty}^{t}{\frac{P_{\text{f}}\left( t' \right)}{Q_{\text{f}}}f\left( t - t' \right)\text{dt}'}$$ [eq 4.4-11]
+
+The fractional fission powers are only applied when total (or
+integrated) decay heat power is calculated. Therefore, total decay heat
+power is defined as
+
+$$P_{\text{d}}\left( t \right) = \sum_{\text{i}}{x_{\text{i}}P_{\text{di}}'\left( t \right)}$$ [eq 4.4-12]
+
+[anchor: implementation]
+
+## 4.4.2. Implementation
+
+Prior to version 5.0, a channel is assigned to a single decay heat curve
+by the parameter IDKCRV. Since multiple curves may now be assigned to a
+given channel, the parameter IDKCRV now refers to which decay heat
+region a channel belongs. The relationship between decay heat curves
+and decay heat regions is defined by new user input in the form of two
+input matrices, DKFRAC and DKANSI, that contains the various
+ $x_{\text{i}}$ for each region. With this, multiple curves can be
+assigned (with different weights) to a single region, and a single curve
+can be assigned to multiple regions. To support older input decks, the
+matrix defaults to an identity matrix where curve 1 is assigned to
+region 1, etc. In this case, curves and regions have the same meaning. A
+description of new and existing input is given in Section 4.8. In the
+following subsections, only a single decay heat curve is considered.
+Using the $x_{\text{i}}$ provided in input, total (normalized) decay heat
+for each region can be calculated as described by Eq. (4.4-12).
+
+[anchor: transient-calculations]
+
+### 4.4.2.1. Transient Calculations
+
+At the beginning of a transient calculation, the initial decay heat
+power and fission power are known as a result of the steady-state
+initialization (see below). From that point on, fission power is
+determined based on the point (or spatial) kinetics equations. Given the
+normalized fission power, the normalized decay power can be solved using
+Eq. (4.4-8). To simplify notation, only a single term from Eq. (4.4-1) is
+considered, and a term for decay heat (i.e. energy) is introduced, where
+the decay heat, $H_{\text{n}}$ , is defined by
+ $P_{\text{d}} \left( t \right)$ = $\Sigma \ \lambda_{\text{n}} \ H_{\text{n}} \left( t \right)$ . At time
+step $k$ , the time varies from $t_{\text{k}}$ to $t_{\text{k}} + \tau$ .
+Term $n$ of Eq. (4.4-8) (in terms of decay heat) can then be written as
+
+$$H_{\text{n}}\left( t_{\text{k}} + \tau \right) = e^{- \lambda_{\text{n}}\tau}\int_{-\infty}^{t_{\text{k}}}{P_{\text{f}}\left( t' \right){\beta_{\text{n}}e}^{- \lambda_{\text{n}}\left( t_{\text{k}} - t' \right)}\text{dt}'} + \int_{t_{\text{k}}}^{t_{\text{k}} + \tau}{P_{\text{f}}\left( t' \right){\beta_{\text{n}}e}^{- \lambda_{\text{n}}\left( t_{\text{k}} + \tau - t' \right)}\text{dt}'}$$ [eq 4.4-13]
+
+Note that the first integral is just the (known) decay heat at the
+beginning of the time step, $H_{\text{n}} \left( t_{\text{k}} \right)$ . To write the
+second integral in terms of the time within a time step, let
+ $t = t' - t_{\text{k}}$ . Then the above equation can be written
+as
+
+$$H_{\text{n}}\left( t_{\text{k}} + \tau \right) = H_{\text{n}}\left( t_{\text{k}} \right)e^{- \lambda_{\text{n}}\tau} + \beta_{\text{n}}e^{- \lambda_{\text{n}}\tau}\int_{0}^{\tau}{P_{\text{f}}^{k}\left( t_{\text{k}} + t \right)e^{\lambda_{\text{n}}t}\text{dt}}$$ [eq 4.4-14]
+
+From the point kinetics solution, the fission power over time step $k$ 
+is represented by a second-order polynomial:
+
+$$P_{\text{f}}^{k}\left( t_{\text{k}} + t \right) = P_{0} + P_{1}t + P_{2}t^{2}$$ [eq 4.4-15]
+
+where $P_0 = P_{\text{f}} \left( t_{\text{k}} \right)$ . Using this
+expansion, the decay heat at the end of the point-kinetics time step can
+be solved:
+
+$$H_{\text{n}}\left( t_{\text{k}} + \tau \right) = H_{\text{n}}\left( t_{\text{k}} \right)e^{- \lambda_{\text{n}}\tau} + \frac{\beta_{\text{n}}}{\lambda_{\text{n}}}\left\lbrack P_{0}I_{0}\left( \tau \right) + \frac{P_{1}I_{1}\left( \tau \right)}{\lambda_{\text{n}}} + \frac{P_{2}I_{2}\left( \tau \right)}{\lambda_{\text{n}}^{2}} \right\rbrack$$ [eq 4.4-16]
+
+where
+
+$$\begin{split}I_{0}\left( \tau \right) &= 1 - e^{- \lambda_{\text{n}}\tau} \\
+I_{1}\left( \tau \right) &= \lambda_{\text{n}}\tau - I_{0}\left( \tau \right) \\
+I_{2}\left( \tau \right) &= \left( \lambda_{\text{n}}\tau \right)^{2} - 2I_{1}\left( \tau \right)\end{split}$$ [eq 4.4-17]
+
+[anchor: steady-state-initialization]
+
+### 4.4.2.2. Steady-State Initialization
+
+Prior to commencing with the transient calculations, SAS4A/SASSYS-1
+performs a steady-state initialization that includes the determination
+of initial decay heat. The user has the option of entering a reactor
+power history as a histogram of relative reactor power. Assuming no
+initial decay heat is present (i.e. fresh fuel with no fission products)
+the initial fission power will be equal to the power level of the first
+histogram. However, as decay heat builds, fission power will decrease to
+maintain constant power.
+
+Like the decay heat calculations during a transient, the decay heat
+during the constant-power interval, $k$ , of duration $\tau_{\text{k}}$ 
+can be written as
+
+$$H_{\text{n}}\left( t_{\text{k}} + \tau_{\text{k}} \right) = H_{\text{n}}\left( t_{\text{k}} \right)e^{- \lambda_{\text{n}}\tau_{\text{k}}} + \beta_{\text{n}}e^{- \lambda_{\text{n}}\tau_{\text{k}}}\int_{0}^{\tau_{\text{k}}}{P_{\text{f}}^{\text{k}}\left( t_{\text{k}} + t \right)e^{\lambda_{\text{n}}t}\text{dt}}$$ [eq 4.4-18]
+
+However, only the total power is known over the interval, not the
+fission power. The above equation can be rewritten as
+
+$${H_{\text{n}}\left( t_{\text{k}} + \tau_{\text{k}} \right) = H_{\text{n}}\left( t_{\text{k}} \right)e^{- \lambda_{\text{n}}\tau_{\text{k}}}}{+ \beta_{\text{n}}e^{- \lambda_{\text{n}}\tau_{\text{k}}}\int_{0}^{\tau_{\text{k}}}{\left\lbrack P_{\text{t}}^{k} - \sum_{\text{n} = 1}^{{\text{NDKGRP}}}{\lambda_{\text{n}}H_{\text{n}}\left( t_{\text{k}} + t \right)} \right\rbrack e^{\lambda_{\text{n}}t}\text{dt}}}$$ [eq 4.4-19]
+
+For a single fissionable isotope, this represents a coupled set of
+NDKGRP integral equations. When multiple fissionable isotopes contribute
+to a single decay heat region in the calculation, the number of coupled
+equations can increase dramatically.
+
+To decouple the terms in Eq. (4.4-19), two assumptions are made. First, the
+fraction of fission power contributed by each fissionable isotope is
+assumed to be fixed by the values of $x_{\text{i}}$ . Second, the fission
+power is assumed to be a constant such that the total power at the end
+of the constant-power interval matches the value supplied by the user.
+The first assumption only applies to decay heat regions that use more
+than one decay heat curve and may not be valid where there is
+significant depletion or breeding of fissionable isotopes during the
+course of steady-state initialization.
+
+The second assumption was chosen for a number of reasons. First, by
+matching power at the end of the initiating power interval, it maintains
+continuity between the steady-state initialization and the transient
+calculation. Second, it can be shown (by example) to introduce at most
+only a few hundredths of a percent error in most cases, and up to a few
+tenths of a percent error in very unusual situations. Third, it
+correctly predicts the two bounding cases of fresh fuel (no decay heat)
+and infinitely-long, steady-state equilibrium.
+
+By assuming a constant (although initially unknown) fission power, the
+integral in Eq. (4.4-19) can be solved as before:
+
+$$H_{\text{n}}\left( t_{\text{k}} + \tau \right) = H_{\text{n}}\left( t_{\text{k}} \right)e^{- \lambda_{\text{n}}\tau} + P_{\text{f}}\frac{\beta_{\text{n}}}{\lambda_{\text{n}}}\left( 1 - e^{- \lambda_{\text{n}}t} \right)$$ [eq 4.4-20]
+
+Note that this is the same as Eq. (4.4-16) with
+ $P_0 = P_{\text{f}}$ and $P_1$ and $P_2$ set to
+zero. By multiplying by $\lambda_{\text{n}}$ and summing the above equation
+over all decay terms, the decay power at the end of the time step is
+
+$$P_{\text{d}}\left( t_{\text{k}} + \tau \right) = \sum_{\text{n}}{{\lambda_{\text{n}}H}_{\text{n}}\left( t_{\text{k}} \right)e^{- \lambda_{\text{n}}\tau}} + P_{\text{f}}\sum_{\text{n}}{\beta_{\text{n}}\left( 1 - e^{- \lambda_{\text{n}}t} \right)}$$ [eq 4.4-21]
+
+For simplicity, the additional sum over isotopes with the appropriate
+ $x_{\text{i}}$ , as shown in Eq. (4.4-12), is implied.
+
+Given the user-supplied total power and that
+ $P_{\text{t}} = P_{\text{f}} + P_{\text{d}}$ , the fission power can now
+be solved:
+
+$$P_{\text{f}} = \frac{P_{\text{t}} - \sum_{\text{n}}{{\lambda_{\text{n}}H}_{\text{n}}\left( t_{\text{k}} \right)e^{- \lambda_{\text{n}}\tau}}}{1 + \sum_{\text{n}}{\beta_{\text{n}}\left( 1 - e^{- \lambda_{\text{n}}t} \right)}}$$ [eq 4.4-22]
+
+Again, the sum over isotopes is implied. If the preexisting decay power
+at the end of the time step (the second term in the numerator) is
+greater than the user-supplied total power, then the fission power for
+that histogram is set to zero by the code. This will be the case, for
+example, if the user specifies a zero-power shutdown period. Otherwise,
+the numerator represents the fission power if no new decay power is
+generated during the time step. The denominator then adjusts that value
+so that the fission power plus accumulated decay power will be equal to
+the total power at the end of the time step.
+
+Finally, by substituting Eq. (4.4-22) into Eq. (4.4-20), the decay heat can
+be determined at the end of this step in the histogram. For an
+infinitely-long power interval, Eq. (4.4-22) simplifies to
+
+$$P_{\text{f}} = P_{\text{t}}\frac{1}{1 + \beta_{\text{d}}}$$ [eq 4.4-23]
+
+and the decay heat from Eq. (4.4-20) is
+
+$$H_{\text{n}}\left( t_{\text{k}} + \tau \right) = P_{\text{f}}\frac{\beta_{\text{n}}}{\lambda_{\text{n}}}$$ [eq 4.4-24]
+
+These two expressions match the analytical solution exactly.
+
+
+------------------------------------------------------------------------------
+[page: Part02/Ch04/net-reactivity.html]
+------------------------------------------------------------------------------
+[anchor: net-reactivity]
+
+# 4.5. Net Reactivity
+
+For applications other than EBR-II, the net reactivity in Eq. (4.2-4) is
+the sum of nine reactivity components:
+
+$$\delta k \left( t \right) = \delta k_{\text{p}}\left( t \right) + \delta k_{\text{cs}}\left( t \right) + \delta k_{\text{D}}\left( t \right) + \delta k_{\text{d}}\left( t \right) + \delta k_{{\text{Na}}}\left( t \right) + \delta k_{\text{re}}\left( t \right) + \delta k_{\text{cr}}\left( t \right) + \delta k_{\text{fu}}\left( t \right) + \delta k_{\text{cl}}\left( t \right)$$ [eq 4.5-1]
+
+where
+
+ $\delta k_{\text{p}}$ = User-programmed reactivity,
+
+ $\delta k_{\text{cs}}$ = Control system reactivity,
+
+ $\delta k_{\text{D}}$ = Fuel Doppler feedback reactivity,
+
+ $\delta k_{\text{d}}$ = Fuel, cladding, and structure axial expansion
+feedback reactivity,
+
+ $\delta k_{\text{Na}}$ = Coolant density or voiding
+feedback reactivity,
+
+ $\delta k_{\text{re}}$ = Core radial expansion feedback
+reactivity,
+
+ $\delta k_{\text{cr}}$ = Control rod drive expansion feedback
+reactivity,
+
+ $\delta k_{\text{fu}}$ = Fuel relocation reactivity feedback,
+
+ $\delta k_{\text{cl}}$ = Cladding relocation reactivity feedback.
+
+The reactivity feedback models available for these components are
+covered in the sections that follow. For EBR-II applications, the net
+reactivity is calculated as formulated in Section 4.5.9.
+
+[anchor: user-programmed-reactivity]
+
+## 4.5.1. User-Programmed Reactivity
+
+The user-programmed reactivity is specified by the user at execution
+time as either an input table or as subprogram FUNCTION PREA. It is
+intended to be used as a means of specifying any reactivity effect not
+explicitly modeled as a feedback. An example might be the simulation of
+a control rod withdrawal or insertion, or the dropping of a fuel
+subassembly during reloading.
+
+The user-programmed reactivity option is triggered by setting IPOWER to 0. For NPREAT equal to
+0, the value returned by the user-supplied subroutine function PREA is
+used as the programmed reactivity. For NPREAT > 0, NPREAT gives the
+number of pairs of values of programmed reactivity and time input on the
+standard input file in PREATB and PREATM. A maximum of twenty pairs of programmed reactivity and
+time may be entered in PREATB and PREATM. These data are then either
+used directly or fit to curves according to the user’s specification of
+input data IFIT.
+
+[anchor: control-system-reactivity]
+
+## 4.5.2. Control System Reactivity
+
+The control system reactivity is the value supplied by the reactivity
+control signal (JTYPE = -1) generated by the control system model (see
+Chapter 6 and Input Block 5-INCONT).
+
+[anchor: fuel-doppler-feedback-reactivity]
+
+## 4.5.3. Fuel Doppler Feedback Reactivity
+
+The fuel Doppler reactivity effect at any axial location in a
+subassembly is estimated from
+
+$$T\frac{\text{d}\left( \delta k_{\text{D}} \right)}{\text{dT}_{\text{f}}} = \alpha_{\text{D}}$$ [eq 4.5-2]
+
+where $T_{\text{f}}$ is the radial mass-averaged fuel temperature for that axial location, and
+ $\alpha_{\text{D}}$ is the local fuel Doppler coefficient, an input
+quantity. To obtain the Doppler reactivity feedback at time $t$ ,
+Eq. (4.5-2) is integrated from steady-state conditions to conditions at
+time $t$ to obtain
+
+$$\delta k_{\text{D}}\left( t \right) = \alpha_{\text{D}}\ln\left\lbrack \frac{T_{\text{f}}\left( t \right)}{T_{\text{f}}\left( 0 \right)} \right\rbrack$$ [eq 4.5-3]
+
+Eq. (4.5-3) is used at each axial location where a fuel temperature is
+calculated. The local fuel Doppler coefficient, $\alpha_{\text{D}}$ , is
+adjusted linearly between the input coolant-in (flooded) and coolant-out
+(voided) values to correct for the effect of coolant voiding on neutron
+leakage.
+
+The coolant-in and coolant-out Doppler coefficients are entered as ADOP
+and BDOP, and the axial weighting
+of the Doppler coefficients is input as WDOPA.
+
+[anchor: fuel-cladding-and-structure-axial-expansion-feedback-reactivity]
+
+## 4.5.4. Fuel, Cladding, and Structure Axial Expansion Feedback Reactivity
+
+[anchor: simple-axial-expansion-reactivity-model]
+
+### 4.5.4.1. Simple Axial Expansion Reactivity Model
+
+A simple model for the reactivity effects of thermal expansion of fuel
+and cladding is included in SAS4A/SASSYS-1. The simple thermal expansion
+feedback model is based on a few assumptions. It is assumed that before
+the start of the transient, a combination of fuel cracking, fuel
+re-structuring, and stress relaxation cause the gap between the fuel and
+the cladding to close, but there is little contact force between the
+fuel and the cladding. During the transient, if the cladding expands
+faster than the fuel, then the fuel-cladding gap opens, and the fuel can
+expand freely in the axial direction. If the fuel expands faster than
+the cladding, then the fuel binds with the cladding, and the axial
+expansion is determined by balancing the axial forces between the fuel
+and the cladding. Slip between fuel and cladding is ignored in this
+case. The axial expansion feedback is calculated separately for each
+channel. The formulation for each channel follows.
+
+For each axial node, $j$ , in the core, the fuel and cladding
+expansion fractions are calculated as
+
+$$\epsilon_{\text{f}}\left( j,t \right) = \alpha_{\text{f}}\left\lbrack T_{\text{f}}\left( j,t \right) - T_{\text{f}}\left( j,0 \right) \right\rbrack$$ [eq 4.5-4]
+
+and
+
+$$\epsilon_{\text{e}}\left( j,t \right) = \alpha_{\text{e}}\left\lbrack T_{\text{e}}\left( j,t \right) - T_{\text{e}}\left( j,0 \right) \right\rbrack$$ [eq 4.5-5]
+
+where
+
+ $\alpha_{\text{f}}$ = fuel thermal expansion coefficient
+
+ $\alpha_{\text{e}}$ = cladding thermal expansion coefficient
+
+ $T_{\text{f}}$ = mass-averaged fuel temperature for axial node j
+
+and
+
+ $T_{\text{e}}$ = cladding mid-point temperature
+
+If $\epsilon_{\text{e}}\left( j \right)$ is greater than
+ $\epsilon_{\text{f}}\left( j \right)$ , then the fuel axial expansion for
+node $j$ is
+
+$$\delta_{\text{f}}\left( j,t \right) = \epsilon_{\text{f}}\left( j,t \right)D_{\text{z}}\left( j \right)$$ [eq 4.5-6]
+
+and the cladding expansion is
+
+$$\delta_{\text{e}}\left( j,t \right) = \epsilon_{\text{e}}\left( j,t \right)D_{\text{z}}\left( j \right)$$ [eq 4.5-7]
+
+where $D_{\text{z}}$ is the nominal axial height of the node. If
+ $\epsilon_{\text{f}}\left( j \right)$ is greater than or equal to
+ $\epsilon_{\text{e}}\left( j \right)$ , then a simple balance between the
+axial forces of the fuel and cladding gives
+
+$$\delta_{\text{f}}\left( j,t \right) = \frac{\epsilon_{\text{f}}\left( j,t \right)Y_{\text{f}}A_{\text{f}} + \epsilon_{\text{e}}\left( j,t \right)Y_{\text{e}}A_{\text{e}}}{Y_{\text{f}}A_{\text{f}} + Y_{\text{e}}A_{\text{e}}}D_{\text{z}}\left( j \right)$$ [eq 4.5-8]
+
+and
+
+$$\delta_{\text{e}}\left( j,t \right) = \delta_{\text{f}}\left( j,t \right)$$ [eq 4.5-9]
+
+where
+
+ $Y_{\text{f}}$ = fuel Young’s modulus
+
+ $Y_{\text{e}}$ = cladding Young’s modulus
+
+ $A_{\text{f}}$ = nominal cross-sectional area of the fuel
+
+and
+
+ $A_{\text{e}}$ = nominal cross-sectional area of the cladding
+
+The reactivity calculation is based on the fuel and cladding worth
+tables used by the code. First an unexpanded axial mesh,
+ $z_{0}\left( j \right)$ , is calculated using
+
+$$z_{0}\left( 1 \right) = 0$$ [eq 4.5-10]
+
+and
+
+$$z_{0}\left( j + 1 \right) = z_{0}\left( j \right) + D_{\text{z}}\left( j \right)$$ [eq 4.5-11]
+
+Note that $z_{0}$ is zero at the bottom of the lower axial
+blanket.
+
+New, expanded axial meshes for the fuel and cladding,
+ $z_{\text{nf}}\left( j \right)$ and
+ $z_{\text{ne}}\left( j \right)$ , are calculated using
+
+$$z_{\text{nf}}\left( 1 \right) = 0$$ [eq 4.5-12]
+
+$$z_{\text{ne}}\left( 1 \right) = 0$$ [eq 4.5-13]
+
+$$z_{\text{nf}}\left( j + 1 \right) = z_{\text{nf}}\left( j \right) + f_{\text{f}}\left( j \right)D_{\text{z}}\left( j \right)$$ [eq 4.5-14]
+
+and
+
+$$z_{\text{ne}}\left( j + 1 \right) = z_{\text{ne}}\left( j \right) + f_{\text{e}}\left( j \right)D_{\text{z}}\left( j \right)$$ [eq 4.5-15]
+
+where
+
+$$f_{\text{f}}\left( j \right) = 1 + \frac{\delta_{\text{f}}\left( j,t \right)}{D_{\text{z}}\left( j \right)}$$ [eq 4.5-16]
+
+and
+
+$$f_{\text{e}}\left( j \right) = 1 + \frac{\delta_{\text{e}}\left( j,t \right)}{D_{\text{z}}\left( j \right)}$$ [eq 4.5-17]
+
+Users define axially dependent fuel worth per unit mass,
+ $R_{\text{f}}\left( j \right)$ , and axially dependent cladding worth per unit mass,
+ $R_{\text{e}}\left( j \right)$ , via the inputs FUELRA and CLADRA, respectively.
+Both are defined on the original mesh, $z_{0}\left( j \right)$ .
+
+Alternatively, the axially dependent fuel worth can be defined as a multi-component mixture
+using mass fractions and reactivity feedback coefficients for each component of the fuel.
+This option can be invoked by defining references to additional tables of mass fraction
+and reactivity feedback data using the inputs iMassFractionTable and iReactivityTable.
+Specifically, this allows for the modeling of axially heterogeneous fuel or other more complex scenarios.
+When this option is used, the overall fuel worth per unit mass for fuel with $k$ components is
+
+$$R_{\text{f}}\left( j \right) = \sum_{k}{f_{k}\left( j \right) r_{k}\left( j \right) }$$ [eq 4.5-18]
+
+where
+
+ $f_{k}\left( j \right)$ = mass fraction of fuel component $k$ at axial node $j$ ,
+
+ $r_{k}\left( j \right)$ = fuel worth per unit mass of fuel component $k$ at axial node $j$ .
+
+Currently, the multi-component fuel mass fractions and reactivity feedback tables are not compatible
+with the fuel relocation models.
+
+If node $j$ has been shifted and expanded so that
+
+$$z_{0}\left( j \right) \leq z_{\text{nf}}\left( j \right) \leq z_{0}\left( j + 1 \right)$$ [eq 4.5-19]
+
+and
+
+$$z_{0}\left( j + 1 \right) \leq z_{\text{nf}}\left( j + 1 \right) \leq z_{0}\left( j + 2 \right)$$ [eq 4.5-20]
+
+as in Figure 4.5.1, then $\Delta\rho_{\text{f}}\left( j \right)$ , the
+fuel contribution to axial expansion feedback from node $j$ is
+calculated as
+
+$$\Delta\rho_{\text{f}}\left( j \right) = m_{\text{f}}\left( j \right)R_{\text{f}}\left( j \right)\frac{z_{0}\left( j + 1 \right) - z_{\text{nf}}\left( j \right)}{z_{\text{nf}}\left( j + 1 \right) - z_{\text{nf}}\left( j \right)} + m_{\text{f}}\left( j \right)R_{\text{f}}\left( j + 1 \right)\frac{z_{\text{nf}}\left( j + 1 \right) - z_{0}\left( j + 1 \right)}{z_{\text{nf}}\left( j + 1 \right) - z_{\text{nf}}\left( j \right)} - m_{\text{f}}\left( j \right)R_{\text{f}}\left( j \right)$$ [eq 4.5-21]
+
+which can also be written as
+
+$$\Delta\rho_{\text{f}}\left( j \right) = R_{\text{f}}\left( j \right) \Delta m_{\text{f}} \left( j \right)$$ [eq 4.5-22]
+
+A similar expression is used to calculate
+ $\Delta\rho_{\text{e}}\left( j \right)$ , the cladding contribution to
+axial expansion feedback. If $z_{\text{nf}}\left( j + 1 \right)$ 
+has expanded past $z_{0}\left( j + 2 \right)$ , then a summation
+over the appropriate nodes is used instead of Eq. (4.5-21).
+
+Figure 4.5.1 Original and Expanded Fuel Axial Meshes
+
+For the cladding, second-order axial expansion effects can optionally be considered
+by defining additional columns in the iReactivityTable.
+When using the second-order model, the cladding contribution to axial expansion feedback becomes
+
+$$\Delta\rho_{\text{e}}\left( j \right) = R_{\text{e}}\left( j \right) \Delta m_{\text{e}} \left( j \right) + R_{\text{e,2}}\left( j \right) \left\lbrack \Delta m_{\text{e}} \left( j \right) \right\rbrack^{2}$$ [eq 4.5-23]
+
+where $R_{\text{e,2}}\left( j \right)$ is the user-defined second-order coefficient
+(column CLADRA2 of iReactivityTable).
+Currently, second-order cladding axial expansion effects cannot be used with fuel and cladding relocation models.
+
+By default, SAS4A/SASSYS-1 calculates the axial expansion of fuel and
+cladding as described above. In addition to the gap-dependent model
+described above, the user can choose cladding-controlled expansion,
+independent free expansion, or force balance controlled expansion at all
+times. These options are selected by the input MODEEX.
+
+Cladding-controlled expansion may be appropriate for cases where
+there is no gap between fuel and cladding and the fuel Young’s modulus
+is much less than the cladding Young’s modulus. In this case, the
+cladding expansion is calculated by Eq. (4.5-7), and the fuel expansion is
+set equal to the cladding expansion. Independent free expansion may be
+appropriate for cases where the gap is expected to be maintained
+throughout the transient; the expansion is then determined by Eq. (4.5-6)
+and Eq. (4.5-7), without the need for force balance. The continual force
+balance option may be appropriate for cases where the fuel and cladding
+are expected to be in contact at the initial condition, and remain in
+contact throughout the transient. In which case, expansion is determined
+by Eq. (4.5-8) and Eq. (4.5-9), regardless of the relative expansion rates of
+fuel and cladding.
+
+A feature has been added to include the reactivity effect associated
+with the axial thermal expansion of structure during the transient. This
+feature may be used, for instance, to treat the axial thermal expansion of the
+subassembly duct walls.
+
+Structure is considered to be free, and
+expansion is calculated in an analogous way as the independent free
+expansion model for fuel and cladding. That is, equations for the
+structure expansion are written similar to Eq. (4.5-5) and Eq. (4.5-7), with no
+need for force balance. An expression for the reactivity change in node
+ $j$ , $\Delta \rho_{\text{s}} \left( j \right)$ , is written similar to
+Eq. (4.5-21), based on changes in the grid calculated in an analogous
+fashion as Eq. (4.5-15). Similar to cladding axial expansion,
+second-order axial structure expansion effects can optionally be considered
+by defining additional columns in the iReactivityTable.
+In this case, the corresponding equation is Eq. (4.5-23).
+
+The total reactivity change, $\delta k_{\text{d}}$ , is
+
+$$\delta k_{\text{d}} = \epsilon_{\text{ex}}\sum_{\text{j}}\left\lbrack \Delta\rho_{\text{f}}\left( j \right) + \Delta\rho_{\text{e}}\left( j \right) + \Delta\rho_{\text{s}}\left( j \right) \right\rbrack$$ [eq 4.5-24]
+
+where $\epsilon_{\text{ex}}$ is an effective axial expansion
+multiplier defined by EXPCFF.
+
+The summation in Eq. (4.5-24) is only over the core nodes. The axial
+blankets are ignored in the fuel expansion feedback calculations. In
+order to obtain an accurate value for the axial expansion reactivity
+feedback, the fuel worth input for the upper axial blanket nodes must be
+the worth of core fuel in the blanket region.
+
+The cladding, fuel, and structure worth used in Eq. (4.5-21) and the
+first-order cladding and structure worth used in Eq. (4.5-23) can be input in
+arrays CLADRA, FUELRA, and STRCRA, or using a TABLE block
+referenced by the iReactivityTable parameter. Second-order coefficients for cladding or structure
+axial expansion feedback used in Eq. (4.5-23) are input in the TABLE block
+referenced by the iReactivityTable parameter. The table block input format is described in
+Table 4.5.1. Mass fractions for multi-component fuel compositions can be
+defined in a TABLE block referenced by the iMassFractionTable parameter.
+The table block input format for a mass fraction table is described in Table 4.5.2.
+If iMassFractionTable is 0 then the fuel is assumed to be a single component.
+
+Table 4.5.1 Input in a Reactivity Table
+
+ | 
+
+ | 
+Column Label
+ | 
+ | 
+Description
+ | 
+ | 
+Units
+ | 
+
+ | 
+
+ | 
+LENGTH (optional)
+ | 
+ | 
+Axial lengths of the mesh intervals over which the reactivity feedback data in this table applies.
+The total length of all mesh intervals must match the length of the MZ or MZC mesh, depending on the
+value of IREACZ. If the LENGTH column is omitted, then the mesh is assumed to be the same
+as the MZ or MZC mesh, according to IREACZ.
+ | 
+ | 
+m
+ | 
+
+ | 
+FUELRA (optional)
+ | 
+ | 
+Fuel reactivity worth for each axial mesh interval. If this column is present, the values for FUELRA are ignored.
+ | 
+ | 
+∆k/k-kg
+ | 
+
+ | 
+CLADRA (optional)
+ | 
+ | 
+Clad reactivity worth for each axial mesh interval. If this column is present, the values for CLADRA are ignored.
+ | 
+ | 
+∆k/k-kg
+ | 
+
+ | 
+CLADRA2 (dependent)
+ | 
+ | 
+Second-order clad reactivity worth for each axial mesh interval. May only be present if CLADRA is present. Assumed to be 0.0 if not input.
+ | 
+ | 
+∆k/k-kg2
+ | 
+
+ | 
+VOIDRA (optional)
+ | 
+ | 
+Void reactivity worth for each axial mesh interval. If this column is present, the values for VOIDRA are ignored.
+ | 
+ | 
+∆k/k-kg
+ | 
+
+ | 
+VOIDRA2 (dependent)
+ | 
+ | 
+Second-order void reactivity worth for each axial mesh interval. May only be present if VOIDRA is present. Assumed to be 0.0 if not input.
+ | 
+ | 
+∆k/k-kg2
+ | 
+
+ | 
+STRCRA (optional)
+ | 
+ | 
+Structure reactivity worth for each axial mesh interval. If this column is present, the values for STRCRA are ignored.
+ | 
+ | 
+∆k/k-kg
+ | 
+
+ | 
+STRCRA2 (dependent)
+ | 
+ | 
+Second-order structure reactivity worth for each axial mesh interval. May only be present if STRCRA is present. Assumed to be 0.0 if not input.
+ | 
+ | 
+∆k/k-kg2
+ | 
+
+ | 
+<any> (optional)
+ | 
+ | 
+Reactivity worth distribution(s) for multi-component fuel compositions. The interpretation of additional
+columns in this table is determined by the definition of the fuel mass fraction table.
+ | 
+ | 
+∆k/k-kg
+ | 
+
+Example reactivity table input:
+
+TABLE <id> ReactivityTable
+ FUELRA CLADRA VOIDRA FUELRA2
+ 0.0 0.0 0.0 0.0 ! Lower Reflector
+ 1.1E-05 0.0 0.0 1.1E-05 ! Fuel, Segment 1
+ 1.3E-05 0.0 0.0 1.3E-05 ! Fuel, Segment 2
+ 1.6E-05 0.0 0.0 1.6E-05 ! Fuel, Segment 3
+ 1.9E-05 0.0 0.0 1.9E-05 ! Fuel, Segment 4
+ 2.3E-05 0.0 0.0 2.3E-05 ! Fuel, Segment 5
+ 2.4E-05 0.0 0.0 2.4E-05 ! Fuel, Segment 6
+ 2.7E-05 0.0 0.0 2.7E-05 ! Fuel, Segment 7
+ 3.1E-05 0.0 0.0 3.1E-05 ! Fuel, Segment 8
+ 3.6E-05 0.0 0.0 3.6E-05 ! Fuel, Segment 9
+ 4.0E-05 0.0 0.0 4.0E-05 ! Fuel, Segment 10
+ 3.7E-05 0.0 0.0 3.7E-05 ! Fuel, Segment 11
+ 3.3E-05 0.0 0.0 3.3E-05 ! Fuel, Segment 12
+ 2.5E-05 0.0 0.0 2.5E-05 ! Fuel, Segment 13
+ 1.9E-05 0.0 0.0 1.9E-05 ! Fuel, Segment 14
+ 7.0E-05 0.0 0.0 7.0E-05 ! Fuel, Segment 15
+ 1.4E-05 0.0 0.0 1.4E-05 ! Fuel, Segment 16
+ 1.0E-05 0.0 0.0 1.0E-05 ! Gas Plenum
+ 0.0 0.0 0.0 0.0 ! Upper Reflector
+END
+
+
+------------------------------------------------------------------------------
+[page: Part02/Ch04/solution-methods.html]
+------------------------------------------------------------------------------
+[anchor: solution-methods]
+
+# 4.6. Solution Methods
+
+The SAS4A/SASSYS-1 point kinetics equations are solved using a technique
+model by Kaganove [4-13] and extended by Fuller [4-14]. The decay-heat
+model is solved according to the method developed by Woodruff for the
+SAS3A computer code [4-1]. In general, the SAS4A/SASSYS-1 neutronics
+solution methods have been adopted from SAS3A.
+
+[anchor: point-kinetics]
+
+## 4.6.1. Point Kinetics
+
+The solution of the point kinetics model equations is carried out
+assuming that (1) the reactivity has been specified, and (2) the number
+of delayed-neutron precursors is limited to six or less. This latter
+assumption requires the interpretation of the precursor yields and decay
+constants as average values, typical for a particular blend of isotopes.
+
+Given these assumptions, the first step in the solution of the point
+kinetics equations is the integration of the delayed-neutron precursor
+energy production balance equations given by Eq. (4.3-1) over a time
+interval. In SAS4A/SASSYS-1, this time interval is taken as the main
+time step. If conditions are known at time $t$ , then integration
+of Eq. (4.3-1) to time $t + \Delta t$ gives
+
+$$C_{\text{i}}\left( t + \Delta t \right) = C_{\text{i}}\left( t \right)e^{- \lambda_{\text{i}}\Delta t} + \frac{\beta_{\text{i}}}{\Lambda}e^{- \lambda_{\text{i}}\left( t + \Delta t \right)}\int_{t}^{t + \Delta t}{\phi\left( t' \right)e^{- \lambda_{\text{i}}t'}\text{dt}'}$$ [eq 4.6-1]
+
+The expressions given by Eq. (4.6-1) for the $C_{\text{i}}$ at the advanced
+time are substituted directly into Eq. (4.2-4). Next, the time variation
+of the fission power amplitude over the time step is assumed to be
+
+$$\phi\left( t + \Delta t \right) = \phi\left( t \right) + \phi_{1}\Delta t + \phi_{2}\left( \Delta t \right)^{2}$$ [eq 4.6-2]
+
+where $\phi_{1}$ and $\phi_{2}$ are constants to be
+determined. To find $\phi_{1}$ and $\phi_{2}$ , Eq. (4.6-2) is
+first differentiated and substituted for in Eq. (4.2-4). In addition,
+Eq. (4.6-2) is substituted directly for in Eq. (4.2-4) and Eq. (4.6-1). The integral
+term in Eq. (4.6-1) is evaluated analytically. This yields a single
+equation in the two unknowns $\phi_{1}$ and $\phi_{2}$ . To
+obtain $\phi_{1}$ and $\phi_{2}$ , this equation is evaluated
+for the full time step $\Delta t$ , and for the half time step
+ $\Delta t/2$ , to give two linear equations in the two unknowns.
+Solution of this equation set yields $\phi_{1}$ and
+ $\phi_{2}$ , and thus an estimate of
+ $\phi\left( t + \Delta t \right)$ .
+
+To control the precision of this approximate solution method, an
+internal time-step control algorithm has been implemented. In addition
+to the full time-step solution, a half time step solution is also
+obtained (i.e. evaluation of Eq. (4.2-4) at $\Delta t/2$ and $\Delta t/4$ ). The half-step
+solution is extrapolated to the end of the time step and compared with
+the full step solution. If the fractional difference is within a
+user-specified tolerance, the full-step solution is accepted. If not,
+the internal time step is halved and the entire solution process is
+repeated. This procedure is carried out until the solution is advanced
+to the end of the main time step. The half/full-step fission power
+amplitude convergence precision is entered as EPSPOW.
+
+On each main time step, the point kinetics solution is obtained twice.
+At the beginning of the time step, the net reactivity is linearly
+extrapolated in time to the end of the time step, and a solution for
+ $\phi$ is obtained with this extrapolated value. This solution is
+then used to drive the energy equation solutions in the SAS4A/SASSYS-1
+models through the time step. When all channels have been advanced to
+the end of the main time step, the reactivities are calculated and the
+net reactivity is used to solve once more for $\phi$ . This second
+solution is taken as the final value for the time step, and solutions
+for the delayed-neutron precursor and decay-heat equations are based on
+this value.
+
+For long, slow transients, an oscillation or instability in the solution
+for reactivity and power has been observed when time steps larger than
+0.25 seconds are used. Modifications to the code have been made to
+eliminate this instability or oscillation. With the modified code, time
+step sizes of 1 second can be used in the early part of the transient,
+when flows and temperatures are changing rapidly, and 5 second step
+sizes can be used after the first few hundred seconds of the transient.
+The oscillations or instabilities come about because the reactivity used
+to compute the power level for a time step is an extrapolated
+reactivity, based on the last two previous computed steps. The
+extrapolated reactivity is used to compute a power level that is then
+used to compute fuel pin temperatures. After the temperatures are
+computed, the reactivity is computed. The computed reactivity may not be
+the same as the extrapolated reactivity. If the extrapolated reactivity
+is high, it will lead to higher fuel temperatures, which will lead to a
+lower computed reactivity. For the next step the extrapolated reactivity
+will be low, and the computed reactivity will be high. For large time
+steps, this leads to oscillations. The fuel expansion and Doppler
+reactivity oscillate up-down-up-down from step to step.
+
+Adding a correction term to the extrapolated reactivity,
+ $k_{{\text{ext}}}^{n}$ , for time step $n$ eliminated
+the oscillations. First an error, $e_{\text{n}}$ , is calculated as the
+difference between the computed reactivity, $k^{n}$ , and the
+extrapolated reactivity:
+
+$$e_{\text{n}} = k^{n} - k_{{\text{ext}}}^{n}$$ [eq 4.6-3]
+
+Then the reactivity $k'$ actually used for step $n$ is
+computed as
+
+$$k' = k_{{\text{ext}}}^{n} + \left| e_{\text{n} - 1} \right|{\text{sign}}\left( e_{\text{n} - 2} \right)$$ [eq 4.6-4]
+
+The correction term tends to cancel out the oscillations. The
+application of this correction is controlled by input variable JREEXT.
+
+[anchor: specified-power-history]
+
+## 4.6.2. Specified Power History
+
+The point kinetics and decay-heat models may be overridden through the
+specification on input of a user-supplied power history. This option is
+intended to be used for analyses in which the power history is known,
+such as those for in-pile experiments. It is also possible to specify an
+external, driving reactivity that is summed with the internally
+calculated feedback reactivity. This option may employ either a
+user-specified subroutine function named PREA, or a user-specified table
+of input power (or reactivity) values for input problem time values. The
+choice of specifying power or external reactivity is controlled with
+input variable IPOWER, and the choice of an
+input function or table is set by NPREAT,
+which gives the number of entries in the power (or reactivity) table and
+defaults to zero, which indicates usage of the input function PREA.
+Should a PREA not be supplied for this case, steady-state power or
+reactivity conditions are assumed.
+
+For NPREAT > 0, input values for the power (or reactivity) and problem
+times at which they apply are entered in arrays PREATB and PREATM.
+
+When the power vs. time option is invoked (IPOWER = 1), additional power
+tables may be entered by setting NPOWDK to
+the total number of tables to be input (2, …, 5), and entering the
+additional power vs. time table in arrays PRETB2 and PRETM2.
+(The first table is always entered in PREATB and PREATM). Input integer
+IDKCRV then specifies the input power curve to be used in a particular
+channel. Total reactor power reported in the output represents only channels assigned to the first input power curve
+and does not include power from channels assigned to input power curves 2-5.
+Note that this multiple input power table option is only available for IPOWER = 1 and NPOWDK > 1.
+
+
+------------------------------------------------------------------------------
+[page: Part02/Ch04/code-organization.html]
+------------------------------------------------------------------------------
+[anchor: code-organization-and-data-flow]
+
+# 4.7. Code Organization and Data Flow
+
+The subroutines in SAS4A/SASSYS-1 that are mainly related to the
+solution of the reactor kinetics, decay-heat, and reactivity feedback
+models are listed in Table 4.7.1. Most of these routines are called
+directly from the steady-state and transient driver routines, SSTHRM and
+TSTHRM. Flow diagrams for these routines are included in Section 2.2.
+
+Table 4.7.1 Listing of Reactor Kinetics Subroutines
+
+ | 
+
+ | 
+Subroutine
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+SSPK
+ | 
+ | 
+Initializes all steady-state point kinetics data including power, reactivity, delayed-neutron precursor concentrations, and decay heat sources.
+ | 
+
+ | 
+POWING
+ | 
+ | 
+Extrapolates power at the beginning of a main time step for external power vs. time option via call to PREA. Updates parabolic power history coefficients.
+ | 
+
+ | 
+PREA
+ | 
+ | 
+User-supplied external power or reactivity history.
+ | 
+
+ | 
+PAR
+ | 
+ | 
+Fits a parabola to three points.
+ | 
+
+ | 
+POINEX
+ | 
+ | 
+Extrapolates reactivity at the beginning of a main time step for reactivity vs. time option by parabolic extrapolation of calculated internal reactivity and direct evaluation of external reactivity via call to PREA.
+ | 
+
+ | 
+TSPK
+ | 
+ | 
+Given an extrapolated or calculated reactivity, drives the calculation of the reactor power. Resets beginning time-step values and calls PKSTEP.
+ | 
+
+ | 
+PKSTEP
+ | 
+ | 
+Performs the integration of the point kinetics equations across a main time step.
+ | 
+
+ | 
+RHOEND
+ | 
+ | 
+Updates end-of-time step values.
+ | 
+
+ | 
+FEEDBK
+ | 
+ | 
+Performs calculation of Doppler and coolant void reactivity feedback for a channel.
+ | 
+
+At steady state, the driver routine SSTHRM calls subroutine SSPK, which
+performs all required data initialization. In the transient calculation,
+the point kinetics equations are solved on each main time step. From
+driver routine TSTHRM, subroutine POWING is called at the beginning of
+each main time step to provide an extrapolation in time of the reactor
+power for the power versus time option (IPOWER = 1). For the reactivity
+versus time option (IPOWER = 0), subroutine POINEX is called to provide
+an extrapolation of the reactivity, and subroutine TSPK is then called
+to compute the reactor power given the reactivity. Subroutine TSPK
+performs data initialization and calls subroutine PKSTEP, which
+integrates the point kinetics and decay-heat equations over the main
+time step. At the end of the main time step, subroutine FEEDBK is called
+from driver routine TSTHRM to compute the current reactivity feedback,
+and subroutine TSPK is called once more to compute the final estimate of
+the reactor power. Subroutine RHOEND is then called to update the
+coefficients used in the integration of the point kinetics equations.
+
+
+------------------------------------------------------------------------------
+[page: Part02/Ch04/input-output.html]
+------------------------------------------------------------------------------
+[anchor: input-output-description]
+
+# 4.8. Input/Output Description
+
+Table 4.8.1 contains a listing of SAS4A/SASSYS-1 input locations that
+are relevant to the point kinetics and reactivity feedback models. Table 4.8.2 contains a listing of input locations that are relevant to the new
+decay heat model. A complete description of all SAS4A/SASSYS-1 input may
+be found in Section 2.7.
+
+The new decay heat model is compatible with old input decks. However, to
+support the larger number of terms in the ANS standard as well as
+specifying multiple curves within a single decay heat region, new input
+locations have been specified. The new decay heat model still supports a
+total of 5 user-supplied decay heat curves, but also supports up to
+eight built-in standard curves. (Currently, only four are defined by the
+code.) A total of 10 decay heat regions can be defined using any
+combination of decay heat curves. User-supplied integer input for the
+decay heat model is contained in Block 1 (INPCOM). Floating-point input
+is contained in Block 12 (POWINA).
+
+The simplest usage of the new decay heat model is one that takes
+advantage of the built-in standard curves. For example, a problem with a
+single decay heat region that can be characterized by the decay heat
+from U-235 fission requires only two input parameters: NDKGRP = 23 and
+DKANSI(1,1) = 1.0.
+
+In addition to the decay heat input described below, the
+channel-dependent input parameter IDKCRV must
+be specified to indicate which decay heat region each channel belongs.
+If this value is zero, no decay heat will be calculated for that
+channel, and power from the predefined non-decay-heat region will be
+used. Similarly, the association of bypass channels with decay heat
+regions is defined by IDKTYP.
+
+On each main time step, the following quantities are printed: a) total
+reactor power (normalized to unity at time zero), b) decay-heat power,
+c) integrated energy (full-power seconds), d) net reactivity, e)
+programmed reactivity, f) control rod drive expansion reactivity, g)
+Doppler reactivity, h) fuel and cladding axial expansion reactivity, i)
+coolant reactivity, j) fuel-motion reactivity, and k) cladding-motion
+reactivity. In addition, the coolant, fuel, cladding, axial expansion
+and Doppler reactivity for each channel are also printed at each main
+time step. This information is also printed following each major print
+in expanded form (more significant digits), along with the group-wise
+values of the delayed-neutron precursor concentrations and decay-heat
+powers.
+
+Table 4.8.1 Point Kinetics and Reactivity Feedback Input Data
+ | 
+
+ | 
+Symbol
+ | 
+ | 
+Reference
+ | 
+ | 
+Name
+ | 
+ | 
+Block
+ | 
+ | 
+Location
+ | 
+ | 
+Suggested Value
+ | 
+
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+IPOWER
+ | 
+ | 
+1
+ | 
+ | 
+8
+ | 
+ | 
+0 or 1
+ | 
+
+ | 
+-
+ | 
+ | 
+4.11.1
+ | 
+ | 
+IPOWOP
+ | 
+ | 
+1
+ | 
+ | 
+9
+ | 
+ | 
+0 or 1
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+NPK
+ | 
+ | 
+1
+ | 
+ | 
+10
+ | 
+ | 
+0
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+NDELAY
+ | 
+ | 
+1
+ | 
+ | 
+16
+ | 
+ | 
+≥0, ≤6
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+NPREAT
+ | 
+ | 
+1
+ | 
+ | 
+18
+ | 
+ | 
+≥0, ≤20
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+ICREXP
+ | 
+ | 
+1
+ | 
+ | 
+31
+ | 
+ | 
+≥0, ≤3
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+IDBPWI
+ | 
+ | 
+1
+ | 
+ | 
+35
+ | 
+ | 
+0 or 1
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+IRADEX
+ | 
+ | 
+1
+ | 
+ | 
+36
+ | 
+ | 
+≥−7, ≤7
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+NFUELD
+ | 
+ | 
+1
+ | 
+ | 
+39
+ | 
+ | 
+<0
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+NOREAC
+ | 
+ | 
+1
+ | 
+ | 
+41
+ | 
+ | 
+≥0
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+NSRMTB
+ | 
+ | 
+1
+ | 
+ | 
+43
+ | 
+ | 
+Not used.
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+NSUBTC
+ | 
+ | 
+1
+ | 
+ | 
+51
+ | 
+ | 
+≥0
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+MTGRD
+ | 
+ | 
+1
+ | 
+ | 
+52
+ | 
+ | 
+1 or 2
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+MTACLP
+ | 
+ | 
+1
+ | 
+ | 
+53
+ | 
+ | 
+1 or 2
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+MTTLP
+ | 
+ | 
+1
+ | 
+ | 
+54
+ | 
+ | 
+1 or 2
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+MODEEX
+ | 
+ | 
+1
+ | 
+ | 
+55
+ | 
+ | 
+≥0, ≤3
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+JREEXT
+ | 
+ | 
+1
+ | 
+ | 
+56
+ | 
+ | 
+0 or 1
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+IREACT
+ | 
+ | 
+1
+ | 
+ | 
+58
+ | 
+ | 
+≥−2, ≤2
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+NSUBTR
+ | 
+ | 
+1
+ | 
+ | 
+59
+ | 
+ | 
+≥0
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+NRRNGS
+ | 
+ | 
+1
+ | 
+ | 
+60
+ | 
+ | 
+0,1, or 2
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+MTRRAC
+ | 
+ | 
+1
+ | 
+ | 
+61
+ | 
+ | 
+1 or 2
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+MTRFAC
+ | 
+ | 
+1
+ | 
+ | 
+63
+ | 
+ | 
+1 or 2
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+MTRFT
+ | 
+ | 
+1
+ | 
+ | 
+64
+ | 
+ | 
+1 or 2
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+IROPT
+ | 
+ | 
+1
+ | 
+ | 
+65
+ | 
+ | 
+0 or 1
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+JCRIND
+ | 
+ | 
+1
+ | 
+ | 
+66
+ | 
+ | 
+>0
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+ICRDDB
+ | 
+ | 
+1
+ | 
+ | 
+71
+ | 
+ | 
+0,1, or 2
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+ICRTMP
+ | 
+ | 
+1
+ | 
+ | 
+72-74
+ | 
+ | 
+≥0
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+ICRNOD
+ | 
+ | 
+1
+ | 
+ | 
+75-77
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+NSEGCR
+ | 
+ | 
+1
+ | 
+ | 
+78
+ | 
+ | 
+>0
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+MTCB
+ | 
+ | 
+1
+ | 
+ | 
+81
+ | 
+ | 
+1 or 2
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+KDEBUG
+ | 
+ | 
+1
+ | 
+ | 
+82
+ | 
+ | 
+0 or 1
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+KEBRS1
+ | 
+ | 
+1
+ | 
+ | 
+83
+ | 
+ | 
+≥0
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+KEBRS2
+ | 
+ | 
+1
+ | 
+ | 
+84
+ | 
+ | 
+≥0
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+IDBDKH
+ | 
+ | 
+1
+ | 
+ | 
+85
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+NULLD3
+ | 
+ | 
+1
+ | 
+ | 
+86
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+NOFDBK
+ | 
+ | 
+1
+ | 
+ | 
+89
+ | 
+ | 
+≥0
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+IBOWTP
+ | 
+ | 
+1
+ | 
+ | 
+102
+ | 
+ | 
+0 or 1
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+KCHUIS
+ | 
+ | 
+3
+ | 
+ | 
+1209-1242
+ | 
+ | 
+Not used.
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+NRREAC
+ | 
+ | 
+3
+ | 
+ | 
+1292
+ | 
+ | 
+≥0
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+ISLREA
+ | 
+ | 
+3
+ | 
+ | 
+1293-1300
+ | 
+ | 
+≥0
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+LBYP
+ | 
+ | 
+3
+ | 
+ | 
+1301
+ | 
+ | 
+≥0
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+LELBYP
+ | 
+ | 
+3
+ | 
+ | 
+1302-1309
+ | 
+ | 
+≥0
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+EPSPOW
+ | 
+ | 
+11
+ | 
+ | 
+3
+ | 
+ | 
+ $10^{- 4}$ 
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+ASCRAM
+ | 
+ | 
+11
+ | 
+ | 
+23
+ | 
+ | 
+Not used.
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+PSCRAM
+ | 
+ | 
+11
+ | 
+ | 
+24
+ | 
+ | 
+Not used.
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+GSCRAM
+ | 
+ | 
+11
+ | 
+ | 
+25
+ | 
+ | 
+Not used.
+ | 
+
+ | 
+-
+ | 
+ | 
+4.11.1
+ | 
+ | 
+POW
+ | 
+ | 
+12
+ | 
+ | 
+1
+ | 
+ | 
+-
+ | 
+
+ | 
+ $\Lambda$ 
+ | 
+ | 
+Eq. (4.2-4)
+ | 
+ | 
+GENTIM
+ | 
+ | 
+12
+ | 
+ | 
+2
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+4.11.1
+ | 
+ | 
+POWTOT
+ | 
+ | 
+12
+ | 
+ | 
+3
+ | 
+ | 
+-
+ | 
+
+ | 
+ $\beta_{\text{i}}$ 
+ | 
+ | 
+Eq. (4.3-1)
+ | 
+ | 
+BETADN
+ | 
+ | 
+12
+ | 
+ | 
+4-9
+ | 
+ | 
+-
+ | 
+
+ | 
+ $\lambda_{\text{i}}$ 
+ | 
+ | 
+Eq. (4.3-1)
+ | 
+ | 
+DECCON
+ | 
+ | 
+12
+ | 
+ | 
+10-15
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+OLDBDK
+ | 
+ | 
+12
+ | 
+ | 
+16-21
+ | 
+ | 
+Not used.
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+OLDDKL
+ | 
+ | 
+12
+ | 
+ | 
+22-27
+ | 
+ | 
+Not used.
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+OLDBDT
+ | 
+ | 
+12
+ | 
+ | 
+28
+ | 
+ | 
+Not used.
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+PREATB
+ | 
+ | 
+12
+ | 
+ | 
+29
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+PREATM
+ | 
+ | 
+12
+ | 
+ | 
+49
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+4.11.1
+ | 
+ | 
+FRPR
+ | 
+ | 
+12
+ | 
+ | 
+69
+ | 
+ | 
+-
+ | 
+
+ | 
+ $L_{\text{cr}}$ 
+ | 
+ | 
+Eq. (4.5-49)
+ | 
+ | 
+CRDLEN
+ | 
+ | 
+12
+ | 
+ | 
+71
+ | 
+ | 
+-
+ | 
+
+ | 
+ $\alpha_{\text{cr}}$ 
+ | 
+ | 
+Eq. (4.5-49)
+ | 
+ | 
+CRDEXP
+ | 
+ | 
+12
+ | 
+ | 
+72
+ | 
+ | 
+-
+ | 
+
+ | 
+ $a_{\text{cr}}$ 
+ | 
+ | 
+Eq. (4.5-52)
+ | 
+ | 
+ACRDEX
+ | 
+ | 
+12
+ | 
+ | 
+73
+ | 
+ | 
+-
+ | 
+
+ | 
+ $b_{\text{cr}}$ 
+ | 
+ | 
+Eq. (4.5-52)
+ | 
+ | 
+BCRDEX
+ | 
+ | 
+12
+ | 
+ | 
+74
+ | 
+ | 
+-
+ | 
+
+ | 
+ $M_{\text{cr}}C_{\text{cr}}$ 
+ | 
+ | 
+Eq. (4.5-42)
+ | 
+ | 
+CRDMC
+ | 
+ | 
+12
+ | 
+ | 
+75
+ | 
+ | 
+-
+ | 
+
+ | 
+ $h_{\text{cr}}A_{\text{cr}}$ 
+ | 
+ | 
+Eq. (4.5-42)
+ | 
+ | 
+CRDHA
+ | 
+ | 
+12
+ | 
+ | 
+76
+ | 
+ | 
+-
+ | 
+
+ | 
+ $V_{\text{ui}}$ 
+ | 
+ | 
+Eq. (4.5-43)
+ | 
+ | 
+UIVOL
+ | 
+ | 
+12
+ | 
+ | 
+77
+ | 
+ | 
+-
+ | 
+
+ | 
+ $C_{\text{re}}$ 
+ | 
+ | 
+Eq. (4.5-27)
+ | 
+ | 
+RDEXPC
+ | 
+ | 
+12
+ | 
+ | 
+78
+ | 
+ | 
+-
+ | 
+
+ | 
+ $\frac{{\text{XMC}}}{{\text{XAC}}}$ 
+ | 
+ | 
+Eq. (4.5-27)
+ | 
+ | 
+XMCXAC
+ | 
+ | 
+12
+ | 
+ | 
+79
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+SCRTAB
+ | 
+ | 
+12
+ | 
+ | 
+80
+ | 
+ | 
+Not used.
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+SCRTME
+ | 
+ | 
+12
+ | 
+ | 
+90
+ | 
+ | 
+Not used.
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+PRETB2
+ | 
+ | 
+12
+ | 
+ | 
+100-179
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+PRETM2
+ | 
+ | 
+12
+ | 
+ | 
+180-259
+ | 
+ | 
+-
+ | 
+
+ | 
+ $S_{{\text{GRMAX}}}$ 
+ | 
+ | 
+Eq. (4.5-31)
+ | 
+ | 
+SLLMAX
+ | 
+ | 
+12
+ | 
+ | 
+408
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+PITCHG
+ | 
+ | 
+12
+ | 
+ | 
+409
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+PITCHA
+ | 
+ | 
+12
+ | 
+ | 
+410
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+PITCHT
+ | 
+ | 
+12
+ | 
+ | 
+411
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+RDEXCF
+ | 
+ | 
+12
+ | 
+ | 
+412
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+TLPRRC
+ | 
+ | 
+12
+ | 
+ | 
+413
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+BNDMM1
+ | 
+ | 
+12
+ | 
+ | 
+414
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+BNDMM2
+ | 
+ | 
+12
+ | 
+ | 
+415
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+TINSRT
+ | 
+ | 
+12
+ | 
+ | 
+416
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+REAINS
+ | 
+ | 
+12
+ | 
+ | 
+417
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+TLIMIT
+ | 
+ | 
+12
+ | 
+ | 
+418
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+DFLTCS
+ | 
+ | 
+12
+ | 
+ | 
+419
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+DFLTSS
+ | 
+ | 
+12
+ | 
+ | 
+420
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+ACLPRC
+ | 
+ | 
+12
+ | 
+ | 
+421
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+FCDTR1
+ | 
+ | 
+12
+ | 
+ | 
+422
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+FCDTR2
+ | 
+ | 
+12
+ | 
+ | 
+423
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+FCDTRF
+ | 
+ | 
+12
+ | 
+ | 
+424
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+DRCOLL
+ | 
+ | 
+12
+ | 
+ | 
+425
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+CRSAC
+ | 
+ | 
+12
+ | 
+ | 
+426
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+RR1TC
+ | 
+ | 
+12
+ | 
+ | 
+427
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+RR2TC
+ | 
+ | 
+12
+ | 
+ | 
+428
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+RODID
+ | 
+ | 
+12
+ | 
+ | 
+429
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+RODOD
+ | 
+ | 
+12
+ | 
+ | 
+430
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+SHRDLN
+ | 
+ | 
+12
+ | 
+ | 
+431-433
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+SHRDID
+ | 
+ | 
+12
+ | 
+ | 
+434-436
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+SHRDOD
+ | 
+ | 
+12
+ | 
+ | 
+437-439
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+RHOCRD
+ | 
+ | 
+12
+ | 
+ | 
+440
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+HTCPCR
+ | 
+ | 
+12
+ | 
+ | 
+441
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+CONDCR
+ | 
+ | 
+12
+ | 
+ | 
+442
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+VFCRD
+ | 
+ | 
+12
+ | 
+ | 
+443
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+HFILM
+ | 
+ | 
+12
+ | 
+ | 
+444
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+FLSHRD
+ | 
+ | 
+12
+ | 
+ | 
+445
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+AREACR
+ | 
+ | 
+12
+ | 
+ | 
+446
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+FLOEXP
+ | 
+ | 
+12
+ | 
+ | 
+447
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+ACLPEL
+ | 
+ | 
+12
+ | 
+ | 
+448
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+TLPEL
+ | 
+ | 
+12
+ | 
+ | 
+449
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+PTCHRA
+ | 
+ | 
+12
+ | 
+ | 
+450
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+PTCHRT
+ | 
+ | 
+12
+ | 
+ | 
+451
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+RCBARR
+ | 
+ | 
+12
+ | 
+ | 
+452
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+FCDTCB
+ | 
+ | 
+12
+ | 
+ | 
+453
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+CB2TC
+ | 
+ | 
+12
+ | 
+ | 
+454
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+YKNF
+ | 
+ | 
+12
+ | 
+ | 
+455
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+YKHF
+ | 
+ | 
+12
+ | 
+ | 
+456
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+YKNNA
+ | 
+ | 
+12
+ | 
+ | 
+457
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+YKNSS
+ | 
+ | 
+12
+ | 
+ | 
+458
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+YRCUR
+ | 
+ | 
+12
+ | 
+ | 
+459
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+YRCLR
+ | 
+ | 
+12
+ | 
+ | 
+460
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+YRCRR
+ | 
+ | 
+12
+ | 
+ | 
+461
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+YRCCR
+ | 
+ | 
+12
+ | 
+ | 
+462
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+YRCGP
+ | 
+ | 
+12
+ | 
+ | 
+463
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+YRCDOP
+ | 
+ | 
+12
+ | 
+ | 
+464
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+YDELT0
+ | 
+ | 
+12
+ | 
+ | 
+465
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+YABOW
+ | 
+ | 
+12
+ | 
+ | 
+466
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+YBBOW
+ | 
+ | 
+12
+ | 
+ | 
+467
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+FCR
+ | 
+ | 
+12
+ | 
+ | 
+468
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+YTCUT
+ | 
+ | 
+12
+ | 
+ | 
+469
+ | 
+ | 
+-
+ | 
+
+ | 
+ $\varepsilon_{\text{ex}}$ 
+ | 
+ | 
+-
+ | 
+ | 
+EXPCOF
+ | 
+ | 
+13
+ | 
+ | 
+1263
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+IAXEXP
+ | 
+ | 
+51
+ | 
+ | 
+181
+ | 
+ | 
+0, 1, or 2
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+IDKCRV
+ | 
+ | 
+51
+ | 
+ | 
+203
+ | 
+ | 
+≥0, ≤5
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+ICHUIS
+ | 
+ | 
+51
+ | 
+ | 
+362
+ | 
+ | 
+0 or 1
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+IPOWRZ
+ | 
+ | 
+51
+ | 
+ | 
+364
+ | 
+ | 
+0 or 1
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+IREACZ
+ | 
+ | 
+51
+ | 
+ | 
+365
+ | 
+ | 
+0 or 1
+ | 
+
+ | 
+ $\gamma_{\text{s}}$ 
+ | 
+ | 
+Eq. (3.3-23)
+ | 
+ | 
+GAMSS
+ | 
+ | 
+62
+ | 
+ | 
+2
+ | 
+ | 
+-
+ | 
+
+ | 
+ $\gamma_{\text{c}}$ 
+ | 
+ | 
+Eq. (3.3-23)
+ | 
+ | 
+GAMTNC
+ | 
+ | 
+62
+ | 
+ | 
+4
+ | 
+ | 
+-
+ | 
+
+ | 
+ $\gamma_{\text{e}}$ 
+ | 
+ | 
+Eq. (3.3-23)
+ | 
+ | 
+GAMTNE
+ | 
+ | 
+62
+ | 
+ | 
+5
+ | 
+ | 
+-
+ | 
+
+ | 
+ $\overline{P}$ 
+ | 
+ | 
+4.11.1
+ | 
+ | 
+PSHAPE
+ | 
+ | 
+62
+ | 
+ | 
+6-29
+ | 
+ | 
+-
+ | 
+
+ | 
+ $P_{\text{r}}$ 
+ | 
+ | 
+-
+ | 
+ | 
+PSHAPR
+ | 
+ | 
+62
+ | 
+ | 
+30-44
+ | 
+ | 
+-
+ | 
+
+ | 
+ $\alpha_{\text{D}}$ 
+ | 
+ | 
+Eq. (4.5-2)
+ | 
+ | 
+ADOP
+ | 
+ | 
+62
+ | 
+ | 
+62
+ | 
+ | 
+-
+ | 
+
+ | 
+ $\alpha_{\text{D}}$ 
+ | 
+ | 
+Eq. (4.5-2)
+ | 
+ | 
+BDOP
+ | 
+ | 
+62
+ | 
+ | 
+63
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+WDOPA
+ | 
+ | 
+62
+ | 
+ | 
+64-111
+ | 
+ | 
+-
+ | 
+
+ | 
+ $\left( \rho_{\text{c}} \right)_{\text{jI}}$ 
+ | 
+ | 
+Eq. (4.5-25)
+ | 
+ | 
+VOIDRA
+ | 
+ | 
+62
+ | 
+ | 
+112-159
+ | 
+ | 
+-
+ | 
+
+ | 
+ $R_{\text{e}}$ 
+ | 
+ | 
+-
+ | 
+ | 
+CLADRA
+ | 
+ | 
+62
+ | 
+ | 
+160-207
+ | 
+ | 
+-
+ | 
+
+ | 
+ $R_{\text{f}}$ 
+ | 
+ | 
+Eq. (4.5-21)
+ | 
+ | 
+FUELRA
+ | 
+ | 
+62
+ | 
+ | 
+208-255
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+4.11.1
+ | 
+ | 
+PRSHAP
+ | 
+ | 
+62
+ | 
+ | 
+256
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+PSHPTP
+ | 
+ | 
+62
+ | 
+ | 
+257-261
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+PSHPBT
+ | 
+ | 
+62
+ | 
+ | 
+262-266
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+XRFSHP
+ | 
+ | 
+62
+ | 
+ | 
+268
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+XRNSHP
+ | 
+ | 
+62
+ | 
+ | 
+269
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+XRSSHP
+ | 
+ | 
+62
+ | 
+ | 
+270
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+PSHAPC
+ | 
+ | 
+62
+ | 
+ | 
+271-318
+ | 
+ | 
+-
+ | 
+
+ | 
+-
+ | 
+ | 
+-
+ | 
+ | 
+PSHAPB
+ | 
+ | 
+62
+ | 
+ | 
+319-366
+ | 
+ | 
+-
+ | 
+
+ | 
+ $\alpha_{\text{f}}$ 
+ | 
+ | 
+Eq. (4.5-4)
+ | 
+ | 
+FUELEX
+ | 
+ | 
+63
+ | 
+ | 
+73
+ | 
+ | 
+-
+ | 
+
+ | 
+ $\alpha_{\text{e}}$ 
+ | 
+ | 
+Eq. (4.5-5)
+ | 
+ | 
+CLADEX
+ | 
+ | 
+63
+ | 
+ | 
+74
+ | 
+ | 
+-
+ | 
+
+ | 
+ $Y_{\text{f}}$ 
+ | 
+ | 
+Eq. (4.5-8)
+ | 
+ | 
+YFUEL
+ | 
+ | 
+63
+ | 
+ | 
+75
+ | 
+ | 
+-
+ | 
+
+ | 
+ $Y_{\text{e}}$ 
+ | 
+ | 
+Eq. (4.5-8)
+ | 
+ | 
+YCLAD
+ | 
+ | 
+63
+ | 
+ | 
+76
+ | 
+ | 
+-
+ | 
+
+ | 
+ $\varepsilon_{\text{ex}}$ 
+ | 
+ | 
+Eq. (4.5-24)
+ | 
+ | 
+EXPCFF
+ | 
+ | 
+63
+ | 
+ | 
+79
+ | 
+ | 
+-
+ |
+
+
+------------------------------------------------------------------------------
+[page: Part02/Ch04/references.html]
+------------------------------------------------------------------------------
+[anchor: references]
+
+# 4.9. References
+
+4-1. F. E. Dunn, et al., Unpublished information, Argonne National
+Laboratory, 1975.
+
+4-2. A. F. Henry, “The Application of Reactor Kinetics to the Analysis
+of Experiment,” Nuclear Science and Engineering, vol. 3, p. 52, 1958.
+
+4-3. G. I. Bell and S. Glasstone, Nuclear Reactor Theory, Van Nostrand
+Reinhold Company, New York, N.Y., 1970.
+
+4-4. American National Standard Decay Heat Power in Light Water
+Reactors, ANSI/ANS-5.1-2005, American Nuclear Society, 2005.
+
+4-5. P. R. Huebotter, Personal Communication, June 3, 1981.
+
+4-6. G. A. McLennan, Unpublished information, Argonne National
+Laboratory, 1978.
+
+4-7. K. L. Basehore and N. E. Todreas, “SUPERENERGY-2: A Multiassembly,
+Steady-State Computer Code for LMFBR Core Thermal-Hydraulics Analysis,”
+Pacific Northwest Laboratory, Unpublished information, August, 1980.
+
+4-8. L. K. Chang and D. Mohr, “The Effect of Primary Pump Coastdown
+Characteristics on Unprotected Loss-of-Flow Transients in EBR-II,”
+Second Specialists’ Meeting on Decay Heat Removal and Natural
+Circulation in LMFBRs, Brookhaven National Laboratory, April 17-19,
+1985.
+
+4-9. D. Mohr and L. K. Chang, “Perturbations of Reactor Flow and Inlet
+Temperature for EBR-II Reactivity-Feedback Validation,” Proceedings of
+the International Topical Meeting on Fast Reactor Safety, Knoxville,
+Tenn., April 21-25, 1985.
+
+4-10. M. L. Carboneau, et al., Unpublished information, Argonne National
+Laboratory, 1980.
+
+4-11. A. M. White, Personal Communication, February 26, 1993.
+
+4-12. J. P. Herzog, Personal Communication, October 20, 1993.
+
+4-13. J. J. Kaganove, et al., “EBR-II Reactor Operation Simulator: Volume
+1. A description of EROS,” ANL-7981, Argonne National Laboratory,
+August, 1974.
+
+4-14. J. J. Kaganove, “Numerical Solution of the One-Group
+Space-Independent Reactor Kinetics Equations for Neutron Density Given
+the Excess Reactivity,” ANL-6132, Argonne National Laboratory, February,
+1960.
+
+4-15. E. L. Fuller, “The Point Kinetics Algorithm for FX2,” ANL-7910,
+Argonne National Laboratory, pp. 503-508, 1972.
+
+
+------------------------------------------------------------------------------
+[page: Part02/Ch04/nomenclature.html]
+------------------------------------------------------------------------------
+[anchor: nomenclature]
+
+# 4.10. Nomenclature
+
+ | 
+
+ | 
+Symbol
+ | 
+ | 
+Description
+ | 
+ | 
+Units
+ | 
+
+ | 
+
+ | 
+ $A$ 
+ | 
+ | 
+Coefficient in EBR-II bowing reactivity.
+ | 
+ | 
+$
+ | 
+
+ | 
+ $A_{\text{cr}}$ 
+ | 
+ | 
+Control rod driveline heat transfer area.
+ | 
+ | 
+m2
+ | 
+
+ | 
+ $A_{\text{e}}$ 
+ | 
+ | 
+Nominal cross-sectional area of cladding.
+ | 
+ | 
+m2
+ | 
+
+ | 
+ $A_{\text{f}}$ 
+ | 
+ | 
+Nominal cross-sectional area of fuel.
+ | 
+ | 
+m2
+ | 
+
+ | 
+ $a$ 
+ | 
+ | 
+Above-core load pad elevation.
+ | 
+ | 
+m
+ | 
+
+ | 
+ $a_{\text{cr}}$ 
+ | 
+ | 
+Coefficient in control rod driveline reactivity feedback.
+ | 
+ | 
+$/m
+ | 
+
+ | 
+ $B$ 
+ | 
+ | 
+Coefficient in EBR-II bowing reactivity.
+ | 
+ | 
+$
+ | 
+
+ | 
+ $b_{\text{cr}}$ 
+ | 
+ | 
+Coefficient in control rod driveline reactivity feedback.
+ | 
+ | 
+$/m2
+ | 
+
+ | 
+ $C_{\text{cr}}$ 
+ | 
+ | 
+Control rod driveline specific heat.
+ | 
+ | 
+J/kg-K
+ | 
+
+ | 
+ $C_{\text{i}}$ 
+ | 
+ | 
+Delayed neutron precursor group $i$ population.
+ | 
+ | | 
+
+ | 
+ $C_{\text{rc}}$ 
+ | 
+ | 
+Coefficient in simple radial core expansion reactivity feedback.
+ | 
+ | 
+$/K
+ | 
+
+ | 
+ $D$ 
+ | 
+ | 
+Hex can flat-to-flat dimension.
+ | 
+ | 
+m
+ | 
+
+ | 
+ $D_{\text{z}}$ 
+ | 
+ | 
+Nominal axial node height in simple axial expansion reactivity feedback model.
+ | 
+ | 
+m
+ | 
+
+ | 
+ $E$ 
+ | 
+ | 
+Modulus of elasticity.
+ | 
+ | 
+N/m2
+ | 
+
+ | 
+ $F_{\text{cr}}$ 
+ | 
+ | 
+Temperature multiplier in EBR-II control rod bank expansion model.
+ | 
+ | | 
+
+ | 
+ $F_{\text{LowBU}}$ 
+ | 
+ | 
+Fraction of fuel elements with burnup less than 2.9% in EBR-II.
+ | 
+ | | 
+
+ | 
+ $f_{\text{e}}$ 
+ | 
+ | 
+Cladding mesh height expansion factor.
+ | 
+ | | 
+
+ | 
+ $f_{\text{f}}$ 
+ | 
+ | 
+Fuel mesh height expansion factor.
+ | 
+ | | 
+
+ | 
+ $f_{\text{i}}$ 
+ | 
+ | 
+Channel flag in simple radial expansion reactivity model.
+ | 
+ | | 
+
+ | 
+ $H$ 
+ | 
+ | 
+Fuel height in EBR-II.
+ | 
+ | 
+m
+ | 
+
+ | 
+ $h_{\text{cr}}$ 
+ | 
+ | 
+Coolant to control rod driveline heat transfer coefficient.
+ | 
+ | 
+W/m2-k
+ | 
+
+ | 
+ $H_{\text{n}}$ 
+ | 
+ | 
+Normalized decay heat energy fraction for group $n$ .
+ | 
+ | | 
+
+ | 
+ $I$ 
+ | 
+ | 
+Moment of inertia of beam cross-sectional area.
+ | 
+ | 
+m4
+ | 
+
+ | 
+ $k$ 
+ | 
+ | 
+Reactor effective multiplication constant.
+ | 
+ | | 
+
+ | 
+ $\delta k$ 
+ | 
+ | 
+Reactivity, or change in the effective reactor multiplication constant.
+ | 
+ | | 
+
+ | 
+ $\delta k_{\text{cl}}$ 
+ | 
+ | 
+Cladding relocation reactivity.
+ | 
+ | | 
+
+ | 
+ $\delta k_{\text{cr}}$ 
+ | 
+ | 
+Control rod drive expansion reactivity.
+ | 
+ | | 
+
+ | 
+ $\delta k_{\text{cs}}$ 
+ | 
+ | 
+Control system reactivity.
+ | 
+ | | 
+
+ | 
+ $\delta k_{\text{D}}$ 
+ | 
+ | 
+Fuel Doppler reactivity.
+ | 
+ | | 
+
+ | 
+ $\delta k_{\text{d}}$ 
+ | 
+ | 
+Fuel and cladding axial expansion reactivity.
+ | 
+ | | 
+
+ | 
+ $\delta k_{\text{fu}}$ 
+ | 
+ | 
+Fuel relocation reactivity.
+ | 
+ | | 
+
+ | 
+ $\delta k_{\text{Na}}$ 
+ | 
+ | 
+Coolant density or voiding reactivity.
+ | 
+ | | 
+
+ | 
+ $\delta k_{\text{p}}$ 
+ | 
+ | 
+User-programmed reactivity.
+ | 
+ | | 
+
+ | 
+ $\delta k_{\text{re}}$ 
+ | 
+ | 
+Core radial expansion reactivity.
+ | 
+ | | 
+
+ | 
+ $L$ 
+ | 
+ | 
+Elevation of top load pad.
+ | 
+ | 
+m
+ | 
+
+ | 
+ $L_{\text{cr}}$ 
+ | 
+ | 
+Control rod driveline length.
+ | 
+ | 
+m
+ | 
+
+ | 
+ $L_{\text{k}}$ 
+ | 
+ | 
+Reactor vessel wall length represented by compressible volume $k$ or element $k$ .
+ | 
+ | 
+m
+ | 
+
+ | 
+ $M$ 
+ | 
+ | 
+Bending moment.
+ | 
+ | 
+N-m
+ | 
+
+ | 
+ $M_{\text{cr}}$ 
+ | 
+ | 
+Control rod driveline mass.
+ | 
+ | 
+kg
+ | 
+
+ | 
+ $M_{\text{GR}}$ 
+ | 
+ | 
+Applied moment at grid plate.
+ | 
+ | 
+N-m
+ | 
+
+ | 
+ $M_{1}$ 
+ | 
+ | 
+Thermally induced bending moment in the core region.
+ | 
+ | 
+N-m
+ | 
+
+ | 
+ $M_{2}$ 
+ | 
+ | 
+Thermally induced bending moment above the core region.
+ | 
+ | 
+N-m
+ | 
+
+ | 
+ $m_{\text{ij}}$ 
+ | 
+ | 
+Fuel or cladding mass at node $j$ in channel $i$ in fuel and cladding relocation reactivity.
+ | 
+ | 
+kg
+ | 
+
+ | 
+ $N$ 
+ | 
+ | 
+Fuel, sodium, or steel atom density in EBR-II reactivity model.
+ | 
+ | 
+atm/m3
+ | 
+
+ | 
+ $N_{\text{c}}$ 
+ | 
+ | 
+Number of channels.
+ | 
+ | | 
+
+ | 
+ $N_{\text{s}}$ 
+ | 
+ | 
+Number of subassemblies per channel.
+ | 
+ | | 
+
+ | 
+ $P$ 
+ | 
+ | 
+Radial force at the above core load pad.
+ | 
+ | 
+N
+ | 
+
+ | 
+ $P_{\text{t}}^{k}$ 
+ | 
+ | 
+Normalized power in interval $k$ of irradiation history for decay heat precursor initial condition.
+ | 
+ | | 
+
+ | 
+ $Q$ 
+ | 
+ | 
+Space and time dependent nodal power.
+ | 
+ | 
+W
+ | 
+
+ | 
+ $Q_{\text{t}}$ 
+ | 
+ | 
+Total recoverable energy per fission
+ | 
+ | 
+MeV
+ | 
+
+ | 
+ $R_{\text{e}}$ 
+ | 
+ | 
+Cladding nodal reactivity worth in simple axial expansion reactivity model.
+ | 
+ | 
+kg-1
+ | 
+
+ | 
+ $R_{\text{f}}$ 
+ | 
+ | 
+Fuel nodal reactivity worth in simple axial expansion reactivity model.
+ | 
+ | 
+kg-1
+ | 
+
+ | 
+ $R_{\text{i}}$ 
+ | 
+ | 
+Radial fuel reactivity worth shape factor in EBR-II reactivity model.
+ | 
+ | | 
+
+ | 
+ $R_{1}$ 
+ | 
+ | 
+Minimum core radius at above-core load pad in detailed radial expansion model.
+ | 
+ | 
+m
+ | 
+
+ | 
+ $R_{2}$ 
+ | 
+ | 
+Minimum core radius at top load pad in detailed radial expansion model.
+ | 
+ | 
+m
+ | 
+
+ | 
+ $R_{3}$ 
+ | 
+ | 
+Maximum core radius at restraint ring in detailed radial expansion.
+ | 
+ | 
+m
+ | 
+
+ | 
+ $\overrightarrow{r}$ 
+ | 
+ | 
+Reactor spatial position vector.
+ | 
+ | | 
+
+ | 
+ $S$ 
+ | 
+ | 
+Space-dependent steady-state nodal power.
+ | 
+ | 
+W
+ | 
+
+ | 
+ $S_{\text{GR}}$ 
+ | 
+ | 
+Subassembly slope with respect to vertical at the grid plate.
+ | 
+ | 
+m/m
+ | 
+
+ | 
+ $S_{\text{GRMAX}}$ 
+ | 
+ | 
+Maximum subassembly slope with respect to vertical at the grid plate.
+ | 
+ | 
+m/m
+ | 
+
+ | 
+ $T$ 
+ | 
+ | 
+Temperature.
+ | 
+ | 
+K
+ | 
+
+ | 
+ $\overline{T}$ 
+ | 
+ | 
+Average temperature.
+ | 
+ | 
+K
+ | 
+
+ | 
+ $\Delta T$ 
+ | 
+ | 
+Hexcan flat-to-flat temperature difference.
+ | 
+ | 
+K
+ | 
+
+ | 
+ $T_{\text{by}}$ 
+ | 
+ | 
+Bypass region temperature.
+ | 
+ | 
+K
+ | 
+
+ | 
+ $T_{\text{ch}}$ 
+ | 
+ | 
+Reflector steel temperature.
+ | 
+ | 
+K
+ | 
+
+ | 
+ $T_{\text{cr}}$ 
+ | 
+ | 
+Control rod driveline temperature.
+ | 
+ | 
+K
+ | 
+
+ | 
+ $T_{\text{cv}1}$ 
+ | 
+ | 
+Inlet plenum coolant temperature.
+ | 
+ | 
+K
+ | 
+
+ | 
+ $T_{\text{cv}2}$ 
+ | 
+ | 
+Outlet plenum coolant temperature.
+ | 
+ | 
+K
+ | 
+
+ | 
+ $T_{\text{e}}$ 
+ | 
+ | 
+Cladding temperature.
+ | 
+ | 
+K
+ | 
+
+ | 
+ $T_{\text{f}}$ 
+ | 
+ | 
+Fuel temperature.
+ | 
+ | 
+K
+ | 
+
+ | 
+ ${\overline{T}}_{\text{f}}$ 
+ | 
+ | 
+Average fuel temperature.
+ | 
+ | 
+K
+ | 
+
+ | 
+ $\Delta T_{f}$ 
+ | 
+ | 
+Fuel temperature change.
+ | 
+ | 
+K
+ | 
+
+ | 
+ $\Delta{\overline{T}}_{\text{favg}}$ 
+ | 
+ | 
+Average fuel temperature change.
+ | 
+ | 
+K
+ | 
+
+ | 
+ ${\overline{T}}_{\text{floc}}$ 
+ | 
+ | 
+Average fuel temperature for a channel.
+ | 
+ | 
+K
+ | 
+
+ | 
+ $T_{\text{i}}$ 
+ | 
+ | 
+Plenum coolant temperature.
+ | 
+ | 
+K
+ | 
+
+ | 
+ $T_{\text{in}}$ 
+ | 
+ | 
+Coolant inlet temperature.
+ | 
+ | 
+K
+ | 
+
+ | 
+ $\Delta T_{\text{in}}$ 
+ | 
+ | 
+Coolant inlet temperature change.
+ | 
+ | 
+K
+ | 
+
+ | 
+ $T_{\text{j}}$ 
+ | 
+ | 
+Reflector coolant temperature.
+ | 
+ | 
+K
+ | 
+
+ | 
+ ${\overline{T}}_{\text{k}}$ 
+ | 
+ | 
+Average vessel wall temperature in $k$ -th compressible volume or element.
+ | 
+ | 
+K
+ | 
+
+ | 
+ ${\overline{T}}_{\text{lr}}$ 
+ | 
+ | 
+Average coolant temperature in lower reflector.
+ | 
+ | 
+K
+ | 
+
+ | 
+ $T_{\text{mm}}$ 
+ | 
+ | 
+Mixed mean coolant core outlet temperature.
+ | 
+ | 
+K
+ | 
+
+ | 
+ ${\overline{T}}_{\text{Na}}$ 
+ | 
+ | 
+Average coolant temperature.
+ | 
+ | 
+K
+ | 
+
+ | 
+ ${\overline{T}}_{\text{rr}}$ 
+ | 
+ | 
+Average radial reflector coolant temperature.
+ | 
+ | 
+K
+ | 
+
+ | 
+ $T_{\text{SLP}}$ 
+ | 
+ | 
+Space and time dependent structure temperature.
+ | 
+ | 
+K
+ | 
+
+ | 
+ ${\overline{T}}_{\text{SLP}}$ 
+ | 
+ | 
+Space-average, time dependent structure temperature.
+ | 
+ | 
+K
+ | 
+
+ | 
+ ${\Delta\overline{T}}_{\text{SLP}}$ 
+ | 
+ | 
+Change in space-averaged structure temperature.
+ | 
+ | 
+K
+ | 
+
+ | 
+ $\Delta T_{\text{ss}}$ 
+ | 
+ | 
+Cladding temperature change.
+ | 
+ | 
+K
+ | 
+
+ | 
+ ${\overline{T}}_{\text{ss}}$ 
+ | 
+ | 
+Average cladding temperature.
+ | 
+ | 
+K
+ | 
+
+ | 
+ $T_{\text{ui}}$ 
+ | 
+ | 
+Coolant temperature in the upper internal structure region.
+ | 
+ | 
+K
+ | 
+
+ | 
+ ${\overline{T}}_{\text{ur}}$ 
+ | 
+ | 
+Average coolant temperature in the upper reflector.
+ | 
+ | 
+K
+ | 
+
+ | 
+ $t$ 
+ | 
+ | 
+Time.
+ | 
+ | 
+s
+ | 
+
+ | 
+ $\Delta t$ 
+ | 
+ | 
+Change in time.
+ | 
+ | 
+s
+ | 
+
+ | 
+ $V_{\text{by}}$ 
+ | 
+ | 
+Bypass region volume.
+ | 
+ | 
+m3
+ | 
+
+ | 
+ $V_{\text{c}}h$ 
+ | 
+ | 
+Channel steel volume.
+ | 
+ | 
+m3
+ | 
+
+ | 
+ $V_{\text{cv}1}$ 
+ | 
+ | 
+Inlet plenum volume.
+ | 
+ | 
+m3
+ | 
+
+ | 
+ $V_{\text{cv}2}$ 
+ | 
+ | 
+Outlet plenum volume.
+ | 
+ | 
+m3
+ | 
+
+ | 
+ $V_{\text{f}}$ 
+ | 
+ | 
+Fuel volume.
+ | 
+ | 
+m3
+ | 
+
+ | 
+ $V_{\text{GR}}$ 
+ | 
+ | 
+Radial reaction at the grid plate.
+ | 
+ | | 
+
+ | 
+ $V_{\text{i}}$ 
+ | 
+ | 
+Plenum coolant volume.
+ | 
+ | 
+m3
+ | 
+
+ | 
+ $V_{\text{i}}$ 
+ | 
+ | 
+Channel volume.
+ | 
+ | 
+m3
+ | 
+
+ | 
+ $V_{\text{j}}$ 
+ | 
+ | 
+Reflector coolant volume.
+ | 
+ | 
+m3
+ | 
+
+ | 
+ $V_{\text{k}}$ 
+ | 
+ | 
+Nodal volume at $k$ in channel.
+ | 
+ | 
+m3
+ | 
+
+ | 
+ $V_{\text{Na}}$ 
+ | 
+ | 
+Sodium volume in fuel/cladding gap.
+ | 
+ | 
+m3
+ | 
+
+ | 
+ $V_{\text{ss}}$ 
+ | 
+ | 
+Cladding volume.
+ | 
+ | 
+m3
+ | 
+
+ | 
+ $V_{\text{ui}}$ 
+ | 
+ | 
+Coolant volume in upper internal structure.
+ | 
+ | 
+m3
+ | 
+
+ | 
+ $w_{\text{c}}$ 
+ | 
+ | 
+Core outlet flow rate.
+ | 
+ | 
+kg/s
+ | 
+
+ | 
+ $w_{\text{k}}$ 
+ | 
+ | 
+Core volume weighting for decay heat curve $k$ .
+ | 
+ | | 
+
+ | 
+ $\text{XAC}$ 
+ | 
+ | 
+Distance from subassembly nozzle support to above core load pad.
+ | 
+ | 
+m
+ | 
+
+ | 
+ $\text{XMC}$ 
+ | 
+ | 
+Distance from subassembly nozzle support to core midplane.
+ | 
+ | 
+m
+ | 
+
+ | 
+ $x$ 
+ | 
+ | 
+Axial elevation in detailed radial core expansion model.
+ | 
+ | 
+m
+ | 
+
+ | 
+ $x_{1}$ 
+ | 
+ | 
+Elevation of lower axial blanket/lower reflector interface.
+ | 
+ | 
+m
+ | 
+
+ | 
+ $x_{\text{i}}$ 
+ | 
+ | 
+Fraction of total fission power from isotope $i$ .
+ | 
+ | | 
+
+ | 
+ $Y$ 
+ | 
+ | 
+Fraction of full power temperature rise.
+ | 
+ | | 
+
+ | 
+ $Y_{\text{e}}$ 
+ | 
+ | 
+Cladding Young’s modulus.
+ | 
+ | | 
+
+ | 
+ $Y_{\text{f}}$ 
+ | 
+ | 
+Fuel Young’s modulus.
+ | 
+ | | 
+
+ | 
+ $Y_{\text{ss}}$ 
+ | 
+ | 
+Cladding Young’s modulus.
+ | 
+ | | 
+
+ | 
+ $y$ 
+ | 
+ | 
+Radial displacement with respect to the core radius at the grid plate.
+ | 
+ | 
+m
+ | 
+
+ | 
+ $Z_{\text{k}}$ 
+ | 
+ | 
+Axial fuel reactivity worth shape.
+ | 
+ | | 
+
+ | 
+ $\Delta z_{\text{cr}}$ 
+ | 
+ | 
+Control rod driveline expansion.
+ | 
+ | 
+m
+ | 
+
+ | 
+ $z_{0}$ 
+ | 
+ | 
+Unexpanded axial mesh elevation.
+ | 
+ | 
+m
+ | 
+
+ | 
+ $\Delta z_{\text{n}}$ 
+ | 
+ | 
+Net control rod movement.
+ | 
+ | 
+m
+ | 
+
+ | 
+ $z_{\text{ne}}$ 
+ | 
+ | 
+Expanded cladding mesh elevation.
+ | 
+ | 
+m
+ | 
+
+ | 
+ $z_{\text{nf}}$ 
+ | 
+ | 
+Expanded fuel mesh elevation.
+ | 
+ | 
+m
+ | 
+
+ | 
+ $\Delta z_{\text{v}}$ 
+ | 
+ | 
+Reactor vessel expansion.
+ | 
+ | 
+m
+ | 
+
+ | 
+ $\alpha$ 
+ | 
+ | 
+Subassembly hex can thermal expansion coefficient.
+ | 
+ | 
+1/K
+ | 
+
+ | 
+ $\alpha_{\text{cr}}$ 
+ | 
+ | 
+Control rod driveline thermal expansion coefficients.
+ | 
+ | 
+1/K
+ | 
+
+ | 
+ $\alpha_{\text{D}}$ 
+ | 
+ | 
+Local fuel Doppler coefficient.
+ | 
+ | | 
+
+ | 
+ $\alpha_{\text{e}}$ 
+ | 
+ | 
+Cladding thermal expansion coefficient.
+ | 
+ | 
+1/K
+ | 
+
+ | 
+ $\alpha_{\text{f}}$ 
+ | 
+ | 
+Fuel thermal expansion coefficient.
+ | 
+ | 
+1/K
+ | 
+
+ | 
+ $\alpha_{\text{jI}}$ 
+ | 
+ | 
+Average coolant void fraction in axial node $j$ of channel $I$ .
+ | 
+ | | 
+
+ | 
+ $\alpha_{\text{k}}$ 
+ | 
+ | 
+Reactor vessel thermal expansion coefficient.
+ | 
+ | 
+1/K
+ | 
+
+ | 
+ $\alpha_{\text{Lf}}$ 
+ | 
+ | 
+Fuel thermal expansion coefficient.
+ | 
+ | 
+1/K
+ | 
+
+ | 
+ $\alpha_{\text{Lss}}$ 
+ | 
+ | 
+Cladding thermal expansion coefficient.
+ | 
+ | 
+1/K
+ | 
+
+ | 
+ $\alpha_{\text{VNa}}$ 
+ | 
+ | 
+Sodium volumetric thermal expansion coefficient.
+ | 
+ | 
+1/K
+ | 
+
+ | 
+ $\alpha_{\text{n}}$ 
+ | 
+ | 
+Contribution of group $n$ to immediate decay heat from a single fission event
+ | 
+ | 
+MeV
+ | 
+
+ | 
+ $\beta$ 
+ | 
+ | 
+Total effective delayed-neutron fraction
+ | 
+ | | 
+
+ | 
+ $\beta_{\text{n}}$ 
+ | 
+ | 
+Effective decay-heat power fraction for group $n$ .
+ | 
+ | | 
+
+ | 
+ $\beta_{\text{i}}$ 
+ | 
+ | 
+Effective delayed-neutron precursor group $i$ fraction.
+ | 
+ | | 
+
+ | 
+ $\delta_{\text{e}}$ 
+ | 
+ | 
+Cladding axial expansion.
+ | 
+ | 
+m
+ | 
+
+ | 
+ $\delta_{\text{f}}$ 
+ | 
+ | 
+Fuel axial expansion.
+ | 
+ | 
+m
+ | 
+
+ | 
+ $\epsilon_{\text{d}}$ 
+ | 
+ | 
+Sodium density multiplier.
+ | 
+ | | 
+
+ | 
+ $\epsilon_{\text{e}}$ 
+ | 
+ | 
+Cladding fractional thermal expansion.
+ | 
+ | | 
+
+ | 
+ $\epsilon_{\text{ex}}$ 
+ | 
+ | 
+Effective axial expansion multiplier.
+ | 
+ | | 
+
+ | 
+ $\epsilon_{\text{f}}$ 
+ | 
+ | 
+Fuel fractional thermal expansion.
+ | 
+ | | 
+
+ | 
+ $\zeta$ 
+ | 
+ | 
+EBR-II reactivity parameter.
+ | 
+ | 
+$
+ | 
+
+ | 
+ $\zeta_{\text{bw}}$ 
+ | 
+ | 
+EBR-II bowing reactivity parameter.
+ | 
+ | 
+$
+ | 
+
+ | 
+ $\zeta_{\text{c}}$ 
+ | 
+ | 
+EBR-II coolant reactivity parameter.
+ | 
+ | 
+$
+ | 
+
+ | 
+ $\zeta_{\text{cr}}$ 
+ | 
+ | 
+EBR-II control rod driveline reactivity parameter.
+ | 
+ | 
+$
+ | 
+
+ | 
+ $\zeta_{\text{fa}}$ 
+ | 
+ | 
+EBR-II axial fuel expansion reactivity parameter.
+ | 
+ | 
+$
+ | 
+
+ | 
+ $\zeta_{\text{fr}}$ 
+ | 
+ | 
+EBR-II radial fuel expansion reactivity parameter.
+ | 
+ | 
+$
+ | 
+
+ | 
+ $\zeta_{\text{lr}}$ 
+ | 
+ | 
+EBR-II lower reflector reactivity parameter.
+ | 
+ | 
+$
+ | 
+
+ | 
+ $\zeta_{\text{rr}}$ 
+ | 
+ | 
+EBR-II radial reflector reactivity parameter.
+ | 
+ | 
+$
+ | 
+
+ | 
+ $\zeta_{\text{ssa}}$ 
+ | 
+ | 
+EBR-II axial cladding expansion reactivity parameter.
+ | 
+ | 
+$
+ | 
+
+ | 
+ $\zeta_{\text{ssr}}$ 
+ | 
+ | 
+EBR-II radial cladding expansion reactivity parameter.
+ | 
+ | 
+$
+ | 
+
+ | 
+ $\zeta_{\text{ur}}$ 
+ | 
+ | 
+EBR-II upper reflector reactivity parameter.
+ | 
+ | 
+$
+ | 
+
+ | 
+ $\Lambda$ 
+ | 
+ | 
+Prompt neutron lifetime.
+ | 
+ | 
+s
+ | 
+
+ | 
+ $\lambda_{\text{n}}$ 
+ | 
+ | 
+Decay heat group effective decay constant for group $n$ .
+ | 
+ | 
+1/s
+ | 
+
+ | 
+ $\lambda_{\text{i}}$ 
+ | 
+ | 
+Delayed neutron precursor group $i$ decay constant.
+ | 
+ | 
+1/s
+ | 
+
+ | 
+ $\rho_{\text{c}}$ 
+ | 
+ | 
+Local coolant void reactivity worth.
+ | 
+ | 
+g-1
+ | 
+
+ | 
+ $\Delta\rho_{\text{e}}$ 
+ | 
+ | 
+Cladding axial expansion reactivity.
+ | 
+ | | 
+
+ | 
+ $\Delta\rho_{\text{f}}$ 
+ | 
+ | 
+Fuel axial expansion reactivity.
+ | 
+ | | 
+
+ | 
+ $\rho_{\text{u}}$ 
+ | 
+ | 
+Sodium density in outlet plenum.
+ | 
+ | 
+kg/m3
+ | 
+
+ | 
+ $\phi$ 
+ | 
+ | 
+Normalized fission power amplitude.
+ | 
+ | | 
+
+ | 
+ $\phi_{1}$ 
+ | 
+ | 
+First order coefficient in normalized fission power amplitude expansion.
+ | 
+ | 
+s-1
+ | 
+
+ | 
+ $\phi_{2}$ 
+ | 
+ | 
+Second order coefficient in normalized fission power amplitude expansion.
+ | 
+ | 
+s-2
+ | 
+
+ | 
+ $\psi_{\text{f}}$ 
+ | 
+ | 
+Normalized fission power.
+ | 
+ | | 
+
+ | 
+ $\psi_{\text{h}}$ 
+ | 
+ | 
+Normalized decay heat power.
+ | 
+ | | 
+
+ | 
+ $\psi_{\text{t}}$ 
+ | 
+ | 
+Normalized total power.
+ | 
+ | |
+
+
+------------------------------------------------------------------------------
+[page: Part02/Ch04/appendices.html]
+------------------------------------------------------------------------------
+[anchor: appendices]
+
+# 4.11. Appendices
+
+[anchor: appendix-4-1-steady-state-power-normalization-in-sas]
+
+## 4.11.1. Appendix 4.1: Steady-State Power Normalization in SAS4A/SASSYS-1
+
+The power in axial fuel pin segment $I$ of channel $J$ is
+given by the expression
+
+$${\text{PSHAPE}}\left( I,J \right)\ \times \ {\text{QMULT}} \times \ {\text{POW}}$$
+
+Here POW is the maximum power of any axial fuel pin segment. QMULT is a
+multiplier that is equal to one in steady state.
+
+ ${\text{PSHAPE}}\left( I,J \right)$ is the ratio of the
+power of segment $\left( I,J \right)$ to the maximum power of any
+segment. It is obvious that PSHAPE takes values between zero and one.
+
+SAS4A/SASSYS-1 will renormalize the input values of PSHAPE and PRSHAP.
+This is done is subroutine PNORM. The user needs only supply
+un-normalized data for these arrays.
+
+PNORM will also compute POW from POWTOT or POWTOT from POW according to
+the value of IPOWOP.
+
+Input:
+
+ | 
+
+ | 
+IPOWOP = 0
+ | 
+ | 
+Calculate steady-state power in peak axial segment from total reactor power.
+ | 
+
+ | 
+
+ | 
+IPOWOP = 1
+ | 
+ | 
+Calculate steady-state total reactor power from the peak axial fuel pin segment.
+ | 
+
+ | 
+POWTOT
+ | 
+ | 
+Total reactor power in steady state.
+ | 
+
+ | 
+POW
+ | 
+ | 
+Steady-state power in the peak axial pin segment.
+ | 
+
+ | 
+FRPR
+ | 
+ | 
+Fraction of total reactor power represented by sum of all SAS4A/SASSYS-1 channels.
+ | 
+
+ | 
+NPIN(ICH)
+ | 
+ | 
+Number of fuel pins in a subassembly of channel ICH.
+ | 
+
+ | 
+NSUBAS(ICH)
+ | 
+ | 
+Number of subassemblies in channel ICH.
+ | 
+
+ | 
+MZ(ICH)
+ | 
+ | 
+Number of axial nodes in channel ICH.
+ | 
+
+ | 
+PRSHAP(ICH)
+ | 
+ | 
+The relative power per subassembly in channel ICH.
+
+PRSHAP will be normalized by PNORM.
+
+ | 
+
+ | 
+PSHAPE(I,ICH)
+ | 
+ | 
+The relative power per axial pin segment of axial pin segment I and channel ICH. I = 1, … MZ(ICH).
+
+PSHAPE will be normalized by the PNORM routine.
+
+ | 
+
+Method:
+
+The values of PRSHAP get renormalized as RELCHA for all channels:
+
+$${\text{RELCHA}}\left( \text{ICH} \right) = {\text{PRSHAP}}\left( \text{ICH} \right)\ \times \frac{\sum_{\text{I}}{{\text{NSUBAS}}\left( I \right)}}{\sum_{\text{I}}{{\text{PRSHAP}}\left( I \right) \times {\text{NSUBAS}}\left( I \right)}}$$
+
+If we multiply the above equation by
+ ${\text{NSUBAS}}\left( \text{ICH} \right)$ and then sum
+over all channels $\text{ICH}$ , we can show that
+
+$$\sum_{\text{ICH}}{{\text{RELCHA}}\left( \text{ICH} \right)\ \times \ {\text{NSUBAS}}\left( \text{ICH} \right)} = \sum_{\text{ICH}}{{\text{NSUBAS}}\left( \text{ICH} \right)}$$
+
+Thus, RELCHA is properly normalized.
+
+The values of PSHAPE get normalized as RELSHP for each channel:
+
+$${\text{RELSHP}}\left( IZ,ICH \right) = \frac{{\text{PSHAPE}}\left( IZ,ICH \right)}{\sum_{\text{I}}{{\text{PSHAPE}}\left( I,ICH \right)}}$$
+
+If we sum over all axial nodes $\text{IZ}$ , we can show that
+
+$$\sum_{\text{IZ}}{{\text{RELSHP}}\left( IZ,ICH \right) = 1}$$
+
+Thus, RELSHP is properly normalized.
+
+The power of axial pin segment $\left( I,J \right)$ is
+
+$${\text{RELSHP}}\left( I,J \right)\ \times \frac{{\text{RELCHA}}\left( J \right)}{{\text{NPIN}}\left( J \right)}\ \times \ \frac{{\text{FRPR}}\ \times \ {\text{POWTOT}}}{\sum_{\text{ICH}}{{\text{NSUBAS}}\left( \text{ICH} \right)}}$$
+
+From the definition of POW we get the equation
+
+$${\text{POW}} = {\left\lbrack {\text{RELSHP}}\left( I,J \right)\ \times \frac{{\text{RELCHA}}\left( J \right)}{{\text{NPIN}}\left( J \right)}\ \right\rbrack \times \ \frac{{\text{FRPR}}\ \times \ {\text{POWTOT}}}{\sum_{\text{ICH}}{{\text{NSUBAS}}\left( \text{ICH} \right)}}}$$
+
+and the unknown POWTOT or POW can be found. Given
+ $I_{\mathrm{\max}}$ and $J_{\mathrm{\max}}$ to be the
+indices of the peak power pin segment, we then redefine
+ ${\text{PSHAPE}}\left( I,J \right)$ as
+
+$${\text{PSHAPE}}\left( I,J \right) = \frac{{\text{RELSHP}}\left( I,J \right)\ \times \ {\text{RELCHA}}\left( J \right)}{{\text{NPIN}}\left( J \right)} \times \frac{{\text{NPIN}}\left( J_{\mathrm{\max}} \right)}{{\text{RELSHP}}\left( I_{\mathrm{\max}},J_{\mathrm{\max}} \right)\ \times \ {\text{RELCHA}}\left( J_{\mathrm{\max}} \right)}$$
+
+This is the desired form of PSHAPE that is used by the subroutine SHAPE.

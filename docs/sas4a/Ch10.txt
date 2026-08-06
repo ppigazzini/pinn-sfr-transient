@@ -1,0 +1,4785 @@
+==============================================================================
+CHAPTER 10. SSCOMP: Pre-Transient Characterization of Metallic Fuel Pins
+source: https://sas-doc.nse.anl.gov/latest/Part03/Ch10/Ch10.html   (ANL/NSE-SAS/5.8.1)
+scope: out of scope: SSCOMP pre-transient characterisation
+==============================================================================
+[anchor: sscomp-pre-transient-characterization-of-metallic-fuel-pins]
+
+# 10. SSCOMP: Pre-Transient Characterization of Metallic Fuel Pins
+
+10.1. Introduction and Overview
+
+10.2. The Earlier SSCOMP Model and Current Capability
+
+10.3. Thermal Properties of U-Pu-Zr and U-Zr Alloy Fuels
+
+10.3.1. Temperature-Dependent Tables
+
+10.3.2. Regionwise Interpolation of IFR Handbook Data
+
+10.3.3. Correlations of the Report ANL/RAS 85-19
+
+10.3.4. Properties of Some Specific Fuels
+
+10.3.5. Computer Implementation
+
+10.4. Future Directions for Modeling Efforts
+
+10.4.1. Fuel constituent Radial Migration
+
+10.4.2. Fission Gas Behavior, and Porosity Formation and Distribution
+
+10.4.3. Irradiation-Induced Radial and Axial Swelling of Fuel and Cladding
+
+10.5. References
+
+10.6. Nomenclature
+
+10.7. Appendices
+
+10.7.1. APPENDIX 10.1: Equivalency of Interpolation in Terms of Weight Fractions and Atom Fractions
+
+10.7.2. APPENDIX 10.2: Correlations in the IFR Handbook and Some Other Sources
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch10/introduction.html]
+------------------------------------------------------------------------------
+[anchor: introduction-and-overview]
+
+# 10.1. Introduction and Overview
+
+The Integral Fast Reactor (IFR) Program [10-1] at Argonne National
+Laboratory is developing an advanced liquid-metal-cooled nuclear reactor
+(LMR) that uses U-Pu-Zr metallic alloy fuel due to a number of safety
+and economic benefits. The post-irradiation examination of U-Pu-Zr fuel
+pins irradiated in EBR-II shows the formation of three annular zones
+(central, middle and outer) of considerably different alloy
+compositions, fuel porosities and densities [10-2, 10-3]. The uranium in
+the fuel migrates from the central and outer zones to the middle zone,
+and the zirconium and fission products migrate in the opposite
+directions, i.e., from the middle zone to the central and outer zones
+[10-3]. Due to zirconium depletion the middle zone has a solidus
+temperature significantly lower than that of the central or outer zone.
+The zonal fuel densities have been measured to vary from about 8000
+kg/m3 in the central zone to about 16000 kg/m3 in the
+middle zone [10-3]. The average porosity of each zone is also found to
+be significantly different from each other [10-4]. This radial
+redistribution of fuel constituents and annular zone formation has a
+considerable effect on the thermal behavior of U-Pu-Zr fuel pins because
+the thermal conductivity, specific heat and density of the fuel all vary
+with composition and porosity. The radial power shape within the fuel
+pin is also changed by fissile (i.e., U and Pu) redistribution.
+
+During steady-state irradiation, the buildup of fission gas within the
+metal fuel produces considerably more fuel swelling than is observed in
+oxide fuel. As the steady-state irradiation proceeds in metal fuel, the
+fission gas is initially all retained in the fuel matrix. Grain boundary
+bubbles gradually form, producing fuel swelling. As the porosity
+continues to increase, the grain boundary bubbles can become
+interlinked, producing a long-range interlinked porosity that offers a
+path for fission gas release to pin plenum [10-4]. When metallic fuel
+was first used in EBR-II, a peak burnup of only 1 at. % was considered a
+reasonable objective because of the extensive fuel swelling caused by
+grain boundary bubbles. Once it was determined that this “breakaway”
+swelling appeared to be self-limiting, and if enough space (~25 to 30%
+of fabricated fuel volume) was provided in the fuel-cladding gap, the
+result was very little stress on the cladding and high burnups could be
+achieved [10-5]. In order to calculate the steady-state behavior of
+metal fuel, it is therefore necessary to model the fuel swelling due to
+grain boundary bubbles and the associated fission gas release in a
+consistent manner.
+
+Listed below are the important in-pin phenomena (including the two
+described above) occurring during steady-state irradiation, that need to
+be modeled in order to characterize a U-Pu-Zr fuel pin at the beginning
+of a transient calculation:
+
+Thermal expansion of fuel and cladding,
+
+Fuel constituent radial migration,
+
+Fission gas behavior, and porosity formation and distribution,
+
+Irradiation-induced radial and axial swelling of fuel and cladding,
+
+Bond sodium migration into fuel and pin plenum,
+
+Cladding constituent migration into fuel.
+
+The modeling of these phenomena in the SSCOMP module will provide SAS4A
+and SASSYS-1 codes with the capability to describe the transition of the
+fuel pin form cold clean as-manufactured conditions to hot irradiated
+swollen initial conditions for the transient fuel mechanics module FPIN2
+[10-6]. The modeling of the following aspects of fission gas behavior
+(phenomenon 3 listed above) is required for calculating the initial
+conditions of FPIN2 transient calculation: (a) fission gas generation,
+(b) fission gas retained within grains, (c) fission gas retained in
+grain boundary bubbles that are not linked, (d) fission gas contained in
+grain boundary bubbles that are interlinked, and (e) fission gas
+released to pin plenum. The need for modeling these three types of
+fission gas contained in fuel (gas within grains, in unlinked grain
+boundary bubbles, and in interlinked grain boundary bubbles) has also
+been expressed by the pre-failure in-pin fuel motion module PINACLE
+development [10-7]. Regarding irradiation induced fuel swelling
+(phenomenon 4 listed above), axial swelling will contribute to
+pre-transient fuel column length, a needed initial condition for the
+FPIN2 module. Radial swelling of fuel and cladding will determine
+fuel-cladding gap closure and bond sodium migration into pin plenum, a
+needed initial condition for the FPIN2 module. The modeling of fuel
+swelling phenomenon has two important aspects: swelling due to solid
+fission products, and fission gas-induced swelling. Swelling of a
+cladding material is mainly determined by neutron fluence which is also
+a parameter in determining cladding rupture life used in the FPIN2
+transient fuel mechanics calculation.
+
+The SSCOMP module is being developed to model the above listed in-pin
+phenomena during steady-state irradiation of metallic fuel pins. After
+the fuel pin has been characterized at the end of steady-state
+irradiation, the calculation of the relevant ones of these phenomena
+during the transient will be performed by the DEFORM-5 model. The
+purpose of this chapter is to present the current status and future
+modeling needs of the SSCOMP module. As discussed in Section 10.2, the
+zone formation calculation method of the earlier SSCOMP model [10-4] is
+not incorporated into SAS4A/SASSYS-1 Version 3.0 code due to its
+limitations. The study of fuel constituent radial migration leading to
+zone formation was not at that time developed to a state where an
+appropriate dynamic model could be developed. At present, the data
+needed to account for the effects of zone formation on pin transient
+temperature calculation are specified through input data controlled by
+the input parameter IFUELC. As a starting point for SSCOMP development,
+Section 10.3 describes thermal properties of U-Pu-Zr metallic alloy fuel
+as a function of composition and temperature. These properties are
+needed in the analysis of the Mark-V fuel (U-20Pu-10Zr), and other
+metallic alloy fuels of different compositions, especially the different
+fuel compositions across the pin radius resulting from fuel constituent
+migration during steady-state irradiation. The implementation of the
+thermal properties data of the IFR Metallic Fuels Handbook [10-8], using
+a method of regionwise interpolation, is an important part of Section 10.3. Thermal properties of mixed-oxide fuel are described in Section 3.15, and not here. Future directions for modeling efforts are discussed
+in Section 10.4.
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch10/capability.html]
+------------------------------------------------------------------------------
+[anchor: the-earlier-sscomp-model-and-current-capability]
+
+# 10.2. The Earlier SSCOMP Model and Current Capability
+
+Assuming chemical equilibrium at annular zone boundaries and mass
+conservation of fuel constituents, a model was developed earlier [10-4]
+to directly calculate zone formation at the end of steady-state
+irradiation. This model was also calibrated using zone formation data
+obtained for the cross section at the mid-height of a U-Pu-Zr alloy fuel
+pin in an EBR-II steady-state irradiation experiment [10-3]. This
+earlier SSCOMP model calculates the alloy compositions of the zones, the
+boundary radii of the zones, and the resulting in-pin power radial
+profile. The earlier model does not calculate the time-development of
+the fuel zones from the fabricated condition to the end-of-steady-state
+irradiation condition. This is so because the study of fuel constituent
+radial migration leading to zone formation was not at that time
+developed to a state where an appropriate dynamic model could be
+developed.
+
+The zone formation calculation method of the earlier SSCOMP model is not
+incorporated into SAS4A/SASSYS-1 Version 3.x codes due to its
+limitations. Some of its limitations are:
+
+The earlier SSCOMP model directly calculates the fuel compositions
+and boundary radii of the zones based on chemical equilibrium under
+end-of-steady-state reactor operating conditions, and does not
+calculate the migration of fuel constituents with time during
+steady-state irradiation. Reactor operating conditions usually change
+during the steady-state irradiation of a fuel pin, and therefore,
+chemical equilibrium under end-of-steady-state operating conditions
+may not have been attained if the operating conditions changed during
+a (fuel constituent) migration time constant before the end of
+steady-state irradiation.
+
+The earlier SSCOMP does not model other important pre-transient
+phenomena such as irradiation-induced fuel swelling, fission gas
+generation, retention and release to pin plenum, etc. These phenomena
+are important for characterizing a fuel pin at the beginning of a
+transient as noted in Section 10.1.
+
+The earlier SSCOMP model is not well validated by analysis of
+experimental data for zone formation.
+
+Therefore, after evaluating the earlier SSCOMP in light of new data on
+zone formation and current understanding of phenomena causing it (zone
+formation), the earlier model or another more advanced model will be
+incorporated into SAS4A/SASSYS-1 codes, and this will be done in the
+framework of models for other important pre-transient phenomena that
+characterize the fuel pin at the beginning of transient calculation. At
+present, the zone formation data (such as zonal U-Pu-Zr alloy
+compositions, boundary radii of the zones, etc.) are supplied to the
+code as input data, and used in pin transient temperature calculation.
+This multiple radial fuel zone option is controlled by the input
+parameter IFUELC.
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch10/metal-fuel-properties.html]
+------------------------------------------------------------------------------
+[anchor: thermal-properties-of-u-pu-zr-and-u-zr-alloy-fuels]
+
+# 10.3. Thermal Properties of U-Pu-Zr and U-Zr Alloy Fuels
+
+The fuel thermal properties described in this section are used in all
+modules of SAS4A/SASSYS-1, and not only in the SSCOMP module.
+The fuel thermal properties include its specific heat, theoretical
+density and thermal conductivity. A U-Zr binary alloy is treated as a
+special case of the U-Pu-Zr ternary alloy. In the SAS4A/SASSYS-1 codes,
+one of the following four options are used for providing fuel thermal
+properties of a channel: (1) temperature-dependent property tables
+prepared by the user, and supplied to the code as input data, (2)
+regionwise interpolation of IFR Metallic Fuels Handbook data (as
+explained in Section 10.3.2, region here implies a triangular part of
+the U-Pu-Zr ternary system composition triangle), (3) composition- and
+temperature-dependent fuel property correlations of the report ANL/RAS
+85-19 developed before IFR Metallic Fuels Handbook [10-9] in course of
+the earlier SSCOMP model development [10-4], and (4) Billone’s
+correlations for Mark-V (i.e., U-20Pu-10Zr) and U-10Zr fuels based on
+IFR Handbook data. The options available for providing mixed-oxide fuel
+properties to the codes are described in Section 3.15, and not in the
+present section.
+
+The specific heat of both metallic and oxide fuels is calculated in
+subroutine CFUEL, the theoretical density in subroutine RHOF, and the
+thermal conductivity in subroutines FK and KFUEL. The difference between
+the two thermal conductivity subroutines FK and KFUEL is that FK is used
+to calculate the thermal conductivity of a single fuel radial node
+during steady-state heat transfer calculation, whereas KFUEL is used to
+calculate the thermal conductivities of all fuel radial modes in a pin
+axial segment (in a single call, for computational efficiency) during
+transient heat transfer calculation. The flow diagrams of these
+subroutines are shown in Figure 10.3.1 to Figure 10.3.5. The above mentioned
+four options for providing fuel thermal properties along with some other
+options related to fuel properties, are controlled through the following
+six input parameters: IRHOK, IMETAL, IFUELM, IFUELC, KFIRR and KDENBU.
+The input parameter IMETAL>1 implies U-Pu-Zr alloy fuel.
+
+Figure 10.3.1 Flow Diagram of Subroutine CFUEL for Fuel Specific Heat.
+
+Figure 10.3.2 Flow Diagram of Function Subprogram RHOF for Fuel Theoretical Density.
+
+Figure 10.3.3 Flow Diagram of Function subprogram FK for Thermal Conductivity of a Single Fuel Radial Node.
+
+Figure 10.3.4 Flow Diagram of Function subprogram FK for Thermal Conductivity of a Single Fuel Radial Node (Cont’d).
+
+Figure 10.3.5 Flow Diagram of Subroutine KFUEL for Thermal Conductivity of All Fuel Radial Nodes in a Pin Axial Segment.
+
+Figure 10.3.6 Flow Diagram of Subroutine KFUEL for Thermal Conductivity of All Fuel Radial Nodes in a Pin Axial Segment (Cont’d).
+
+[anchor: temperature-dependent-tables]
+
+## 10.3.1. Temperature-Dependent Tables
+
+The input parameter IRHOK=0 in a channel implies that
+temperature-dependent tables of specific heat, theoretical density and
+thermal conductivity of U-Pu-Zr alloy fuels of a maximum of 8 different
+alloy compositions (called fuel types in the input description given in
+Chapter 2) have been prepared by the user and supplied to the code as
+input data, and one of these tables is to be used in the channel. The
+core and blanket fuel types to be used in a channel are specified
+through the input variables IFUELV and IFUELB if the channel has a
+single radial fuel zone (indicated by the input parameter IFUELC=0). The
+fuel types are specified through the input array MFTZN if the channel
+has multiple radial fuel zones (indicated by the input parameter
+IFUELC=1). The compositions of the U-Pu-Zr metallic alloy fuel types are
+specified through the input array PUZRTP.
+
+[anchor: regionwise-interpolation-of-ifr-handbook-data]
+
+## 10.3.2. Regionwise Interpolation of IFR Handbook Data
+
+SAS4A/SASSYS-1 is being developed to perform calculations
+for the Mark-V fuel (U-20Pu-10Zr) and other metallic alloy fuels of
+different compositions, especially the different fuel compositions
+across the pin radius resulting form the migration of fuel constituents
+during steady-state reactor operation. There is thus a need for modeling
+and correlation development for the thermal properties of U-Pu-Zr alloy
+fuels as a function of composition. This is so because the IFR Metallic
+Fuels Handbook [10-8, 10-9] presents thermal properties data for the 3
+constituents and certain specific alloys only, and does not always
+present correlations with their coefficients and transition temperatures
+as functions of composition. Using the thermal properties data presented
+in the IFR Metallic Fuels Handbook, a method of regionwise interpolation
+in the U-Pu-Zr ternary composition triangle has been developed to
+estimate thermal properties of U-Pu-Zr alloy fuels as a function of
+composition and temperature. This method of evaluating fuel thermal
+properties is specified by setting the input parameter IRHOK=1 and the
+input parameter IFUELM=0 in a channel, and this is the recommended
+option among the built-in fuel thermal properties options.
+
+Figure 10.3.7 shows the flow diagram of a subroutine PRECAL that is
+called by the input driver routine INPDRV (see flow diagram of Figure 2.2.2) to pre-calculate, using the method of regionwise interpolation,
+certain parameters (described below) stored for fast evaluation of
+U-Pu-Zr alloy fuel thermal properties by fuel type. Fuel thermal
+properties by fuel type can be used only in case of a single radial fuel
+zone (IFUELC=0), or multiple (i.e., up to 3) radial fuel zones
+(IFUELC=1), but not when each fuel radial mesh interval is a unique zone
+of a different alloy composition (IFUELC=2). In the latter case, fuel
+thermal properties are evaluated directly using the fuel compositions of
+the mesh intervals. The pre-calculated parameters by fuel type evaluated
+by the subroutine PRECAL are not used when IFUELC=2.
+
+Figure 10.3.7 Flow Diagram of Subroutine PRECA1 to Pre-Calculate Parameters Stored for Fast Evaluation of U-Pu-Zr Specific Heat, Theoretical Density and Thermal Conductivity by Fuel Type.
+
+Figure 10.3.8 Flow Diagram of Subroutine PRECA1 to Pre-Calculate Parameters Stored for Fast Evaluation of U-Pu-Zr Specific Heat, Theoretical Density and Thermal Conductivity by Fuel Type (Cont’d).
+
+[anchor: enthalpy-of-u-pu-zr-fuel]
+
+### 10.3.2.1. Enthalpy of U-Pu-Zr Fuel
+
+[anchor: introduction]
+
+#### 10.3.2.1.1. Introduction
+
+The IFR Metallic Fuels Handbook presents enthalpy and specific heat data
+for the 3 constituents and certain specific alloys only, and does not
+present correlations with their coefficients and transition temperatures
+as functions of composition.
+
+Earlier, before the preparation of the Metallic Fuels Handbook [10-9], a
+method was developed to estimate the composition-dependent enthalpy of
+solid U-Pu-Zr alloy fuel by mass-weighted averaging of the enthalpy data
+of the 3 constituents, i.e., U, Pu and Zr metals [10-4]. Each of the
+constituent metals undergoes certain crystallographic phase transitions
+in the solid state that require considerable heat addition (causing an
+enthalpy jump) at the transition temperatures, but the alloy itself has
+no sharp transition temperature or enthalpy jump. A drawback of this
+method [10-4] of estimating U-Pu-Zr enthalpy is that the enthalpy jumps
+in the constituent metals data are required to be spread over an
+arbitrarily chosen temperature range containing the transition
+temperatures. Another drawback is that the enthalpy data for the
+constituent metals was obtained from a source [10-10] other than the
+Metallic Fuels Handbook.
+
+The method that is used in the FPIN2 code [10-11] to estimate the
+composition-dependent specific heat of U-Pu-Zr alloy fuel is also based
+on mass-weighted averaging of the 3 constituent specific heats. In this
+method, each constituent specific heat is assumed to be constant over
+the range of room temperature to the melting point of the constituent
+metal; and this assumption is tantamount to spreading the enthalpy jumps
+(due to solid-state phase transitions) over the same temperature range.
+
+Recently, Billone has suggested that the enthalpy of solid U-Pu-Zr alloy
+fuel as a function of composition could be obtained by mixing the
+following 3 alloys rather than the 3 constituent metals [10-12]:
+
+U-15 wt % Pu-10 wt % Zr ternary alloy.
+
+U-(10 ± 5) wt % Zr binary alloy, and
+
+Pu metal.
+
+The enthalpy data of U-15Pu-10Zr ternary, U-10Zr binary and Pu metal
+have been reported in the Metallic Fuels Handbook. The enthalpy of U-Zr
+binary alloy as a function of Zr content (in the neighborhood of 10 wt
+%) has also been correlated [10-12] by Billone using data for some
+binary alloys reported in the Metallic Fuels Handbook, i.e., 87 at. %
+U-Zr (U-5.4 wt. % Zr), U-10 wt % Zr, 59 at. % U-Zr (U-21.1 wt % Zr), and
+39 at. % U-Zr (U-37.6 wt % Zr). The suggestion of mixing the 3 alloys
+rather than the 3 constituents provides a number of benefits. It removes
+the drawback of spreading the enthalpy jumps (due to solid-state phase
+transitions) over an arbitrarily chosen temperature range. The heats of
+solid-state transitions are naturally spread over the correct
+temperature range and included in the enthalpy data of the alloys that
+are mixed. The suggestion also improves the accuracy of the calculated
+enthalpy of the desired U-Pu-Zr alloy by choosing the 3 basic alloy
+compositions (that are mixed) in the neighborhood of the desired alloy
+composition.
+
+Based on (a) this suggestion for obtaining the enthalpy of solid U-Pu-Zr
+alloy fuel, and (b) the assumption of ideal solution of molten U, Pu and
+Zr (used in the Metallic Fuels Handbook to obtain U-10Zr and U-15Pu-10Zr
+enthalpies at and above their liquidus temperatures) for obtaining the
+enthalpy of liquid U-Pu-Zr fuel, a method of regionwise interpolation
+and a subroutine HFUEL1 based on it have been developed and incorporated
+into the SAS4A/SASSYS-1 codes. This method exactly reproduces enthalpy
+data in the Handbook for molten U-15Pu-10Zr, U-10Zr, U, Pu and Zr
+liquids. The enthalpy data in the Handbook for solid U-15Pu-10 Zr,
+U-5.4Zr, U-10Zr, U-21.1Zr, U-37.6Zr alloys, and solid U and Pu metals
+are also accurately reproduced by this method.
+
+[anchor: description-of-the-method]
+
+#### 10.3.2.1.2. Description of the Method
+
+Figure 10.3.9 shows the U-Pu-Zr ternary system composition triangle. To
+perform design and safety calculations for the Mark-V fuel and other
+metallic alloy fuels important in the IFR program, including the
+different fuel compositions across the pin radius caused by migration of
+fuel constituents during reactor operation, it is sufficient to be able
+to evaluate enthalpy of alloy compositions (represented by points)
+located in a small region, equal in area to about one-third of the whole
+composition triangle, in the U corner of the triangle. The present
+method models and evaluates the enthalpy of all alloy compositions
+located in the triangular region UEPu of Figure 10.3.9.
+
+The enthalpy of a molten alloy (at and above its liquidus temperature)
+as a function of composition is evaluated in the present method by
+assuming the molten alloy to be an ideal solution of the 3 liquid
+components U, Pu and Zr. The enthalpy evaluation approach for the molten
+alloy is changed from that for the solid alloy because (1) the IFR
+Metallic Fuels Handbook uses this 3-component ideal solution assumption
+for evaluating enthalpy of molten U-10Zr, and U-15Pu-10Zr, and
+recommends this assumption for other alloy compositions, and (2) the
+solid-state phase structure is lost after melting, i.e., the liquid
+obtained after melting is the same irrespective of the solid phase which
+melted; the alternate approach of arriving at the enthalpy at liquidus
+by adding the heat of fusion and the sensible heat (required for raising
+temperature form solidus to liquidus) to the enthalpy at solidus
+contains uncertainties which can be avoided by using the 3-liquid ideal
+solution assumption. Between the solidus and liquidus temperatures, the
+enthalpy of the alloy is linearly interpolated as recommended in the
+Metallic Fuels Handbook. The solidus and liquidus temperatures required
+in the present method may be either obtained from experimental
+measurements for the desired alloy, if available, or calculated using a
+subroutine developed by Pelton [10-13] and incorporated into the
+SAS4A/SASSYS-1 codes.
+
+Figure 10.3.9 Diagram Showing Enthalpy Interpolation Regions for Solid U-Pu-Zr Ternary Alloy.
+
+Base on the enthalpy data available in the IFR Handbook, the present
+method divides the triangular region UEPu, i.e., the region representing
+all those alloy compositions whose enthalpy in the solid state can be
+evaluated by the present method, into four regions as shown in Figure 10.3.9. There are data in the Handbook for solid U, Pu, U-15Pu-10Zr
+(represented by point A in Figure 10.3.9), and six U-Zr binary alloys with
+Zr content ranging form 5.4 wt % (point D) to 75.7 wt %. Because the IFR
+program deals with fuels having a limited amount of Zr, the highest Zr
+content U-Zr binary alloy data used in the method is that of U-37.6 wt %
+Zr (point E). In region 1 given by triangle ADE of Figure 10.3.9, the
+enthalpy of a solid U-Pu-Zr alloy of a desired composition represented
+by point F is obtained by mixing or linearly interpolating between the
+database alloys A (i.e., U-15Pu-10Zr) and B (i.e., the U-Zr binary
+defined by the point of intersection of line AF). The Zr content of
+binary alloy B is given in Section D, and the enthalpy of this binary
+alloy is found form a correlation by Billone [10-12] of all the enthalpy
+data in the Handbook for U-Zr alloys between points D and E. The
+coefficients of this correlation are composition-dependent. By
+comparison with data in the Handbook, this U-Zr enthalpy correlation has
+been found to be accurate.
+
+The enthalpy of a solid U-Pu-Zr alloy of a desired composition
+represented by a point inside region 2 (given by triangle ADPu of Figure 10.3.9 is obtained by mixing the 3 database alloys A, D (i.e., U-5.4Zr)
+and Pu metal. The enthalpy of a solid U-Pu-Zr alloy of a desired
+composition represented by a point inside region 3 (given by triangle
+AEPu) is obtained by mixing the 3 database alloys A, E (i.e., U-37.6Zr)
+and Pu as shown in Table 10.3.1. Regions 1, 2 and 3 are all in the
+vicinity of the important ternary fuel U-15Pu-10Zr, and in the present
+method the enthalpy data for this fuel has a proportional influence on
+the interpolated enthalpy for any desired alloy composition in these
+three regions. The enthalpy of a solid U-Pu-Zr alloy of a desired
+composition represented by a point inside region 4 (given by triangle
+UDPu) is obtained by mixing the database alloy D, and U and Pu metals.
+The enthalpy of U metal used in the present method is obtained from data
+and correlation given in the Handbook because an extrapolation of the
+U-Zr binary alloy enthalpy correlation does not produce an accurate U
+metal enthalpy. The enthalpies of the database alloys used in the
+interpolation are given in Section C. The proportions or weight
+fractions of the 3 database alloys in mixing are given in Section D.
+
+Between the first and the last solid-state phase transition
+temperatures, 873 K and 923 K, the specific heat of database alloy A
+(i.e., U-15Pu-10Zr) is much higher than the specific heat above and
+below this temperature range. These transition temperatures, denoted by
+ $T_{\alpha}$ and $T_{\gamma}$ , are required for the other database alloys
+and the desired U-Pu-Zr alloy in order to accurately account for the
+specific heat variation over this temperature range. In the present
+method, these transition temperatures for the U-Zr binary alloys used as
+database, and for all U-Pu-Zr ternary alloy compositions in regions 1, 2
+and 3 are assumed to be equal to those of database alloy A because of
+lack of composition-dependent correlations for the transition
+temperatures. Such an assumption was suggested by Billone [10-12] for
+U-Pu-Zr alloys in the vicinity of U-15Pu-10Zr, and for U-Zr binary
+alloys used in mixing calculations. The choice of $T_{\alpha}$ and
+ $T_{\gamma}$ for Pu metal is immaterial because its enthalpy data, after
+the simplification suggested by Billone [10-12] and described in Section
+C, does not have any temperature range of abruptly high specific heat.
+In region 4 of Figure 10.3.9, the average specific heat of U metal between
+its first and last transition temperatures is abruptly high, and
+therefore, $T_{\alpha}$ is interpolated between the value of $T_{\alpha}$ 
+(942 K) for U metal [10-8] and the assumed value for other databases
+(873 K); and $T_{\gamma}$ is interpolated between the value of
+ $T_{\gamma}$ (1049 K) for U metal [10-8] and the assumed value for other
+databases (923 K). These transition temperatures are summarized in Table 10.3.1.
+
+Section C describes the enthalpy correlations for the basic alloys and
+their comparison with the data in the Handbook. Section D describes the
+equations used for interpolating between the database alloys. Section E
+summarizes the variation of fuel enthalpy with composition computed
+using the subroutine HFUEL1 based on this method.
+
+Table 10.3.1 Basic Alloys Whose IFR Handbook Enthalphy Data are Combined to Obtain the Enthalpy of a Desired U-Pu-Zr Alloy Composition
+
+ | | 
+ | 
+Database Alloys
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+
+ | 
+Regiona
+ | 
+ | 
+1
+ | 
+ | 
+2
+ | 
+ | 
+3
+ | 
+ | 
+Desired
+
+Alloy
+
+ $T_{\alpha}, K^{b}$ 
+
+ | 
+ | 
+Desired
+
+Alloy
+
+ $T_{\gamma}, K^{b}$ 
+
+ | 
+
+ | 
+Region 1
+ | 
+ | 
+U-15Pu-10Zr
+ | 
+ | 
+U-xZrc
+ | 
+ | 
+not required
+ | 
+ | 
+873
+ | 
+ | 
+923
+ | 
+
+ | 
+Region 2
+ | 
+ | 
+U-15Pu-10Zr
+ | 
+ | 
+U-5.4455Zr
+ | 
+ | 
+Pu metal
+ | 
+ | 
+873
+ | 
+ | 
+923
+ | 
+
+ | 
+Region 3
+ | 
+ | 
+U-15Pu-10Zr
+ | 
+ | 
+U-37.6105Zr
+ | 
+ | 
+Pu metal
+ | 
+ | 
+873
+ | 
+ | 
+923
+ | 
+
+ | 
+Region 4
+ | 
+ | 
+U metal
+ | 
+ | 
+U-5.4455Zr
+ | 
+ | 
+Pu metal
+ | 
+ | 
+873 to 942d
+ | 
+ | 
+923 to 1049e
+ | 
+
+a These regions are shown on the U-Pu-Zr ternary composition
+triangle in Figure 10.3.9.
+
+b $T_{\alpha}$ and $T_{\gamma}$ denote the first and the last
+solid-state phase transition temperatures of the alloy. $T_{\alpha}$ and
+ $T_{\gamma}$ of alloy compositions in the vicinity of U-15Pu-10Zr are
+assumed to be equal to those of U-15Pu-10Zr, i.e., 873 K and 923 K, as
+suggested by Billone [10-12].
+
+c The weight fraction x of Zr is selected such that the point
+representing U-xZr binary lies on the line joining the points
+representing the desired alloy composition and U-15Pu-10Zr database
+alloy on the ternary composition triangle shown in Figure 10.3.9.
+
+d Interpolated between 942 K (the value for U metal) and 873 K
+(the assumed value for other databases, see footnote b).
+
+e Interpolated between 1049 K (the value for U metal) and 923 K
+(the assumed value for other databases, see footnote b).
+
+[anchor: enthalpy-correlations-of-database-alloys]
+
+#### 10.3.2.1.3. Enthalpy Correlations of Database Alloys
+
+Figure 10.3.10 to Figure 10.3.16 show the temperature dependence of the
+enthalpy of all the basic alloys used in the present method. The
+difference in behavior of a database alloy when mixed to produce a
+desired alloy composition, e.g., U-20Pu-20Zr, as compared to its
+behavior in isolation is also clarified by these figures. For this
+purpose, the comparison of enthalpy of the basic alloy in isolation,
+evaluated from the correlations used in the present method, with the
+data in the Metallic Fuels Handbook [10-8] is also shown. These plots
+cover the entire temperature range from 298 K (zero enthalpy reference
+temperature) to 2000 K, a temperature well beyond the liquidus. In the
+following sections, the enthalpy correlations of the database alloys for
+use in solid and liquid phases are separately described.
+
+Database Used in Liquid Phase
+
+The enthalpy of a molten U-Pu-Zr alloy fuel (at and above its liquidus
+temperature) is evaluated by assuming the molten alloy to be an ideal
+solution of the 3 liquid components U, Pu and Zr. Thus the enthalpies of
+the 3 liquid components as functions of temperature from the database.
+Based on the data for enthalpy at U liquidus and specific heat of liquid
+U given in the Handbook [10-8], the enthalpy of liquid U can be written
+as
+
+$$H_{\text{lu}} = 58347 + 48.66 \left( T - 1408 \right)$$ [eq 10.3-1]
+
+where
+
+ $H_{\text{lu}}$ = enthalpy of liquid U, J/mol
+
+ $T$ = temperature of liquid U, K
+
+58347 = liquid U enthalpy (J/mol) at its melting point 1408 K,
+
+48.66 = liquid U specific heat, J/mol-K.
+
+Eq. (10.3-1) simplifies to
+
+$$H_{\text{lu}} = 48.66T - 10166.28$$ [eq 10.3-2]
+
+Similarly, based on the data for enthalpy at liquidus and specific heat
+of the liquid phase given in the Handbook for Pu and Zr, the following
+equations for liquid phase enthalpy are obtained:
+
+$$H_{\text{lp}} = 42.258T - 7291.55$$ [eq 10.3-3]
+
+$$H_{\text{lz}} = 33.5 T + 6116.5$$ [eq 10.3-4]
+
+Figure 10.3.10 Enthalpy of U-15Pu-10Zr Obtained from Eq. (10.3-2) to Eq. (10.3-5) That is Used as Database 1 in Regions 1, 2 and 3; and its Comparison with Metallic Fuels Handbook Data.
+
+Figure 10.3.11 Enthalpy of U Metal Obtained From Eq. (10.3-2) and Eq. (10.3-6) That is used as Database 1 in Region 4; and its Comparison With Metallic Fuels handbook Data.
+
+Figure 10.3.12 Enthalpy of U-5.4Zr Obtained From Eq. (10.3-2), Eq. (10.3-4) and Eq. (10.3-7) That is Used as Database 2 in Regions 1, 2 and 4; and its Comparison With Metallic Fuels Handbook Data.
+
+Figure 10.3.13 Enthalpy of U-10Zr Obtained from Eq. (10.3-2), Eq. (10.3-4) and Eq. (10.3-7) That is Used as Database 2 in Regions 1, 2 and 4; and its Comparison With Metallic Fuels Handbook Data.
+
+Figure 10.3.14 Enthalpy of U-21.1Zr Obtained From Eq. (10.3-2), Eq. (10.3-4) and Eq. (10.3-7) That is Used as Database 2 in Region 1; and its Comparison With Metallic Fuels Handbook Data.
+
+Figure 10.3.15 Enthalpy of U-37.6Zr Obtained From Eq. (10.3-2), Eq. (10.3-4) and Eq. (10.3-7) That is Used as Database 2 in Regions 1 and 3; and its Comparison With Metallic Fuels Handbook Data.
+
+Figure 10.3.16 Enthalpy of Pu Metal Obtained From Eq. (10.3-3) and Eq. (10.3-8) That is Used as Database 3 in Regions 2, 3 and 4; and its Comparison With Metallic Fuels Handbook Data.
+
+where
+
+ $H_{\text{lp}}$ , $H_{\text{lz}}$ = enthalpies of liquid Pu and liquid
+Zr, J/mol
+
+ $T$ = temperature of the liquid phase, K.
+
+When mixed to form a U-Pu-Zr molten mixture, Eq. (10.3-2) to
+Eq. (10.3-4) are used for all temperatures at and above the liquidus
+temperature of the U-Pu-Zr alloy, even if the liquidus temperature
+is below the melting point of U, Pu or Zr.
+
+Database 1 Used in Solid Phase
+
+As described in Section B, the ternary fuel U-15Pu-10Zr is used as
+database 1 in regions 1, 2 and 3 of Figure 10.3.9; and the U metal is used
+as database 1 in region 4. The enthalpy data and correlation for
+U-15Pu-10Zr presented in the Metallic Fuels Handbook [10-8] and in the
+memorandum by Billone [10-12] can be written as
+
+$$\begin{split}H_{\text{a}} \left( T \right) = \begin{cases}
+\begin{aligned}
+& 19.34 \left( T - 298 \right) + 0.0133 \left( T^{2} - 298^{2} \right) & T \leq 873 \text{ K} && \text{(10.3‑5a)} \\
+& H_{\text{a}} \left( 873 \right) + 162 \left( T - 873 \right) & 873 < T \leq 923 \text{ K} && \text{(10.3‑5b)} \\
+& H_{\text{a}} \left( 923 \right) + 8.752 \left( T - 923 \right) + 0.01304 \left( T^{2} - 923^{2} \right) & 923 < T \leq 1379 \text{ K} && \text{(10.3‑5c)} \\
+& H_{\text{a}} \left( 1379 \right) + 89.95 \left( T - 1379 \right) & 1379 < T \leq 1588 \text{ K} && \text{(10.3‑5d)} \\
+& H_{\text{a}} \left( 1588 \right) + 44.4 \left( T - 1588 \right) & T > 1588 \text{ K} && \text{(10.3‑5e)}
+\end{aligned}
+\end{cases}\end{split}$$ [eq 10.3-5]
+
+where
+
+ $H_{\text{a}}$ = enthalpy of U-15Pu-10Zr alloy, J/mol
+
+ $T$ = temperature of the alloy, K
+
+Here 1379 K and 1588 K are the solidus and liquidus temperatures of this
+alloy. In the present method, Eq. (10.3-5) and Eq. (10.3-5) are never
+required. Eq. (10.3-5) covers the temperature range containing
+solid-state phase transitions. When mixed to form a desired U-Pu-Zr
+alloy composition, Eq. (10.3-5) for the enthalpy in the temperature
+range above the solid-state phase transitions is extended up to the
+solidus temperature of the desired alloy. This difference in behavior of
+U-15Pu-10Zr when mixed to produce a desired alloy composition, e.g.,
+U-20Pu-20Zr, as compared to its behavior in isolation is shown in Figure 10.3.10.
+
+The enthalpy data and correlation for U metal (used as database 1 in
+region 4) presented in the Metallic Fuels Handbook [10-8] can be written
+as
+
+$$\begin{split}H_{\text{u}} \left( T \right) = \begin{cases}
+\begin{aligned}
+& 26.92 \left( T - 298 \right) - 1.251 \times 10^{-3} \left( T^{2} - 298^{2} \right) + \\ & 8.852 \times 10^{-6} \left( T^{3} - 298^{3} \right)
+- 7.7 \times 10^{4} \left\lbrack \frac{1}{298} - \frac{1}{T} \right\rbrack & T \leq 942 \text{ K} && \text{(10.3‑6a)} \\
+& H_{\text{u}} \left( 942 \right) + 113.467 \left( T - 942 \right) , & 942 < T \leq 1049 \text{ K} && \text{(10.3‑6b)} \\
+& H_{\text{u}} \left( 1049 \right) + 38.284 \left( T - 1049 \right) , & 1049 < T \leq 1408 \text{ K} && \text{(10.3‑6c)} \\
+& H_{\text{u}} \left( 1408 \right) + 9142 + 48.66 \left( T - 1408 \right) , & T > 1408 \text{ K} && \text{(10.3‑6d)}
+\end{aligned}
+\end{cases}\end{split}$$ [eq 10.3-6]
+
+where
+
+ $H_{\text{u}} \left( T \right)$ = enthalpy (J/mol) of U metal at temperature T(K).
+
+Here 942 K and 1049 K are the first and the last solid-state phase
+transition temperatures of U metal, and 1408 K is the melting point. The
+average specific heat [10-8] over the solid-state phase transition range
+is 113.467 J/mol-K as used in Eq. (10.3-6). In the present method,
+Eq. (10.3-6) is never required. When mixed to form a desired U-Pu-Zr alloy
+composition, Eq. (10.3-6) for the enthalpy in the temperature range
+above the solid-state phase transitions is extended up to the solidus
+temperature of the desired alloy. This difference in behavior of U metal
+when mixed to produce a desired alloy composition, e.g., U-20Pu-2Zr, as
+compared to its behavior in isolation is shown in Figure 10.3.11.
+
+Database 2 Used in Solid Phase
+
+As described in Section B, U-Zr binary alloys of 5.4 to 37.6 wt % Zr
+content are used as database 2 in different regions as given in Table 10.3.1. The enthalpy data and correlations for 87 at.% U-Zr (U-5.4wt
+%Zr), U-10 wt %Zr, 59 at.% U-Zr (U-21.1wt %Zr), and 39 at.% U-Zr
+(U-37.6wt %Zr) presented in the Metallic Fuels Handbook have been
+correlated by Billone [10-12] into the following single equation with
+composition-dependent coefficients. Here the relationships between atom
+fractions and weight fractions were derived using an average atomic
+weight of 236.678 for U (based on a U-235 enrichment of 0.478 weight
+fraction as done by Billone for Mark-V fuel), an atomic weight of 91.22
+from Zr, and an atomic weight of 239.13 for Pu.
+
+$$\begin{split}H_{\text{uz}} \left( T \right) = \begin{cases}
+\begin{aligned}
+& 1.594 \left( A_{\text{u}} + 0.3219 A_{\text{z}} \right) \left( T - 298 \right) \\
+& + 0.03235 \left( A_{\text{u}} + 0.8495 A_{\text{z}} \right) \left( T^{2} - 298^{2} \right) \\
+& + 928700 \left( A_{\text{u}} + 1.0243 A_{\text{z}} \right) \left( \frac{1}{298} - \frac{1}{T} \right) , & T \leq T_{\gamma} && \text{(10.3‑7a)} \\
+& H_{\text{uz}} \left( T_{\gamma} \right) + 38.28 \left( A_{\text{u}} + 0.8203 A_{\text{z}} \right) \left( T - T_{\gamma} \right) , & T_{\gamma} < T \leq T_{\text{s}} && \text{(10.3‑7b)} \\
+& H_{\text{uz}} \left( T_{\text{s}} \right) + 9142 \left( A_{\text{u}} + 5.938 A_{\text{z}} \right) \left( T - T_{\text{s}} \right) / \left( T_{\text{l}} - T_{\text{s}} \right) , & T_{\text{s}} < T \leq T_{\text{l}} && \text{(10.3‑7c)} \\
+& H_{\text{uz}} \left( T_{\text{l}} \right) + 48.66 \left( A_{\text{u}} + 0.6885 A_{\text{z}} \right) \left( T - T_{\text{l}} \right) , & T > T_{\text{l}} && \text{(10.3‑7d)}
+\end{aligned}
+\end{cases}\end{split}$$ [eq 10.3-7]
+
+where
+
+ $H_{\text{uz}} \left( T \right)$ = enthalpy (J/mol) of the U-Zr binary alloy at
+temperature T (K),
+
+ $A_{\text{u}}, A_{\text{z}}$ = atom fractions of U and Zr in the alloy,
+
+ $T_{\gamma}$ = the highest solid-state phase ( $\gamma$ -phase) transition
+temperature,
+
+ $T_{\text{s}}$ , $T_{\text{l}}$ = solidus and liquidus
+temperatures of the U-Zr binary alloy.
+
+For the U-Zr binary alloy, the temperatures $T_{\gamma}$ , $T_{\text{s}}$ and
+ $T_{\text{l}}$ should be taken form the U-Zr phase diagram. For
+U-10 wt% Zr, the temperatures $T_{\gamma}$ , $T_{\text{s}}$ and
+ $T_{\text{l}}$ are 1000 K, 1506 K and 1669 K. In the present
+method, Eq. (10.3-7) and Eq. (10.3-7) are never required. When mixed to
+form a desired U-Pu-Zr alloy composition, the temperatures $T_{\gamma}$ ,
+ $T_{\text{s}}$ and $T_{\text{l}}$ for the U-Pu-Zr ternary alloy
+are to be used in Eq. (10.3-7) as suggested by Billone [10-12]. In the
+present method, this amounts to (1) lowering $T_{\gamma}$ from the U-Zr
+value of about 1000 K to the U-Pu-Zr alloy value of 923 K (see Table 10.3.1), and (2) extending Eq. (10.3-7) for U-Zr enthalpy in the
+γ-phase temperature range to the solidus temperature of the desired
+U-Pu-Zr alloy composition. This difference in behavior of four U-Zr
+alloys (database 2 alloys) when mixed to produce a desired alloy
+composition, e.g., U-20Pu-20Zr, as compared to their behavior in
+isolation is shown in Figure 10.3.12 to Figure 10.3.15. These plots also show the
+agreement between the enthalpy of U-Zr alloys in isolation, evaluated
+from this correlation, with the data in the Metallic Fuels Handbook
+[10-8].
+
+Database 3 Used in Solid Phase
+
+As described in Section B, the Pu metal is used as database 3 in regions
+2, 3, and 4. Region 1 does not require this database. The enthalpy data
+for Pu metal presented in the Metallic Fuels Handbook [10-8] has a
+number of solid-state phase transitions causing relatively small
+enthalpy jumps at the transition temperatures. As suggested by Billone
+[10-12], the following equation is a simplified representation of Pu
+metal enthalpy data [10-8], in the spirit of mixing to produce a desired
+U-Pu-Zr alloy composition (the value of the average Pu specific heat
+from the reference temperature of 298 K to Pu melting point of 913 K has
+been corrected):
+
+$$\begin{split}H_{\text{p}} \left( T \right) = \begin{cases}
+\begin{aligned}
+& 46.286 \left( T - 298 \right), & T \leq 913K && \text{(10.3‑8a)} \\
+& H_{\text{p}} \left( 913 \right) + 34.434 \left( T - 913 \right) , & 913 < T \leq T_{\text{s}} && \text{(10.3‑8b)} \\
+& H_{\text{p}} \left( 913 \right) + 34.434 \left( T - 913 \right) + 2824 \left( T - T_{\text{s}} \right) / \left( T_{\text{l}} - T_{\text{s}} \right), & T_{\text{s}} < T \leq T_{\text{l}} && \text{(10.3‑8c)} \\
+& H_{\text{p}} \left( T_{\text{l}} \right) + 42.258 \left( T - T_{\text{l}} \right) & T > T_{\text{l}} && \text{(10.3‑8d)}
+\end{aligned}
+\end{cases}\end{split}$$ [eq 10.3-8]
+
+where
+
+ $H_{\text{p}} \left( T \right)$ = enthalpy (J/mol) of Pu metal at temperature T,
+
+913 K = the melting point of Pu metal
+
+ $T_{\text{s}}$ , $T_{\text{l}}$ = solidus and liquidus
+temperatures of the desired U-Pu-Zr alloy composition, and not of pure
+Pu metal.
+
+Here 46.286 J/mol-K is the average Pu specific heat between 298 K and
+913 K, and 34.434 J/mol-K is the specific heat of the last solid-stat
+phase ( $\varepsilon$ -phase) of Pu metal that is extended up to the liquidus
+temperature of the desired U-Pu-Zr alloy composition to account for the
+sensible heat absorbed by Pu. Eq. (10.3-8) indicates that the Pu
+heat of fusion required for solid-to-liquid phase transition is added
+linearly between the solidus and liquidus temperatures of the desired
+U-Pu-Zr alloy composition. In the present method, Eq. (10.3-8) and
+Eq. (10.3-8) are never required. The difference in behavior of Pu metal
+when mixed to produce a desired alloy composition, e.g., U-20Pu-20Zr, as
+compared to its behavior in isolation is shown in Figure 10.3.16. This
+plot also shows the comparison between the enthalpy of Pu metal in
+isolation with the date in Metallic Fuels Handbook [10-8]. In Figure 10.3.16, the Pu enthalpy above the solidus temperature of the desired
+U-Pu-Zr alloy composition was obtained by linearly joining the enthalpy
+at solidus evaluated from Eq. (10.3-8) with the enthalpy at liquidus
+evaluated from Eq. (10.3-3) as mentioned in Section B.
+
+It should be noted that the contribution of Pu enthalpy to U-Pu-Zr fuel
+compositions in the vicinity of U-15Pu-10Zr (point A of Figure 10.3.9) is
+small because the corner Pu of the ternary composition triangle is far
+removed from point A and the point representing the desired fuel
+composition. The major contribution comes from U-15Pu-10Zr enthalpy.
+
+[anchor: method-of-interpolation-between-database]
+
+#### 10.3.2.1.4. Method of Interpolation Between Database
+
+As described in Section B, the enthalpy of a desired U-Pu-Zr fuel
+composition at and above its liquidus temperature is evaluated by
+assuming it to be an ideal solution of the 3 liquid components U, Pu and
+Zr whose enthalpies are given by Eq. (10.3-2) to Eq. (10.3-4). This method
+is tantamount to mass-weighted averaging of the component enthalpies.
+
+$$h_{\text{l}} \left( T \right) = 1000 \left( W_{\text{u}} \frac{H_{\text{lu}}}{a_{\text{u}}} + W_{\text{p}} \frac{H_{\text{lp}}}{a_{\text{p}}} + W_{\text{z}} \frac{H_{\text{l}z}}{a_{\text{z}}} \right)$$ [eq 10.3-9]
+
+where
+
+ $h_{\text{l}} \left( T \right)$ = enthalpy (J/kg) of a U-Pu-Zr
+fuel composition at a temperature T, at and above its liquidus,
+
+ $W_{\text{u}}$ , $W_{\text{p}}$ , $W_{\text{z}}$ = weight fractions of U,
+Pu and Zr in the U-Pu-Zr fuel composition
+
+ $H_{\text{lu}}, H_{\text{lp}}, H_{\text{lz}}$ =
+enthalpies (J/mol) of U, Pu and Zr metals in the liquid phase
+
+ $a_{\text{u}}$ , $a_{\text{p}}$ , $a_{\text{z}}$ = atomic weight of U, Pu and Zr,
+
+1000 = conversion factor from J/gm to J/kg.
+
+The method of interpolation to evaluate the enthalpy of a U-Pu-Zr fuel
+composition at and below its solidus temperature consists of first
+determining the region of the ternary composition triangle (shown in
+Figure 10.3.9) in which the desired fuel composition lies, and then
+finding the weight fractions in which the 3 database alloys of the
+region are required to be mixed to obtain the desired fuel composition.
+The mass balance of he 3 constituents requires that the following 3
+equations be satisfied by the weight fractions of the 3 database alloys.
+
+$$W_{\text{u}1} X_{1} + W_{\text{u}2} X_{2} + W_{\text{u}3} X_{3} = W_{\text{u}}$$ [eq 10.3-10]
+
+$$W_{\text{p}1} X_{1} + W_{\text{p}2} X_{2} + W_{\text{p}3} X_{3} = W_{\text{p}}$$ [eq 10.3-11]
+
+$$W_{\text{z}1} X_{1} + W_{\text{z}2} X_{2} + W_{\text{z}3} X_{3} = W_{\text{z}}$$ [eq 10.3-12]
+
+where
+
+ $W_{\text{u}1}$ , $W_{\text{p}1}$ ,
+ $W_{\text{z}1}$ = weight fractions of U, Pu and Zr in database
+alloy 1 of the region in which the desired fuel composition lies,
+
+ $W_{\text{u}2}$ , $W_{\text{p}2}$ ,
+ $W_{\text{z}2}$ = weight fractions of U, Pu and Zr is database
+alloy 2 of the region,
+
+ $W_{\text{u}3}$ , $W_{\text{p}3}$ ,
+ $W_{\text{z}3}$ = weight fractions of U, Pu and Zr in database
+alloy 3 of the region,
+
+ $W_{\text{u}}$ , $W_{\text{p}}$ , $W_{\text{z}}$ = weight fractions of U,
+Pu and Zr in the desired fuel composition,
+
+ $X_{1}, X_{2}, X_{3}$ = weight fractions of
+database alloys 1, 2, and 3 in which they must be mixed.
+
+It should be noted that the sum of U, Pu and Zr weight fractions in each
+database alloy is 1.
+
+$$\begin{aligned}
+W_{\text{u,i}} + W_{\text{p,i}} + W_{\text{z,i}} = 1, && i = 1, 2, 3
+\end{aligned}$$ [eq 10.3-13]
+
+Adding Eq. (10.3-10) to Eq. (10.3-12), and substituting Eq. (10.3-13), one
+obtains
+
+$$X_{1} + X_{2} + X_{3} = 1$$ [eq 10.3-14]
+
+Eq. (10.3-11), Eq. (10.3-12) and Eq. (10.3-14) provide a set of 3 linear
+equations in the variables $X_{1}, X_{2}$ and
+ $X_{3}$ . The solution of this set is given by
+
+$$\begin{aligned}
+X_{\text{i}} = \frac{D_{\text{i}}}{D}, && i = 1, 2, 3
+\end{aligned}$$ [eq 10.3-15]
+
+where
+
+$$D = \left( W_{\text{z}1} - W_{\text{z}2} \right) \left( W_{\text{p}3} - W_{\text{p}1} \right) - \left( W_{\text{p}1} - W_{\text{p}2} \right) \left( W_{\text{z}3} - W_{\text{z}1} \right)$$ [eq 10.3-16]
+
+$$D_{1} = \left( W_{\text{z}} - W_{\text{z}2} \right) \left( W_{\text{p}3} - W_{\text{p}} \right) - \left( W_{\text{p}} - W_{\text{p}2} \right) \left( W_{\text{z}3} - W_{\text{z}} \right)$$ [eq 10.3-17]
+
+$$D_{2} = \left( W_{\text{z}1} - W_{\text{z}} \right) \left( W_{\text{p}3} - W_{\text{p}1} \right) - \left( W_{\text{p}1} - W_{\text{p}} \right) \left( W_{\text{z}3} - W_{\text{z}1} \right)$$ [eq 10.3-18]
+
+$$D_{3} = \left( W_{\text{z}1} - W_{\text{z}2} \right) \left( W_{\text{p}} - W_{\text{p}1} \right) - \left( W_{\text{p}1} - W_{\text{p}2} \right) \left( W_{\text{z}} - W_{\text{z}1} \right)$$ [eq 10.3-19]
+
+The sum of $X_{1}, X_{2}$ and $X_{3}$ is always 1.
+In case of interpolation, the values of $X_{1}$ , $X_{2}$ and
+ $X_{3}$ are always positive. If any extrapolation were involved,
+the value of at least one weight fraction becomes negative which is
+entirely avoided in the present method. For region 4 of Figure 10.3.9, the
+mixing fractions of the database alloys given by Eq. (10.3-15) to
+Eq. (10.3-19) simplify to the following:
+
+$$X_{2} = \frac{W_{\text{z}}}{W_{\text{z}2}}$$ [eq 10.3-20]
+
+$$X_{3} = W_{\text{p}}$$ [eq 10.3-21]
+
+$$X_{1} = 1 - X_{2} - X_{3}$$ [eq 10.3-22]
+
+The Zr weight fraction of database alloy 2 to be used in region 1 of
+Figure 10.3.9 is found by writing the general equation of the line joining
+points A and F, i.e., the points representing the U-15Pu-10Zr database
+and the desired fuel composition.
+
+$${W'}_{\text{z}} = W_{\text{z}1} + \frac{\left( W_{\text{z}} - W_{\text{z}1} \right)}{\left( W_{\text{p}} - W_{\text{p}1} \right)}\left( {W'}_{\text{p}} - W_{\text{p}1} \right)$$ [eq 10.3-23]
+
+where
+
+ ${W'}_{\text{p}}, {W'}_{\text{z}}$ = weight fractions of Pu and Zr
+corresponding to any point on the line AF.
+
+The Zr weight fraction of database alloy 2 is then found by setting
+ ${W'}_{\text{p}} = 0$ in Eq. (10.3-23) because database 2 is a U-Zr
+binary alloy.
+
+$$x = W_{\text{z}1} - \frac{\left( W_{\text{z}} - W_{\text{z}1} \right)}{\left( W_{\text{p}} - W_{\text{p}1} \right)} W_{\text{p}1}$$ [eq 10.3-24]
+
+where
+
+x = Zr weight fraction of database alloy 2 to be used in region 1.
+
+The enthalpy of the desired U-Pu-Zr fuel composition at and below its
+solidus temperature is then evaluated by mass-weighted averaging of the
+enthalpies of the 3 database alloys of the region in which the desired
+fuel composition lies.
+
+$$h \left( T \right) = 1000 \left( X_{1} \frac{H_{1}}{a_{1}} + X_{2} \frac{H_{2}}{a_{2}} + X_{3} \frac{H_{3}}{a_{3}} \right)$$ [eq 10.3-25]
+
+where
+
+ $h \left( T \right)$ = enthalpy (J/kg) of the U-Pu-Zr fuel composition at a
+temperature T, at and below its solidus,
+
+ $H_{1}, H_{2}, H_{3}$ = enthalpies (J/mol) of the 3
+database alloys at temperature T,
+
+ $a_{1}, a_{2}, a_{3}$ = average atomic weights of
+the 3 database alloys,
+
+1000 = conversion factor from J/gm to J/kg.
+
+[anchor: subroutine-hfuel1-and-specific-heat-by-fuel-type]
+
+#### 10.3.2.1.5. Subroutine HFUEL1 and Specific Heat by Fuel Type
+
+Figure 10.3.17 shows flow diagram of the subroutine HFUEL1 for
+calculating the enthalpy, based on this method of regionwise
+interpolation, of a U-Pu-Zr alloy fuel as a function of composition and
+temperature. The specific heat of each input fuel type of U-Pu-Zr alloy
+is evaluated using the 9 parameters defined in Figure 10.3.18 that are
+calculated using the subroutine HFUEL1 as described in this section.
+Figure 10.3.19 to Figure 10.3.22 show the comparison of calculated enthalpy
+with all the data in the Metallic Fuels Handbook for U-15Pu-10Zr and
+U-10Zr alloys, and U and Pu metals. Figure 10.3.23 to Figure 10.3.25 show the
+variation of U-Pu-Zr alloy fuel enthalpy with composition obtained from
+this subroutine. The Zr content varies from 2 to 20 wt % and the Pu
+content varies from 5 to 30 wt % in the U-Pu-Zr alloy fuels plotted in
+these figures. The solidus and liquidus temperature required as input to
+the HFUEL1 subroutine were calculated using the subroutine developed by
+Pelton [10-13].
+
+The subroutine is used in the SAS4A/SASSYS-1 codes by the subroutine
+PRECAl (see flow diagram of Figure 10.3.7), before the steady state
+calculation, to pre-calculate coefficient of a simplified specific heat
+equation to be used in the steady state and transient calculations of
+the codes. These coefficients or parameters are defined in Figure 10.3.18,
+and are pre-calculated for each fuel type that use the regionwise
+interpolated U-Pu-Zr thermal properties (input option IFUELM=0). This
+pre-calculation of the coefficients or parameters of the simplified
+specific heat equation should increase the computational speed of the
+codes. For this pre-calculation, a sufficient number of pairs of
+temperature and enthalpy values for the pre-transition solid U-Pu-Zr
+alloy (see Figure 10.3.18) are obtained from the subroutine HFUEL1. The
+following enthalpy equation, basically a quadratic function of
+temperature that is constrained to exactly reproduce the first and last
+pairs of values, is then fitted by the method of least squares.
+
+$$h \left( T \right) = f\left( T \right) + c\left( T - T_{1} \right)\left( T - T_{\text{N}} \right)$$ [eq 10.3-26]
+
+$$f \left( T \right) = h_{1} + \frac{h_{\text{N}} - h_{1}}{T_{\text{N}} - T_{1}}\left( T - T_{1} \right)$$ [eq 10.3-27]
+
+where
+
+ $T_{\text{i}}, h_{\text{i}}$ = ith pair of temperature and enthalpy
+values,
+
+ $N$ = number of pairs of values,
+
+ $c$ = coefficient of the quadratic term in the simplified enthalpy
+equation, to be determines by the method of least squares.
+
+Figure 10.3.17 Flow Diagram of Subroutine HFUEL1 for U-Pu-Zr Enthalpy.
+
+Figure 10.3.18 Diagram Showing the 9 Parameters (ACPF1 to ACPF7, and Solidus and Liquidus Temperatures) Pre-Calculated and Stored for Each U-PuZr Fuel Type for Fast Evaluation of Specific Heat.
+
+Figure 10.3.19 Comparison of Calculated Enthalpy of U-Pu-10Zr Fuel With the IFR Metallic Fuels Handbook Data.
+
+Figure 10.3.20 Comparison of Calculated Enthalpy of U-10Zr Fuel With the Handbook Data (Input KBASE to Subroutine HFUEL1-1).
+
+Figure 10.3.21 Comparison of Calculated Enthalpy of Uranium Metal with the IFR Metallic Fuels Handbook Data.
+
+Figure 10.3.22 Comparison of Calculated Enthalpy of Plutonium Metal with the IFR Metallic Fuels Handbook Data.
+
+Figure 10.3.23 Variation of U-5Pu-Zr Alloy Fuel Enthalpy With Composition Obtained From Subroutine HFUEL1 Based on the Method of Regionwise Interpolation.
+
+Figure 10.3.24 Variation of U-20Pu-Zr Alloy Fuel Enthalpy With Composition Obtained From Subroutine HFUEL1 Based on the Method of Regionwise Interpolation.
+
+Figure 10.3.25 Variation of U-30Pu-Zr Alloy Fuel Enthalpy With Composition Obtained From Subroutine HFUEL1 Based on the Method of Regionwise Interpolation.
+
+Minimizing the sum of squared
+errors, ${\sum_{\text{i} = 1}^{N}{\left\lbrack h \left( T_{\text{i}} \right) - h_{\text{i}} \right\rbrack}}^{2}$ ,
+one obtains the following value of the quadratic term coefficient.
+
+$$c = \frac{\sum_{\text{i}}{\left\lbrack h_{\text{i}} - f \left( T_{\text{i}} \right) \right\rbrack} \left( T_{\text{i}} - T_{1} \right) \left( T_{\text{i}} - T_{\text{N}} \right)}{\sum_{\text{i}} \left( T_{\text{i}} - T_{1} \right)^{2} \left( T_{\text{i}} - T_{\text{N}} \right)^{2}}$$ [eq 10.3-28]
+
+Differentiating Eq. (10.3-26) with respect to temperature, one obtains
+the following values of the coefficients of the simplified specific heat
+equation for the pre-transition solid U-Pu-Zr alloy (see Figure 10.3.18).
+
+$$C_{\text{p}} = \text{ACPF}1 + \text{ACPF}2*T$$ [eq 10.3-29]
+
+$$\text{ACPF}1 = \frac{\left( h_{\text{N}} - h_{\text{i}} \right)}{\left( T_{\text{N}} - T_{1} \right)} - c \left( T_{1} + T_{\text{N}} \right)$$ [eq 10.3-30]
+
+$$\text{ACPF}2 = 2C$$ [eq 10.3-31]
+
+The least-squares fitting procedure is repeated for the post-transition
+solid U-Pu-Zr alloy (see Figure 10.3.18) to obtain the coefficients its
+simplified specific heat equation. In each of the remaining temperature
+ranges of Figure 10.3.18, the specific heat is assumed to be a constant.
+
+It is important to note that, in order to be consistent with the method
+of Section 3.3.5 for adjusting fuel temperature (computed without
+accounting for heat of fusion during the main heat transfer calculation)
+to account for heat of fusion at any radial mesh interval that is going
+through the melting range, the actual specific heat ACPF6 (see Figure 10.3.18) over the melting range is replaced in subroutine CFUEL by a
+value linearly interpolated between (i) the post-transition solid
+U-Pu-Zr specific heat at the solidus temperature, and (ii) the molten
+liquid solution specific heat, ACPF7, at the liquidus temperature.
+
+This approach of calculating U-Pu-Zr fuel specific heat by fuel type is
+used only in case of a single radial fuel zone (IFUELC=0), or multiple
+(i.e., up to 3) radial fuel zones (IFUELC=1). When each fuel radial mesh
+interval is a unique zone of a different alloy composition (IFUELC=2),
+then use is made of another subroutine CFUEL1 that calculates U-Pu-Zr
+alloy specific heat as a function of composition, directly by regionwise
+interpolation of the temperature-derivative of enthalpies of database
+alloys, as described in the next section.
+
+[anchor: specific-heat-of-u-pu-zr-fuel]
+
+### 10.3.2.2. Specific Heat of U-Pu-Zr Fuel
+
+When each fuel radial mesh interval is a unique zone of a different
+alloy composition (input parameter IFUELC = 2), then it is difficult to
+use specific heat by fuel type because only 8 fuel types are currently
+allowed in the SAS4A/SASSYS-1 codes. The situation becomes even more
+difficult after in-pin fuel melting, and mixing of fuel radial mesh
+intervals in the molten fuel cavity produces new alloy compositions. In
+this case, use is made of another subroutine CFUEL1 that calculates
+U-Pu-Zr alloy specific heat as a function of composition, directly by
+regionwise interpolation of the temperature-derivatives of enthalpies of
+database alloys, given by Eq. (10.3-2) to Eq. (10.3-8). The regionwise
+interpolation of the derivatives in subroutine CFUEL1 is performed
+following exactly the same logic as that used in the regionwise
+interpolation of enthalpies in the subroutine HFUEL1. This makes the two
+subroutines consistent. Figure 10.3.26 shows flow diagram of the
+subroutine CFUEL1.
+
+The calculation begins with the evaluation of the first and last
+solid-state transition temperatures based on data in Table 10.3.1. The
+bold-boundary rectangular box in the flow diagram of Figure 10.3.26
+represents the most major part of the subroutine CFUEL1, the part that
+performs regionwise interpolation of the temperature-derivatives of
+enthalpies of database alloys in the temperature range of pre-transition
+and post-transition solid fuels. These temperature ranges are defined in
+Figure 10.3.18. Between the first and last transition temperatures, the
+subroutine HFUEL1 is used to find the enthalpies at the first and last
+transition temperatures, and the fuel specific heat is set equal to the
+average slope of enthalpy between these two temperatures. The detailed
+variation of specific heat between the first and last transition
+temperatures was studied using a modified version of CFUEL1 and found to
+be small (see Figure 10.3.27 to Figure 10.3.29) and inappropriate for inclusion
+in the heat transfer calculation of the SAS4A/SASSYS-1 codes. In that
+modified version of CFUEL1, the regionwise interpolation of derivatives
+represented by the bold-boundary rectangular box of Figure 10.3.26 was
+used instead of the average slope. At and above the liquidus temperature
+of the desired U-Pu-Zr alloy, the specific heat as a function of
+composition is evaluated by assuming the molten alloy to be an ideal
+solution of the 3 liquid components U, Pu and Zr. Between the solidus
+and liquidus temperatures of the desired U-Pu-Zr alloy, the actual
+specific heat (obtained by following the dashed part of the CFUEL1 flow
+diagram shown in Figure 10.3.26) over the melting range is replaced by a
+value linearly interpolated between (i) the post-transition solid
+U-Pu-Zr specific heat (CPSOL in Figure 10.3.26) at the solidus
+temperature, and (ii) the molten liquid solution specific heat (CPLIQ in
+Figure 10.3.26) at the solidus temperature. This replacement is required
+in order to be consistent with the method of Section 3.3.5 for adjusting
+fuel temperature (computed without accounting for heat of fusion during
+the main heat transfer calculation) to account for heat of fusion at any
+radial mesh interval that is going through the melting range.
+
+Figure 10.3.20 shows the variation of Mark-V (U-20Pu-10Zr), U-15Pu-10Zr
+and U-10Zr fuel specific heats with temperature, obtained from this
+subroutine. Figure 10.3.31 to Figure 10.3.36 show the variation of U-Pu-Zr
+alloy fuel specific heat with composition. The Zr content varies from 2
+to 25 wt %, and the Pu content varies from 5 to 30 wt % in the U-Pu-Zr
+alloy fuels plotted in these figures. Figure 10.3.32, Figure 10.3.34 and
+Figure 10.3.36 simply show an enlargement of the solid-stat transition region
+of Figure 10.3.31, Figure 10.3.33 and Figure 10.3.35. The solidus and liquidus
+temperatures required as input to the CFUEL1 subroutine were obtained
+using the subroutine developed by Pelton [10-13].
+
+Figure 10.3.26 Flow Diagram of Subroutine CFUEL1 for U-Pu-Zr Specific Heat.
+
+Figure 10.3.27 Detailed Variation of U-Pu-2Zr Fuel Specific Heat Obtained by Regionwise Interpolation of Metallic Fuels Handbook Data.
+
+Figure 10.3.28 Detailed Variation of U-Pu-10Zr Fuel Specific Heat Obtained by Regionwise Interpolation of Metallic Fuels Handbook Data.
+
+Figure 10.3.29 Detailed Variation of U-Pu-25Zr Fuel Specific Heat Obtained by Regionwise Interpolation of Metallic Fuels Handbook Data.
+
+Figure 10.3.30 Specific Heat of Mark-V (U-20Pu-10Zr) Fuel Obtained by Regionwise Interpolation of Metallic Fuels Handbook Data.
+
+Figure 10.3.31 Specific Heat of U-Pu-2Zr Alloy Fuel Obtained By Regionwise Interpolation of Metallic Fuels Handbook Data.
+
+Figure 10.3.32 Specific Heat of U-Pu-2Zr Alloy Fuel Obtained by Regionwise Interpolation of Metallic Fuels Handbook Data (Enlarged).
+
+Figure 10.3.33 Specific Heat of U-Pu-10Zr Alloy Fuel Obtained by Regionwise Interpolation of Metallic Fuels Handbook Data.
+
+Figure 10.3.34 Specific Heat of U-Pu-10Zr Alloy Fuel Obtained by Regionwise Interpolation of Metallic Fuels Handbook Data (Enlarged).
+
+Figure 10.3.35 Specific Heat of U-Pu-25Zr Alloy Fuel Obtained by Regionwise Interpolation of Metallic Fuels Handbook Data.
+
+Figure 10.3.36 Specific Heat of U-Pu-25Zr Alloy Fuel Obtained by Regionwise Interpolation of Metallic Fuels Handbook Data (Enlarged).
+
+[anchor: theoretical-density-of-u-pu-zr-fuel]
+
+### 10.3.2.3. Theoretical Density of U-Pu-Zr Fuel
+
+[anchor: section-10-3-2-3-1]
+
+#### 10.3.2.3.1. Introduction
+
+The IFR Metallic Fuels Handbook presents density and thermal expansion
+data for the 3 constituents and certain specific alloys only, and does
+not present correlations with their coefficients and transition
+temperatures as functions of composition.
+
+Earlier, before the preparation of the Metallic Fuels Handbook [109], a
+method was developed to estimate the composition- and
+temperature-dependent theoretical density of solid U-Pu-Zr alloy fuel
+[10-4]. In this method, the theoretical density was first evaluated at a
+fixed temperature of 298K from the theoretical densities of the 3
+constituents, i.e., U, Pu and Zr metals, by assuming that there is no
+volume change due to alloying of the constituents. This U-Pu-Zr
+theoretical density was adjusted for thermal expansion from 298K to the
+desired temperature, assuming thermal expansion to be independent of
+alloy composition and using the U-15Pu-10ZR alloy thermal expansion data
+for all alloy compositions. A drawback of this method [10-4] of
+estimating U-Pu-Zr theoretical density is that the dependence of thermal
+expansion on alloy composition is left unaccounted. Another drawback is
+that the data for the theoretical densities of the constituent metals
+and the thermal expansion of U-15Pu-10Zr were obtained from sources
+[10-14, 10-15] other than the Metallic Fuels Handbook.
+
+A similar method is used in the FPIN2 code [10-11] to estimate the
+composition- and temperature-dependent theoretical density of U-Pu-Zr
+alloy fuel. The theoretical density is first evaluated at a fixed
+temperature of 293K from the theoretical density data in the Handbook of
+the 3 constituent metals, by assuming that there is no volume change due
+to alloying of the constituents. The U-Pu-Zr density is then adjusted
+for temperature difference, using a composition-independent thermal
+expansion data. This data is obtained simply by averaging the thermal
+expansion data of U-5Fs, U-10Zr and U-15Pu-10Zr. The dependence of
+thermal expansion on alloy composition is here also left unaccounted.
+
+Recently, new experimental thermal expansion data for U-19Pu-10Zr and
+U-26Pu-10Zr alloys have been reported in the IFR Handbook [10-8].
+Prompted b this new data, the method of estimating U-Pu-Zr alloy
+enthalpy by regionwise interpolation has been extended to estimate
+linear thermal expansion of U-Pu-Zr alloy fuels as a function of
+composition. A subroutine THEXP1 based on this method to calculate the
+composition-dependent thermal expansion has been developed and
+incorporated into the SAS4A/SASSYS-1 codes. The subroutine makes use of
+the thermal expansion data of all the 8 alloys/components reported in
+the Handbook [10-8]. The 8 basic alloy compositions are used to divide
+the ternary composition triangle into 9 regions of interpolation as
+described in Section 10.3.2.4. The method is flexible enough to make use
+of the thermal expansion data of additional alloys (as they become
+available) to divide the composition triangle into a larger number of
+smaller regions, thus improving its accuracy. The U-Pu-Zr theoretical
+density is now adjusted for temperature difference using
+composition-dependent thermal expansion calculated for the desired alloy
+instead of using an arbitrarily assumed composition-independent thermal
+expansion data. Also, an approximate technique to correct the
+theoretical density for the presence of fission products, which remains
+valid even if annular composition zones have been formed due to radial
+redistribution of alloy constituents, has been developed and
+incorporated into the SAS4A/SASSYS-1 codes. This technique is applied by
+a code user option.
+
+[anchor: theoretical-density-of-u-pu-zr-fuel-at-293k]
+
+#### 10.3.2.3.2. Theoretical Density of U-Pu-Zr Fuel at 293K
+
+The theoretical density of U-Pu-Zr fuel at a fixed temperature of 293K
+is calculated form the theoretical densities of U, Pu and Zr by assuming
+that there is no volume change due to alloying of the constituents. This
+assumption has been referred to as the ideal-solution approximation, and
+recommended in the IFR Handbook. The recommended theoretical densities
+of U, Pu and Zr at 293K are 19070, 19750 and 6570 kg/m3. The
+volume of one kilogram of U-Pu-Zr alloy can be found by summing the
+volumes of its constituents, and the reciprocal of this volume equals
+theoretical density.
+
+$$\rho_{\text{th}} \left( 0, 293\text{K}, W_{\text{p}}, W_{\text{z}} \right) = \frac{1}{\left( \frac{W_{\text{u}}}{19070} + \frac{W_{\text{p}}}{19750} + \frac{W_{\text{z}}}{6570} \right)}$$ [eq 10.3-32]
+
+where
+
+ $\rho_{\text{th}} \left( \text{Bu},T,W_{\text{p}},W_{\text{z}} \right)$ = theoretical density
+of U-Pu-Zr alloy at temperature T°K after a burnup of Bu atom percent,
+kg/m3,
+
+ $W_{\text{u}}, W_{\text{p}}, W_{\text{z}}$ = weight fractions of U, Pu
+and Zr in the alloy.
+
+Table 10.3.2 shows a comparison of all the measured densities reported
+in the IFR Handbook with the theoretical densities calculated using
+Eq. (10.3-32). The comparison gives a maximum error of 2.45% with an average
+error of 1.1%. The comparison is satisfactory for these alloy
+compositions. The small differences may be due to measurement error,
+small voids left during the alloy preparation or some volume change
+taking place during alloying. Eq. (10.3-32) does not account for
+the effect of isotopic compositions of U and Pu on theoretical density,
+and some of the difference between the measured and calculated densities
+may be caused by this effect.
+
+[anchor: correction-for-the-presence-of-fission-products]
+
+#### 10.3.2.3.3. Correction for the Presence of Fission Products
+
+Eq. (10.3-32) gives the theoretical density of unirradiated U-Pu-Zr
+fuel at a fixed temperature of 293K. This section presents the effect of
+the presence of fission products, and the next section presents the
+effect of temperature on U-Pu-Zr fuel theoretical density. The effect of
+burnup on U-Pu-Zr fuel density was studied earlier [10-16], and the
+following equation for the theoretical density of irradiated fuel at a
+fixed temperature of 293K was obtained in terms of fabricated fuel
+composition and burnup.
+
+Table 10.3.2 Comparison of Measured and Calculated Theoretical Densities of U-Pu-Zr Alloys at 293K
+ | 
+
+ | | 
+ | | 
+ | 
+Density, kg/m3
+ | 
+ | | 
+ | | 
+
+ | 
+
+ | 
+No.
+ | 
+ | 
+Alloy
+ | 
+ | 
+Handbook
+ | 
+ | 
+Calculated
+
+Using Eq. (10.3-32)
+
+ | 
+ | 
+% Error
+ | 
+
+ | 
+1
+ | 
+ | 
+U
+ | 
+ | 
+19070
+ | 
+ | 
+19070
+ | 
+ | 
+0.0
+ | 
+
+ | 
+2
+ | 
+ | 
+U-10Zr
+ | 
+ | 
+16020
+ | 
+ | 
+16022
+ | 
+ | 
+0.01
+ | 
+
+ | 
+3
+ | 
+ | 
+U-20Zr
+ | 
+ | 
+13810
+ | 
+ | 
+13814
+ | 
+ | 
+0.03
+ | 
+
+ | 
+4
+ | 
+ | 
+Zr
+ | 
+ | 
+6570
+ | 
+ | 
+6570
+ | 
+ | 
+0.0
+ | 
+
+ | 
+5
+ | 
+ | 
+U-15Pu-10Zr
+ | 
+ | 
+15800
+ | 
+ | 
+16092
+ | 
+ | 
+1.85
+ | 
+
+ | 
+6
+ | 
+ | 
+U-19Pu-10Zr
+ | 
+ | 
+–
+ | 
+ | 
+16110
+ | 
+ | 
+–
+ | 
+
+ | 
+7
+ | 
+ | 
+U-26Pu-10Zr
+ | 
+ | 
+–
+ | 
+ | 
+16143
+ | 
+ | 
+–
+ | 
+
+ | 
+8
+ | 
+ | 
+Pu
+ | 
+ | 
+19750
+ | 
+ | 
+19750
+ | 
+ | 
+0.0
+ | 
+
+ | 
+9
+ | 
+ | 
+U-20Pu-10Zr
+ | 
+ | 
+15730
+ | 
+ | 
+16115
+ | 
+ | 
+2.45
+ | 
+
+ | 
+10
+ | 
+ | 
+U-11.1Pu-6.3Zr
+ | 
+ | 
+16800
+ | 
+ | 
+17087
+ | 
+ | 
+1.71
+ | 
+
+ | 
+11
+ | 
+ | 
+U-18.5Pu-14.1Zr
+ | 
+ | 
+14800
+ | 
+ | 
+15112
+ | 
+ | 
+2.11
+ | 
+
+ | 
+12
+ | 
+ | 
+U-15Pu-6.8Zr
+ | 
+ | 
+16600
+ | 
+ | 
+16963
+ | 
+ | 
+2.19
+ | 
+
+ | 
+13
+ | 
+ | 
+U-15Pu-13.5Zr
+ | 
+ | 
+15000
+ | 
+ | 
+15235
+ | 
+ | 
+1.57
+ | 
+
+$$\begin{split}\rho_{\text{th}} \left( \text{Bu}, 293\text{K}, {W'}_{\text{p}}, {W'}_{\text{z}} \right) \\
+= \frac{\rho_{\text{th}} \left( 0, 293\text{K}, W_{\text{po}}, W_{\text{zo}} \right)\left\lbrack 1 - 9.026 \times 10^{-6} \text{Bu} \left( W_{\text{uo}} + W_{\text{po}} \right) \right\rbrack}{1 + 1.190 \times 10^{-6} \rho_{\text{th}} \left( 0, 293K, W_{\text{po}}, W_{\text{zo}} \right)\text{Bu} \left( W_{\text{uo}} + W_{\text{po}} \right)}\end{split}$$ [eq 10.3-33]
+
+where
+
+ $W_{\text{uo}}, W_{\text{po}}, W_{\text{zo}}$ = fabricated weight
+fractions of U, Pu and Zr in the unirradiated U-Pu-Zr alloy,
+
+ ${W'}_{\text{u}}, {W'}_{\text{p}}, {W'}_{\text{z}}$ = weight fractions of U, Pu and
+Zr in the irradiated alloy after a burnup of Bu atom percent, without
+any radial migration of alloy constituents.
+
+This change in alloy composition is only due to fission and breeding.
+The value of the fabricated alloy theoretical density required for the
+evaluation of the right hand side of Eq. (10.3-33) can be obtained from
+Eq. (10.3-32), using the fabricated weight fractions in place of the
+present weight fractions of the alloy.
+
+In this section we want to express the irradiated fuel theoretical
+density in terms of zonal fuel composition (resulting from fission,
+breeding and also migration of constituents) and burnup. For this
+purpose, we need to know the amount of fission products the present fuel
+contains. During irradiation, uranium migrates to the middle radial
+composition zone while plutonium, zirconium and fission products migrate
+out of the middle radial composition zone. Thus the fuel constituents
+and their generated fission products do not remain together. This makes
+it difficult to calculate the amount of fission products mixed in a
+given zonal fuel composition. Lacking a modeling and calculation of the
+radial migration of fission products in a fuel pin, it is assumed that
+the fission products are uniformly distributed over the pin cross
+section, on a per unit U-Pu-Zr alloy post-irradiation mass basis. The
+total amount of fission products is obtained from the radially averaged
+atom percent burnup and the fabricated pin composition. Due to radial
+migration of heavy metal constituents, it is difficult to define a
+radial variation of atom percent burnup. The fabricated composition and
+not the irradiated (zonal0 composition is the basis of atom percent
+burnup reported in literature and, therefore, the fabricated composition
+should be used in evaluating the total amount of fission products. The
+number of heavy-metal atoms, $N_{\text{ho}}$ , per unit fabricated U-Pu-Zr
+alloy mass is given by
+
+$$N_{\text{ho}} = \frac{W_{\text{uo}} \text{Na}}{a_{\text{u}}} + \frac{W_{\text{po}} \text{Na}}{a_{\text{p}}}$$ [eq 10.3-34]
+
+where
+
+ $a_{\text{u}}, a_{\text{p}}$ = uranium and plutonium atomic weights,
+
+ $\text{Na} = 6.02472 \times 10^{26}$ = Avogadro’s number, molecules/kg-mole.
+
+The number of fissions, $N_{\text{fo}}$ , per unit fabricated mass equals
+the product of burnup and heavy-metal atoms.
+
+$$N_{\text{fo}} = \frac{\text{Na Bu}}{100}\left( \frac{W_{\text{uo}}}{a_{\text{u}}} + \frac{W_{\text{po}}}{a_{\text{p}}} \right)$$ [eq 10.3-35]
+
+Assuming $a_{\text{u}} \approx a_{\text{p}}$ , the mass of heavy-metals
+fissioned, $M_{\text{fo}}$ , per unit fabricated U-Pu-Zr alloy mass is
+given by
+
+$$M_{\text{fo}} = N_{\text{fo}} \frac{a_{\text{u}}}{\text{Na}}$$ [eq 10.3-36]
+
+Substituting Eq. (10.3-35), Eq. (10.3-36) becomes
+
+$$M_{\text{fo}} = 0.01 \text{Bu} \left( W_{\text{uo}} + W_{\text{po}} \right)$$ [eq 10.3-37]
+
+The mass of U-Pu-Zr alloy left after irradiation per unit fabricated
+mass is given by $\left( 1 - M_{\text{fo}} \right)$ . Therefore, the average number of
+fissions, $N_{\text{f}}$ , per unit U-Pu-Zr alloy post-irradiation mass is
+obtained by dividing Eq. (10.3-35) by $\left( 1 - M_{\text{fo}} \right)$ .
+
+$$N_{\text{f}} = \frac{0.01 \text{Bu Na} \frac{\left( W_{\text{uo}} + W_{\text{po}} \right)}{a_{\text{u}}}}{1 - 0.01 \text{Bu} \left( W_{\text{uo}} + W_{\text{po}} \right)}$$ [eq 10.3-38]
+
+Eq. (10.3-38) determines the assumed uniform distribution of
+fission products over the pin cross section, on a per unit U-Pu-Zr alloy
+post-irradiation mass basis. As discussed above, the amount of fission
+products determined by Eq. (10.3-38) is used to correct U-Pu-Zr alloy
+theoretical density for the presence of fission products as follows.
+
+Considering the mass-plus-energy conservation of a nuclear power reactor
+with negligible neutron leakage and capture in coolant and structure,
+all neutrons emitted by fuel are absorbed in the fuel itself. Therefore,
+the mass of fission products equals the mass of heavy-metals fissioned
+minus the mass-equivalent of fission energy released. The mass of
+fission products, $M_{\text{f}}$ , per unit U-Pu-Zr alloy post-irradiation
+mass is given by
+
+$$M_{\text{f}} = \frac{N_{\text{f}} a_{\text{u}}}{\text{Na}} - \frac{200 m_{\text{a}}}{931} N_{\text{f}}$$ [eq 10.3-39]
+
+where
+
+ $m_{\text{a}}$ = 1 atomic mass unit = $1.659828 \times 10^{-27}$ kilogram,
+
+200 = energy released per fission in MeV units,
+
+931 = energy-equivalent (in MeV units) of 1 atomic mass unit.
+
+Following Ref. [10-16], the volume of fission products, $V_{\text{f}}$ ,
+per unit U-Pu-Zr alloy post-irradiation mass is given by
+
+$$V_{\text{f}} = N_{\text{f}} v_{\text{sfp}}$$ [eq 10.3-40]
+
+where
+
+ $v_{\text{sfp}}$ = characteristic volume of the solid fission products
+per fission = $6.772565 \times 10^{-29}$ m3.
+
+This value of $v_{\text{sfp}}$ has been found from pure uranium swelling
+data to be $4.70 \times 10^{-29}$ m3/fission over and above the
+characteristic volume of uranium atom [10-16]. Using Eq. (10.3-39) and
+Eq. (10.3-40), the theoretical density of irradiated fuel at a fixed
+temperature of 293K, after correction for the presence of fission
+products, is obtained as
+
+$$\rho_{\text{th}} \left( \text{Bu}, 293\text{K}, W_{\text{p}}, W_{\text{z}} \right) = \frac{1 + \frac{N_{\text{f}} a_{\text{u}}}{\text{Na}} - 200 m_{\text{a}} \frac{N_{\text{f}}}{931}}{\left( \frac{W_{\text{u}}}{19070} + \frac{W_{\text{p}}}{19750} + \frac{W_{\text{z}}}{6570} \right) + N_{\text{f}} v_{\text{sfp}}}$$ [eq 10.3-41]
+
+where
+
+ $W_{\text{u}}, W_{\text{p}}, W_{\text{z}}$ = weight fractions of U, Pu
+and Zr in the irradiated U-Pu-Zr alloy.
+
+Using a value of 238 for $a_{\text{u}}$ , and noting that $m_{\text{a}}$ is
+the reciprocal of Na, Eq. (10.3-41) becomes
+
+$$\rho_{\text{th}} \left( \text{Bu}, 293\text{K}, W_{\text{p}}, W_{\text{z}} \right) = \frac{1 + 0.009991 f_{\text{o}}}{\left( \frac{W_{\text{u}}}{19070} + \frac{W_{\text{p}}}{19750} + \frac{W_{\text{z}}}{6570} \right) + 1.7144 \times 10^{-6} f_{\text{o}}}$$ [eq 10.3-42]
+
+where
+
+$$f_{\text{o}} = \frac{\text{Bu} \left( W_{\text{uo}} + W_{\text{po}} \right)}{1 - 0.01 \text{Bu} \left( W_{\text{uo}} + W_{\text{po}} \right)}$$ [eq 10.3-43]
+
+The quantity $f_{\text{o}}$ is the heavy-metal mass fissioned expressed as
+a percentage of U-Pu-Zr alloy post-irradiation mass. This approximate
+technique to correct the theoretical density for the presence of fission
+products, which remains valid even after annular zone formation
+( $W_{\text{u}}, W_{\text{p}}, W_{\text{z}}$ are then zonal weight
+fractions) due to radial migration of alloy constituents, is
+incorporated into the SAS4A/SASSYS-1 codes and is applied by a code user
+option.
+
+[anchor: theoretical-density-of-irradiated-u-pu-zr-fuel]
+
+#### 10.3.2.3.4. Theoretical Density of Irradiated U-Pu-Zr Fuel
+
+Eq. (10.3-42) and Eq. (10.3-43) give the theoretical density of
+irradiated U-Pu-Zr fuel at a fixed temperature of 293K. In the next
+section, a method of interpolating the linear thermal expansion from
+293K to any desired temperature T as a function of fuel composition is
+described. Using this thermal expansion, the following equation can be
+written for the theoretical density of irradiated U-Pu-Zr fuel at any
+desired temperature T:
+
+$$\rho_{\text{th}} \left( \text{Bu}, T, W_{\text{p}}, W_{\text{z}} \right) = \frac{\left( 1 + 0.009991 f_{\text{o}} \right)\left\lbrack 1 + \Delta L \left( T, W_{\text{p}}, W_{\text{z}} \right) / \text{Lo} \right\rbrack^{-3}}{\left( \frac{W_{\text{u}}}{19070} + \frac{W_{\text{p}}}{19750} + \frac{W_{\text{z}}}{6570} \right) + 1.7144 \times 10^{-6} f_{\text{o}}}$$ [eq 10.3-44]
+
+where
+
+ $\Delta L \left( T, W_{\text{p}}, W_{\text{z}} \right) / L_{\text{o}}$ = linear
+thermal expansion from 293K to temperature T, expressed as a fraction of
+length $L_{\text{o}}$ at the temperature 293K, for a U-Pu-Zr alloy with
+U, Pu, and Zr weight fractions equal to $W_{\text{u}}, W_{\text{p}}$ and
+ $W_{\text{z}}$ .
+
+Figure 10.3.37 shows the flow diagram of a subroutine RHOFM for
+calculating the theoretical density, based on this method, of irradiated
+U-Pu-Zr alloy fuel as a function of composition and temperature. For
+improving the computational speed of the SAS4A/SASSYS-1 codes, the
+theoretical density without fission products at 293K of each U-Pu-Zr
+fuel type (that uses the regionwise interpolation thermal properties,
+i.e., input option IFUELM = 0) is precalculated in subroutine PRECAL
+before steady state calculation, and used later in the steady state and
+transient calculation of the codes.
+
+Figures (Figure 10.3.38) to (Figure 10.3.41) show the variation of theoretical density
+(without fission products) with temperature for 28 alloy compositions,
+calculated using Eq. (10.3-44). The thermal expansion required on the
+right hand side of Eq. (10.3-44) was obtained using the subroutine
+THEXP1 described below. The Pu and Zr contents each vary from zero to 30
+at % in the alloy compositions plotted in these figures.
+
+Figure 10.3.37 Flow Diagram of subroutine PHOFM for U-Pu-Zr Fuel Theoretical Density.
+
+Figure 10.3.38 Theoretical Density of U-Pu Fuel Without Fission Products, Obtained from Regionwise Interpolation.
+
+Figure 10.3.39 Theoretical Density of U-Pu-10Zr Fuel Without Fission Products, Obtained From Regionwise Interpolation of IFR Handbook Data.
+
+Figure 10.3.40 Theoretical Density of U-Pu-20Zr Fuel Without Fission Products, Obtained from Regionwise Interpolation of IFR Handbook Data.
+
+Figure 10.3.41 Theoretical Density of U-Pu-30Zr Fuel Without Fission Products, Obtained from Regionwise interpolation of IFR Handbook Data.
+
+[anchor: thermal-expansion-of-u-pu-zr-fuel]
+
+### 10.3.2.4. Thermal Expansion of U-Pu-Zr Fuel
+
+In this section, a method of interpolating the linear thermal expansion
+of U-Pu-Zr fuel form 293K to any desired temperature T as a function of
+fuel composition is described. Only the U, Pu and Zr weight fractions
+are considered and the effect of fission products on thermal expansion
+is ignored. This thermal expansion is used in the evaluation of
+theoretical density of irradiated U-Pu-Zr fuel at any desired
+temperature, as explained in Section 10.3.2.3.
+
+[anchor: section-10-3-2-4-1]
+
+#### 10.3.2.4.1. Description of the Method
+
+Figure 10.3.42 shows the U-Pu-Zr ternary composition triangle marked
+with the points representing all the 8 alloys/components for which
+thermal expansion data re reported in the IFR Handbook [10-8]. The
+composition points of these 8 database alloys/components are used to
+divide the whole ternary composition triangle into 9 triangular regions
+of interpolation. For evaluating the linear thermal expansion of a
+desired solid U-Pu-Zr alloy represented by a point located in any region
+of interpolation, the method consists of mixing the 3 database alloys
+represented by the corners of the region of interpolation. The
+proportions or weight fractions of the 3 database alloys in mixing are
+so calculated in the method that the resulting mixture has the
+composition of the desired alloy. The calculated mixing fractions are
+then used as weight factors in making a linear combination of (or liner
+interpolation between) thermal expansions of the 3 database alloys
+corresponding to the desired temperature, and the value of the linear
+combination is the interpolated thermal expansion of the desired alloy.
+It should be noted that the calculated mixing fractions are never
+negative and the linear combination never requires extrapolation because
+the desired alloy composition point is always inside the triangle with
+corners at the 3 database alloy points. If the desired alloy composition
+point were outside this triangle, the linear combination would involve
+negative mixing fractions and extrapolation which are avoided entirely
+in the present method.
+
+Figure 10.3.42 Diagram Showing Thermal Expansion Interpolation Regions for Solid U-Pu-Zr Alloy Fuels.
+
+[anchor: thermal-expansion-data-of-basic-alloys]
+
+#### 10.3.2.4.2. Thermal Expansion Data of Basic Alloys
+
+Table 10.3.3 gives the linear thermal expansion data of the 8 basic
+solid alloys or components that are used in the present method of
+evaluating composition-dependent thermal expansion of a U-Pu-Zr alloy.
+The 8 basic alloys/components are: (1) U metal, (2) U-10Zr, (3) U-20Zr,
+(4) Zr metal, (5) U-15Pu-10Zr, (6) U-19Pu-10Zr, (7) U-26Pu-10Zr, and (8)
+Pu metal. The data have all been taken from the Metallic Fuels Handbook
+[10-8] with the modification that the thermal expansion data of U, Pu
+and Zr metals between their first and last solid-state transition
+temperatures are not included in Table 10.3.3, and not used in the
+present method. The thermal expansion data of U, Pu and Zr metals at
+their first and last transition temperatures are included in Table 10.3.3, and the thermal expansion is assumed to vary linearly with
+temperature between the first and last transition temperatures. This is
+reasonable because the sharp jumps (i.e., discontinuities) in thermal
+expansion data of U, Pu and Zr metals, over the temperature range of
+solid-state transitions, are not exhibited by alloys. The value of
+thermal expansion at 2500K shows in Table 10.3.3, for each database
+alloy/component has been obtained from the Handbook data for percent
+thermal expansion and coefficient of thermal expansion at the highest
+temperature available. A warning message is printed by the SAS4A/SASSYS-1
+codes if the thermal expansion value at 2500K of any database alloy is
+ever used in computation. The uranium thermal expansion data at 1500K,
+1600K and 2500K (above its melting point) in Table 10.3.3 have been
+obtained by subtracting the thermal expansion due to melting (i.e.,
+1.14%) from the data given in the Handbook. This is done because the
+data in Table 10.3.3 is used in the present method to interpolate the
+thermal expansion of a desired U-Pu-Zr alloy up to its solidus
+temperature only. The evaluation of thermal expansion above the solidus
+temperature is described below in Section D.
+
+[anchor: method-of-interpolation]
+
+#### 10.3.2.4.3. Method of Interpolation
+
+The method of interpolation to evaluate the linear thermal expansion of
+a U-Pu-Zr fuel composition at and below its solidus temperature consists
+of first determining the region of the ternary composition triangle
+(shown in Figure 10.3.42) in which the desired fuel composition lies, and
+then finding the weight fractions in which the 3 database alloys of the
+region are required to be mixed to obtain the desired fuel composition.
+From the mass balance of U, Pu and Zr, the following equations have been
+obtained in Section 10.3.2.1 for the mixing fractions, $X_{\text{i}}$ , of
+the database alloys that are assumed to be numbered 1, 2 and 3:
+
+Table 10.3.3 Linear Thermal Expansion Data of the 8 Basic Solid Alloys or Components Used in the Method of Regionwise Interpolation
+ | 
+
+ | | 
+ | 
+1
+ | 
+ | 
+Uranium
+ | 
+ | 
+2
+ | 
+ | 
+U-10Zr
+ | 
+ | 
+3
+ | 
+ | 
+U-20Zr
+ | 
+ | 
+4
+ | 
+ | 
+Zirconium
+ | 
+
+ | 
+No.
+ | 
+ | 
+Temp (K)
+ | 
+ | 
+ $\Delta L/L_{\text{0}}$ (%)
+ | 
+ | 
+Temp (K)
+ | 
+ | 
+ $\Delta L/L_{\text{0}}$ (%)
+ | 
+ | 
+Temp (K)
+ | 
+ | 
+ $\Delta L/L_{\text{0}}$ (%)
+ | 
+ | 
+Temp (K)
+ | 
+ | 
+ $\Delta L/L_{\text{0}}$ (%)
+ | 
+
+ | 
+
+ | 
+1
+ | 
+ | 
+293
+ | 
+ | 
+0
+ | 
+ | 
+293
+ | 
+ | 
+0
+ | 
+ | 
+293
+ | 
+ | 
+0
+ | 
+ | 
+293
+ | 
+ | 
+0
+ | 
+
+ | 
+2
+ | 
+ | 
+400
+ | 
+ | 
+0.157
+ | 
+ | 
+400
+ | 
+ | 
+0.142
+ | 
+ | 
+400
+ | 
+ | 
+0.107
+ | 
+ | 
+400
+ | 
+ | 
+0.06
+ | 
+
+ | 
+3
+ | 
+ | 
+500
+ | 
+ | 
+0.315
+ | 
+ | 
+500
+ | 
+ | 
+0.281
+ | 
+ | 
+500
+ | 
+ | 
+0.219
+ | 
+ | 
+500
+ | 
+ | 
+0.123
+ | 
+
+ | 
+4
+ | 
+ | 
+600
+ | 
+ | 
+0.494
+ | 
+ | 
+600
+ | 
+ | 
+0.433
+ | 
+ | 
+600
+ | 
+ | 
+0.348
+ | 
+ | 
+600
+ | 
+ | 
+0.192
+ | 
+
+ | 
+5
+ | 
+ | 
+700
+ | 
+ | 
+0.697
+ | 
+ | 
+700
+ | 
+ | 
+0.603
+ | 
+ | 
+700
+ | 
+ | 
+0.5
+ | 
+ | 
+700
+ | 
+ | 
+0.265
+ | 
+
+ | 
+6
+ | 
+ | 
+800
+ | 
+ | 
+0.924
+ | 
+ | 
+800
+ | 
+ | 
+0.799
+ | 
+ | 
+800
+ | 
+ | 
+0.681
+ | 
+ | 
+800
+ | 
+ | 
+0.343
+ | 
+
+ | 
+7
+ | 
+ | 
+900
+ | 
+ | 
+1.186
+ | 
+ | 
+900
+ | 
+ | 
+1.027
+ | 
+ | 
+900
+ | 
+ | 
+0.899
+ | 
+ | 
+900
+ | 
+ | 
+0.442
+ | 
+
+ | 
+8
+ | 
+ | 
+941
+ | 
+ | 
+1.3
+ | 
+ | 
+1000
+ | 
+ | 
+1.725
+ | 
+ | 
+1000
+ | 
+ | 
+1.3
+ | 
+ | 
+1000
+ | 
+ | 
+0.505
+ | 
+
+ | 
+9
+ | 
+ | 
+1048
+ | 
+ | 
+2.05
+ | 
+ | 
+1100
+ | 
+ | 
+1.95
+ | 
+ | 
+1100
+ | 
+ | 
+1.487
+ | 
+ | 
+1100
+ | 
+ | 
+0.586
+ | 
+
+ | 
+10
+ | 
+ | 
+1100
+ | 
+ | 
+2.168
+ | 
+ | 
+1200
+ | 
+ | 
+2.175
+ | 
+ | 
+1200
+ | 
+ | 
+1.674
+ | 
+ | 
+1137
+ | 
+ | 
+0.617
+ | 
+
+ | 
+11
+ | 
+ | 
+1200
+ | 
+ | 
+2.398
+ | 
+ | 
+2500
+ | 
+ | 
+5.1
+ | 
+ | 
+2500
+ | 
+ | 
+4.105
+ | 
+ | 
+1284
+ | 
+ | 
+0.617
+ | 
+
+ | 
+12
+ | 
+ | 
+1400
+ | 
+ | 
+2.855
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | 
+1400
+ | 
+ | 
+0.725
+ | 
+
+ | 
+13
+ | 
+ | 
+1408
+ | 
+ | 
+2.866
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | 
+1600
+ | 
+ | 
+0.922
+ | 
+
+ | 
+14
+ | 
+ | 
+1500
+ | 
+ | 
+3.092
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | 
+1800
+ | 
+ | 
+1.138
+ | 
+
+ | 
+15
+ | 
+ | 
+1600
+ | 
+ | 
+3.362
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | 
+2500
+ | 
+ | 
+1.803
+ | 
+
+ | 
+16
+ | 
+ | 
+2500
+ | 
+ | 
+5.657
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+
+ | 
+
+ | | 
+ | 
+5
+ | 
+ | 
+U-15Pu-10Zr
+ | 
+ | 
+6
+ | 
+ | 
+U-19Pu-10Zr
+ | 
+ | 
+7
+ | 
+ | 
+U-26Pu-10Zr
+ | 
+ | 
+8
+ | 
+ | 
+Plutonium
+ | 
+
+ | 
+No.
+ | 
+ | 
+Temp (K)
+ | 
+ | 
+ $\Delta L/L_{\text{0}}$ (%)
+ | 
+ | 
+Temp (K)
+ | 
+ | 
+ $\Delta L/L_{\text{0}}$ (%)
+ | 
+ | 
+Temp (K)
+ | 
+ | 
+ $\Delta L/L_{\text{0}}$ (%)
+ | 
+ | 
+Temp (K)
+ | 
+ | 
+ $\Delta L/L_{\text{0}}$ (%)
+ | 
+
+ | 
+
+ | 
+1
+ | 
+ | 
+293
+ | 
+ | 
+0
+ | 
+ | 
+293
+ | 
+ | 
+0
+ | 
+ | 
+293
+ | 
+ | 
+0
+ | 
+ | 
+293
+ | 
+ | 
+0
+ | 
+
+ | 
+2
+ | 
+ | 
+400
+ | 
+ | 
+0.18
+ | 
+ | 
+373
+ | 
+ | 
+0.103
+ | 
+ | 
+373
+ | 
+ | 
+0.108
+ | 
+ | 
+350
+ | 
+ | 
+0.279
+ | 
+
+ | 
+3
+ | 
+ | 
+500
+ | 
+ | 
+0.356
+ | 
+ | 
+473
+ | 
+ | 
+0.242
+ | 
+ | 
+473
+ | 
+ | 
+0.253
+ | 
+ | 
+395
+ | 
+ | 
+0.502
+ | 
+
+ | 
+4
+ | 
+ | 
+600
+ | 
+ | 
+0.532
+ | 
+ | 
+573
+ | 
+ | 
+0.431
+ | 
+ | 
+573
+ | 
+ | 
+0.455
+ | 
+ | 
+753
+ | 
+ | 
+6.287
+ | 
+
+ | 
+5
+ | 
+ | 
+700
+ | 
+ | 
+0.708
+ | 
+ | 
+673
+ | 
+ | 
+0.638
+ | 
+ | 
+673
+ | 
+ | 
+0.683
+ | 
+ | 
+800
+ | 
+ | 
+6.459
+ | 
+
+ | 
+6
+ | 
+ | 
+800
+ | 
+ | 
+0.884
+ | 
+ | 
+773
+ | 
+ | 
+0.86
+ | 
+ | 
+773
+ | 
+ | 
+0.924
+ | 
+ | 
+2500
+ | 
+ | 
+12.68
+ | 
+
+ | 
+7
+ | 
+ | 
+868
+ | 
+ | 
+1.004
+ | 
+ | 
+873
+ | 
+ | 
+1.146
+ | 
+ | 
+873
+ | 
+ | 
+1.276
+ | 
+ | | 
+ | | 
+
+ | 
+8
+ | 
+ | 
+938
+ | 
+ | 
+1.524
+ | 
+ | 
+973
+ | 
+ | 
+1.662
+ | 
+ | 
+973
+ | 
+ | 
+1.868
+ | 
+ | | 
+ | | 
+
+ | 
+9
+ | 
+ | 
+1000
+ | 
+ | 
+1.649
+ | 
+ | 
+1073
+ | 
+ | 
+1.881
+ | 
+ | 
+1073
+ | 
+ | 
+2.095
+ | 
+ | | 
+ | | 
+
+ | 
+10
+ | 
+ | 
+1100
+ | 
+ | 
+1.85
+ | 
+ | 
+1173
+ | 
+ | 
+2.104
+ | 
+ | 
+1173
+ | 
+ | 
+2.327
+ | 
+ | | 
+ | | 
+
+ | 
+11
+ | 
+ | 
+1200
+ | 
+ | 
+2.051
+ | 
+ | 
+1273
+ | 
+ | 
+2.334
+ | 
+ | 
+1233
+ | 
+ | 
+2.464
+ | 
+ | | 
+ | | 
+
+ | 
+12
+ | 
+ | 
+1300
+ | 
+ | 
+2.252
+ | 
+ | 
+2500
+ | 
+ | 
+5.113
+ | 
+ | 
+2500
+ | 
+ | 
+5.386
+ | 
+ | | 
+ | | 
+
+ | 
+13
+ | 
+ | 
+1378
+ | 
+ | 
+2.409
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+
+ | 
+14
+ | 
+ | 
+2500
+ | 
+ | 
+4.664
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+
+ | 
+15
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+
+ | 
+16
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+
+$$\begin{aligned}
+X_{\text{i}} = \frac{D_{\text{i}}}{D}, && i = 1, 2, 3
+\end{aligned}$$ [eq 10.3-45]
+
+$$D = \left( W_{\text{z}1} - W_{\text{z}2} \right)\left( W_{\text{p}3} - W_{\text{p}1} \right) - \left( W_{\text{p}1} - W_{\text{p}2} \right)\left( W_{\text{z}3} - W_{\text{z}1} \right)$$ [eq 10.3-46]
+
+$$D_{1} = \left( W_{\text{z}} - W_{\text{z}2} \right)\left( W_{\text{p}3} - W_{\text{p}} \right) - \left( W_{\text{p}} - W_{\text{p}2} \right)\left( W_{\text{z}3} - W_{\text{z}} \right)$$ [eq 10.3-47]
+
+$$D_{2} = \left( W_{\text{z}1} - W_{\text{z}} \right)\left( W_{\text{p}3} - W_{\text{p}1} \right) - \left( W_{\text{p}1} - W_{\text{p}} \right)\left( W_{\text{z}3} - W_{\text{z}1} \right)$$ [eq 10.3-48]
+
+$$D_{3} = \left( W_{\text{z}1} - W_{\text{z}2} \right)\left( W_{\text{p}} - W_{\text{p}1} \right) - \left( W_{\text{p}1} - W_{\text{p}2} \right)\left( W_{\text{z}} - W_{\text{z}1} \right)$$ [eq 10.3-49]
+
+where
+
+ $W_{\text{ui}}, W_{\text{pi}}, W_{\text{zi}}$ = weight fractions of U,
+Pu and Zr in database alloy I of the region in which the desired fuel
+compositions lies,
+
+ $W_{\text{u}}, W_{\text{p}}, W_{\text{z}}$ = weight fractions of U,
+Pu and Zr in the desired fuel composition.
+
+The sum of $X_{1}, X_{2}$ and $X_{3}$ is always 1.
+In case of interpolation, the values of $X_{1}, X_{2}$ and
+ $X_{3}$ are always positive. If any extrapolation were involved,
+the value of at least one weight fraction would be negative which is
+entirely avoided in the present method. The linear thermal expansion of
+the desired U-Pu-Zr fuel composition from 293K to a temperature T at or
+below its solidus is then evaluated by mass-weighted averaging of the
+thermal expansions of the 3 database alloys from 293K to the same
+temperature T.
+
+$$\frac{\Delta L \left( T, W_{\text{p}}, W_{\text{z}} \right)}{L_{\text{o}}} = X_{1} \frac{\Delta L_{1}}{L_{\text{o}}} + X_{2} \frac{\Delta L_{2}}{L_{\text{o}}} + X_{3} \frac{\Delta L_{3}}{L_{\text{o}}}$$ [eq 10.3-50]
+
+where
+
+ $\frac{\Delta L_{\text{i}}}{L_{\text{o}}}$ = linear thermal expansion from 293K
+to temperature T of the database alloy i of the region in which the
+desired fuel composition lines.
+
+[anchor: thermal-expansion-during-and-after-melting]
+
+#### 10.3.2.4.4. Thermal Expansion During and After Melting
+
+Thermal expansion data during and after melting is available for none of
+the database alloys except uranium metal. Therefore, the thermal
+expansion of all alloy compositions above their solidus temperatures is
+evaluated using the uranium metal data, and a warning message is printed
+by the SAS4A/SASSYS-1 codes if this is ever required in computation. The
+linear thermal expansion of uranium during melting at 1408K reported in
+the Handbook [10-8] is 1.14%, and the coefficient of linear expansion of
+molten uranium is 25.5 x 10-6/K. In the present method, the post-solidus
+uranium thermal expansion is added to Eq. (10.3-50) to obtain the
+following equation for estimating the linear thermal expansion form 293K
+to a temperature T above the solidus of the desired alloy:
+
+$$\begin{split}\frac{\Delta L \left( T, W_{\text{p}}, W_{\text{z}} \right)}{L_{\text{o}}} = X_{1} \frac{\Delta L \left( T_{\text{s}}, W_{\text{p}}, W_{\text{z}} \right)}{L_{\text{o}}} + X_{2} \frac{\Delta L_{2} \left( T_{\text{s}}, W_{\text{p}}, W_{\text{z}} \right)}{L_{\text{o}}} \\
++ X_{3} \frac{\Delta L_{3}\left( T_{\text{s}}, W_{\text{p}}, W_{\text{z}} \right)}{L_{\text{o}}} + 0.0114 \text{ min } \left( \frac{T - T_{\text{s}}}{T_{\text{l}} - T_{\text{s}}} , 1 \right) + 25.5 \times 10^{-6} \left( T - T_{\text{s}} \right)\end{split}$$ [eq 10.3-51]
+
+where
+
+ $T_{\text{s}}, T_{\text{l}}$ = solidus and liquidus temperatures of
+the desired alloy.
+
+The fourth term on the right hand side is basically the product of alloy
+melt fraction and uranium thermal expansion during melting phase change,
+and the fifth term is an estimate of the molten alloy thermal expansion
+due to temperature rise above the alloy solidus.
+
+[anchor: subroutine-thexp1-and-its-comparison-with-the-handbook-data]
+
+#### 10.3.2.4.5. Subroutine THEXP1 and its Comparison With the Handbook Data
+
+Figure 10.3.43 shows flow diagram of the subroutine THEXP1 developed for
+calculating the linear thermal expansion, based on this method of
+regionwise interpolation, of U-Pu-Zr fuel as a function of composition.
+This subroutine is used, in the SAS4A/SASSYS-1 codes, in the calculation
+of the theoretical density as a function of temperature and composition,
+given by Eq. (10.3-44).
+
+Figure 10.3.44 to Figure 10.3.51 show the comparison of calculated linear
+thermal expansion with all the data in the Metallic Fuels Handbook
+[10-8] for the 8 basic alloys or components discussed in Section B. It
+can be noted in Figure 10.3.44, Figure 10.3.47 and Figure 10.3.51 that the Handbook
+data for U, Zr and Pu metals over the solid-state transition temperature
+range differ from the calculated values. As discussed in Section B, the
+calculated thermal expansion varies linearly with temperature between
+the first and last solid state transitions. In the case of Zr and Pu
+(Figure 10.3.47 and Figure 10.3.51), this linearization has led to ignoring the
+thermal contractions (taking place during heatup) that occur at solid
+state transitions. However the behavior of the 3 metals when alloyed is
+different from their behavior in isolation, and the linearization is the
+expected behavior when alloyed.
+
+Figure 10.3.52 to Figure 10.3.54 show the variation of linear thermal
+expansion with temperature for 21 alloy compositions obtained from this
+subroutine. The Pu and Zr contents each vary from zero to 30 wt % in the
+alloy compositions plotted in the figures. The solidus and liquidus
+temperatures required as input to the THEXP1 subroutine were calculated
+using another subroutine developed by Pelton [10-13]. The linear thermal
+expansion from 293K to solidus varies over the range 2.4% to 4.0% for
+the alloy compositions plotted.
+
+Figure 10.3.43 Flow Diagram of Subroutine THEXP2 for U-Pu-Zr Thermal Expansion.
+
+Figure 10.3.44 Comparison of Uranium Metal Linear Thermal Expansion Data in IFR Handbook With Those Calculated by the Regionwise Interpolation Subroutine THEXP1.
+
+Figure 10.3.45 Comparison of U-10Zr Alloy Linear Thermal Expansion Data in IFR Handbook With Those Calculated by the Regionwise Interpolation Subroutine THEXP1.
+
+Figure 10.3.46 Comparison of U-20Zr Alloy Linear Thermal Expansion Data in IFR Handbook With those Calculated by the Regionwise Interpolation Subroutine THEXP1.
+
+Figure 10.3.47 Comparison of Zirconium Metal Linear Thermal Expansion Data in IFR Handbook With Those Calculated by the Regionwise Interpolation Subrountine THEXP1.
+
+Figure 10.3.48 Comparison of U-15Pu-10Zr Linear Thermal Expansion Data in IFR Handbook With Those Calculated by the Regionwise Interpolation Subroutine THEXP1.
+
+Figure 10.3.49 Comparison of U-19Pu-10Zr Linear Thermal Expansion Data in IFR Handbook With Those Calculated by the Regionwise Interpolation Subroutine THEXP1.
+
+Figure 10.3.50 Comparison of U-26Pu-10Zr Linear Thermal expansion Data in IFR Handbook With those Calculated by the Regionwise Interpolation Subroutine THEXP1.
+
+Figure 10.3.51 Comparison of Plutonium Metal Liner Thermal Expansion Data in IFR Handbook With Those calculated by the Regionwise Interpolation Subroutine THEXP1.
+
+Figure 10.3.52 Linear Thermal Expansion of U-Pu Fuel Without Fission Products, Obtained From Regionwise Interpolation of IFR Handbook Data.
+
+Figure 10.3.53 Linear Thermal Expansion of U-Pu-10Zr fuel Without Fission Products, Obtained From Regionwise Interpolation of IFR Handbook Data.
+
+Figure 10.3.54 Linear Thermal Expansion of U-Pu-30Zr Fuel Without Fission Products, Obtained From Regionwise Interpolation of IFR Handbook Data.
+
+[anchor: thermal-conductivity-of-unirradiated-100-dense-u-pu-zr-fuel]
+
+### 10.3.2.5. Thermal Conductivity of Unirradiated 100% Dense U-Pu-Zr Fuel
+
+[anchor: section-10-3-2-5-1]
+
+#### 10.3.2.5.1. Introduction
+
+To perform calculations for the Mark-V fuel (U-20Pu-10Zr), and other
+metallic alloy fuels to different compositions, especially the fuel
+compositions across the pin radius resulting from the migration of alloy
+constituents during steady state irradiation, there is a need for
+modeling and correlation development for the thermal conductivity of
+U-Pu-Zr fuels as a function of composition, using the data presented in
+the IFR Metallic Fuels Handbook [10-8, 10-9].
+
+Earlier, before the preparation of the Metallic Fuels Handbook [10-9], a
+correlation was developed to estimate the composition- and
+temperature-dependent thermal conductivity of 100% dense solid U-Pu-Zr
+alloy fuel [10-4]. In this correlation, the thermal conductivity of the
+U-Zr binary alloy having the uranium-to-zirconium atomic ratio of the
+desired U-Pu-Zr fuel was first evaluated from the data for U metal and
+U-50 at. % Zr alloy. This thermal conductivity was then adjusted for the
+presence of Pu by subtracting a term linearly proportional to Pu atom
+fraction where the coefficient of proportionality was determined (as a
+function of temperature and zirconium atom fraction) by fitting to the
+thermal conductivity data available for three U-Pu-Zr alloys, i.e.,
+U-16.2Pu-6.2Zr, U-14.7Pu-9.7Zr and U-18.4Pu-11.5Zr. This correlation is
+valid when Pu atom fraction is less than 0.2, and Zr atom fraction is
+less than 0.5. The variation of thermal conductivity obtained from this
+correlation has been plotted for alloy compositions having 0.0 to 30 wt
+% Pu and 1.5 to 40 wt % Zr [10-17]. A drawback of this correlation
+[10-4] is that, for some alloy compositions, the thermal conductivity
+becomes negative (unphysical) at room temperature, and shows a maximum
+when plotted as a function of temperature (an unexpected behavior
+[10-18] for temperatures greater than 300 K). Although the allow
+compositions showing this unphysical/unexpected behavior are out of the
+noted region of validity, the correlation has another drawback that the
+thermal conductivity data used in obtaining the correlation were taken
+from sources [10-14, 10-19, 10-20] other than the Metallic Fuels
+Handbook.
+
+The Metallic Fuels Handbook [10-8, 10-9] presents thermal conductivity
+data for U metal and a number of U-Zr and U-Pu-Zr alloys. It also gives
+a correlation to estimate the composition- and temperature-dependent
+thermal conductivity of 100% dense solid U-Pu-Zr alloys. In addition,
+Billone has developed, based on the data reported in the IFR Handbook
+[10-8], two other correlations [10-21, 10-22] for use in the analysis of
+EBR-II Mark-V fuel core, and so the following 3 correlations based on
+the Handbook data are available to estimate 100% dense solid U-Pu-Zr
+fuel thermal conductivity:
+
+The correlation in the IFR Handbook [10-8, 10-9],
+
+The correlation in Billone’s memorandum [10-21] of March 8, 1991,
+
+The correlation in Billone’s memorandum [10-22] of October 21, 1991.
+
+The above 3 correlations are summarized here in Section 10.7.2 for easy
+reference. The variation of thermal conductivity obtained form these 3
+correlations have been plotted for alloy compositions having 0.0 to 30
+wt % Pu and 1.5 to 40 wt % Zr [10-17]. The correlation in March 8
+memorandum should not be used because it is not well-behaved, and so
+recommended by Billone [10-22]. The thermal conductivity obtained from
+this correlation, with increasing Pu content at a fixed Zr content,
+first increases above the U-Zr binary value, then starts decreasing and
+goes below the binary value, and finally starts increasing again and
+becomes much greater than the binary value. A drawback of the other two
+correlations (i.e., the correlations in the IFR Handbook and in the
+October 21 memorandum) is that the thermal conductivities become
+negative (unphysical) at room temperature for Pu and Zr contents greater
+than 20 wt %. Another drawback of the correlation in October 21
+memorandum is that the thermal conductivity shows a maximum when plotted
+as a function of temperature (an unexpected behavior [10-18] for
+temperatures greater than 300 K). A comparison of these 3 correlations
+with the Handbook data for U-Zr binary alloys shows that the 3
+correlations are almost identical for binary alloys [10-17], and that
+they agree with the data closely. The correlation in the IFR Handbook
+can be reliably used for binary alloys containing 1.5 to 20 wt. % Zr.
+
+Recently, the method of estimating U-Pu-Zr alloy enthalpy by regionwise
+interpolation has been extended to estimate thermal conductivity of 100%
+dense solid U-Pu-Zr alloy fuels as a function of composition. Based on
+this method of calculating composition- and temperature-dependent
+thermal conductivity, a subroutine KFUEL1 has been developed that
+removes all the drawbacks mentioned above. The subroutine makes use of
+the thermal conductivity data of 9 basic alloys/components, compressing
+of all the data in the IFR Handbook [10-8, 10-9]. The U-10Pu data used
+in the method are obtained from Billone [10-21], and the Pu data are
+reported in the Plutonium Handbook [10-23]. The 9 basic alloy
+compositions are used to divide the ternary composition triangle into 10
+regions of interpolation as shown in Figure 10.3.55. The method is
+flexible enough to make use of the thermal conductivity data of
+additional alloys (as they become available) to divide the composition
+triangle into a larger number of smaller regions, thus improving its
+accuracy. The subroutine KFUEL1 has been incorporated into the
+SAS4A/SASSYS-1 codes.
+
+The technique used at present to estimate the fuel thermal conductivity
+during and after melting is also discussed in this section. Since all
+the thermal conductivity data reported in the IFR Handbook lies in the
+293 K to 1173 K temperature range, a warning message is printed by the
+codes whenever fuel thermal conductivity is calculated at a temperature
+smaller than 293 K or greater than 1200 K.
+
+Figure 10.3.55 Diagram Showing Thermal Conductivity Interpolation Regions for 100% Dense Solid U-Pu-Zr Fuels.
+
+[anchor: section-10-3-2-5-2]
+
+#### 10.3.2.5.2. Description of the Method
+
+Figure 10.3.55 shows the U-Pu-Zr ternary composition triangle marked
+with the points representing 9 basic alloys/components comprising of all
+the thermal conductivity data reported in the IFR Handbook [10-8, 10-9].
+The U-10Pu data used here are obtained from Billone [10-21], and the Pu
+data are reported in the Plutonium Handbook [10-23], and a warning
+message is printed by the codes when these two data are actually used in
+any calculation. The composition points of these 9 database
+alloys/components are used to divide the whole ternary composition
+triangle into 10 triangular regions of interpolation as shown in Figure 10.3.55. For evaluating the thermal conductivity of a desired solid
+U-Pu-Zr alloy represented by a point located in any region of
+interpolation, the method consists of mixing the 3 database alloys
+represented by the corners of the region of interpolation. The
+proportions or weight fractions of the 3 database alloys in mixing are
+so calculated in the method that the resulting mixture has the
+composition of the desired alloy. The calculated mixing fractions are
+then used as weight factors in making a linear combination of (or linear
+interpolation between) thermal conductivity data of the 3 database
+alloys, and the linear combination gives the interpolated thermal
+conductivity of the desired alloy. The thermal conductivity data of each
+basic alloy/component are least-square fitted by aquadratic function of
+temperature.
+
+$$K_{\text{0i}} = A_{\text{i1}} + A_{\text{i2}} T + A_{\text{i3}} T^{2}$$ [eq 10.3-52]
+
+where
+
+ $K_{\text{0i}}$ = thermal conductivity of the ith 100%-dense solid
+database alloy/component, W/m-K,
+
+ $A_{\text{i1}}, A_{\text{i2}}, A_{\text{i3}}$ = coefficients of the quadratic for the thermal
+conductivity of the ith database alloy,
+
+ $T$ = alloy temperature, K.
+
+The interpolation of the thermal conductivity data of the 3 basic alloys
+is performed by interpolating between the coefficients (of like terms)
+of the quadratics for the 3 basic alloys. The calculated mixing
+fractions are never negative and the linear combination never requires
+extrapolation because the desired alloy composition point is always
+inside the triangle with corners at the 3 database alloy points. If the
+desired alloy composition point were outside this triangle, the linear
+combination would involve negative mixing fractions and extrapolation
+which are avoided entirely in the present method.
+
+A different method of interpolation is used in region 3 (Figure 10.3.55)
+in order to employ the Handbook U-Zr binary correlation for composition
+points on the side joining corners 2 and 3, i.e., for binary
+compositions containing 1.5 to 20 wt % Zr. This is done because the
+Handbook binary correlation Eq. (10.7-12) with Pu content set to zero)
+is accurate for Zr content in this range, as discussed in Section 10.7.1.
+The thermal conductivity of a desired U-Pu-Zr alloy in region 3
+(represented by point F in Figure 10.3.55) is interpolated between only
+two compositions, the database alloy 5 and binary alloy represented by
+point A. The point A is the intersection of the side 23 with the line F5
+that joins the desired alloy and the database alloy 5. Here also, the
+interpolation between the database alloy 5 and the binary correlation is
+performed in terms of the coefficients (of like terms) of the quadratics
+for thermal conductivity.
+
+[anchor: thermal-conductivity-data-of-basic-alloys]
+
+#### 10.3.2.5.3. Thermal Conductivity Data of Basic Alloys
+
+Table 10.3.4 gives the thermal conductivity data of the 9 basic solid
+alloys or components that are used in the present method of evaluating
+composition- and temperature- dependent thermal conductivity of 100%
+dense solid U-Pu-Zr fuels. Table 10.3.5 gives the coefficient of the
+quadratic functions of temperature fitted to the data given in Table 10.3.4. The 9 basic alloys/components are: (1) U metal, (2) U-1.5Zr, (3)
+U-20Zr, (4) U-40Zr, (5) U-14.7Pu-9.7Zr, (6) U-18.4Pu-11.5Zr, (7) U-10Pu,
+(8) Pu metal, and (9) U-16.2Pu-6.2Zr. The coefficients of the quadratics
+for all database alloys except U-1.5 Zr and U-20 Zr are obtained by the
+method of least-squares fit. The coefficients of the quadratics for
+U-1.5 Zr an U-20 Zr are evaluated form the Handbook binary correlation.
+This is required to make the thermal conductivity continuous at the
+boundary lines of interpolation region 3 (Figure 10.3.55). All the data
+available in the Metallic Fuels Handbook [10-8, 10-9] have been included
+in the database used in the present method. Data for two non-Handbook
+alloys/components, i.e., U-10 Pu data obtained from Billone [10-21] and
+Pu data reported in the Plutonium handbook [10-23], have also been
+included in the database of the present method. The U-Pu data is the
+only intermediate point on the U-Pu binary side of the ternary
+composition triangle (Figure 10.3.55), and has been included to account
+for thermal conductivity variation of U-Pu binary as Pu content
+increases from zero to 100 wt. %. The Pu data has been included to be
+able to interpolate Mark-V fuel (U-10Pu-10Zr) thermal conductivity
+because all the other database alloys/components contain les than 20 wt.
+% Pu. Without the Pu data, the evaluation of thermal conductivity of
+fuels containing more than 18.4 wt. % Pu will involve extrapolation,
+which is avoided in the present method.
+
+The quadratic functions given in Table 10.3.5 are used in the
+temperature range of 293 K to the solidus temperature of the desired
+U-Pu-Zr alloy. Since the thermal conductivity data of the 9 basic
+alloys/components (Table 10.3.4) used in the present method go only up
+to 1173 K, a warning message is printed by the code when the method is
+used to calculate thermal conductivity at temperatures above 1200 K. A
+similar warning message is also printed when the method is used at
+temperatures below 293 K. The thermal conductivity at temperatures above
+the desired alloys solidus temperature is assumed to be equal to the
+value at the solidus temperature as discussed in Section E.
+
+Table 10.3.4 Thermal Conductivity Data of the 9 100%-Dense Basic Solid Alloys/Components Used in the Method of Regionwise Interpolation
+ | 
+
+ | 
+1
+ | 
+ | 
+Uranium
+ | 
+ | 
+2
+ | 
+ | 
+U-1.5Zr
+ | 
+ | 
+3
+ | 
+ | 
+U-20Zr
+ | 
+ | 
+4
+ | 
+ | 
+U-40Zr
+ | 
+ | 
+5
+ | 
+ | 
+U-14.7Pu-9.7Zr
+ | 
+
+ | 
+Temp (K)
+ | 
+ | 
+Cond (W/m-K)
+ | 
+ | 
+Temp (K)
+ | 
+ | 
+Cond (W/m-K)
+ | 
+ | 
+Temp (K)
+ | 
+ | 
+Cond (W/m-K)
+ | 
+ | 
+Temp (K)
+ | 
+ | 
+Cond (W/m-K)
+ | 
+ | 
+Temp (K)
+ | 
+ | 
+Cond (W/m-K)
+ | 
+
+ | 
+
+ | 
+293
+ | 
+ | 
+27
+ | 
+ | 
+293
+ | 
+ | 
+22.6
+ | 
+ | 
+293
+ | 
+ | 
+11
+ | 
+ | 
+293
+ | 
+ | 
+7
+ | 
+ | 
+373
+ | 
+ | 
+10
+ | 
+
+ | 
+373
+ | 
+ | 
+29.1
+ | 
+ | 
+373
+ | 
+ | 
+24
+ | 
+ | 
+373
+ | 
+ | 
+13
+ | 
+ | 
+373
+ | 
+ | 
+8
+ | 
+ | 
+473
+ | 
+ | 
+13.2
+ | 
+
+ | 
+473
+ | 
+ | 
+31.1
+ | 
+ | 
+473
+ | 
+ | 
+26
+ | 
+ | 
+473
+ | 
+ | 
+15
+ | 
+ | 
+473
+ | 
+ | 
+10
+ | 
+ | 
+573
+ | 
+ | 
+16.4
+ | 
+
+ | 
+573
+ | 
+ | 
+33.4
+ | 
+ | 
+573
+ | 
+ | 
+38.5
+ | 
+ | 
+573
+ | 
+ | 
+17
+ | 
+ | 
+573
+ | 
+ | 
+12
+ | 
+ | 
+673
+ | 
+ | 
+19.6
+ | 
+
+ | 
+673
+ | 
+ | 
+35.8
+ | 
+ | 
+673
+ | 
+ | 
+31
+ | 
+ | 
+673
+ | 
+ | 
+20
+ | 
+ | 
+673
+ | 
+ | 
+14
+ | 
+ | 
+773
+ | 
+ | 
+22.5
+ | 
+
+ | 
+773
+ | 
+ | 
+38.2
+ | 
+ | 
+773
+ | 
+ | 
+34
+ | 
+ | 
+773
+ | 
+ | 
+22
+ | 
+ | 
+773
+ | 
+ | 
+17
+ | 
+ | 
+873
+ | 
+ | 
+25.3
+ | 
+
+ | 
+873
+ | 
+ | 
+40.6
+ | 
+ | 
+873
+ | 
+ | 
+37
+ | 
+ | 
+873
+ | 
+ | 
+25
+ | 
+ | 
+873
+ | 
+ | 
+20
+ | 
+ | 
+973
+ | 
+ | 
+27.8
+ | 
+
+ | 
+973
+ | 
+ | 
+43.2
+ | 
+ | 
+973
+ | 
+ | 
+40.5
+ | 
+ | 
+973
+ | 
+ | 
+28
+ | 
+ | 
+973
+ | 
+ | 
+24
+ | 
+ | 
+1073
+ | 
+ | 
+30.1
+ | 
+
+ | 
+1073
+ | 
+ | 
+45.7
+ | 
+ | 
+1073
+ | 
+ | 
+44.5
+ | 
+ | 
+1073
+ | 
+ | 
+31
+ | 
+ | 
+1073
+ | 
+ | 
+28
+ | 
+ | 
+1173
+ | 
+ | 
+32.3
+ | 
+
+ | 
+1173
+ | 
+ | 
+48.3
+ | 
+ | | 
+ | | 
+ | 
+1173
+ | 
+ | 
+34
+ | 
+ | 
+1173
+ | 
+ | 
+33
+ | 
+ | | 
+ | | 
+
+ | 
+
+ | 
+6
+ | 
+ | 
+U-18.4Pu-11.5Zr
+ | 
+ | 
+7
+ | 
+ | 
+U-10Pu
+ | 
+ | 
+8
+ | 
+ | 
+Plutonium
+ | 
+ | 
+9
+ | 
+ | 
+U-16.2Pu-6.2Zr
+ | 
+
+ | 
+Temp (K)
+ | 
+ | 
+Cond (W/m-K)
+ | 
+ | 
+Temp (K)
+ | 
+ | 
+Cond (W/m-K)
+ | 
+ | 
+Temp (K)
+ | 
+ | 
+Cond (W/m-K)
+ | 
+ | 
+Temp (K)
+ | 
+ | 
+Cond (W/m-K)
+ | 
+
+ | 
+
+ | 
+373
+ | 
+ | 
+9.2
+ | 
+ | 
+473
+ | 
+ | 
+23.9
+ | 
+ | 
+293
+ | 
+ | 
+ $4.1 \pm 6.1 \%$ 
+ | 
+ | 
+373
+ | 
+ | 
+10.9
+ | 
+
+ | 
+473
+ | 
+ | 
+11.7
+ | 
+ | 
+673
+ | 
+ | 
+28.9
+ | 
+ | 
+400
+ | 
+ | 
+ $10.2 \pm 9.2 \%$ 
+ | 
+ | 
+473
+ | 
+ | 
+14.2
+ | 
+
+ | 
+573
+ | 
+ | 
+14.4
+ | 
+ | 
+873
+ | 
+ | 
+36.4
+ | 
+ | 
+500
+ | 
+ | 
+ $12.3 \pm 6.5 \%$ 
+ | 
+ | 
+573
+ | 
+ | 
+17.7
+ | 
+
+ | 
+673
+ | 
+ | 
+17.1
+ | 
+ | 
+1073
+ | 
+ | 
+41.9
+ | 
+ | 
+600
+ | 
+ | 
+ $15.8 \pm 5.4 \%$ 
+ | 
+ | 
+673
+ | 
+ | 
+21
+ | 
+
+ | 
+773
+ | 
+ | 
+19.7
+ | 
+ | | 
+ | | 
+ | 
+700
+ | 
+ | 
+ $18.2 \pm 4.4 \%$ 
+ | 
+ | 
+773
+ | 
+ | 
+24.1
+ | 
+
+ | 
+873
+ | 
+ | 
+21.9
+ | 
+ | | 
+ | | 
+ | 
+800
+ | 
+ | 
+ $18.2 \pm 2.5 \%$ 
+ | 
+ | 
+873
+ | 
+ | 
+26.4
+ | 
+
+ | 
+973
+ | 
+ | 
+23.4
+ | 
+ | | 
+ | | 
+ | 
+900
+ | 
+ | 
+ $20.8 \pm 2.5 \%$ 
+ | 
+ | 
+973
+ | 
+ | 
+28
+ | 
+
+ | 
+1073
+ | 
+ | 
+24.8
+ | 
+ | | 
+ | | 
+ | 
+2000a
+ | 
+ | 
+47.1
+ | 
+ | 
+1073
+ | 
+ | 
+29.3
+ | 
+
+ | 
+1173
+ | 
+ | 
+26
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | 
+1173
+ | 
+ | 
+30.1
+ | 
+
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | |
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch10/future.html]
+------------------------------------------------------------------------------
+[anchor: future-directions-for-modeling-efforts]
+
+# 10.4. Future Directions for Modeling Efforts
+
+Multiple annular fuel zones of different compositions formed at the end
+of steady-state irradiation in U-Pu-Zr alloy fuel can not be supplied to
+the SAS4A/SASSYS-1 codes through the input data. The codes are capable
+of using the input zone formation data in the steady-state and transient
+temperature calculations. U-Pu-Zr fuel thermal properties can now be
+evaluated by the codes as a function of composition and temperature,
+using the method of regionwise interpolation of IFR Handbook data.
+Besides the U-Pu-Zr fuel specific heat, theoretical density and thermal
+conductivity, the codes can now evaluate the zonal solidus and liquidus
+temperatures and heat of fusion. The effect of radial migration of fuel
+constituents on in-pin radial power shape is yet to be modeled.
+
+The purpose of the SSCOMP module is to provide SAS4A/SASSYS-1 codes with
+the modeling of all those phenomena that describe the transition of a
+U-Pu-Zr fuel pin from cold clean as-manufactured conditions to hot
+irradiated swollen initial conditions for the transition fuel mechanics
+module FPIN2 [10-6]. As described in Section 10.1, listed below are the
+important in-pin phenomena occurring during steady-state irradiation,
+that need to be modeled in order to characterize a U-Pu-Zr fuel pin at
+the beginning of a transient calculation:
+
+Thermal expansion of fuel and cladding,
+
+Fuel constituent radial migration,
+
+Fission gas behavior, and porosity formation and distribution,
+
+Irradiation-induced radial and axial swelling of fuel and cladding,
+
+Bond sodium migration into fuel and pin plenum,
+
+Cladding constituent migration into fuel.
+
+The modeling of the above phenomena will provide all the needed initial
+conditions for the transient fuel mechanics module FPIN2. Future
+modeling efforts will be directed towards modeling the above phenomena.
+Detailed comments are made below about some of the above six phenomena.
+
+[anchor: fuel-constituent-radial-migration]
+
+## 10.4.1. Fuel constituent Radial Migration
+
+As discuss in Section 10.2, the zone formation calculation method of the
+earlier SSCOMP model [10-4] is not incorporated into SAS4A/SASSYS-1
+Version 3.0 codes due to its limitation. The study of fuel constituent
+radial migration leading to zone formation was not at that time
+developed to a state where an appropriate dynamic model could be
+developed. It is expected that a dynamic model for calculating fuel
+constituent radial migration, available in the literature or developed
+on the basis of available zonal composition and radial boundary data,
+will be incorporated into the codes. Such a dynamic model will be based
+on pin power history during steady-state irradiation. If neither a
+dynamic model nor a zonal composition and radial boundary database is
+available in the near future, the earlier SSCOMP model will be
+implemented in the codes.
+
+Table 10.4.1 Internal Arrays Required for Implementing IFR Handbook U-Pu-Zr Fuel Properties Data and Multiple Radial Fuel Zones Option
+ | 
+
+ | 
+Definition/Comments
+ | 
+ | 
+Array Name
+ | 
+
+ | 
+
+ | 
+Arrays by Radial Node and Axial Segment in Block COMC
+ | 
+ | | 
+
+ | 
+
+Fuel mass
+
+ | 
+ | 
+FUELMS(11,24)
+ | 
+
+ | 
+
+Pu mass in fuel
+
+ | 
+ | 
+FUPUMS(11,24)
+ | 
+
+ | 
+
+Zr mass in fuel
+
+ | 
+ | 
+FUZRMS(11,24)
+ | 
+
+ | 
+
+Fe mass in fuel
+
+ | 
+ | 
+FUFEMS(11,24)
+ | 
+
+ | 
+
+Ni mass in fuel
+
+ | 
+ | 
+FUNIMS(11,24)
+ | 
+
+ | 
+
+Total porosity in fuel
+
+ | 
+ | 
+PRSTY2(11,24)
+ | 
+
+ | 
+
+Logged sodium mass in fuel
+
+ | 
+ | 
+FUNAMS(11,24)
+ | 
+
+ | 
+Arrays by Fuel Type in Block FPTVAR
+ | 
+ | | 
+
+ | 
+
+First solid-state transition temperature of fuel
+
+ | 
+ | 
+TEMALF(8)
+ | 
+
+ | 
+
+Last solid-state transition temperature of fuel
+
+ | 
+ | 
+TEMGAM(8)
+ | 
+
+ | 
+
+Pre-calculated coefficients in the quadratic equation for fuel thermal conductivity
+
+ | 
+ | 
+ACPF(8,7)
+ | 
+
+ | 
+
+Pre-calculated coefficient in the quadratic equation for fuel thermal conductivity
+
+ | 
+ | 
+AKFU(8,5)
+ | 
+
+ | 
+
+Pre-calculated parameters in fuel theoretical density equation
+
+ | 
+ | 
+ADFU(8,2)
+ | 
+
+[anchor: fission-gas-behavior-and-porosity-formation-and-distribution]
+
+## 10.4.2. Fission Gas Behavior, and Porosity Formation and Distribution
+
+The modeling of the following aspects of fission gas behavior is
+required for calculation the initial conditions of FPIN2 transient
+calculation: (a) fission gas generation, (b) fission gas retained with
+grains, (c) fission gas retained in grain boundary bubbles that are not
+linked, (d) fission gas contained in grain boundary bubbles that are
+interlinked, and (e) fission gas released to pin plenum. The need for
+modeling these three types of fission gas contained in fuel (gas within
+grains, in unliked grain boundary bubbles, and in interlined grain
+boundary bubbles) has also been expressed by the pre-failure in-pin fuel
+motion module PINACL development [10-7].
+
+[anchor: irradiation-induced-radial-and-axial-swelling-of-fuel-and-cladding]
+
+## 10.4.3. Irradiation-Induced Radial and Axial Swelling of Fuel and Cladding
+
+Regarding irradiation-induced fuel swelling, the axial swelling will
+contribute to pre-transient fuel column length, a needed initial
+condition of the FPIN2 module. Radial swelling of fuel and cladding will
+determine fuel-cladding gap closure and bond sodium migration into pin
+plenum, a needed initial condition of the FPIN2 module. The modeling of
+fuel swelling phenomenon has two important aspects: swelling due to
+solid fission products, and fission gas induced swelling. Swelling of a
+cladding material is mainly determined by neutron fluence which is also
+a parameter in determining cladding rupture life used in the FPIN2
+transient fuel mechanics calculation.
+
+The SSCOMP module is being developed to model the above listed in-pin
+phenomena during steady-state irradiation of metallic fuel pins. After
+the fuel pin has been characterized at the end of steady-state
+irradiation, the calculation of the relevant ones of these phenomena
+during the transient will be performed by the DEFORM-5 model.
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch10/references.html]
+------------------------------------------------------------------------------
+[anchor: references]
+
+# 10.5. References
+
+10‑1. C. E. Till, “The IFR Status and Prospects,” Trans. Am. Nucl. Soc.,
+vol. 66, p. 351, November 1992.
+
+10‑2. J. H. Kittel, et al., “Plutonium and Plutonium Alloys as Nuclear
+Fuel Elements,” Nucl. Eng. Design, vol. 15, pp. 373-440, 1971.
+
+10‑3. W. F. Murphy, et al., “Post-irradiation Examination of U-Pu-Zr Fuel
+Elements Irradiated in EBR-II to 4.5 Atomic Percent Burnup,” ANL-7602,
+Argonne National Laboratory, Illinois, November 1969.
+
+10‑4. Kalimullah, K. J. Miles, Jr., A. M Tentner and D. P. Weber,
+Unpublished information, Argonne National Laboratory, 1985.
+
+10‑5. L. C. Walters, B. R. Seidel and J. H. Kittel, “Performance of
+Metallic Fuels and Blankets in Liquid-Metal Fast Breeder Reactors,”
+Nucl. Technol., vol. 65, pp. 179-231, May 1984.
+
+10‑6. T. Sofu, personal communication, Argonne National Laboratory, January 1994.
+
+10‑7. A. M. Tentner, Unpublished information, Argonne National Laboratory, 1993.
+
+10‑8. “Handbook of Properties of Metallic Fuels,” compiled by IFR
+Property Evaluation Working Group, G. L. Hofman, Chairman, Argonne
+National Laboratory, Idaho Falls, Idaho, June 1988.
+
+10‑9. G. L. Hofman, et al., Unpublished information, Argonne National Laboratory, 1985.
+
+10‑10. R. Hultgren, et al., “Selected Values of the Thermodynamic
+Properties of the Elements,” American Soc. For Metals, Metals Park,
+Ohio, 1973.
+
+10‑11. J. M. Kramer, T. Hughes and E. E. Gruber, “Validation of Models for
+the Analysis of the Transient Behavior of Metallic Fast Reactor Fuel,”
+Proc. of the 10:sup:`th` Intl. Conf. on Structural Mechanics in
+Reactor Technology, Anaheim, CA, vol. C, pp. 65-76, August 14-18, 1989.
+
+10‑12. M. C. Billone, Unpublished information, Argonne National Laboratory, 1991.
+
+10‑13. L. Leibowitz and A. D. Pelton, personal communication, Argonne
+National Laboratory, September 1987.
+
+10‑14. “Reactor Handbook, Vol. 1, Materials,” Second Edition, C. R.
+Tipton, Jr. Editor, Interscience Publishers, Inc., New York, 1960.
+
+10‑15. J. J. Sienicki, Unpublished information, Argonne National Laboratory, 1984.
+
+10‑16. Kalimullah and A. M. Tentner, Unpublished information, Argonne
+National Laboratory, 1988.
+
+10‑17. Kalimullah, Unpublished information, Argonne National Laboratory, 1993.
+
+10‑18. Y. S. Touloukian, et al., “Thermophysical Properties of Matter,”
+Thermal Conductivity, Metallic Elements and Alloys, Vol. 1, IFI/Plenum,
+New York, 1970.
+
+10‑19. L. Leibowitz, Unpublished information, Argonne National Laboratory, 1984.
+
+10‑20. Argonne National Laboratory, Unpublished information, 1966.
+
+10‑21. M. C. Billone, Unpublished information, Argonne National Laboratory, 1991.
+
+10‑22. M. C. Billone, Unpublished information, Argonne National Laboratory, 1991.
+
+10‑23. “Plutonium Handbook, A Guide to the Technology,” Vol. 1, O. J.
+Wick, Editor, Division of Technical Information, USAEC, Gordon and
+Breach, Science Publishers, London, 1967.
+
+10‑24. “Smithhells Metals Reference Book,” 6th Edition, E. A.
+Brandes, Editor, Butterworths, Boston, 1983.
+
+10‑25. C. F. Beaton and G. F. Hewitt, “Physical Property Data for the
+Design Engineer,” Hemisphere Publishing Corporation, Washington, 1989.
+
+10‑26. D. R. Olander, “Fundamental Aspects of Nuclear Reactor Fuel
+Elements,” TID-26711-P1, pp. 124-127, Energy Research and Development
+Administration, NTIS, Springfield, Virginia, 1976.
+
+10‑27. R. A. di Novi, “Effect of Burnup, Swelling and Irradiation
+Temperatures on Thermal Diffusivity and Conductivity of Uranium-Fission
+Alloy,” ANL-7889, Argonne National Laboratory, 1972.
+
+10‑28. W. N. Beck and R. J. Fousek, “Fission Gas Release and Thermal
+Conductivity Measurements on U-5 wt % Fs Irradiated in CP-5,” Trans.
+Am. Nucl. Soc., vol. 12, pp. 78-79, 1969.
+
+10‑29. P. R. Betten, “In-core Measurements of U-5 wt % Fissium Alloy
+Thermal Conductivity,” Trans. Am. Nucl. Soc., vol. 50, pp. 239-240,
+1985.
+
+10‑30. R. A. Wigeland and T. Sofu, personal communication, Argonne
+National Laboratory, August 1993.
+
+10‑31. Kalimullah, M. C. Billone and J. M. Kramer, Unpublished
+information, Argonne National Laboratory, 1993.
+
+10‑32. L. L. Briggs, personal communication, Argonne National Laboratory,
+January 1993.
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch10/nomenclature.html]
+------------------------------------------------------------------------------
+[anchor: nomenclature]
+
+# 10.6. Nomenclature
+
+ | 
+
+ | 
+Symbols
+ | 
+ | 
+Definition
+ | 
+ | 
+Units
+ | 
+
+ | 
+
+ | 
+ $A$ 
+ | 
+ | 
+Atom fraction, e.g., Eq. (10.3-7) or coefficients of the quadratic function of temperature for fuel thermal conductivity, e.g., Eq. (10.3-52) and Eq. (10.3-61).
+ | 
+ | | 
+
+ | 
+ $a$ 
+ | 
+ | 
+Atomic weight
+ | 
+ | | 
+
+ | 
+ $B$ 
+ | 
+ | 
+Coefficient of the quadratic function of temperature for fuel thermal conductivity, e.g., Eq. (10.7-12) to Eq. (10.7-14)
+ | 
+ | | 
+
+ | 
+ $Bu$ 
+ | 
+ | 
+Fuel burnup
+ | 
+ | 
+atom %
+ | 
+
+ | 
+ $C$ 
+ | 
+ | 
+Plutonium alloying coefficient in thermal conductivity Eq. (10.3-102)
+ | 
+ | | 
+
+ | 
+ $C_{\text{p}}$ 
+ | 
+ | 
+Specific heat
+ | 
+ | 
+J/kg-K
+ | 
+
+ | 
+ $c$ 
+ | 
+ | 
+Coefficient of the quadratic term in the simplified enthalpy Eq. (10.3-26)
+ | 
+ | | 
+
+ | 
+ $D$ 
+ | 
+ | 
+Value of determinants in Cramer’s rule for solving a system of linear algebraic equations
+ | 
+ | | 
+
+ | 
+ $f_{\text{o}}$ 
+ | 
+ | 
+Heavy-metal mass fissioned expressed as a percentage of U-Pu-Zr alloy post-irradiation mass
+ | 
+ | | 
+
+ | 
+ $H$ 
+ | 
+ | 
+Enthalpy
+ | 
+ | 
+J/mol
+ | 
+
+ | 
+ $h$ 
+ | 
+ | 
+Enthalpy
+ | 
+ | 
+J/kg
+ | 
+
+ | 
+ $K$ 
+ | 
+ | 
+Thermal Conductivity
+ | 
+ | 
+W/m-K
+ | 
+
+ | 
+ $K_{\text{pt}1}$ 
+ | 
+ | 
+Thermal conductivity of a pore tube containing a fission gas-filled pore
+ | 
+ | 
+W/m-K
+ | 
+
+ | 
+ $K_{\text{pt}2}$ 
+ | 
+ | 
+Thermal conductivity of a pore tube containing a logged sodium-filled pore
+ | 
+ | 
+W/m-K
+ | 
+
+ | 
+ $L$ 
+ | 
+ | 
+Length, e.g., Eq. (10.3-44) or Lorenz number in Q. Eq. (10.3-68)
+ | 
+ | 
+m or W-Ω/K2
+ | 
+
+ | 
+ $M$ 
+ | 
+ | 
+Mass
+ | 
+ | 
+kg
+ | 
+
+ | 
+ $m_{\text{a}}$ 
+ | 
+ | 
+One atomic mass unit, $1.6592828 \times 10^{-27}$ kg
+ | 
+ | 
+kg
+ | 
+
+ | 
+ $N$ 
+ | 
+ | 
+Number of atoms, e.g., Eq. (10.3-34) or number of fissions, e.g., Eq. (10.3-35) or number of pairs of temperature and enthalpy values, e.g., Eq. (10.3-37)
+ | 
+ | | 
+
+ | 
+ $Na$ 
+ | 
+ | 
+Avogadro’s number, $6.02472 \times 10^{26}$ molecules/kg-mole
+ | 
+ | 
+/kg-mole
+ | 
+
+ | 
+ $P'$ 
+ | 
+ | 
+Porosity fraction relative to the 100%-dense volume
+ | 
+ | | 
+
+ | 
+ $P_{\text{c}1}$ 
+ | 
+ | 
+Areal fraction of a face of a unit cell that is occupied by a sodium-filled pore, e.g., Eq. (10.3-72)
+ | 
+ | | 
+
+ | 
+ $P_{\text{c}2}$ 
+ | 
+ | 
+Areal fraction of a face of a unit cell that is occupied by a sodium-filled pore, e.g., Eq. (10.3-72)
+ | 
+ | | 
+
+ | 
+ $P_{\text{g}}$ 
+ | 
+ | 
+Gas-filled porosity fraction relative to the swollen fuel volume
+ | 
+ | | 
+
+ | 
+ $P_{\text{I},1}$ 
+ | 
+ | 
+Fraction of the side (in heat flow direction) of a unit cell that is occupied by a gas-filled pore
+ | 
+ | | 
+
+ | 
+ $P_{\text{I},2}$ 
+ | 
+ | 
+Fraction of the side (in heat flow direction) of a unit cell that is occupied by a sodium-filled pore
+ | 
+ | | 
+
+ | 
+ $P_{\text{Na}}$ 
+ | 
+ | 
+Sodium-filled porosity fraction relative to the swollen fuel volume
+ | 
+ | | 
+
+ | 
+ $T$ 
+ | 
+ | 
+Temperature
+ | 
+ | 
+K
+ | 
+
+ | 
+ $V$ 
+ | 
+ | 
+Volume
+ | 
+ | 
+m3
+ | 
+
+ | 
+ $v$ 
+ | 
+ | 
+Characteristic volume of an atom
+ | 
+ | 
+m3
+ | 
+
+ | 
+ $W$ 
+ | 
+ | 
+Weight fraction
+ | 
+ | | 
+
+ | 
+ $X_{\text{i}}$ 
+ | 
+ | 
+Weight fractions of the 3 database alloys to be mixed to produce the desired fuel composition
+ | 
+ | | 
+
+ | 
+ $x$ 
+ | 
+ | 
+Zr weight fraction in the U-Zr binary database alloy used in enthalpy region 1 or thermal conductivity region 3
+ | 
+ | | 
+
+ | 
+ $Y_{\text{i}}$ 
+ | 
+ | 
+Atom fractions of the 3 database alloys to be mixed to produce the desired fuel composition
+ | 
+ | | 
+
+ | 
+ $\alpha$ 
+ | 
+ | 
+Coefficient of linear thermal expansion
+ | 
+ | 
+per K
+ | 
+
+ | 
+ $\Delta L$ 
+ | 
+ | 
+Linear thermal expansion from 293K
+ | 
+ | 
+m
+ | 
+
+ | 
+ $\rho$ 
+ | 
+ | 
+Density, e.g., Eq. (10.3-32) or electrical resistivity in Eq. (10.3-68)
+ | 
+ | 
+kg/m3 or Ω-m
+ | 
+
+ | 
+ $\sigma$ 
+ | 
+ | 
+Standard deviation
+ | 
+ | | 
+
+ | 
+Subscripts:
+ | 
+ | | 
+ | | 
+
+ | 
+ $\text{a}$ 
+ | 
+ | 
+Desired alloy or desired database alloy
+ | 
+ | | 
+
+ | 
+ $\text{c}$ 
+ | 
+ | 
+Centigrade temperature scale
+ | 
+ | | 
+
+ | 
+ $\text{f}$ 
+ | 
+ | 
+Fission, e.g., Eq. (10.3-38) or solid fission products, e.g., Eq. (10.3-40) or desired fuel, e.g., Eq. (10.3-61)
+ | 
+ | | 
+
+ | 
+ $\text{g}$ 
+ | 
+ | 
+Fission gas
+ | 
+ | | 
+
+ | 
+ $\text{h}$ 
+ | 
+ | 
+Heavy metals
+ | 
+ | | 
+
+ | 
+ $\text{i}$ 
+ | 
+ | 
+Index for fuel constituents (I - U, Pu, Zr) or index for the 3 database alloys of a region of interpolation
+ | 
+ | | 
+
+ | 
+ $\text{l}$ 
+ | 
+ | 
+Liquidus or molten liquid
+ | 
+ | | 
+
+ | 
+ $\text{Na}$ 
+ | 
+ | 
+Sodium
+ | 
+ | | 
+
+ | 
+ $\text{o}$ 
+ | 
+ | 
+Fabricated condition, e.g., Eq. (10.3-33) or 100%-dense unirradiated condition, e.g., Eq. (10.3-72) or a specified temperature, e.g., Eq. (10.3-44)
+ | 
+ | | 
+
+ | 
+ $\text{p}$ 
+ | 
+ | 
+Plutonium
+ | 
+ | | 
+
+ | 
+ $\text{s}$ 
+ | 
+ | 
+Solidus
+ | 
+ | | 
+
+ | 
+ $\text{sfp}$ 
+ | 
+ | 
+Solid fission products
+ | 
+ | | 
+
+ | 
+ $\text{th}$ 
+ | 
+ | 
+Theoretical
+ | 
+ | | 
+
+ | 
+ $\text{u}$ 
+ | 
+ | 
+Uranium
+ | 
+ | | 
+
+ | 
+ $\text{uz}$ 
+ | 
+ | 
+U-Zr binary alloy
+ | 
+ | | 
+
+ | 
+ $\text{u50}$ 
+ | 
+ | 
+U-50 atom % Zr binary alloy
+ | 
+ | | 
+
+ | 
+ $\text{z}$ 
+ | 
+ | 
+Zirconium
+ | 
+ | | 
+
+ | 
+ $\alpha$ 
+ | 
+ | 
+Lowest-temperature solid-state phase (α-phase)
+ | 
+ | | 
+
+ | 
+ $\gamma$ 
+ | 
+ | 
+Highest-temperature solid-state phase (γ-phase)
+ | 
+ | |
+
+
+------------------------------------------------------------------------------
+[page: Part03/Ch10/appendices.html]
+------------------------------------------------------------------------------
+[anchor: appendices]
+
+# 10.7. Appendices
+
+[anchor: appendix-10-1-equivalency-of-interpolation-in-terms-of-weight-fractions-and-atom-fractions]
+
+## 10.7.1. APPENDIX 10.1: Equivalency of Interpolation in Terms of Weight Fractions and Atom Fractions
+
+As described in Section 10.3.2.1, the enthalpy of a desired U-Pu-Zr fuel
+composition is evaluated by mixing 3 basic alloys with enthalpy data
+known and reported in the Metallic Fuels Handbook [10-8]. The
+proportions or weight fractions of the 3 database alloys in mixing are
+so calculated that the resulting mixture has the composition of the
+desired fuel. The purpose of this appendix is to show that it makes no
+difference whether this mixing or linear interpolation is carried out by
+expressing composition in terms of weight fractions or atom fractions,
+and correspondingly enthalpy in terms of J/unit mass or J/mol.
+
+Let
+
+ $a_{1}, a_{2}, a_{3}$ = average atomic weights of
+the 3 database alloys,
+
+ $h_{1}, h_{2}, h_{3}$ = enthalpy (J/gm) of the 3
+database alloys at a desired temperature.
+
+ $H_{1}, H_{2}, H_{3}$ = enthalpy (J/mol) of the 3
+database alloys at the desired temperature,
+
+ $X_{1}, X_{2}, X_{3}$ = weight fractions of the 3
+database alloys to be mixed to produce the desired fuel composition.
+
+ $Y_{1}, Y_{2}, Y_{3}$ = atom fractions of the
+database alloys to be mixed to produce the desired fuel composition.
+
+The desired fuel enthalpy interpolated in terms of weight fractions is
+given by
+
+$$h = X_{1} h_{1} + X_{2} h_{2} + X_{3} h_{3}$$ [eq 10.7-1]
+
+where $h$ is in units of J/gm. The desired fuel enthalpy interpolated in
+terms of atom fractions is given by
+
+$$H = Y_{1} H_{1} + Y_{2} H_{2} + Y_{3} H_{3}$$ [eq 10.7-2]
+
+where $H$ is in units of J/mol. The enthalpies given by Eq. (10.7-1)
+and Eq. (10.7-2) will be the same if it is shown that
+
+$$h = \frac{H}{a}$$ [eq 10.7-3]
+
+where
+
+ $a$ = average atomic weight of the desired fuel composition.
+
+The average atomic weight of the desired fuel composition is related to
+the atomic weight of the 3 database alloys and their weight fractions in
+the desired fuel as follows:
+
+$$a = \frac{1}{\left( \frac{X_{1}}{a_{1}} + \frac{X_{2}}{a_{2}} + \frac{X_{3}}{a_{3}} \right)}$$ [eq 10.7-4]
+
+The atom fraction $Y_{1}$ of database alloy 1 in the desired fuel
+is related to the weight fractions $X_{1}, X_{2}$ ,
+ $X_{3}$ of the 3 database alloys in the desired fuel as follows:
+
+$$Y_{1} = \frac{\left( \frac{X_{1}}{a_{1}} \right)}{\left( \frac{X_{1}}{a_{1}} + \frac{X_{2}}{a_{2}} + \frac{X_{3}}{a_{3}} \right)}$$ [eq 10.7-5]
+
+With the help of Eq. (10.7-4), the atom fraction $Y_{1}$ given by
+Eq. (10.7-5) simplifies to
+
+$$Y_{1} = \frac{a X_{1}}{a_{1}}$$ [eq 10.7-6]
+
+Similarly, the atom fractions $Y_{2}$ and $Y_{3}$ can be
+written as
+
+$$Y_{2} = \frac{a X_{2}}{a_{2}}$$ [eq 10.7-7]
+
+$$Y_{3} = \frac{a X_{3}}{a_{3}}$$ [eq 10.7-8]
+
+The enthalpies of the 3 database alloys in units of J/mol are related to
+their enthalpies in units of J/gm and their atomic weights as follows:
+
+$$\begin{aligned}
+H_{1} = a_{1} h_{1}, && H_{2} = a_{2} h_{2}, && H_{3} = a_{3} h_{3}
+\end{aligned}$$ [eq 10.7-9]
+
+Substituting the values of $Y_{1}, Y_{2}, Y_{3}$ 
+and $H_{1}, H_{2}, H_{3}$ from Eq. (10.7-6) to
+Eq. (10.7-9) into Eq. (10.7-2), one obtains
+
+$$H = a X_{1} h_{1} + a X_{2} h_{2} + a X_{3} h_{3}$$ [eq 10.7-10]
+
+With the help of Eq. (10.7-1), the desired fuel enthalpy interpolated
+in terms of atom fractions given by Eq. (10.7-10) becomes
+
+$$H = ah$$ [eq 10.7-11]
+
+Eq. (10.7-11) proves what Eq. (10.7-3) required.
+
+[anchor: appendix-10-2-correlations-in-the-ifr-handbook-and-some-other-sources]
+
+## 10.7.2. APPENDIX 10.2: Correlations in the IFR Handbook and Some Other Sources
+
+The following 4 correlations are available to estimate 100% dense solid
+U-Pu-Zr fuel thermal conductivity, $K_{\text{o}}$ (W/m-K):
+
+1. The correlation in the IFR Metallic Fuels Handbook [10-8, 10-9] is
+written as
+
+$$K_{\text{o}} = B_{1} + B_{2} T + B_{3} T^{2}$$ [eq 10.7-12]
+
+where
+
+ $B_{1} = 17.5 \left\lbrack \frac{\left( 1 - 2.23 W_{\text{z}} \right)}{\left( 1 + 1.61 W_{\text{z}} \right)} - 2.62 W_{\text{p}} \right\rbrack$ 
+
+ $B_{2} = 0.0154 \left\lbrack \frac{\left( 1 + 0.061 W_{\text{z}} \right)}{ \left( 1 + 1.61 W_{\text{z}} \right)} + 0.90 W_{\text{p}} \right\rbrack$ 
+
+ $B_{3} = 9.38 \times 10^{-6} \left( 1 - 2.70 W_{\text{p}} \right)$ 
+
+ $W_{\text{p}}, W_{\text{z}}$ = weight fractions of Pu and Zr
+
+ $T$ = fuel temperature, K.
+
+2. The correlation in Billone’s memorandum [10-21] of March 8, 1991 is
+written as
+
+$$K_{\text{o}} = B_{4} + B_{5} T + B_{6} T^{2}$$ [eq 10.7-13]
+
+where
+
+ $B_{4} = 17.5 \left\lbrack 1 - 1.471 A_{\text{z}} + 44.083 A_{\text{p}} \left( 1 - 16.198 A_{\text{p}} + 55.290 A_{\text{p}}^{2} \right) \right\rbrack$ 
+
+ $B_{5} = 0.0154 \left\lbrack 1 - 0.5935 A_{\text{z}} - 158.88 A_{\text{p}} \left( 1 - 14.865 A_{\text{p}} + 49.478 A_{\text{p}}^{2} \right) \right\rbrack$ 
+
+ $B_{6} = 9.38 \times 10^{-6} \left\lbrack 1 + 215.78 A_{\text{p}} \left( 1 - 14.421 A_{\text{p}} + 47.158 A_{\text{p}}^{2} \right) \right\rbrack$ 
+
+ $A_{\text{p}}, A_{\text{z}}$ = atom fractions of Pu and Zr.
+
+3. The correlation in Billone’s memorandum [10-22] of October 21, 1991
+is written as
+
+$$K_{\text{o}} = B_{7} + B_{8} T + B_{9} T^{2}$$ [eq 10.7-14]
+
+where
+
+ $B_{7} = 17.5 \left( 1 - 1.417 A_{\text{z}} - 6.8174 A_{\text{p}} \right)$ 
+
+ $B_{8} = 0.0154 \left(1 - 0.5935 A_{\text{z}} + 15.108 A_{\text{p}} \right)$ 
+
+ $B_{9} = 9.38 \times 10^{-6} \left( 1 - 18.778 A_{\text{p}} \right)$ 
+
+The correlation reported in ANL/RAS 85-19 can be written as
+
+$$K_{\text{o}} = K_{\text{u}} + 2A_{\text{z}} \frac{\left( K_{\text{u}50} - K_{\text{u}} \right)}{\left( A_{\text{u}} + A_{\text{z}} \right)} - CA_{\text{p}}$$ [eq 10.7-15]
+
+where
+
+ $K_{\text{u}} = 22.173 + 0.018562 T_{\text{c}} + 1.3278 \times 10^{-5} T_{\text{c}}^{2}$ 
+
+ $K_{\text{u}50} = 7.4766 + 0.016738 T_{\text{c}} + 1.1599 \times 10^{-5} T_{\text{c}}^{2}$ 
+
+ $C = \left( 89.079 - 167.57 A_{\text{z}} \right) - T_{\text{c}} \left( 0.17437 - 0.4008 A_{\text{z}} \right) + \
+T_{\text{c}}^{2} \left( 1.9608 \times 10^{-4} - 3.1043 \times 10^{-4} A_{\text{z}} \right), \ \ 100 \leq T_{\text{c}} \leq 1500$ ,
+
+$$\begin{aligned}
+ 0.0 \leq A_{\text{p}} \leq 0.2, && 0.0 \leq A_{\text{z}} \leq 0.5
+ \end{aligned}$$ [eq 10.7-16]
+
+ $T_{\text{c}}$ = fuel temperature, °C
+
+Correlations 1, 2 and 3 have been developed based on the thermal
+conductivity data presented in the Metallic Fuels Handbook. Detailed
+plots of these correlations are available in Ref. [10-17]. Correlation 2
+should not be used because it is ill-behaved, and so recommended by
+Billone [10-22]. A drawback of correlations 1 and 3 is that the thermal
+conductivities become negative (unphysical) at room temperature for Pu
+and Zr contents greater than 20 wt %. In addition, the thermal
+conductivity obtained from correlation 3 shows a maximum when plotted as
+a function of temperature (an unexpected behavior [10-18] for
+temperatures above 300 K).
+
+The comparison of these 3 correlations with the Handbook data for 3
+ternary alloys (U-16.2Pu-6.2Zr, U-14.7Pu9.7Zr and U-18.4Pu-11.5Zr) shows
+that there are significantly large differences among the 3 correlations
+at temperatures above 1200 K where there is no thermal conductivity
+data. Below 1200 K, the difference among the data and the 3 correlations
+are smaller.
+
+The comparison of these 3 correlations with the Handbook data for 3 U-Zr
+binary alloys (U-1.5Zr, U-5Zr and U-20Zr) shows that the 3 correlations
+are almost identical at all temperatures, and that they agree with the
+data closely. The agreement is not so good with the data for U-40Zr, as
+shown by a plot given in the Handbook [10-8, 10-9]. The Handbook
+correlation for U-Zr binary alloys, i.e., Eq. (10.7-12) with
+ $W_{\text{p}}$ set to zero, is found to be reliable for Zr content in the
+1.5 to 20 wt % range.
+
+The thermal conductivity obtained from correlation 4 for the some alloy
+compositions becomes negative (unphysical) at room temperature, and
+shows an unexpected maximum when plotted as a function of temperature.
+Although the alloy compositions showing this unphysical/unexpected
+behavior are out of the noted region of validity, the correlation has
+another drawback that it was derived using data from sources [10-14,
+10-19, 10-20] other than the IFR Metallic Fuels Handbook [10-8, 10-9].

@@ -179,6 +179,10 @@ known-first-party = ["pinn_sfr_transient"]
                #     so a job without it skips rather than errors at collection
     "INP001",  # tests/ is a collection dir, not an importable package
 ]
+"tools/**" = [
+    "INP001",  # standalone scripts, not an importable package
+    "T201",    # progress output is the point
+]
 "src/pinn_sfr_transient/pinn_deepxde.py" = [
     "ANN001",  # DeepXDE backend tensors are untyped at the residual boundary
     "ANN202",
@@ -223,11 +227,6 @@ unused-ignore-comment = "ignore"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra -q --cov --cov-report=term-missing"
-filterwarnings = [
-    # PyTorch internally references torch.jit.script, which it flags as unsupported
-    # on Python 3.14. We never use it and the suite passes; silence the noise.
-    "ignore:`torch.jit.script` is not supported in Python 3.14:DeprecationWarning",
-]
 
 [tool.coverage.run]
 source = ["pinn_sfr_transient"]
