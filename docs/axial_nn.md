@@ -1192,7 +1192,7 @@ implementation is checked against `torch.optim.LBFGS` on problems whose minima a
 known *before* it is allowed near the PINN. Nothing about the PINN's loss would
 have revealed it.
 
-#### 7.5.2 On test problems, self-scaling loses
+#### 7.5.2 Self-scaling loses the mean and wins the variance
 
 Five variants, `H₀` scaling and the `min(1, ·)` cap swept, against
 `torch.optim.LBFGS`. Objective value after N iterations, function evaluations in
@@ -1218,6 +1218,34 @@ which is the paper's whole premise; and the paper's winning configuration gives 
 quasi-Newton stage **30000** iterations against 300 here, where asymptotic
 behaviour is what is being compared. The second of those is testable on its own,
 and is §7.5.3.
+
+**On the PINN it also loses the mean — and it is the most reproducible method
+here by two orders of magnitude.** Two seeds, torch, 3000 Adam + 300 quasi-Newton,
+`n = 160` ruler:
+
+| optimiser | `T_s` per seed | spread | margin per seed |
+|---|---|---|---|
+| `lbfgs` (torch's) | 0.0753, 0.0786 | 4.4% | +20.5, +17.2 K |
+| `lbfgs-shared` (ours, the fair control) | 0.0769, 0.0789 | 2.6% | +20.6, +16.1 K |
+| `ssbfgs` | 0.0853, 0.0852 | **0.1%** | **+21.2, +21.1 K** |
+
+Self-scaled BFGS is **8–11% worse in the mean** than its own-implementation control
+at both seeds, which confirms the test-problem result and refutes the paper's
+accuracy claim for this problem at this budget.
+
+**But its seed spread is 0.1% against 2.6–4.4%, and its margin varies by 0.1 K
+against 3–4.5 K.** It converges to essentially the same point regardless of
+initialisation. That is the damping doing what it is built to do: `τ ≤ 1` caps step
+growth, so the trajectory is far less sensitive to where it started.
+
+That is not a footnote in this project. §7.1 recorded a **12.5× seed spread**; two
+conclusions in this document have been overturned by seed variance; and §7.5.4's
+whole difficulty is that the front metric can swing 0.63 → 1.00 on the seed alone.
+A method that trades 10% of the mean for a 30× reduction in seed spread is worth
+having available, and it is — as `optimizer = "ssbfgs"`, off by default.
+
+**Two seeds.** The spread figure in particular is a two-sample estimate of a
+variance, which is the weakest kind of claim in this table. Seed 2 is running.
 
 #### 7.5.3 The budget split
 
