@@ -9,8 +9,14 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
+      # `docs/sas4a/` is a verbatim text rendering of someone else's manual, kept
+      # so an equation citation can be checked offline. Reformatting it — even
+      # trailing whitespace — makes it no longer verbatim, and a 45k-line
+      # whitespace diff would bury any real change to the mirror.
       - id: trailing-whitespace
+        exclude: ^docs/sas4a/
       - id: end-of-file-fixer
+        exclude: ^docs/sas4a/
       - id: check-yaml
       - id: check-toml
       - id: check-added-large-files
