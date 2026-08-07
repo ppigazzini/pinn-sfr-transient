@@ -6,18 +6,103 @@ deviation from the SAS4A/SASSYS-1 manual, are in
 training recipe, the two backends, and **what has actually been measured** —
 including the results that came out badly, which are most of them.
 
-> **Status.** The network trains, satisfies every hard constraint exactly, and
-> does **not** meet the 1% bar. Current Plan B: `T_f` 0.137, `T_cl` 0.189,
-> `T_s` 0.075, `T_c` 0.075 (§7.2.5); current Plan A: 0.250 relative `L2` on
-> `P(t)` (§7.4). The boiling front does now form, `max α = 1.0000` against the
-> reference's 1.0000, since the void was eliminated algebraically (§7.2.3–§7.2.4).
-> None of this is presented as a working result.
->
-> **The front forms only inside a narrow training horizon, and until now the
-> shipped default was outside it** (§7.2.7). At `t_train_frac = 1.0` — what the
-> repository actually ran — `max α = 0.0000`. The default is now 0.275, tied by a
-> test to the 16.5 s at which the reference stops being valid. Every table below
-> was measured at 0.275; none of them said so.
+---
+
+## 0. Status quo
+
+Everything below is measured at three seeds against an `n_axial = 160` reference
+unless it says otherwise, and every table is reproducible by a sub-command of
+[`tools/axial_study.py`](../tools/axial_study.py).
+
+### 0.1 Where the accuracy stands
+
+| configuration | `T_f` | `T_s` | `T_c` | `L_void` | `max α` |
+|---|---|---|---|---|---|
+| **shipped default** | 0.1373 `[.1348–.1392]` | 0.0739 `[.0677–.0786]` | 0.0742 `[.0684–.0786]` | 0.1505 `[.1212–.1670]` | 1.0000 |
+| quasi-Newton budget (§7.5.3 arm C) | 0.1247 | 0.0434 | 0.0450 | 0.0724 `[.0495–.1068]` | 0.87 `[.63–1.00]` |
+| **best known (§7.5.4)** | **0.1143** `[.1084–.1201]` | **0.0353** `[.0315–.0380]` | **0.0364** `[.0324–.0393]` | **0.2270** `[.2010–.2455]` | 1.0000 |
+| reference | — | — | — | 0.3812 | 1.0000 |
+| **acceptance bar** | 0.01 | 0.01 | 0.01 | — | — |
+
+**The bar is missed by 3.5× to 11×.** The best known configuration —
+`adam_iters=300, lbfgs_iters=3000, fourier_features=32` — is **52% better than the
+shipped default on `T_s` and `T_c` and 51% better on `L_void`, with disjoint seed
+ranges on all four**. It is not the default: see §0.5.
+
+The ruler is not the limit. At `n = 160` the reference's own error is 1.1–1.6e-3
+(§6.5), so the 1% bar sits 6–9× above it and the PINN's failure is **45–120× the
+ruler**.
+
+### 0.2 What is settled
+
+| | |
+|---|---|
+| **Hard constraints** | exact, for any weights: IC `0.0`, inlet `T_c(0,t) = T_in` to `0.0`, `α ∈ [0,1)` by construction, `c(0) = 1`, `P(0) = 1.000000` under Plan A |
+| **One set of equations** | the residual calls the same `continuous_derivatives` the reference discretises; bit-equality is tested |
+| **Backend parity** | the two backends' residuals agree to **1e-14** at identical parameters. The 16.8% accuracy gap is the framework L-BFGS and nothing else: `jax/torch` is 1.168 with each framework's own and **0.999** with a shared implementation (§7.3.2) |
+| **The ruler** | converged and quantified at every mesh (§6.5). Onset time is mesh-independent; onset location is converged to one cell |
+| **Objective 2** | answered — the positive void coefficient drives an excursion to 5.3× nominal, governed by `zeta_sign`, not by the void worth ([`axial_physics.md`](axial_physics.md) §10) |
+
+### 0.3 What is understood but not fixed
+
+**The front is one inequality.** Under D-TH-3, `α` is a function of `T_c` alone, so
+"the front forms" means `max T_c > 1169.0 K`. The shipped default clears it by
+**20.5 K out of a ~590 K range**. `max α` is a saturating function of that margin
+and carries no independent information (§7.2.8).
+
+**The mean and the extremum are near-independent**, which is why a change can
+improve every temperature score and switch the front off. That cost this project
+nine remedies scored on the mean while M4 asks for the peak.
+
+**Plan A's failure is systematic, not variance.** `L2(P)` = 0.1110 at three seeds
+(7.7% spread) and `min ρ/β` = −0.1503 against the reference's −0.2052 — the network
+finds **26–28% less negative feedback on every seed**, with a 2.6% spread on that
+quantity (§7.4.1).
+
+**The model is optimisation-limited**, from three independent directions: the
+quasi-Newton stage is what forms the front at all (§7.3.4), moving budget into it
+improves every temperature with disjoint ranges (§7.5.3), and Plan A improves 2.4×
+on a 4× budget increase (§7.4.1).
+
+### 0.4 What is open
+
+| | |
+|---|---|
+| **M4 acceptance** | onset within 0.5 s and one cell — **not met**; both criteria are now known to be measurable (§6.5) |
+| **The 1% bar** | **not met**, by 3.5× at best |
+| **`L_void`** | best 0.2270 against the reference's 0.3812 — 40% short |
+| **M6 acceptance** | **failed**, 11.1% on `L2(P)` against a 1% bar |
+| **D-TH-2** | `z`-dependent flow after voiding: implemented, and Radau cannot step it |
+| **D-FB-3** | five feedback mechanisms omitted; the model is **non-conservative** in that direction |
+
+### 0.5 Why the best known configuration is not the default
+
+`adam_iters=300, lbfgs_iters=3000, fourier_features=32` beats the default on every
+metric with disjoint seed ranges. It is nonetheless **not** shipped as the default,
+for three reasons:
+
+* **Every published table in this document was measured on the default.** Moving it
+  invalidates all of them at once, and this project has just spent a revision
+  recovering from a default that silently disagreed with its own tables (§7.2.7).
+* **It is 52% more wall-clock** — 905 s against 597 s for the budget alone.
+* **`AGENTS.md` requires new behaviour to land off by default** so no published
+  number moves when it does.
+
+The correct sequence is to re-measure the document against it and then move both
+together. That is a compute task, not a development one.
+
+### 0.6 Method notes that changed the answers
+
+* **Three seeds, or say the sample size in the sentence.** Every two-seed claim made
+  during this study was wrong at three: the budget sweep's "monotonic" front, the
+  backend gap's disappearance, and a 0.1% variance that was two coincident samples.
+* **Do not pair seed indices across backends.** `seed=1` seeds two different RNGs;
+  index-paired the backend ratios read 1.167/0.997/1.366, as distributions they read
+  1.158/1.166/1.177.
+* **A retraction needs the same evidence as the claim.** §7.3.2 was withdrawn on one
+  seed and re-confirmed at three.
+* **A control arm that reproduces a published configuration** is what caught D67 —
+  the default that produced no front.
 
 ---
 
@@ -1375,22 +1460,22 @@ smoothing should do against it. So:
 | C + `modified_mlp` | control: a stronger mean-winner that *costs* the peak |
 | A + `fourier_features=32` | separates the Fourier effect from the budget effect |
 
-**Seed 0, two of three arms, and the control landed the way the design said it
-would:**
+**Three seeds, and it holds:**
 
-| arm | T_f | T_cl | T_s | T_c | `L_void` | `max α` | **margin** |
-|---|---|---|---|---|---|---|---|
-| A (shipped default) | 0.1373 | 0.1890 | 0.0739 | 0.0742 | 0.1505 | 1.0000 | +20.5 K |
-| C (3-seed mean) | 0.1247 | 0.1761 | 0.0434 | 0.0450 | 0.0724 | 0.8702 | — |
-| **C + fourier** | **0.1084** | **0.1525** | **0.0315** | **0.0324** | **0.2455** | 1.0000 | +18.6 K |
-| C + modified_mlp | 0.1251 | 0.1768 | 0.0460 | 0.0475 | 0.0774 | 0.9199 | **+0.6 K** |
-| reference | — | — | — | — | 0.3812 | 1.0000 | — |
+| arm | T_f | T_s | T_c | `L_void` | `max α` | margin per seed |
+|---|---|---|---|---|---|---|
+| A (shipped default) | 0.1373 | 0.0739 `[.0677–.0786]` | 0.0742 | 0.1505 `[.1212–.1670]` | 1.0000 | +20.5, +17.2, +9.8 K |
+| C (budget only) | 0.1247 | 0.0434 `[.0379–.0464]` | 0.0450 | 0.0724 `[.0495–.1068]` | 0.8702 | — |
+| **C + fourier** | **0.1143** `[.1084–.1201]` | **0.0353** `[.0315–.0380]` | **0.0364** `[.0324–.0393]` | **0.2270** `[.2010–.2455]` | **1.0000** | +18.6, +13.5, +7.6 K |
+| C + modified_mlp | 0.1250 | 0.0452 (2 seeds) | 0.0467 | 0.0851 | 0.95 | **+0.6, +2.4 K** |
+| A + fourier | 0.1284 | 0.0583 (2 seeds) | 0.0588 | 0.1773 | 0.91 | **+3.7, −0.4 K** |
+| reference | — | — | — | 0.3812 | 1.0000 | — |
 
 **`C + fourier` is the best result this model has produced, on every metric at
-once.** Against the shipped default: `T_s` and `T_c` down **57%**, `T_f` down 21%,
-and `L_void` up from 0.1505 to **0.2455** — 63% closer to the reference than the
-default and better than the previous best of 0.2070 (§7.2.6). The front forms fully
-and keeps 18.6 K of margin.
+once, and the seed ranges are disjoint from the default's on all four.** `T_s` and
+`T_c` are **52% better**, `T_f` 17% better, and `L_void` **51% better** — 0.2270
+against 0.1505, where the reference is 0.3812. `max α = 1.0000` on all three seeds,
+with 7.6–18.6 K of margin.
 
 **The control is the part that makes it more than a lucky arm.** `C + modified_mlp`
 pairs the same mean-winning budget with a remedy that *lowers* the peak, and the
