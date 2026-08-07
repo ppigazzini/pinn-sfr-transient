@@ -1001,15 +1001,19 @@ Twelve tables in this document state **"3000 Adam + 300 L-BFGS"**.
 the shipped budget, and the mismatch was invisible for the same reason as the
 first: every study passed the budget explicitly, so nothing ever ran the default.
 
-Measured at the true default — `t_train_frac = 0.275`, 8000 + 500, seed 0, torch:
+Measured at the true default — `t_train_frac = 0.275`, 8000 + 500, seed 0, **both
+backends**:
 
 | | `T_s` | `L_void` | `max α` | margin |
 |---|---|---|---|---|
-| **true shipped default** (8000/500) | **0.0371** | 0.0440 | 0.7383 | **−1.1 K** |
-| published tables (3000/300) | 0.0739 | 0.1505 | 1.0000 | +20.5 K |
+| **true shipped default, torch** | **0.0371** | 0.0440 | 0.7383 | **−1.1 K** |
+| **true shipped default, jax** | 0.0529 | 0.0506 | 0.7920 | **−0.7 K** |
+| published tables (3000/300), torch | 0.0739 | 0.1505 | 1.0000 | +20.5 K |
 
-**The shipped default still does not form a front.** Its peak `T_c` sits 1.1 K
-*below* saturation.
+**The shipped default does not form a front in either backend.** Both peaks sit
+*below* saturation — 1.1 K on torch, 0.7 K on JAX. Two independent implementations
+failing the same way is what makes this a property of the configuration rather than
+of one optimiser stack.
 
 And the mechanism is §7.2.8 for the third independent time: the true default has a
 **better mean** than every published table — `T_s` 0.0371 against 0.0739 — and
