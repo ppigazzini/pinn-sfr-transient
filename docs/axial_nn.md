@@ -18,7 +18,9 @@ including the results that came out badly, which are most of them.
 ## 1. What the network solves
 
 A map `(ζ, t) → (T_f, T_cl, T_s, T_c, α)`, trained on the Chapter 3 residuals
-alone. No reference data enters the loss; the reference is used only at test time,
+alone. By default `α` is *computed* from `T_c` rather than learned (D-TH-3), so
+the network's free outputs are the four temperatures and the residual carries
+four field blocks. No reference data enters the loss; the reference is used only at test time,
 the protocol the 0D model already follows ([`neural_network.md`](neural_network.md) §7).
 
 **One set of equations.** The residual calls
@@ -45,10 +47,17 @@ them.
 
 ## 2. The ansatz — every constraint hard, none in the loss
 
+> **`α` is no longer a network output.** Under the default `void_closure = True`
+> it is a function of the network's own `T_c` (D-TH-3), so the residual has
+> **four** field blocks, not five, and the void-free initial and inlet conditions
+> fall out of the closure rather than being imposed by a gate. The gated-sigmoid
+> form below is what `void_closure = False` still selects, and what every number
+> in §5 and §7.1–§7.2 was measured on.
+
 ```math
 \theta_k(\zeta, \hat t) = \theta_{k,0}(\zeta)\,\exp\!\big(\hat t\, N_k(\zeta, \hat t)\big),
 \qquad
-\alpha = \tanh(a\hat t)\,\tanh(a\zeta)\,\sigma(N_\alpha),
+\alpha = 1 - \big(1 - b(T_c)\big)^3,
 \qquad
 c_i = \exp\!\big(\hat t\, N_{c,i}(\hat t)\big)
 ```
@@ -58,7 +67,7 @@ c_i = \exp\!\big(\hat t\, N_{c,i}(\hat t)\big)
 | Initial condition | `exp(0) = 1` | exact, `0.0` |
 | **Positivity `T ≥ T_in`** | `θ₀ ≥ 0` times a positive exponential | exact under ×50 adversarial weights |
 | Coolant inlet `T_c(0,t) = T_in` | `θ_c0(0) = 0`, so it falls out of the same form | exact, `0.0`, **no separate gate** |
-| Void `α ∈ [0,1)`, void-free start, none at inlet | gated, **biased** sigmoid | exact by construction |
+| Void `α ∈ [0,1)`, void-free start, none at inlet | **the algebraic closure itself** (D-TH-3) | exact by construction |
 | Precursors `c(0) = 1`, `c > 0` | bounded exponential | exact |
 
 Nothing is penalised, so the objective is pure physics and there is one fewer
@@ -116,10 +125,26 @@ Adam with cosine decay → L-BFGS polish, plus causal temporal weighting
 biases in both backends — [`neural_network.md`](neural_network.md) §9 records what
 happens when the two disagree.
 
-Available and **off by default**, because the ablation in §5 says they hurt:
-time-window curriculum (`n_windows`), random Fourier features
-(`fourier_features`), the two-encoder modified MLP (`modified_mlp`), and
-pseudo-time stepping (`pts_every`).
+### 3.1 Knobs and their measured defaults
+
+| knob | default | why |
+|---|---|---|
+| `residual_scaling` | `True` | per-block variable scaling; §7.2.3 |
+| `void_closure` | `True` | the algebraic void, D-TH-3; §7.2.3–§7.2.4 |
+| `weight_max_ratio` | `1.0` (off) | adaptive block weights measured harmful; §7.2.1 |
+| `causal_eps` | `0.0` (off) | causal weighting measured harmful; §7.2.4 |
+| `t_train_frac` | `1.0` | set below 1 for Plan B, whose validity window ends before `t_end`; §7.2.4 |
+| `front_net` | `False` | front-position network, measured worse on every metric |
+| `n_windows` | `1` (off) | neutral in the re-ablation; §7.2.5 |
+| `fourier_features` | `0` (off) | **now measured better** (−11.1% at 3 seeds); not adopted — see below |
+| `modified_mlp` | `False` (off) | **now measured better** (−16.1% at 3 seeds); not adopted — see below |
+| `pts_every` | `0` (off) | pseudo-time stepping measured harmful; §7.2.5 |
+
+**Two defaults are open questions rather than settled ones.** §7.2.5 shows
+Fourier features and the modified MLP both improve every temperature under the
+current formulation, reversing D38. Neither is adopted, because the modified MLP
+also gives the worst voided length of the working arms — it trades the front for
+the fields — and because their **combination is worse than either alone** (§7.2.6).
 
 ## 4. Two backends, and why
 
@@ -610,6 +635,19 @@ its cost twice: it showed the pre-fix failure was *not* backend-specific, which
 implicated the formulation; and the post-fix divergence exposed the frozen
 collocation bug. Both are findings a single backend could not have produced.
 
+## 7.6 What is still open
+
+| topic | status |
+|---|---|
+| Fourier + modified MLP combined | **measured, and it fails** — §7.2.6 |
+| Plan A, multiple seeds | **TBD** — one seed measured (§7.5) |
+| Backend parity, post-closure | **TBD** — the structure is at parity and tested; the accuracy comparison has not been re-run |
+| Optimiser bake-off (SSBroyden / SSBFGS) | **TBD — not started** |
+| GPU timing | **TBD — not started** |
+| Pseudo-time stepping accuracy | measured harmful (§7.2.5); no further work planned |
+| M4 acceptance: onset within 0.5 s and one cell | **not met.** The front now forms, but onset is late. Under D-TH-3 the front is the level set `T_c = T_sat + ΔT_sup`, so this is bounded by `T_c` accuracy |
+| The 1% bar on temperatures | **not met** — see §7.2.5 for the current figures |
+
 ## 8. What to do next
 
 In order, and none of it is "add another method":
@@ -670,6 +708,42 @@ Not yet adopted as defaults. The modified MLP buys the best temperatures and the
 *worst* voided length of the three working arms (0.1121 against the base 0.1805,
 reference 0.3812), so it trades the front for the fields; Fourier improves both.
 The combination is untested.
+
+### 7.2.6 The two winners do not compose
+
+§7.2.5 found two remedies that help. Combining them is the obvious next step, and
+it is the one the recipe would have taken without measuring. Four arms, **three**
+seeds each, so the two-seed figures in §7.2.5 are superseded by these:
+
+| arm | T_f | T_cl | T_s | T_c | `L_void` | `max α` | mean ΔT |
+|---|---|---|---|---|---|---|---|
+| base | 0.1360 | 0.1874 | 0.0707 | 0.0711 | 0.1630 | 0.9998 | — |
+| `fourier_features = 32` | 0.1279 | 0.1776 | 0.0590 | 0.0594 | **0.2070** | 0.9797 | **−11.1%** |
+| `modified_mlp` | **0.1271** | 0.1790 | **0.0513** | **0.0526** | 0.0932 | 0.9606 | **−16.1%** |
+| **both** | 0.1360 | 0.1875 | 0.0776 | 0.0778 | 0.1037 | **0.8813** | **+4.8%** |
+| reference | — | — | — | — | 0.3812 | 1.0000 | |
+
+**Each helps alone; together they are worse than neither.** The combination lands
+at +4.8% against base, so it gives back everything both remedies won and a little
+more, and it has the worst `max α` of any working arm — 0.88, meaning the front
+only partly forms on two of three seeds.
+
+Both remedies attack **spectral bias**, by different routes: Fourier features lift
+the input into a high-frequency basis, the modified MLP carries the input to every
+layer through multiplicative gating. Applying both appears to over-correct, and
+the void field — the sharpest feature in the problem, and the one with no residual
+of its own under D-TH-3 — is what pays for it.
+
+**This is the ninth remedy in this document argued soundly and refuted by
+measurement, and the second proposed by this audit rather than the literature.**
+Neither remedy is adopted as a default. On this evidence `fourier_features = 32`
+is the better single choice, because it is the only arm that improves the
+temperatures *and* moves voided length toward the reference; the modified MLP wins
+the temperatures and gives up the front.
+
+**A note on seed counts.** §7.2.5's two-seed figures were −12.8% and −18.9%; at
+three seeds they are −11.1% and −16.1%. The third seed moderated both. The
+direction held, the magnitude did not.
 
 ## 7.5 N5 — Plan A measured end to end
 
