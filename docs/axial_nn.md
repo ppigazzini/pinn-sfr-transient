@@ -374,9 +374,10 @@ Three further results:
 
 M7 asks for three things: a multi-seed table, every performance claim measured at
 a stated config, and torch and JAX statistically indistinguishable. The first two
-are now satisfied; the third is **not** — the backends agree on `T_f` and `T_cl` at
-three seeds and differ by a consistent, unexplained 21% on `T_s` and `T_c`
-(§7.3.2). `TBD` below marks a number that has not been measured, not one that has
+are now satisfied. The third is met **conditionally**: with each framework's own
+L-BFGS the backends differ by a consistent 16.8% on `T_s` and `T_c`, and with one
+shared L-BFGS implementation the ratio is 0.999 (§7.3.2). The gap was the optimiser
+and nothing else. `TBD` below marks a number that has not been measured, not one that has
 been measured and omitted.
 
 This section is long and was written in the order the work happened. If you want
@@ -966,8 +967,10 @@ ranges:
 | `T_c` | 0.0632–0.0771 | 0.0785–0.0929 | **no** |
 
 On `T_s` and `T_c` the ranges do not overlap at three seeds: torch is
-consistently ~21% better. That is a real residual difference, not noise, and it is
-unexplained. Both backends reach `max α = 1.0000`, so the front forms in both.
+consistently ~21% better. That is a real residual difference and not noise — and it
+is **no longer unexplained**: it is `torch.optim.LBFGS` against `optax.lbfgs`, and
+a shared implementation removes it entirely (below). Both backends reach
+`max α = 1.0000`, so the front forms in both.
 
 **Speed: JAX is 2.4× faster at identical budget**, and the figure is robust —
 2.36× from the contended three-seed runs, 2.41× from a clean uncontended
@@ -991,8 +994,10 @@ against 199.9 ms with it off) because the model has 12 parameter tensors and
 dispatches to. Neither has been measured. **TBD** — and until it is, the number
 should be reported as an observation, not explained.
 
-**So M7's acceptance is still not met, for a much narrower reason.** Two fields
-agree, two differ by a consistent 21%.
+**So M7's acceptance is not met at the default, for a reason now identified.** Two
+fields agree, two differ by a consistent 21%, and the difference is the optimiser
+implementation — see the three-seed table below, where a shared implementation
+brings the ratio to 0.999.
 
 **The equations are exonerated.** Transplanting the torch model's weights into the
 Equinox model — so both backends hold *identical* parameters — and evaluating every
@@ -1455,7 +1460,7 @@ collocation bug. Both are findings a single backend could not have produced.
 |---|---|
 | Fourier + modified MLP combined | **measured, and it fails** — §7.2.6 |
 | Plan A, multiple seeds | **TBD** — one seed measured (§7.4) |
-| Backend parity, post-closure | **measured** — §7.3.2. Accuracy 1.04–1.22×, but `T_s` and `T_c` do not overlap at three seeds and the 21% torch advantage there is unexplained |
+| Backend parity, post-closure | **closed** — §7.3.2. The gap is the framework L-BFGS: 1.168 with each framework's own, **0.999** with one shared implementation, three seeds each. M7's criterion is met with `optimizer = "lbfgs-shared"` |
 | The 2.4× JAX speed advantage | **unattributed** — §7.3.2. `torch.compile` accounts for 1.06× of it and is not the answer |
 | Optimiser bake-off (SSBroyden / SSBFGS) | **TBD — not started**, and §7.3.4 makes it the highest-value remaining item |
 | GPU timing | **not a goal** — §7.7. CPU is the target |
@@ -1474,10 +1479,10 @@ would not be different.
    `max α = 0` in both backends. That makes the quasi-Newton stage the most
    load-bearing component of the recipe and the least examined. SSBroyden/SSBFGS
    drop into the same slot with no new machinery.
-2. **Explain the 21% on `T_s` and `T_c`** — §7.3.2. Two backends running the same
-   equations, the same budget and the same ruler disagree consistently on two of
-   four fields and agree on the other two. That is a bug-shaped result, and every
-   previous backend disagreement in this document turned out to be one.
+2. ~~**Explain the 21% on `T_s` and `T_c`.**~~ **Done — §7.3.2.** It is the L-BFGS
+   implementation: 1.168 with each framework's own, 0.999 with one shared. As with
+   every previous backend disagreement in this document, it was bug-shaped and it
+   was a bug — this time in a dependency rather than in this code.
 3. ~~**Converge the ruler in `α`, then re-derive the acceptance bar.**~~ **Done —
    §6.5.** The bar stands at 1% for the temperatures, where the ruler is 1.1–1.6e-3,
    and for `L_void`, where it is 0.57%. The pointwise `α` field cannot carry a 1%
