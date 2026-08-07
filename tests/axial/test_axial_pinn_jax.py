@@ -478,3 +478,38 @@ def test_residual_blocks_are_identical_given_identical_parameters():
             atol=1e-13,
             err_msg=f"residual block {k} differs between backends",
         )
+
+
+def test_self_scaling_actually_changes_the_iterates():
+    """A knob that is read by nothing reports nothing, and this project has had one.
+
+    `front_frac` was declared in the JAX config and never read, so setting it did
+    nothing and said so nowhere (`docs/axial_nn.md` section 4). `self_scale` gates
+    a single multiplication inside the two-loop recursion, which is exactly the
+    shape of change that can be silently dropped. It also does nothing for the
+    first two iterations by construction, since tau needs a stored pair — so a
+    short smoke test would pass either way.
+    """
+    torch = pytest.importorskip("torch")
+
+    from pinn_sfr_transient.axial.torchpinn.optimizers import SelfScaledLBFGS
+
+    def rosenbrock(x):
+        return (100.0 * (x[1:] - x[:-1] ** 2) ** 2 + (1.0 - x[:-1]) ** 2).sum()
+
+    def run(*, self_scale: bool) -> np.ndarray:
+        x = torch.full((10,), -1.2, dtype=torch.float64)
+        x[1::2] = 1.0
+        x = x.requires_grad_(True)
+        opt = SelfScaledLBFGS([x], max_iter=30, self_scale=self_scale)
+
+        def closure():
+            x.grad = None
+            loss = rosenbrock(x)
+            loss.backward()
+            return loss
+
+        opt.step(closure)
+        return x.detach().numpy().copy()
+
+    assert not np.allclose(run(self_scale=True), run(self_scale=False), rtol=1e-9, atol=1e-12)
