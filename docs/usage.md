@@ -290,6 +290,30 @@ from pinn_sfr_transient.axial.pinn_torch import TrainConfig, train
 from pinn_sfr_transient.axial.torchpinn import TrainConfig, train  # identical
 ```
 
+**The training horizon is a scope decision, not a tuning knob.** `t_train_frac`
+defaults to `0.275` — 16.5 s of the 60 s horizon — because that is where the
+channel leaves the §12.13 sodium property range and the reference stops, on every
+mesh from `n = 40` to `n = 640`. It defaulted to `1.0` until recently, which trains
+over 72% of a horizon where the model does not apply and **forms no boiling front
+at all**; see [`axial_nn.md`](axial_nn.md) §7.2.7. Plan A (`feedback=True`) needs no
+truncation and uses the full horizon.
+
+**Every published table is reproducible by a command.** Each study in
+[`axial_nn.md`](axial_nn.md) is a sub-command of
+[`../tools/axial_study.py`](../tools/axial_study.py):
+
+```bash
+OMP_NUM_THREADS=8 uv run python tools/axial_study.py ruler      # reference mesh convergence
+OMP_NUM_THREADS=8 uv run python tools/axial_study.py horizon    # the training horizon
+OMP_NUM_THREADS=8 uv run python tools/axial_study.py budget     # Adam vs quasi-Newton split
+OMP_NUM_THREADS=8 uv run python tools/axial_study.py optimizer  # L-BFGS vs self-scaled BFGS
+OMP_NUM_THREADS=8 uv run python tools/axial_study.py parity     # torch vs JAX
+OMP_NUM_THREADS=8 uv run python tools/axial_study.py plan-a     # closed-loop power
+```
+
+The training studies take tens of minutes per arm. `ruler` is 42 seconds and needs
+no deep-learning extra at all.
+
 **Accuracy: do not quote it from here.** The axial PINN does **not** meet its 1%
 bar. [`axial_nn.md`](axial_nn.md) §5–§7 carries every measurement, including which
 of them are superseded, and it is the only place in this repository where an axial
