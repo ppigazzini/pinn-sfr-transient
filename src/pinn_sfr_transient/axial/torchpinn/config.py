@@ -47,7 +47,27 @@ class AxialTrainConfig:
     # horizon is a property of the model's validity range, not of its solution.
     # Plan A needs no truncation: with feedback the transient is self-limiting
     # and completes 60 s inside the property range.
-    t_train_frac: float = 1.0
+    # 16.5 s of the 60 s horizon: the reference stops exactly there, on every mesh
+    # from n = 40 to n = 640 (`axial_nn.md` section 6.5), because that is where the
+    # channel leaves the section 12.13 property range.
+    #
+    # **This default was 1.0, and 1.0 does not reproduce any published number.**
+    # Every table in `axial_nn.md` sections 7.2.5 onward was measured at 0.275 and
+    # described as "the current defaults"; the value was recorded nowhere. At 1.0
+    # the shipped configuration trains over 72% of a horizon where the model does
+    # not apply and **forms no boiling front at all** — `max alpha = 0.0000` — so
+    # the repository's headline result was not what its own entry point produced.
+    #
+    # 0.25 scores better on all four fields (T_f 0.1250 against 0.1379) and is
+    # **rejected**: 15 s is not where this model stops being valid, and choosing
+    # the validity window by its score against the reference is fitting the
+    # problem statement to the ruler. The horizon is a property of the model's
+    # validity range, not of its solution.
+    #
+    # It is also a cliff, not a slope. 0.300 gives `max alpha = 0.0000` — no front
+    # at all — so the published configuration sits 0.025 from where its headline
+    # result vanishes. See `axial_nn.md` section 7.2.7.
+    t_train_frac: float = 0.275
 
     # Gradient-norm adaptive block weights [Wang, Teng & Perdikaris 2021]
     weight_update_every: int = 250

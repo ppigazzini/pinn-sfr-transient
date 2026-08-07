@@ -733,3 +733,30 @@ def test_axial_expansion_adds_negative_reactivity_as_the_fuel_heats():
     d_off = float(reactivity_components(T_f0 * 1.3, zero, T_f0, w_D, w_void, off)[0])
     d_on = float(reactivity_components(T_f0 * 1.3, zero, T_f0, w_D, w_void, on)[0])
     assert d_on < d_off
+
+
+def test_the_training_horizon_matches_the_models_validity_range():
+    """`t_train_frac` must track where the model actually stops being valid.
+
+    The reference terminates when any temperature reaches the top of the section
+    12.13 sodium property fits (D-SCOPE-1). Training past that asks the network to
+    satisfy residuals where the model does not apply, and because the ansatz is one
+    smooth function of `t_hat` that state propagates back to `t = 0`.
+
+    This was a defect, not a hypothetical: the default was 1.0, which trains over
+    72% of an invalid horizon and forms no boiling front at all, while every
+    published table was measured at 0.275 with the value recorded nowhere. Tie the
+    default to the measurement so a change in the physics cannot silently
+    invalidate it.
+    """
+    from pinn_sfr_transient.axial.torchpinn.config import AxialTrainConfig as TorchCfg
+
+    p = AxialParams(n_axial=40)
+    traj = solve_reference(p, n_out=241)
+    assert traj.t[-1] < p.t_end, "the run must stop early, or there is no validity limit to track"
+
+    validity_frac = traj.t[-1] / p.t_end
+    assert TorchCfg().t_train_frac == pytest.approx(validity_frac, abs=0.02), (
+        f"default t_train_frac {TorchCfg().t_train_frac} does not match the measured "
+        f"validity horizon {validity_frac:.4f} (stop time {traj.t[-1]:.2f} s)"
+    )
