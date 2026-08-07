@@ -1,10 +1,19 @@
 # Physics theory
 
-This document derives and explains the coupled model solved in
-`pinn-sfr-transient`: six-group point kinetics, lumped two-node
-thermal-hydraulics, and the reactivity-feedback closure that makes the
-**Unprotected Loss of Flow (ULOF)** the limiting transient for a sodium-cooled
-fast reactor (SFR). Citations in square brackets refer to `docs/references.md`.
+This document derives and explains the **0D lumped model**: six-group point
+kinetics, lumped two-node thermal-hydraulics, and the reactivity-feedback closure
+that makes the **Unprotected Loss of Flow (ULOF)** the limiting transient for a
+sodium-cooled fast reactor (SFR). Citations in square brackets refer to
+[`references.md`](references.md).
+
+> **This is one of two models in the repository.** The void term below is a `tanh`
+> *demonstration* surrogate centred at 820 K, not the ~1156 K sodium saturation
+> temperature (§6 says so where it is defined). It cannot represent where boiling
+> starts, how far the void spreads, or the fact that the sodium void worth changes
+> sign near the top of the core. The 1D axially resolved model in
+> [`axial_physics.md`](axial_physics.md) takes those from the SAS4A/SASSYS-1 manual
+> instead. This model is not superseded by it: it remains the fast regression
+> harness and the pedagogical entry point.
 
 State vector throughout:
 
@@ -63,8 +72,8 @@ $\sim10^{8}$, making the system **extremely stiff**. Two consequences:
 * the steady-state precursor concentrations are large,
   $C_{i,0}=\beta_i/(\Lambda\lambda_i)\sim10^4\text{ to }10^5$ for $P=1$;
 * explicit integration is unusable; the reference solver uses an implicit
-  Radau/BDF scheme (`src/reference.py`), and the PINN requires the
-  non-dimensionalisation of §5 to train at all (see `docs/neural_network.md`).
+  Radau/BDF scheme (`src/pinn_sfr_transient/reference.py`), and the PINN requires the
+  non-dimensionalisation of §5 to train at all (see [`neural_network.md`](neural_network.md)).
 
 Stiffness is the documented "failure mode" of naive PINNs on kinetics
 [Ji et al. 2021; Krishnapriyan et al. 2021], which motivates the formulation
@@ -88,14 +97,14 @@ reduced model uses one fuel node $T_f$ and one coolant node $T_c$
 * $P_0$ — nominal power scale (deposited in the fuel node).
 * $UA$ — fuel→coolant conductance (heat-transfer coefficient × area).
 * $C_f, C_c$ — fuel- and coolant-node heat capacities.
-* $W_0 = 2\,\dot m_0 c_{p,c}$ — nominal coolant heat-removal coefficient; the
+* $W_0 = 2 \dot m_0 c_{p,c}$ — nominal coolant heat-removal coefficient; the
   factor 2 converts the average coolant temperature to an outlet temperature
   $T_{out}=2T_c-T_{in}$ for a node with linear axial profile.
 * $T_{in}$ — core inlet (cold-leg) temperature.
 * $g(t)$ — normalised mass-flow fraction (§4).
 
-The constants are derived (`src/config.py`) so the nominal steady state is exact:
-$P_0 = UA\,(T_{f0}-T_{c0}) = W_0\,(T_{c0}-T_{in})$.
+The constants are derived (`src/pinn_sfr_transient/config.py`) so the nominal steady state is exact:
+$P_0 = UA (T_{f0}-T_{c0}) = W_0 (T_{c0}-T_{in})$.
 
 ---
 
@@ -192,7 +201,7 @@ $\tau_{\text{pump}}$ gives a peak-power safety map: a steep gradient along
 $\alpha_{\text{void}}$ with only a weak $\tau_{\text{pump}}$ tilt. The nominal
 design point sits in the benign ($\sim1.4\times$) corner. This is the kind of
 *family* of transients the operator-learning extension targets
-(see `docs/neural_network.md` §8).
+(see [`neural_network.md`](neural_network.md) §8).
 
 ![Peak-power safety map over the void coefficient and pump coast-down time](img/safety_map.png)
 
@@ -231,7 +240,7 @@ and multiplying the power equation by $\Lambda$ rescales it to $O(\beta)$:
 ```
 
 This is the key to training a PINN on a system this stiff (see
-`docs/neural_network.md` and `tests/test_consistency.py`, which verifies the
+[`neural_network.md`](neural_network.md) and `tests/test_consistency.py`, which verifies the
 normalised residuals equal the physical ODEs to machine precision).
 
 ### 5.3 Default parameters

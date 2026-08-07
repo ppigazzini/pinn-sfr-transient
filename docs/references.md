@@ -1,9 +1,22 @@
 # References
 
 Annotated bibliography for `pinn-sfr-transient`. BibTeX entries are in
-[`docs/references.bib`](references.bib).
+[`references.bib`](references.bib).
 
 ---
+
+## Primary source for the axial model
+
+- **Argonne National Laboratory, Nuclear Science and Engineering Division.**
+  *The SAS4A/SASSYS-1 Safety Analysis Code System.* ANL/NSE-SAS/5.8.1.
+  https://sas-doc.nse.anl.gov/latest/ — the sole source of truth for the physics of
+  `src/pinn_sfr_transient/axial/`: the §12.13 sodium property correlations, the
+  Chapter 3 energy balance, §12.4 boiling onset, §12.5.1 film degradation and
+  dryout, and the Chapter 4 reactivity feedback. Every departure from it is
+  registered with its equation number in
+  [`axial_physics.md`](axial_physics.md) §3. A plain-text mirror is kept in
+  [`sas4a/`](sas4a/) so a citation can be checked offline; Argonne holds the manual
+  and the site is the authority.
 
 ## Physics-informed neural networks and operator learning
 
@@ -69,6 +82,30 @@ Annotated bibliography for `pinn-sfr-transient`. BibTeX entries are in
   faster, older.* arXiv:2409.03137 — Adam with an additional slow second-moment
   EMA; the optional high-budget optimiser noted in `neural_network.md` §4.5
   (`optax.contrib.ademamix`).
+- **Wang, Sankaran, Wang & Perdikaris (2023).** *An expert's guide to training
+  physics-informed neural networks.* arXiv:2308.08468 — the ablation study behind
+  the `jaxpi` reference implementation, and the source of the modular
+  architecture / weighting / sampling split both axial backends follow.
+- **Wang, Koohy, Lu & Perdikaris (2026).** *When PINNs go wrong: pseudo-time
+  stepping against spurious solutions.* arXiv:2604.23528 — the spurious-solution
+  failure mode that motivated the multiplicative ansatz of
+  [`axial_nn.md`](axial_nn.md) §2, and the source of the `pts_*` knobs, which that
+  document measures as harmful here (§7.2.5, §7.6).
+
+### Optimisers for PINNs — the axial model's open question
+
+[`axial_nn.md`](axial_nn.md) §7.3.4 measures that the quasi-Newton stage is not
+polishing anything: it is the step that forms the boiling front. That makes these
+two the highest-value untested items in the project (§7.5).
+
+- **Kiyani, Shukla, Urbán, Darbon & Karniadakis (2025).** *Optimizing the optimizer
+  for physics-informed neural networks and Kolmogorov-Arnold networks.*
+  arXiv:2501.16371 — Self-Scaled BFGS and Self-Scaled Broyden report
+  orders-of-magnitude accuracy gains over L-BFGS without adaptive weights, and drop
+  into the same schedule slot.
+- **Rathore, Lei, Frangella, Lu & Udell (2024).** *Challenges in training PINNs: a
+  loss landscape perspective.* ICML 2024, PMLR 235, 42159–42191 — ill-conditioning
+  as the obstacle, and NysNewton-CG as the response.
 
 ## Reactor-physics PINNs
 
@@ -110,6 +147,12 @@ Annotated bibliography for `pinn-sfr-transient`. BibTeX entries are in
 
 ## Software and related code
 
+- **jaxpi** — https://github.com/PredictiveIntelligenceLab/jaxpi and its successor
+  **jaxpi2** — https://github.com/sifanexisted/jaxpi2. The reference PINN
+  implementation for the *expert's guide* above, and the structural model for both
+  axial backends: architectures, models, samplers and evaluation as independent
+  modules, so an ablation is a config change rather than an edit to one long file
+  ([`axial_nn.md`](axial_nn.md) §4).
 - **neutherm-pinn** — coupled neutronics/thermal-hydraulics PINN in PyTorch.
   https://github.com/carcaraa/neutherm-pinn
 - **Wen, Li, Azizzadenesheli, Anandkumar & Benson (2022).** *U-FNO—an enhanced
@@ -140,5 +183,3 @@ Annotated bibliography for `pinn-sfr-transient`. BibTeX entries are in
   coefficients.
 - **Todreas & Kazimi (2012).** *Nuclear Systems, Vol. I: Thermal Hydraulic
   Fundamentals,* 2nd ed. CRC Press — lumped energy balances.
-</content>
-</invoke>

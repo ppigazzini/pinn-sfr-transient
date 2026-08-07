@@ -1,8 +1,10 @@
 # Usage guide
 
 Everything a reader needs to install, run, train, extend, and troubleshoot
-`pinn-sfr-transient`. For the science see `docs/physics_theory.md` and
-`docs/neural_network.md`; for citations see `docs/references.md`.
+`pinn-sfr-transient`. For the science see [`physics_theory.md`](physics_theory.md)
+and [`neural_network.md`](neural_network.md) (the 0D model) or
+[`axial_physics.md`](axial_physics.md) and [`axial_nn.md`](axial_nn.md) (the 1D
+axial boiling model); for citations see [`references.md`](references.md).
 
 ---
 
@@ -13,8 +15,13 @@ Everything a reader needs to install, run, train, extend, and troubleshoot
 | Python | ≥ 3.13 | everything (uv can install it for you) |
 | [uv](https://docs.astral.sh/uv/) | ≥ 0.6 | project & environment management |
 | git | any recent | cloning / version control |
-| PyTorch | ≥ 2.13 | only the PINN (`pinn_torch`) — optional extra |
-| DeepXDE | ≥ 1.11 | only the DeepXDE variant — optional extra |
+| PyTorch | ≥ 2.13 | the PyTorch PINN backends — optional extra |
+| JAX + Equinox + Optax | ≥ 0.11 / ≥ 0.13.8 / ≥ 0.2.8 | the JAX PINN backends — optional extra |
+| DeepXDE | ≥ 1.15 | the DeepXDE 0D variant — optional extra |
+
+Google Colab is **not** a target. The axial PINN needs tens of minutes of CPU per
+run, so a hosted runtime was never where it would be trained, and holding the
+Python floor at Colab's version cost a compatibility shim for no benefit.
 
 Install uv (one line; nothing else is required globally):
 
@@ -50,7 +57,7 @@ framework has a `-cpu` and a `-gpu` build; the two builds of one framework are
 ```bash
 uv sync --extra torch-cpu                  # PyTorch ≥ 2.13, CPU-only wheel (small)
 uv sync --extra jax-cpu                    # JAX (Equinox + Optax), CPU-only
-uv sync --extra torch-gpu                  # CUDA PyTorch; both -gpu builds train ~5x faster on an NVIDIA T4
+uv sync --extra torch-gpu                  # CUDA PyTorch (large; see §7 before you do)
 uv sync --extra deepxde --extra torch-cpu  # DeepXDE + a torch backend
 ```
 
@@ -95,22 +102,26 @@ Console prints peak power, peak temperatures, and peak void fraction.
 
 ### 3.1 Regenerate the documentation figures
 
-Every figure shown in the README and docs is rebuilt from the model by:
+Every figure shown in the README and docs is rebuilt from the model — one command
+per model:
 
 ```bash
-uv run pinn-sfr figures              # -> docs/img/*.png
-uv run pinn-sfr figures --no-pinn    # skip the optional PINN overlay
+uv run pinn-sfr figures              # 0D  -> docs/img/*.png
+uv run pinn-sfr figures --no-pinn    # ... skipping the optional PINN overlay
+uv run pinn-sfr axial figures        # 1D  -> docs/img/axial_*.png
 ```
 
-This writes the reference transient, the reactivity decomposition, the phase
-portrait, the void-coefficient sweep and the peak-power safety map to
-`docs/img/`. With the `torch` extra installed it also trains a short PINN and
-adds `pinn_overlay.png`. Figures are always regenerated from
-`src/pinn_sfr_transient/figures.py`, never committed from notebook output.
+The 0D command writes the reference transient, the reactivity decomposition, the
+phase portrait, the void-coefficient sweep and the peak-power safety map; with the
+`torch` extra installed it also trains a short PINN and adds `pinn_overlay.png`. The
+axial command writes the four material fields, the boiling front (voided length and
+the saturation level set) and the closed-loop reactivity split. Figures are always
+regenerated from `figures.py` — `src/pinn_sfr_transient/figures.py` and
+`src/pinn_sfr_transient/axial/figures.py` — and never committed from notebook output.
 
 ### 3.2 Interactive notebook (recommended for a first read)
 
-A guided Jupyter notebook walks through the whole model — reference simulation,
+A guided Jupyter notebook walks through the 0D model end to end — reference simulation,
 the four-panel plot, the feedback decomposition, the normalized-residual
 verification, a void-coefficient parameter sweep, and a short PINN demo:
 
@@ -127,16 +138,25 @@ cleanly if `torch` is absent (add `--extra torch-cpu` to enable it).
 ## 4. Run the tests and quality checks
 
 ```bash
-uv run pytest                     # 4 consistency tests (numpy/scipy only)
+uv run pytest                     # the full suite (236 tests with both extras)
+uv run pytest --no-cov -k physics # a quick subset, no coverage
 uv run ruff check .               # lint
 uv run ruff format --check .      # formatting
-uv run ty check                   # type check
+uv run ty check                   # type check (src only)
 ```
 
-The tests verify the nominal state is an exact fixed point, that the reference
-satisfies the ODEs, and crucially that the PINN's *normalized* residuals equal
-the physical ODEs to machine precision — so the deep-learning math is validated
-even without PyTorch installed.
+Backend tests use `pytest.importorskip`, so they **skip** rather than fail when
+that extra is absent; the numpy/scipy core runs on its own.
+
+The suite verifies that the nominal state is an exact fixed point, that each
+reference trajectory satisfies its own equations, and — the load-bearing part —
+that every backend's residuals are algebraically identical to the numpy `physics.py`
+they claim to solve. `tests/test_consistency.py` does this for the 0D model and
+`tests/axial/test_axial_pinn.py` for the axial one, so the deep-learning maths is
+validated even with no framework installed. A third test asserts that the two axial
+backends expose equal block counts, equal input widths and field-by-field equal
+defaults, because a feature landing in one backend and not the other forks the model
+silently and makes every cross-backend number a comparison of two different things.
 
 Enable the git hooks (run ruff/ty/pytest automatically on every commit):
 
@@ -149,11 +169,12 @@ uv run pre-commit install
 ## 5. Train the PINN
 
 Two from-scratch backends solve the *same* normalized residuals (no data —
-physics only), then print the relative-L2 error against the held-out reference.
+physics only), then print the relative $L_2$ error against the held-out reference.
 Generate the reference first (`uv run pinn-sfr reference`). Both backends train on
-the *same* optimisation budget and fit comparably; a GPU speeds them up ~5× on an
-NVIDIA T4 (about a minute, vs several on CPU — varies a lot by machine).
-`docs/neural_network.md` §9 compares the two (they are equally first-class).
+the *same* optimisation budget and fit comparably.
+[`neural_network.md`](neural_network.md) §9 compares the two (they are equally
+first-class). §5.3 below covers the axial model, which has its own two backends and
+its own accuracy story.
 
 ### 5.1 PyTorch
 
@@ -211,10 +232,10 @@ uv run python -m pinn_sfr_transient.pinn_jax
 ```
 
 Functional implementation — an Equinox model (immutable PyTree) trained with
-Optax (`optax.adam` then `optax.lbfgs`), same recipe *and same budget* as §5.1. On
-a GPU runtime XLA compiles and runs the whole step on the GPU, several times faster
-than CPU on an NVIDIA T4; the CPU wall-clock varies a lot by machine. (Use a
-GPU, not a TPU: TPUs lack the required float64.)
+Optax (`optax.adam` then `optax.lbfgs`), same recipe *and same budget* as §5.1.
+CPU wall-clock varies a lot by machine. If you do reach for an accelerator, use a
+**GPU, not a TPU**: TPUs lack the float64 this stiff problem needs, and JAX silently
+falls back to CPU on a TPU runtime.
 
 ### 5.3 The axial boiling model
 
@@ -238,12 +259,41 @@ Training the axial PINN is a Python entry point rather than a CLI sub-command,
 because it takes tens of minutes on CPU:
 
 ```bash
-uv run python -m pinn_sfr_transient.axial.pinn_torch
-uv run python -m pinn_sfr_transient.axial.pinn_jax
+OMP_NUM_THREADS=8 uv run python -m pinn_sfr_transient.axial.pinn_torch
+OMP_NUM_THREADS=8 uv run python -m pinn_sfr_transient.axial.pinn_jax
 ```
 
-**Accuracy: do not quote it from here.** [`axial_nn.md`](axial_nn.md) §7 carries
-every measurement, including which of them are superseded.
+**Pin the thread count.** `OMP_NUM_THREADS` defaults to every core, so two
+concurrent runs oversubscribe and each reports a wall-clock that says more about
+the other run than about the code. Thread count also changes float reduction order,
+so a run is only reproducible against a stated thread budget — with one pinned, the
+torch backend reproduces to four digits run to run.
+
+Each backend is a **package**, and the entry-point module above is a facade over it:
+
+| | PyTorch | JAX |
+|---|---|---|
+| package | `axial/torchpinn/` | `axial/jaxpinn/` |
+| modules | `config`, `archs`, `ansatz`, `model`, `weighting`, `training`, `evaluate` | `config`, `archs`, `ansatz`, `residuals`, `weighting`, `samplers`, `training`, `evaluate` |
+| knobs | `TrainConfig` — the same fields, with the same defaults, in both | |
+
+Two modules do not mirror each other, and that is torch's idiom rather than a
+design choice: `nn.Module` owns its parameters *and* its forward pass, so the ansatz
+and the residuals share `torchpinn.model`; and the sampler needs the model to place
+points on the predicted front while the loop needs mutable optimiser state, so both
+share `Trainer` in `torchpinn.training`.
+
+Import from either the facade or the package — they are the same objects:
+
+```python
+from pinn_sfr_transient.axial.pinn_torch import TrainConfig, train
+from pinn_sfr_transient.axial.torchpinn import TrainConfig, train  # identical
+```
+
+**Accuracy: do not quote it from here.** The axial PINN does **not** meet its 1%
+bar. [`axial_nn.md`](axial_nn.md) §5–§7 carries every measurement, including which
+of them are superseded, and it is the only place in this repository where an axial
+accuracy number is quoted.
 
 ### 5.4 DeepXDE variant
 
@@ -289,34 +339,47 @@ still reaches voiding.
 
 ## 7. Compute requirements
 
-**No GPU is required.** This is a small problem:
+**CPU is the target, and no GPU is required.**
 
-* The reference solver, tests, lint, and type-check are **CPU-only** and
-  finish in seconds.
-* The PINN is a tiny MLP (~17k parameters, 1-D input, ~4k-point batches) trained
-  in **float64**. Memory use is well under 1 GB.
-* A GPU helps here: on an NVIDIA T4 **both** backends train ~5× faster than on a
-  modest CPU. The margin is smaller than for an fp32 workload — float64 is
-  throttled to ≈1/32–1/64 of FP32 on consumer NVIDIA GPUs — so a strong desktop
-  CPU can stay competitive with a gaming GPU.
+| workload | cost |
+|---|---|
+| reference solvers, tests, lint, type-check | seconds to a few minutes, CPU-only |
+| 0D PINN, either backend | minutes on CPU (~5 to ~13 min for the same workload across machines) |
+| axial PINN, either backend | tens of minutes on CPU |
 
-To use a GPU, set `device="cuda"` (or `"mps"` on Apple Silicon) in `TrainConfig`
-and install the CUDA build with `uv sync --extra torch-gpu` (the `torch-cpu` and
-`torch-gpu` extras are mutually exclusive; `--extra torch-gpu` pulls the CUDA
-`torch` wheel and the nvidia stack from PyPI). The notebook auto-selects the GPU
-when one is present.
+Both PINNs are small MLPs trained in **float64** — the 0D one is ~17k parameters
+over a 1-D input with ~4k-point batches — and memory use stays well under 1 GB.
 
-Beyond this problem a GPU pays off even more if you scale up — much larger
-networks, or the parametric / operator-learning extension (DeepONet / FNO over
-many ULOF scenarios
-in float32).
+**Why a GPU does not pay for itself here.** float64 is throttled to roughly
+1/32–1/64 of FP32 on consumer NVIDIA hardware, and these networks are too small to
+saturate a device in the first place, so the kernel-launch and transfer overheads eat
+a large share of the step. A strong desktop CPU stays competitive with a gaming GPU.
+The axial model has never been benchmarked on a GPU
+([`axial_nn.md`](axial_nn.md) records that as a deliberate non-goal, not a gap).
+
+CUDA builds do exist if you want to try: `uv sync --extra torch-gpu` or
+`--extra jax-gpu` (each framework's `-cpu` and `-gpu` extras are mutually exclusive;
+the two frameworks can coexist), then set `device="cuda"` — or `"mps"` on Apple
+Silicon — in `TrainConfig`. Measure before you believe it, and exclude the first
+iteration, which is compilation rather than computation.
+
+A GPU would pay off if the problem were scaled up: much larger networks, or the
+parametric / operator-learning extension (DeepONet / FNO over many ULOF scenarios in
+float32).
 
 ---
 
 ## 8. Reproducibility
 
-* `seed` in `TrainConfig` fixes the PyTorch RNG; the reference solver is
-  deterministic.
+* `seed` in `TrainConfig` fixes the RNG, and both backends seed **before** module
+  construction, because `nn.init` draws from the global RNG. The reference solvers
+  are deterministic.
+* **Pin `OMP_NUM_THREADS`.** Thread count changes float reduction order, so a
+  "reproducible" result that was never pinned to a thread budget is not
+  reproducible. With one pinned, the torch axial backend reproduces to four digits.
+* Record a regression number *before* a refactor, not after. Splitting the JAX
+  backend into modules once dropped `jax_enable_x64` and ran the whole thing in
+  float32 with the entire suite green; only a number taken beforehand caught it.
 * Optionally commit `uv.lock` and use `uv sync --frozen` to pin exact dependency
   versions across machines.
 * Quality is enforced locally by pre-commit (`uv run pre-commit install`):
@@ -328,18 +391,27 @@ in float32).
 
 | Symptom | Cause / fix |
 |---|---|
-| `PyTorch >= 2.12 is required` on import | run `uv sync --extra torch-cpu` (or `--extra torch-gpu`) |
+| `PyTorch >= 2.13 is required` on import | run `uv sync --extra torch-cpu` (or `--extra torch-gpu`) |
+| `JAX backend requires …` on import | run `uv sync --extra jax-cpu` (or `--extra jax-gpu`) |
 | `DeepXDE is required` | run `uv sync --extra deepxde --extra torch-cpu`; set `DDE_BACKEND=pytorch` |
 | `uv sync --frozen` errors | no committed lockfile → `uv lock` (or use plain `uv sync`) |
 | `[pinn] forward-mode autodiff unavailable…` | harmless; it auto-falls back to reverse mode. To force it, set `jacobian="reverse"` |
 | Validation step says "Run `pinn-sfr reference` first" | generate the reference `.npz` before training |
-| `ty` flags `torch`/`deepxde` symbols | expected without the extras; ty treats those optional imports as untyped |
+| `ty` flags `torch`/`deepxde` symbols | expected; the optional backends are excluded from `ty` in `pyproject.toml` precisely so the gate does not flip on whether an extra is installed |
 | Training loss plateaus / diverges | raise `causal_eps`, lower `lr`, or increase `lbfgs_iters`; check `device`/precision |
+| An axial run takes far longer than the last one | another run is oversubscribing the cores; pin `OMP_NUM_THREADS` on both |
+| Two axial runs disagree at the same seed | check the thread budget matches before suspecting the code |
 
 ---
 
 ## 10. Where to go next
 
-* `docs/physics_theory.md` — the model, equations, and parameters.
-* `docs/neural_network.md` — PINN architecture and the training recipe.
-* `docs/references.md` / `docs/references.bib` — annotated bibliography.
+* [`physics_theory.md`](physics_theory.md) — the 0D model, equations, parameters.
+* [`neural_network.md`](neural_network.md) — the 0D PINN architecture and recipe.
+* [`axial_physics.md`](axial_physics.md) — the 1D axial model and the deviation
+  register against the SAS4A/SASSYS-1 manual.
+* [`axial_nn.md`](axial_nn.md) — the axial PINN and every measurement taken on it.
+* [`sas4a/`](sas4a/) — the local text mirror of the manual, so an equation citation
+  can be checked without a network round-trip.
+* [`references.md`](references.md) / [`references.bib`](references.bib) — annotated
+  bibliography.

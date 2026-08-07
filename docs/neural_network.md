@@ -1,14 +1,23 @@
 # Neural network & PINN methodology
 
-This document describes the deep-learning side of `pinn-sfr-transient`: the
+This document describes the deep-learning side of the **0D lumped model**: the
 physics-informed neural network (PINN) that solves the coupled ULOF system from
-`docs/physics_theory.md` using *only* the physics residuals as supervision (no
-training data). Citations refer to `docs/references.md`.
+[`physics_theory.md`](physics_theory.md) using *only* the physics residuals as
+supervision (no training data). Citations refer to
+[`references.md`](references.md).
 
 Implementations: `src/pinn_sfr_transient/pinn_torch.py` (from-scratch PyTorch) and
 `src/pinn_sfr_transient/pinn_jax.py` (from-scratch JAX / Equinox + Optax) — two
 equally first-class backends — plus `src/pinn_sfr_transient/pinn_deepxde.py`
-(DeepXDE). Target stack: **PyTorch ≥ 2.12** / **JAX ≥ 0.4** on Python 3.12+.
+(DeepXDE). Target stack: **PyTorch ≥ 2.13** / **JAX ≥ 0.11** (Equinox ≥ 0.13.8,
+Optax ≥ 0.2.8) on Python ≥ 3.13, in **float64**, on **CPU**.
+
+> **This is the model that works.** The 1D axially resolved boiling model is a
+> separate PINN with its own two backends, its own ansatz and its own recipe, and it
+> does **not** meet its accuracy bar. It is documented in
+> [`axial_nn.md`](axial_nn.md); do not carry a number from here to there, or the
+> reverse. What the two share is the validation protocol of §7 — the reference is
+> held out, and never enters the loss.
 
 ---
 
@@ -250,7 +259,17 @@ $L_2$ metric.
 ## 8. Extensions
 
 Implemented already: causal weighting, gradient-norm adaptive weights, RAR
-sampling, forward-mode AD (§4). Natural extensions:
+sampling, forward-mode AD (§4).
+
+**Spatial resolution is no longer an extension — it is a second model.** The 1D
+axial boiling channel ([`axial_physics.md`](axial_physics.md),
+[`axial_nn.md`](axial_nn.md)) replaces this model's `tanh` void surrogate with
+saturation-plus-superheat boiling onset from the SAS4A/SASSYS-1 manual, and its
+PINN maps `(ζ, t)` rather than `t`. It reuses this document's recipe and validation
+protocol and adds variable scaling, an algebraic void closure and front-aware
+sampling. It does not yet meet its accuracy bar; that page carries the numbers.
+
+Extensions still ahead:
 
 * **Parametric / operator learning**: a DeepONet [Lu et al. 2021] or Fourier
   Neural Operator [Li et al. 2021; Wen et al. 2022] over the ULOF scenario
@@ -305,12 +324,19 @@ was fit poorly ($L_2 \approx 0.3$); matching the init closed the gap. Both also
 seed the network before
 initialisation, so a run is reproducible from `cfg.seed` (PyTorch's init used to
 be drawn from entropy, which made roughly one run in four land in a bad basin).
-**A GPU speeds up both backends** ~5× on an NVIDIA T4 — roughly a minute, down from
-several on a modest CPU — and both fit well there. The float64 this stiff problem
-needs is throttled on consumer GPUs (≈1/32–1/64 of FP32), so the margin is smaller
-than for an fp32 workload, but the T4 still clearly beats a modest CPU. (PyTorch on a consumer GPU used to *diverge* here — that turned out to
-be the init bug above, not float64.) The CPU wall-clock varies a lot by machine
-(we have seen anywhere from ~5 to ~13 min for the same workload), so treat
-any CPU figure as a rough guide — the cell prints the actual time. Use a **GPU, not
-a TPU**: TPUs do not support the
-required float64 (JAX falls back to CPU on a TPU runtime; torch cannot use a TPU).
+
+**Timing, and the thread budget it depends on.** CPU is the target for both
+backends. Wall-clock varies a lot by machine — anywhere from ~5 to ~13 min for the
+same workload — so treat any single CPU figure as a rough guide; the run prints its
+own. It is not a *measurement* unless `OMP_NUM_THREADS` is pinned and stated: the
+default is every core, so two concurrent runs oversubscribe, and thread count also
+changes float reduction order, which is what makes a run reproducible or not.
+
+An accelerator is not the answer here. The float64 this stiff problem needs is
+throttled to roughly 1/32–1/64 of FP32 on consumer NVIDIA hardware, and these
+networks are far too small to saturate a device, so a strong desktop CPU stays
+competitive with a gaming GPU. If you do try one, use a **GPU, not a TPU** — TPUs do
+not support float64 (JAX falls back to CPU on a TPU runtime; torch cannot use a TPU
+at all) — and measure rather than assume, excluding the first iteration, which is
+compilation. (PyTorch on a consumer GPU used to *diverge* here; that turned out to
+be the init bug above, not float64.)
