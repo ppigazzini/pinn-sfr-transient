@@ -795,10 +795,37 @@ pair (torch 105.9 s, jax 44.0 s). `eqx.filter_jit` compiles the whole step; torc
 runs eager. On CPU, for this problem size, that is the whole difference.
 
 **So M7's acceptance is still not met, for a much narrower reason.** Two fields
-agree, two differ by a consistent 21%. The remaining suspect is the one never
-tested: the RAR implementations genuinely differ — torch grows a reservoir to
-`rar_cap`, JAX keeps a fixed `rar_keep` set so `jit` never recompiles — and that
-is the last structural asymmetry between them. **TBD.**
+agree, two differ by a consistent 21%.
+
+### 7.4.1 RAR is not the cause
+
+The obvious suspect was the last structural asymmetry: torch grows an RAR
+reservoir up to `rar_cap`, JAX keeps a fixed `rar_keep` set so `jit` never
+recompiles. At the default budget they genuinely differ — RAR fires once, at
+iteration 2000, contributing **200** extra collocation points in torch against
+**400** in JAX, on a base set of 6000.
+
+Tested by removal, three seeds each, everything else identical:
+
+| | T_f | T_cl | T_s | T_c |
+|---|---|---|---|---|
+| ratio jax/torch, **RAR on** | 1.048 | 1.037 | 1.220 | 1.213 |
+| ratio jax/torch, **RAR off** | 1.036 | 1.027 | **1.141** | **1.135** |
+
+**The gap survives.** Removing RAR from both backends narrows the `T_s` excess
+from 22% to 14% — about a third of it — and the per-seed ranges on `T_s` and
+`T_c` still do not overlap. RAR contributes, and is not the explanation.
+
+The direction is at least consistent with the asymmetry: RAR *helps* torch
+(`T_s` 0.0707 → 0.0734 when removed) and *hurts* JAX (0.0863 → 0.0837), which is
+what a backend receiving twice as many high-residual points would show. The
+effect is simply too small to account for the gap.
+
+**Remaining suspect: the L-BFGS polish.** It is the last genuinely different
+implementation — torch uses `torch.optim.LBFGS` with a strong-Wolfe line search
+and a snapshot/revert guard, JAX uses `optax.lbfgs` with its own default line
+search. Everything else the two backends do is now shared source or verified
+equal. **TBD.**
 
 ## 7.5 N5 — Plan A measured end to end
 
