@@ -710,6 +710,13 @@ class Trainer:
         # solution, held fixed while the network takes an implicit step toward it.
         self.pts_anchor: tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None = None
         self.pts_dtau = cfg.pts_dtau
+        # Explicit generator: collocation draws must not depend on global RNG
+        # state, or a run is only reproducible if nothing else touched it.
+        self.gen = torch.Generator(device=self.dev).manual_seed(cfg.seed)
+
+    def _rand(self, *shape: int) -> torch.Tensor:
+        """Uniform draw from this trainer's own generator, never the global one."""
+        return torch.rand(*shape, dtype=torch.float64, device=self.dev, generator=self.gen)
 
     def _blocks(self, zeta: torch.Tensor, that: torch.Tensor) -> tuple[torch.Tensor, ...]:
         """Residual blocks for whichever plan is active."""
@@ -722,18 +729,14 @@ class Trainer:
         if self.cfg.feedback:
             # Plan A collocates in TIME only: the axial direction is the fixed
             # quadrature the reactivity integral needs (section 3.5a).
-            that = torch.rand(self.cfg.n_time, 1, dtype=torch.float64, device=self.dev) * t_max
-            early = (
-                torch.rand(self.cfg.n_time // 2, 1, dtype=torch.float64, device=self.dev)
-                * 0.4
-                * t_max
-            )
+            that = self._rand(self.cfg.n_time, 1) * t_max
+            early = self._rand(self.cfg.n_time // 2, 1) * 0.4 * t_max
             allt = torch.cat([that, early], dim=0)
             return allt, allt
         n = self.cfg.n_colloc
-        pts = torch.rand(n, 2, dtype=torch.float64, device=self.dev)
+        pts = self._rand(n, 2)
         pts[:, 1] *= t_max
-        early = torch.rand(n // 2, 2, dtype=torch.float64, device=self.dev)
+        early = self._rand(n // 2, 2)
         early[:, 1] *= 0.4 * t_max  # fastest dynamics live early in the window
         parts = [pts, early, *([self.rar] if self.rar.numel() else [])]
         if self.model.use_front and self.cfg.front_frac > 0.0:
@@ -750,9 +753,9 @@ class Trainer:
         including across the front. The front's own position is the only signal
         left that says where the interesting 2% of the domain is.
         """
-        that = torch.rand(n, 1, dtype=torch.float64, device=self.dev) * t_max
+        that = self._rand(n, 1) * t_max
         z_f = self.model.front_position(that)
-        spread = 0.05 * torch.randn(n, 1, dtype=torch.float64, device=self.dev)
+        spread = 0.05 * torch.randn(n, 1, dtype=torch.float64, device=self.dev, generator=self.gen)
         zeta = (z_f + spread).clamp(0.0, 1.0)
         return torch.cat([zeta, that], dim=1)
 
@@ -822,9 +825,16 @@ class Trainer:
         e = self._pointwise(zeta, that)
         chunks = self.cfg.causal_chunks
         idx = torch.clamp((that.reshape(-1) / max(t_max, 1e-12) * chunks).long(), max=chunks - 1)
-        losses = torch.stack(
-            [e[idx == m].mean() if bool((idx == m).any()) else e.sum() * 0.0 for m in range(chunks)]
+        # Scatter-reduce, not a Python loop over boolean masks. The loop cost a
+        # graph break per chunk under `torch.compile` -- `bool(mask.any())` is a
+        # host synchronisation and `e[mask]` a data-dependent shape -- so the whole
+        # step fell back to eager. This is also exactly what the JAX twin does with
+        # `bincount`, so the two reductions are now the same operation.
+        sums = torch.zeros(chunks, dtype=e.dtype, device=e.device).index_add_(0, idx, e)
+        counts = torch.zeros(chunks, dtype=e.dtype, device=e.device).index_add_(
+            0, idx, torch.ones_like(e)
         )
+        losses = sums / counts.clamp(min=1.0)
         with torch.no_grad():
             w = _causal_weights(losses, self.cfg.causal_eps)
         return (w * losses).mean() + self._pts_penalty()
@@ -868,7 +878,7 @@ class Trainer:
         """Append the worst-residual candidates to the reservoir [Wu et al. 2023]."""
         if self.cfg.feedback:
             return  # Plan A's collocation is a tensor grid; RAR would break the quadrature
-        pool = torch.rand(self.cfg.rar_pool, 2, dtype=torch.float64, device=self.dev)
+        pool = self._rand(self.cfg.rar_pool, 2)
         pool[:, 1] *= t_max
         e = self._pointwise(pool[:, 0:1], pool[:, 1:2])
         top = torch.topk(e, min(self.cfg.rar_add, e.numel())).indices
