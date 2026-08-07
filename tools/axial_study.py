@@ -400,6 +400,83 @@ def _regime_point(args: tuple[float, float]) -> dict:
     }
 
 
+def study_regime_sign(out: Path) -> None:
+    """M9 part 2: sweep ``zeta_sign``, the parameter Objective 2 actually turns on.
+
+    ``study_regime`` swept ``void_worth_net`` and ``tau_pump`` and found the
+    positive void branch exercised at 0 of 30 points. That identifies the wrong
+    knob rather than a null result: boiling starts at ``zeta`` ~ 0.96 and the worth
+    changes sign at ``zeta_sign = 0.80``, so the voided region lies entirely inside
+    the negative lobe and scaling the worth scales a term evaluated only where it
+    is negative.
+
+    ``zeta_sign`` is the sign-change height. Sweeping it against the worth is what
+    answers Objective 2, and it does: excursions to 5.3x nominal appear.
+    """
+    from concurrent.futures import ProcessPoolExecutor  # noqa: PLC0415
+
+    grid = [
+        (float(sign), float(worth))
+        for sign in (0.80, 0.90, 0.95, 0.97, 0.99, 0.995)
+        for worth in (2.0e-3, 8.0e-3, 1.6e-2)
+    ]
+    print(f"{len(grid)} points, n_axial=80, closed loop", flush=True)
+    with ProcessPoolExecutor(max_workers=10) as ex:
+        rows = list(ex.map(_sign_point, grid))
+    write(rows, out)
+
+    ok = [r for r in rows if "error" not in r]
+    print(
+        f"\n{'zeta_sign':>10s} {'worth':>8s} {'regime':>16s} {'peakP':>8s} "
+        f"{'maxrho/b':>9s} {'exercised':>9s} {'L_void':>7s}"
+    )
+    for r in ok:
+        print(
+            f"{r['zeta_sign']:10.3f} {r['void_worth_net']:8.1e} {r['regime']:>16s} "
+            f"{r['peak_power']:8.4f} {r['max_rho_beta']:+9.4f} "
+            f"{r['void_exercised']!s:>9s} {r['L_void_max']:7.4f}"
+        )
+    hot = [r for r in ok if r["max_rho_beta"] > 0.5]
+    if hot:
+        print(
+            f"\n*** {len(hot)} point(s) exceed rho/beta = 0.5. The prompt-jump closure"
+            " (D-KIN-1) has a pole at 1; these are near its validity limit and are"
+            " warnings, not predictions."
+        )
+
+
+def _sign_point(args: tuple[float, float]) -> dict:
+    """Solve one ``(zeta_sign, void_worth_net)`` point. Top level, so it pickles."""
+    sign, worth = args
+    try:
+        p = AxialParams(n_axial=80, zeta_sign=sign, void_worth_net=worth, delta_sign=0.02)
+        traj = solve_reference(p, n_out=241, feedback=True)
+    except Exception as exc:  # noqa: BLE001 - a failed point is data, not a crash
+        return {"zeta_sign": sign, "void_worth_net": worth, "error": repr(exc)[:200]}
+    t_on, _ = traj.onset()
+    mx = float(traj.peak_rho_over_beta)
+    return {
+        "zeta_sign": sign,
+        "void_worth_net": worth,
+        "peak_power": float(traj.power.max()),
+        "min_power": float(traj.power.min()),
+        "max_rho_beta": mx,
+        "void_exercised": bool(traj.void_worth_is_exercised()),
+        "onset_t": t_on,
+        "L_void_max": float(traj.voided_length.max()),
+        "peak_clad": float(traj.peak_clad),
+        "regime": (
+            "prompt-critical"
+            if mx >= 1.0
+            else "power-excursion"
+            if traj.power.max() > 1.01
+            else "boiling-bounded"
+            if np.isfinite(t_on)
+            else "no-boiling"
+        ),
+    }
+
+
 STUDIES = {
     "ruler": study_ruler,
     "horizon": study_horizon,
@@ -409,6 +486,7 @@ STUDIES = {
     "plan-a": study_plan_a,
     "combo": study_combo,
     "regime": study_regime,
+    "regime-sign": study_regime_sign,
 }
 
 

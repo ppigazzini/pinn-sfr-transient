@@ -724,3 +724,83 @@ exists for exactly this and sets `zeta_sign = 0.995`. §10.3 sweeps it.
 The regime map above is therefore a **negative control** — it establishes that the
 benign outcome is robust to the two knobs a reader would reach for first, which is
 worth knowing before any positive result is claimed from the third.
+
+### 10.3 `zeta_sign` — and Objective 2, answered
+
+Eighteen closed-loop points, `zeta_sign` from 0.80 to 0.995 against `void_worth_net`
+at 2e-3, 8e-3 and 1.6e-2. Reproduce with
+`uv run python tools/axial_study.py regime-sign`.
+
+| `zeta_sign` | worth | regime | peak `P` | `max ρ/β` | exercised | `L_void` |
+|---|---|---|---|---|---|---|
+| 0.800 | 2.0e-3 | boiling-bounded | 1.0000 | +0.0000 | no | 0.1465 |
+| 0.800 | 8.0e-3 | boiling-bounded | 1.0000 | +0.0000 | no | 0.1092 |
+| 0.800 | 1.6e-2 | boiling-bounded | 1.0000 | +0.0000 | no | 0.0895 |
+| 0.900 | 2.0e-3 | boiling-bounded | 1.0000 | +0.0000 | yes | 0.1785 |
+| 0.900 | 8.0e-3 | boiling-bounded | 1.0000 | +0.0516 | yes | 0.3091 |
+| 0.900 | 1.6e-2 | boiling-bounded | 1.0000 | +0.0000 | **no** | 0.1019 |
+| 0.950 | 2.0e-3 | boiling-bounded | 1.0000 | +0.0000 | yes | 0.2009 |
+| 0.950 | 8.0e-3 | **power-excursion** | **1.8601** | +0.4473 | yes | 0.4841 |
+| 0.950 | 1.6e-2 | **power-excursion** | **2.4960** | +0.6171 | yes | 0.3301 |
+| 0.970 | 2.0e-3 | boiling-bounded | 1.0000 | +0.0000 | yes | 0.2057 |
+| 0.970 | 8.0e-3 | **power-excursion** | **1.9423** | +0.4623 | yes | 0.4869 |
+| 0.970 | 1.6e-2 | **power-excursion** | **3.5897** | +0.7168 | yes | 0.3508 |
+| 0.990 | 2.0e-3 | boiling-bounded | 1.0000 | +0.0000 | yes | 0.2081 |
+| 0.990 | 8.0e-3 | **power-excursion** | **2.1432** | +0.4956 | yes | 0.5037 |
+| 0.990 | 1.6e-2 | **power-excursion** | **4.0264** | +0.7424 | yes | 0.3554 |
+| 0.995 | 2.0e-3 | boiling-bounded | 1.0000 | +0.0000 | yes | 0.2084 |
+| 0.995 | 8.0e-3 | **power-excursion** | **2.2119** | +0.5045 | yes | 0.5101 |
+| 0.995 | 1.6e-2 | **power-excursion** | **5.2957** | +0.7958 | yes | 0.3702 |
+
+**Objective 2 is answerable, and the answer is yes.** The positive sodium void
+coefficient does drive a power excursion in this model — to **5.3× nominal** at
+`zeta_sign = 0.995`, `void_worth_net = 1.6e-2` — and the transient is no longer
+self-limiting on Doppler alone. Eight of eighteen points are excursions; the
+positive branch is exercised at fourteen.
+
+**It is governed by `zeta_sign`, not by the void worth.** At `zeta_sign = 0.80` the
+branch is never sampled at any worth (§10.1 showed that across 30 more points). An
+excursion needs **both** `zeta_sign ≳ 0.95` *and* `void_worth_net ≳ 8e-3`: at the
+default worth of 2e-3 the positive branch is sampled from `zeta_sign = 0.90`
+upward and still never overcomes Doppler, peak power staying at 1.0000 to four
+figures.
+
+> ### The strongest points are near the closure's pole and are **not predictions**
+>
+> D-KIN-1's prompt-jump approximation has a pole at `ρ = β`. The register requires
+> every run to report `max ρ/β` and states that anything approaching 1 is *outside
+> the approximation, not a result*. The four largest excursions sit at
+> **+0.62 to +0.80**, i.e. 62–80% of the way to the pole, where the closure
+> degrades and the neglected prompt dynamics stop being negligible.
+>
+> Read those rows as **the model saying an excursion begins**, not as a prediction
+> of its size. A peak of 5.3× at `ρ/β = 0.80` is a tripwire, and quoting it as a
+> power level would be exactly the error D-KIN-1 was registered to prevent.
+> Resolving them needs the full point kinetics, which is a deviation-register
+> change, not a parameter change.
+
+**One non-monotonicity, and it is physical.** At `zeta_sign = 0.90`, raising the
+worth from 8e-3 to 1.6e-2 turns the positive sampling **off** — `exercised` goes
+yes → no and `L_void` collapses 0.3091 → 0.1019. More void worth means more
+*negative* reactivity from the lobe below the sign change, which cuts the power,
+which cuts the heating, so the void never climbs high enough to reach the positive
+lobe at all. The system is bistable there: moderate worth lets the front into the
+positive region, large worth suppresses the front before it arrives.
+
+That is the same mechanism as §10.1's "more worth is safer", seen at the boundary
+where it stops holding.
+
+### 10.4 What M9 delivers, and what it does not
+
+**Delivered.** The regime map, both axes, 48 closed-loop points, four regime
+classes of which two are populated on each axis. Every point reports `max ρ/β`, as
+M9's acceptance requires. The controlling parameter is identified and the boundary
+is located.
+
+**Not delivered.** The parametric PINN, and with it M9's remaining acceptance
+criteria — that a trained model's classification match this map, and that it beat
+re-solving on wall-clock. Not attempted, for the reason in §10: the single-point
+network misses its accuracy bar by 7–19×. A surrogate is worth building over a
+family a solver finds expensive; here one point costs 6 s, so the reference sweep
+above cost about four minutes of wall-clock, and there is nothing for a surrogate
+to beat until the base model is accurate.
