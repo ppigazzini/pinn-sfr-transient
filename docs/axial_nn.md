@@ -978,8 +978,31 @@ remaining suspect is the *implementation* of L-BFGS — `torch.optim.LBFGS` agai
 
 That is now directly testable: `optimizer = "lbfgs-shared"` selects this
 repository's own L-BFGS in **both** backends, pinned to agree to 1e-10 by
-`test_self_scaled_bfgs_agrees_across_backends`. If the 21% survives it, the
-framework optimisers are not the cause.
+`test_self_scaled_bfgs_agrees_across_backends`.
+
+**Tested. It closes most of the gap and not all of it.** Seed 0, identical config,
+identical ruler — `jax / torch` ratios:
+
+| optimiser | T_f | T_cl | T_s | T_c |
+|---|---|---|---|---|
+| `lbfgs` (each framework's own) | 1.042 | 1.034 | **1.167** | **1.164** |
+| `lbfgs-shared` (one implementation) | 1.019 | 1.015 | **1.065** | **1.063** |
+
+The `T_s` gap falls from **+16.7% to +6.5%** and `T_c` from **+16.4% to +6.3%**;
+`T_f` and `T_cl` roughly halve too. So the framework L-BFGS implementations are the
+**largest single contributor** to the disagreement — about 60% of it — which is
+what §7.3.4 pointed at and is now measured rather than inferred.
+
+The remaining ~6% is not the equations (1e-14, §7.3.2), not RAR (§7.3.3) and not
+the optimiser. What is left unshared is the sampler and the float64 CPU kernels
+each stack dispatches to, and neither has been isolated. **TBD.**
+
+One diagnostic worth carrying: torch clears saturation by **+20.5 K** and JAX by
+**+17.1 K** on the same configuration. The backends differ in exactly the quantity
+§7.2.8 says the front depends on, and JAX is the one with less margin.
+
+**Seed 0 only.** Two more seeds are running. Given §7.5.3's front metric spread,
+these ratios are a measurement and not yet a statistic.
 
 One incidental measurement worth recording: at initialisation the four residual
 blocks are `T_f` 4.5e-2, `T_cl` 1.4e-1, `T_s` 2.6e-2, **`T_c` 2.4e0** — the
