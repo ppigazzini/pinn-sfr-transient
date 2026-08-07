@@ -667,6 +667,85 @@ domain. It is a resolution problem, not a weighting one, and the remedies for it
 are the free-boundary and level-set formulations of REPORT-01 §7.4 — a
 formulation change, which is M8's subject, not another loss term.
 
+#### 7.2.5 N6 — re-ablated against the algebraic closure, and D38 is half wrong
+
+Every remedy in §7.2.x was measured against the *old* formulation: differential
+void, unbounded block weights, no residual scaling. All of that has changed, so
+D38's conclusion — "the §7 remedy list is not applicable here, and applying it
+hurt" — was re-tested. Seven arms × two seeds, 3000 Adam + 300 L-BFGS, reference
+`n = 160`, on top of the current defaults:
+
+| arm | T_f | T_cl | T_s | T_c | `L_void` | `max α` | mean ΔT |
+|---|---|---|---|---|---|---|---|
+| base | 0.1376 | 0.1886 | 0.0749 | 0.0751 | 0.1805 | 1.0000 | — |
+| `n_windows=4` | 0.1385 | 0.1895 | 0.0751 | 0.0752 | 0.1830 | 1.0000 | +0.4% |
+| **`fourier_features=32`** | 0.1286 | 0.1787 | 0.0600 | 0.0604 | **0.1878** | 0.9696 | **−12.8%** |
+| **`modified_mlp`** | **0.1270** | **0.1786** | **0.0509** | **0.0521** | 0.1121 | 0.9919 | **−18.9%** |
+| `weight_max_ratio=10` | 0.1409 | 0.1927 | 0.0789 | 0.0804 | 0.1632 | 1.0000 | +4.3% |
+| `causal_eps=5` | 0.1938 | 0.2625 | 0.1591 | 0.1598 | **0.0000** | **0.0000** | +76.3% |
+| `pts_every=500` | 0.2112 | 0.2822 | 0.1829 | 0.1834 | **0.0000** | **0.0000** | +97.9% |
+| reference | — | — | — | — | 0.3812 | 1.0000 | |
+
+**D38 is retracted for the two architecture remedies and confirmed for the loss
+ones.** The modified MLP — jaxpi's default, previously recorded as *3.3× worse* —
+is now the best arm on all four temperatures, by 19%. Fourier features,
+previously 0.255, now improve every field by 13% *and* move voided length toward
+the reference. Time windowing is neutral. Causal weighting and pseudo-time
+stepping remain catastrophic, and now visibly so: under both the boiling front
+never forms at all, `max α = 0.0000`.
+
+The reading that survives is narrower than D38's and more useful. A remedy aimed
+at **representation** — spectral bias, depth — was being masked by a formulation
+whose loss was dominated by a block carrying a normalised rate of 8.5e4. Remove
+that (D-TH-3) and the representation remedies pay. A remedy aimed at
+**reweighting** the loss was, and remains, harmful here, because the imbalance it
+targets is now removed analytically rather than adaptively.
+
+**This is the first time in this project that adding something helped.** Every
+prior improvement — the algebraic closure, bounding the block weights, truncating
+the horizon — was a subtraction.
+
+Not yet adopted as defaults. The modified MLP buys the best temperatures and the
+*worst* voided length of the three working arms (0.1121 against the base 0.1805,
+reference 0.3812), so it trades the front for the fields; Fourier improves both.
+The combination is untested.
+
+#### 7.2.6 The two winners do not compose
+
+§7.2.5 found two remedies that help. Combining them is the obvious next step, and
+it is the one the recipe would have taken without measuring. Four arms, **three**
+seeds each, so the two-seed figures in §7.2.5 are superseded by these:
+
+| arm | T_f | T_cl | T_s | T_c | `L_void` | `max α` | mean ΔT |
+|---|---|---|---|---|---|---|---|
+| base | 0.1360 | 0.1874 | 0.0707 | 0.0711 | 0.1630 | 0.9998 | — |
+| `fourier_features = 32` | 0.1279 | 0.1776 | 0.0590 | 0.0594 | **0.2070** | 0.9797 | **−11.1%** |
+| `modified_mlp` | **0.1271** | 0.1790 | **0.0513** | **0.0526** | 0.0932 | 0.9606 | **−16.1%** |
+| **both** | 0.1360 | 0.1875 | 0.0776 | 0.0778 | 0.1037 | **0.8813** | **+4.8%** |
+| reference | — | — | — | — | 0.3812 | 1.0000 | |
+
+**Each helps alone; together they are worse than neither.** The combination lands
+at +4.8% against base, so it gives back everything both remedies won and a little
+more, and it has the worst `max α` of any working arm — 0.88, meaning the front
+only partly forms on two of three seeds.
+
+Both remedies attack **spectral bias**, by different routes: Fourier features lift
+the input into a high-frequency basis, the modified MLP carries the input to every
+layer through multiplicative gating. Applying both appears to over-correct, and
+the void field — the sharpest feature in the problem, and the one with no residual
+of its own under D-TH-3 — is what pays for it.
+
+**This is the ninth remedy in this document argued soundly and refuted by
+measurement, and the second proposed by this audit rather than the literature.**
+Neither remedy is adopted as a default. On this evidence `fourier_features = 32`
+is the better single choice, because it is the only arm that improves the
+temperatures *and* moves voided length toward the reference; the modified MLP wins
+the temperatures and gives up the front.
+
+**A note on seed counts.** §7.2.5's two-seed figures were −12.8% and −18.9%; at
+three seeds they are −11.1% and −16.1%. The third seed moderated both. The
+direction held, the magnitude did not.
+
 #### 7.2.7 The training horizon was undocumented, and it is a cliff
 
 > Numbered out of sequence because it was found last, by a control arm, and it
@@ -756,85 +835,6 @@ Two consequences worth stating:
 * **A 1% bar on `T_c` in `L2` does not imply the front forms.** The two criteria
   are close to independent. M4's acceptance is a statement about the peak; §7.2.5's
   is a statement about the mean.
-
-#### 7.2.5 N6 — re-ablated against the algebraic closure, and D38 is half wrong
-
-Every remedy in §7.2.x was measured against the *old* formulation: differential
-void, unbounded block weights, no residual scaling. All of that has changed, so
-D38's conclusion — "the §7 remedy list is not applicable here, and applying it
-hurt" — was re-tested. Seven arms × two seeds, 3000 Adam + 300 L-BFGS, reference
-`n = 160`, on top of the current defaults:
-
-| arm | T_f | T_cl | T_s | T_c | `L_void` | `max α` | mean ΔT |
-|---|---|---|---|---|---|---|---|
-| base | 0.1376 | 0.1886 | 0.0749 | 0.0751 | 0.1805 | 1.0000 | — |
-| `n_windows=4` | 0.1385 | 0.1895 | 0.0751 | 0.0752 | 0.1830 | 1.0000 | +0.4% |
-| **`fourier_features=32`** | 0.1286 | 0.1787 | 0.0600 | 0.0604 | **0.1878** | 0.9696 | **−12.8%** |
-| **`modified_mlp`** | **0.1270** | **0.1786** | **0.0509** | **0.0521** | 0.1121 | 0.9919 | **−18.9%** |
-| `weight_max_ratio=10` | 0.1409 | 0.1927 | 0.0789 | 0.0804 | 0.1632 | 1.0000 | +4.3% |
-| `causal_eps=5` | 0.1938 | 0.2625 | 0.1591 | 0.1598 | **0.0000** | **0.0000** | +76.3% |
-| `pts_every=500` | 0.2112 | 0.2822 | 0.1829 | 0.1834 | **0.0000** | **0.0000** | +97.9% |
-| reference | — | — | — | — | 0.3812 | 1.0000 | |
-
-**D38 is retracted for the two architecture remedies and confirmed for the loss
-ones.** The modified MLP — jaxpi's default, previously recorded as *3.3× worse* —
-is now the best arm on all four temperatures, by 19%. Fourier features,
-previously 0.255, now improve every field by 13% *and* move voided length toward
-the reference. Time windowing is neutral. Causal weighting and pseudo-time
-stepping remain catastrophic, and now visibly so: under both the boiling front
-never forms at all, `max α = 0.0000`.
-
-The reading that survives is narrower than D38's and more useful. A remedy aimed
-at **representation** — spectral bias, depth — was being masked by a formulation
-whose loss was dominated by a block carrying a normalised rate of 8.5e4. Remove
-that (D-TH-3) and the representation remedies pay. A remedy aimed at
-**reweighting** the loss was, and remains, harmful here, because the imbalance it
-targets is now removed analytically rather than adaptively.
-
-**This is the first time in this project that adding something helped.** Every
-prior improvement — the algebraic closure, bounding the block weights, truncating
-the horizon — was a subtraction.
-
-Not yet adopted as defaults. The modified MLP buys the best temperatures and the
-*worst* voided length of the three working arms (0.1121 against the base 0.1805,
-reference 0.3812), so it trades the front for the fields; Fourier improves both.
-The combination is untested.
-
-#### 7.2.6 The two winners do not compose
-
-§7.2.5 found two remedies that help. Combining them is the obvious next step, and
-it is the one the recipe would have taken without measuring. Four arms, **three**
-seeds each, so the two-seed figures in §7.2.5 are superseded by these:
-
-| arm | T_f | T_cl | T_s | T_c | `L_void` | `max α` | mean ΔT |
-|---|---|---|---|---|---|---|---|
-| base | 0.1360 | 0.1874 | 0.0707 | 0.0711 | 0.1630 | 0.9998 | — |
-| `fourier_features = 32` | 0.1279 | 0.1776 | 0.0590 | 0.0594 | **0.2070** | 0.9797 | **−11.1%** |
-| `modified_mlp` | **0.1271** | 0.1790 | **0.0513** | **0.0526** | 0.0932 | 0.9606 | **−16.1%** |
-| **both** | 0.1360 | 0.1875 | 0.0776 | 0.0778 | 0.1037 | **0.8813** | **+4.8%** |
-| reference | — | — | — | — | 0.3812 | 1.0000 | |
-
-**Each helps alone; together they are worse than neither.** The combination lands
-at +4.8% against base, so it gives back everything both remedies won and a little
-more, and it has the worst `max α` of any working arm — 0.88, meaning the front
-only partly forms on two of three seeds.
-
-Both remedies attack **spectral bias**, by different routes: Fourier features lift
-the input into a high-frequency basis, the modified MLP carries the input to every
-layer through multiplicative gating. Applying both appears to over-correct, and
-the void field — the sharpest feature in the problem, and the one with no residual
-of its own under D-TH-3 — is what pays for it.
-
-**This is the ninth remedy in this document argued soundly and refuted by
-measurement, and the second proposed by this audit rather than the literature.**
-Neither remedy is adopted as a default. On this evidence `fourier_features = 32`
-is the better single choice, because it is the only arm that improves the
-temperatures *and* moves voided length toward the reference; the modified MLP wins
-the temperatures and gives up the front.
-
-**A note on seed counts.** §7.2.5's two-seed figures were −12.8% and −18.9%; at
-three seeds they are −11.1% and −16.1%. The third seed moderated both. The
-direction held, the magnitude did not.
 
 ### 7.3 Backend parity
 
@@ -1189,9 +1189,12 @@ complete.
 mean-winners. §7.2.8 changes what "compose" should mean here: the mean and the
 peak are close to independent, so the pairing worth trying is one remedy for each.
 
-Fourier features are the only change measured to improve **both** — §7.2.5 gives
-−12.8% on the mean *and* `L_void` 0.1878 against a 0.1805 base — which is what
-reducing spectral bias should do to an extremum. So:
+Fourier features are the only change measured to improve **both**, and §7.2.6's
+three-seed table is the stronger evidence: `L_void` **0.2070 against a 0.1630
+base** while also taking −11.1% off the mean. The modified MLP beats it on the mean
+(−16.1%) and *halves* `L_void` to 0.0932. One remedy raises the peak, the other
+lowers it — which is what reducing spectral bias should do to an extremum, and what
+smoothing should do against it. So:
 
 | arm | what it tests |
 |---|---|
