@@ -292,7 +292,17 @@ def study_parity(out: Path) -> None:
 
 
 def study_plan_a(out: Path) -> None:
-    """Measure closed-loop power at three seeds -- section 7.4 has only one."""
+    """Measure closed-loop power at three seeds -- section 7.4 has only one.
+
+    **This runs the SHIPPED budget, not section 7.4's.** That section used 3000 Adam
+    + 300 L-BFGS at 681 s; `AxialTrainConfig` ships 8000 + 500, which is what a
+    reader running the model actually gets. The two are not comparable and the
+    difference is large -- `L2(P)` 0.2497 against 0.1060 at seed 0 -- so any
+    improvement here is a budget result until it is measured at a matched budget.
+
+    Plan A takes the full horizon: with feedback the transient is self-limiting and
+    completes 60 s inside the property range, so `t_train_frac` stays at 1.0.
+    """
     from pinn_sfr_transient.axial.torchpinn import AxialTrainConfig, train  # noqa: PLC0415
 
     # Say so before the long silence: the closed-loop reference at n = 160 plus the
