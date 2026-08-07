@@ -1,4 +1,4 @@
-"""Physics-Informed Neural Network for the SFR ULOF transient (PyTorch 2.12).
+"""Physics-Informed Neural Network for the SFR ULOF transient (PyTorch 2.13).
 
 Built from scratch with the current SOTA training recipe for stiff,
 multi-equation ODE PINNs (see ``docs/references.md``):
@@ -40,7 +40,7 @@ try:
     from torch import nn  # ty: ignore
     from torch.func import jvp, vmap  # ty: ignore
 except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency
-    msg = "PyTorch >= 2.12 is required: `uv sync --extra torch-cpu` (or `--extra torch-gpu`)"
+    msg = "PyTorch >= 2.13 is required: `uv sync --extra torch-cpu` (or `--extra torch-gpu`)"
     raise SystemExit(msg) from exc
 
 if TYPE_CHECKING:

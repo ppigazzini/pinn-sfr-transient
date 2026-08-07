@@ -1,111 +1,158 @@
 # pinn-sfr-transient
 
-Physics-Informed Neural Network for the **Unprotected Loss of Flow (ULOF)**
-transient in a Generation-IV **Sodium-cooled Fast Reactor (SFR)**: 6-group point
-kinetics coupled to a lumped two-node thermal-hydraulics core, closed by
-reactivity feedback including the safety-defining **positive sodium void
-coefficient**. No experimental data is used for training — the physics residuals
-are the teacher; a stiff `scipy` integrator is the held-out reference.
+Physics-Informed Neural Networks for the **Unprotected Loss of Flow (ULOF)**
+transient in a Generation-IV **Sodium-cooled Fast Reactor (SFR)**. No experimental
+data is used for training — the physics residuals are the teacher; a stiff `scipy`
+integrator is the held-out reference.
+
+The repository holds **two models**, and they are at very different stages:
+
+| | [0D lumped](docs/physics_theory.md) | [1D axial boiling](docs/axial_physics.md) |
+|---|---|---|
+| state | 6-group point kinetics + two thermal nodes | four material fields on an axial mesh + sodium void |
+| void | a `tanh` demonstration surrogate at 820 K | saturation + superheat from the SAS4A manual, ~1156 K |
+| reference solver | verified | verified, except the void fraction (`axial_physics.md` §6.5) |
+| PINN | **meets its bar** — a few 1e-3 relative L2 | **does not meet its bar** — see below |
+| backends | PyTorch, JAX, DeepXDE | PyTorch, JAX |
+
+This README is a map. The physics, the neural-network methodology, and the usage
+details live in [`docs/`](docs/) — see [Documentation](#documentation).
+
+## The 0D model — a solved problem
 
 ![ULOF reference transient — power, temperatures, sodium void fraction, and reactivity/flow](docs/img/ulof_reference.png)
 
-> Loss of flow drives the coolant past the void-onset temperature; the positive
-> void coefficient pushes power to **1.38× nominal at ≈ 23 s**, then negative
-> Doppler feedback dominates and the power turns over, settling to ≈ 0.69× — a
-> bounded, self-limiting transient.
+Loss of flow drives the coolant past the void-onset temperature; the positive
+void coefficient pushes power to **1.38× nominal at ≈ 23 s**, then negative
+Doppler feedback dominates and the power turns over, settling to ≈ 0.69× — a
+bounded, self-limiting transient. Trained on residuals alone, the PINN recovers
+the whole trajectory ([`docs/neural_network.md`](docs/neural_network.md) §7).
 
-This README is a map. The physics, the neural-network methodology, and the usage
-details live in [`docs/`](docs/) — see [Documentation](#documentation) below.
+## The 1D axial model — the current work
+
+![Axial boiling — voided length against time, and the saturation level set that defines the front](docs/img/axial_front.png)
+
+Because the 0D void surrogate cannot say *where* boiling starts, how far the void
+spreads, or that the sodium void worth **changes sign** near the top of the core —
+which is what a loss-of-flow safety argument turns on — a second model resolves the
+channel axially and takes its thermophysics, boiling onset and feedback laws from the
+[SAS4A/SASSYS-1 manual](https://sas-doc.nse.anl.gov/latest/) (ANL/NSE-SAS/5.8.1).
+
+**Status, stated plainly.** The reference solver is verified. The PINN trains and
+satisfies every hard constraint exactly, and **does not meet its 1% accuracy bar** —
+currently 0.08 to 0.19 relative L2 on the temperatures. The boiling front does now
+form, after the void was eliminated algebraically. Every measurement lives in
+[`docs/axial_nn.md`](docs/axial_nn.md) §5–§7, including the negative results, which
+outnumber the positive ones, and including which of that document's own earlier
+conclusions have since been retracted.
+
+**Every deviation from the manual is registered** in
+[`docs/axial_physics.md`](docs/axial_physics.md) §3 with its equation number. That
+register is a contract, not a commentary: an unregistered deviation is a bug, and
+new physics lands **off by default** so no published number moves when it does.
 
 ## Quick start
 
 ```bash
-uv sync                      # create .venv from pyproject + lockfile
-uv run pinn-sfr reference    # stiff reference sim -> results/ulof_reference.npz (held-out data)
-uv run pinn-sfr figures      # (re)generate every README/docs figure -> docs/img/
-uv run pytest                # consistency tests (numpy/scipy only)
+uv sync                             # create .venv from pyproject + lockfile
+uv run pinn-sfr reference           # 0D stiff reference -> results/ (held-out data)
+uv run pinn-sfr figures             # (re)generate the 0D figures -> docs/img/
+uv run pinn-sfr axial reference     # 1D axial channel, prescribed power
+uv run pinn-sfr axial reference --feedback   # ... with the prompt-jump kinetics closed
+uv run pinn-sfr axial figures       # -> docs/img/axial_*.png
+uv run pytest                       # the suite; backend tests skip without their extra
 ```
 
-The PINN has **two equally first-class backends** — PyTorch and JAX — solving the
-same residuals (compared in [`docs/neural_network.md`](docs/neural_network.md) §9).
-Each is an optional extra with a CPU build (small, recommended) and a CUDA build
-(`-gpu`). Both train on the *same* optimisation budget and fit comparably; a GPU
-speeds them up ~5× on an NVIDIA T4 (about a minute, vs several on CPU — varies by
-machine):
+Both models are solved by **two equally first-class PINN backends** — PyTorch and
+JAX — on the same residuals. Each is an optional extra:
 
 ```bash
-uv sync --extra torch-cpu  && uv run python -m pinn_sfr_transient.pinn_torch    # PyTorch
-uv sync --extra jax-cpu    && uv run python -m pinn_sfr_transient.pinn_jax      # JAX (Equinox+Optax)
+uv sync --extra torch-cpu  && uv run python -m pinn_sfr_transient.axial.pinn_torch
+uv sync --extra jax-cpu    && uv run python -m pinn_sfr_transient.axial.pinn_jax
 uv sync --extra deepxde --extra torch-cpu && uv run python -m pinn_sfr_transient.pinn_deepxde
-# CUDA: swap any `-cpu` extra for `-gpu`. With torch present, `pinn-sfr figures`
-# also renders the PINN overlay.
 ```
 
-**No GPU required** — the reference solver, tests and the small float64 PINN are
-all comfortable on a CPU. See [`docs/usage.md`](docs/usage.md) for the full CLI,
-library API, compute notes and troubleshooting.
+**CPU is the target.** These are small float64 networks; float64 is throttled to
+roughly 1/32–1/64 of FP32 on consumer NVIDIA hardware, which is most of the reason a
+GPU does not pay for itself here. CUDA builds exist (swap any `-cpu` extra for
+`-gpu`) but are neither required nor benchmarked on the axial model. Google Colab is
+**not** a target: the axial PINN needs tens of minutes of CPU per run. Pin
+`OMP_NUM_THREADS` before quoting any timing or any reproducibility claim — thread
+count changes float reduction order.
 
 ## Documentation
 
-The heavy lifting is in the docs and notebooks:
-
-- [`docs/physics_theory.md`](docs/physics_theory.md) — point kinetics, lumped
-  thermal-hydraulics, reactivity feedback (Doppler + positive sodium void), the
-  ULOF transient, non-dimensionalisation, parameters, and validity caveats.
-- [`docs/neural_network.md`](docs/neural_network.md) — PINN methodology: the
-  normalized-state formulation, hard-IC ansatz, architecture, Adam→L-BFGS
-  training, the adaptive recipe (causal weighting, gradient-norm loss weights,
-  residual-adaptive sampling, forward-mode autodiff), **and a JAX-vs-PyTorch
-  comparison** (§9) of the two backends.
-- [`docs/axial_physics.md`](docs/axial_physics.md) — **work in progress**: a
-  second, axially resolved model with sodium boiling, following the
-  [SAS4A/SASSYS-1 manual](https://sas-doc.nse.anl.gov/latest/) — four material
+- [`docs/physics_theory.md`](docs/physics_theory.md) — the 0D model: point
+  kinetics, lumped thermal-hydraulics, reactivity feedback (Doppler + positive
+  sodium void), the ULOF transient, non-dimensionalisation, parameters, caveats.
+- [`docs/neural_network.md`](docs/neural_network.md) — the 0D PINN: normalized-state
+  formulation, hard-IC ansatz, architecture, Adam→L-BFGS training, the adaptive
+  recipe (causal weighting, gradient-norm loss weights, residual-adaptive sampling,
+  forward-mode autodiff), and a JAX-vs-PyTorch comparison (§9).
+- [`docs/axial_physics.md`](docs/axial_physics.md) — the 1D model: four material
   fields, real sodium properties, saturation-plus-superheat boiling onset, film
-  dryout, and a prompt-jump kinetics closure. The reference solver is verified;
-  the page doubles as the register of every deviation from the manual, which is a
-  contract rather than a commentary — an unregistered deviation is a bug.
-- [`docs/axial_nn.md`](docs/axial_nn.md) — **work in progress**: the axial PINN —
-  ansatz, hard constraints, training recipe, both backends, and every measured
-  result including the negative ones — of which there are more than the positive
-  ones. The network does **not** meet its accuracy bar; that page says so, marks
-  which of its own earlier conclusions have since been retracted, and labels every
-  figure that predates the current formulation.
-- [`docs/usage.md`](docs/usage.md) — install, run, train, use as a library,
-  compute requirements, troubleshooting.
+  dryout, the prompt-jump kinetics closure, and **the deviation register**.
+- [`docs/axial_nn.md`](docs/axial_nn.md) — the 1D PINN: ansatz, hard constraints,
+  training recipe, both backends, and every measured result.
+- [`docs/sas4a/`](docs/sas4a/) — a local text mirror of the SAS4A/SASSYS-1 manual,
+  so an equation citation can be checked without a network round-trip. Fetched by
+  [`tools/fetch_sas_manual.py`](tools/fetch_sas_manual.py).
+- [`docs/usage.md`](docs/usage.md) — install, run, train, use as a library, compute
+  requirements, troubleshooting.
 - [`docs/references.md`](docs/references.md) — annotated bibliography
   ([`docs/references.bib`](docs/references.bib) for LaTeX).
 - [`notebooks/01_ulof_walkthrough.ipynb`](notebooks/01_ulof_walkthrough.ipynb) —
-  interactive end-to-end walkthrough (reference sim, plots, residual check, short
-  PINN demo).
+  interactive end-to-end walkthrough of the 0D model.
 - [`notebooks/02_safety_map.ipynb`](notebooks/02_safety_map.ipynb) —
-  parameter-space safety study (peak-power map, phase portraits; numpy/scipy
-  only).
+  parameter-space safety study (peak-power map, phase portraits; numpy/scipy only).
 
 ## Layout
 
 ```
 pinn-sfr-transient/
 ├── src/pinn_sfr_transient/
-│   ├── config.py      # SFRParams (typed; derived steady state)
-│   ├── physics.py     # reactivity, void, flow, RHS (numpy)
-│   ├── reference.py   # stiff Radau solver -> Trajectory
-│   ├── pinn_jax.py    # JAX PINN (functional; Equinox + Optax; fast on GPU)
-│   ├── pinn_torch.py  # PyTorch PINN (OO/eager; same recipe + RAR)
-│   ├── pinn_deepxde.py# DeepXDE variant (same residuals)
-│   ├── plotting.py    # 4-panel reference figure
-│   ├── figures.py     # regenerates every docs/img/ figure from the model
-│   └── cli.py         # `pinn-sfr` entry point (reference, figures)
-├── tests/             # pytest: consistency, physics, CLI (+ PINN when torch present)
-├── docs/              # theory, usage, references; img/ holds ALL committed figures
-├── notebooks/         # guided walkthroughs (outputs stripped; run to reproduce)
-└── results/           # held-out reference .npz from `pinn-sfr reference` (gitignored)
+│   ├── config.py        # SFRParams (typed; derived steady state)
+│   ├── physics.py       # reactivity, void, flow, RHS (numpy)
+│   ├── reference.py     # stiff Radau solver -> Trajectory
+│   ├── pinn_torch.py    # 0D PyTorch PINN (OO/eager; recipe + RAR)
+│   ├── pinn_jax.py      # 0D JAX PINN (functional; Equinox + Optax)
+│   ├── pinn_deepxde.py  # 0D DeepXDE variant (same residuals, vanilla loop)
+│   ├── plotting.py      # 4-panel reference figure
+│   ├── figures.py       # regenerates the 0D docs/img/ figures
+│   ├── cli.py           # `pinn-sfr` (reference | figures | axial …)
+│   └── axial/
+│       ├── config.py    # AxialParams (mesh, geometry, feedback switches)
+│       ├── sodium.py    # the §12.13 sodium property correlations
+│       ├── physics.py   # the residuals — ONE definition, shared by all three
+│       ├── reference.py # stiff axial solver -> AxialTrajectory
+│       ├── figures.py   # regenerates the axial docs/img/ figures
+│       ├── torchpinn/   # PyTorch backend, split config/archs/ansatz/model/
+│       │                #   weighting/training/evaluate
+│       ├── jaxpinn/     # JAX backend, the same split plus residuals/samplers
+│       ├── pinn_torch.py# facade re-exporting torchpinn's public surface
+│       └── pinn_jax.py  # facade re-exporting jaxpinn's public surface
+├── tests/               # pytest: consistency, physics, CLI, both PINNs, parity
+├── docs/                # theory, usage, references; img/ holds ALL figures;
+│                        #   sas4a/ mirrors the manual
+├── tools/               # fetch_sas_manual.py
+├── notebooks/           # guided walkthroughs (outputs stripped; run to reproduce)
+└── results/             # held-out reference .npz files (gitignored)
 ```
 
-Tooling: **uv** (project + envs), **ruff** (lint + format), **ty** (type check),
-**pre-commit** (local quality gate), **pytest**, and a small GitHub Actions
-workflow ([`.github/workflows/test.yml`](.github/workflows/test.yml)) running the
-suite + an 85% coverage gate on the CPU torch backend, plus a core-only job.
-`src/` layout, fully type-hinted, PEP 561 (`py.typed`).
+The axial backends are **packages, not modules**, split after
+[jaxpi2](https://github.com/sifanexisted/jaxpi2) so that an ablation is a config
+change rather than an edit to one long file — and so that `evaluate` never being
+imported by `training` makes "the reference never enters the loss" a structural
+property instead of a convention. They expose the same knobs with the same
+defaults, asserted field by field by a test, because that has silently broken twice
+([`docs/axial_nn.md`](docs/axial_nn.md) §4).
+
+Tooling: **uv** (project + envs), **ruff** (lint + format, `select = ["ALL"]`),
+**ty** (type check), **pre-commit** (local quality gate), **pytest**, and a GitHub
+Actions workflow ([`.github/workflows/test.yml`](.github/workflows/test.yml)) with
+three jobs: the CPU torch backend on Python 3.14 with an 85% coverage gate, the JAX
+backend on 3.13, and a core-only job on 3.13 that proves the optional-import guards
+hold. `src/` layout, fully type-hinted, PEP 561 (`py.typed`).
 
 ## License
 

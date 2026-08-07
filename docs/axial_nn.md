@@ -9,7 +9,7 @@ including the results that came out badly, which are most of them.
 > **Status.** The network trains, satisfies every hard constraint exactly, and
 > does **not** meet the 1% bar. Current Plan B: `T_f` 0.137, `T_cl` 0.189,
 > `T_s` 0.075, `T_c` 0.075 (§7.2.5); current Plan A: 0.250 relative `L2` on
-> `P(t)` (§7.5). The boiling front does now form, `max α = 1.0000` against the
+> `P(t)` (§7.4). The boiling front does now form, `max α = 1.0000` against the
 > reference's 1.0000, since the void was eliminated algebraically (§7.2.3–§7.2.4).
 > None of this is presented as a working result.
 
@@ -52,7 +52,7 @@ them.
 > **four** field blocks, not five, and the void-free initial and inlet conditions
 > fall out of the closure rather than being imposed by a gate. The gated-sigmoid
 > form below is what `void_closure = False` still selects, and what every number
-> in §5 and §7.1–§7.2 was measured on.
+> in §5 and §7.1–§7.2.2 was measured on.
 
 ```math
 \theta_k(\zeta, \hat t) = \theta_{k,0}(\zeta)\,\exp\!\big(\hat t\, N_k(\zeta, \hat t)\big),
@@ -190,15 +190,25 @@ which exposed a real bug in the JAX port: it trained on a frozen collocation set
 between RAR refreshes, where the 0D twin (and torch) resample every step. Fixing
 that did **not** close the accuracy gap, so the gap remains open.
 
+**Record a number before a refactor, not after.** Splitting the JAX backend into
+its package dropped the `jax_enable_x64` call, and the whole backend trained in
+float32 — with all 241 tests green, because no test asserted a dtype. It was caught
+by a four-digit accuracy baseline taken before the split and re-checked after. The
+torch split was then done in that order deliberately: confirm the backend is
+bit-reproducible run to run at a pinned `OMP_NUM_THREADS`, lock the baseline
+(`seed=0`, 500 iterations, `T_f` 0.2343, `T_cl` 0.3104, `T_s` 0.2106, `T_c` 0.2111),
+refactor, re-check. It reproduced exactly. A passing suite is not a regression test
+for a refactor that can silently change precision.
+
 ## 5. Measured results
 
-> **Provenance (Annex A, N8).** Every number in §5 and §7.1–§7.2 was measured on
+> **Provenance (Annex A, N8).** Every number in §5 and §7.1–§7.2.2 was measured on
 > the **pre-D-TH-3 formulation**: the void solved as a differential unknown, block
 > weights unbounded, no per-block residual scaling, and the full 60 s horizon.
-> All four have since changed. Treat §5 and §7.1–§7.2 as a record of how the
+> All four have since changed. Treat §5 and §7.1–§7.2.2 as a record of how the
 > model got here, not as current accuracy. The current numbers are §7.2.3
 > (variable scaling), §7.2.4 (the phantom void), §7.2.5 (the re-ablation, which
-> **retracts half of D38**) and §7.5 (Plan A). Where a §5 conclusion has been
+> **retracts half of D38**) and §7.4 (Plan A). Where a §5 conclusion has been
 > overturned the later section says so explicitly.
 
 
@@ -315,9 +325,17 @@ Two consequences:
 ## 7. M7 — hardening and backend parity
 
 M7 asks for three things: a multi-seed table, every performance claim measured at
-a stated config, and torch and JAX statistically indistinguishable. **None of the
-three is satisfied.** What exists is below; `TBD` marks a number that has not been
-measured, not one that has been measured and omitted.
+a stated config, and torch and JAX statistically indistinguishable. The first two
+are now satisfied; the third is **not** — the backends agree on `T_f` and `T_cl` at
+three seeds and differ by a consistent, unexplained 21% on `T_s` and `T_c`
+(§7.3.2). `TBD` below marks a number that has not been measured, not one that has
+been measured and omitted.
+
+This section is long and was written in the order the work happened. If you want
+only the current state, read §7.2.3–§7.2.5 (what made the front form, and what it
+costs), §7.3.2 (where the two backends stand) and §7.9 (what is left). Sections are
+numbered so that a superseded result keeps its number and gains a marker, rather
+than being deleted — the reason a result was wrong is usually the finding.
 
 ### 7.1 Multi-seed study
 
@@ -378,7 +396,13 @@ reference's own 5e-3.
 while `w(α)` pins at 0.451, identical to three digits across independent seeds.
 That was §7.2's last untested suspect. It has now been tested; see §7.2.1.
 
-### 7.2.1 The block weighting was the variance
+### 7.2 The formulation fixes
+
+Six measurements, in the order they were taken. Together they are why the boiling
+front forms at all; §7.2.3 is the single change that did it. Read §7.2.4 before
+quoting §7.2.3 — the second retracts a result of the first.
+
+#### 7.2.1 The block weighting was the variance
 
 Four weighting variants × three seeds, torch, Plan B, 3000 Adam + 300 L-BFGS,
 scored against `n_axial = 160`. Only *ratios* between block weights can matter —
@@ -419,7 +443,7 @@ variant against a reference maximum of 1.0. The single run that ever reached
 The boiling front switching on is not a success mode here; it is the same
 instability wearing a different hat.
 
-### 7.2.2 Why the void does not form — a number, not a technique
+#### 7.2.2 Why the void does not form — a number, not a technique
 
 The void residual sits at ~1e11–1e12 in every non-boiling run, four to six orders
 above every other block, and no weighting scheme moves it. That is not a training
@@ -443,7 +467,7 @@ This is the same stiffness argument that justified the prompt-jump approximation
 for the kinetics (D-KIN-1, a factor ~2300), applied to the block that actually
 limits this model now. §7.2.3 acts on it.
 
-### 7.2.3 Variable scaling — the void equation now gets solved
+#### 7.2.3 Variable scaling — the void equation now gets solved
 
 The fix is the one the stiff-PINN literature prescribes and that this repo
 already applies globally: **divide each equation by its own characteristic rate**
@@ -508,7 +532,7 @@ must be stated in those terms rather than reported as a clean win.
 **Residual and trajectory error have decoupled**, which is worth flagging on its
 own: a 1e6× reduction in residual bought ~25% in `T_f` and cost 2× in `T_c`.
 
-### 7.2.4 The "over-running front" was a phantom, and §7.2.3 caused it
+#### 7.2.4 The "over-running front" was a phantom, and §7.2.3 caused it
 
 §7.2.3 reported `L_void` over-predicted by 2.1× and called it a front 2× too
 long. **That reading was wrong.** Plotting `α(ζ,t)` against the reference instead
@@ -587,7 +611,91 @@ domain. It is a resolution problem, not a weighting one, and the remedies for it
 are the free-boundary and level-set formulations of REPORT-01 §7.4 — a
 formulation change, which is M8's subject, not another loss term.
 
-### 7.2 Backend parity
+#### 7.2.5 N6 — re-ablated against the algebraic closure, and D38 is half wrong
+
+Every remedy in §7.2.x was measured against the *old* formulation: differential
+void, unbounded block weights, no residual scaling. All of that has changed, so
+D38's conclusion — "the §7 remedy list is not applicable here, and applying it
+hurt" — was re-tested. Seven arms × two seeds, 3000 Adam + 300 L-BFGS, reference
+`n = 160`, on top of the current defaults:
+
+| arm | T_f | T_cl | T_s | T_c | `L_void` | `max α` | mean ΔT |
+|---|---|---|---|---|---|---|---|
+| base | 0.1376 | 0.1886 | 0.0749 | 0.0751 | 0.1805 | 1.0000 | — |
+| `n_windows=4` | 0.1385 | 0.1895 | 0.0751 | 0.0752 | 0.1830 | 1.0000 | +0.4% |
+| **`fourier_features=32`** | 0.1286 | 0.1787 | 0.0600 | 0.0604 | **0.1878** | 0.9696 | **−12.8%** |
+| **`modified_mlp`** | **0.1270** | **0.1786** | **0.0509** | **0.0521** | 0.1121 | 0.9919 | **−18.9%** |
+| `weight_max_ratio=10` | 0.1409 | 0.1927 | 0.0789 | 0.0804 | 0.1632 | 1.0000 | +4.3% |
+| `causal_eps=5` | 0.1938 | 0.2625 | 0.1591 | 0.1598 | **0.0000** | **0.0000** | +76.3% |
+| `pts_every=500` | 0.2112 | 0.2822 | 0.1829 | 0.1834 | **0.0000** | **0.0000** | +97.9% |
+| reference | — | — | — | — | 0.3812 | 1.0000 | |
+
+**D38 is retracted for the two architecture remedies and confirmed for the loss
+ones.** The modified MLP — jaxpi's default, previously recorded as *3.3× worse* —
+is now the best arm on all four temperatures, by 19%. Fourier features,
+previously 0.255, now improve every field by 13% *and* move voided length toward
+the reference. Time windowing is neutral. Causal weighting and pseudo-time
+stepping remain catastrophic, and now visibly so: under both the boiling front
+never forms at all, `max α = 0.0000`.
+
+The reading that survives is narrower than D38's and more useful. A remedy aimed
+at **representation** — spectral bias, depth — was being masked by a formulation
+whose loss was dominated by a block carrying a normalised rate of 8.5e4. Remove
+that (D-TH-3) and the representation remedies pay. A remedy aimed at
+**reweighting** the loss was, and remains, harmful here, because the imbalance it
+targets is now removed analytically rather than adaptively.
+
+**This is the first time in this project that adding something helped.** Every
+prior improvement — the algebraic closure, bounding the block weights, truncating
+the horizon — was a subtraction.
+
+Not yet adopted as defaults. The modified MLP buys the best temperatures and the
+*worst* voided length of the three working arms (0.1121 against the base 0.1805,
+reference 0.3812), so it trades the front for the fields; Fourier improves both.
+The combination is untested.
+
+#### 7.2.6 The two winners do not compose
+
+§7.2.5 found two remedies that help. Combining them is the obvious next step, and
+it is the one the recipe would have taken without measuring. Four arms, **three**
+seeds each, so the two-seed figures in §7.2.5 are superseded by these:
+
+| arm | T_f | T_cl | T_s | T_c | `L_void` | `max α` | mean ΔT |
+|---|---|---|---|---|---|---|---|
+| base | 0.1360 | 0.1874 | 0.0707 | 0.0711 | 0.1630 | 0.9998 | — |
+| `fourier_features = 32` | 0.1279 | 0.1776 | 0.0590 | 0.0594 | **0.2070** | 0.9797 | **−11.1%** |
+| `modified_mlp` | **0.1271** | 0.1790 | **0.0513** | **0.0526** | 0.0932 | 0.9606 | **−16.1%** |
+| **both** | 0.1360 | 0.1875 | 0.0776 | 0.0778 | 0.1037 | **0.8813** | **+4.8%** |
+| reference | — | — | — | — | 0.3812 | 1.0000 | |
+
+**Each helps alone; together they are worse than neither.** The combination lands
+at +4.8% against base, so it gives back everything both remedies won and a little
+more, and it has the worst `max α` of any working arm — 0.88, meaning the front
+only partly forms on two of three seeds.
+
+Both remedies attack **spectral bias**, by different routes: Fourier features lift
+the input into a high-frequency basis, the modified MLP carries the input to every
+layer through multiplicative gating. Applying both appears to over-correct, and
+the void field — the sharpest feature in the problem, and the one with no residual
+of its own under D-TH-3 — is what pays for it.
+
+**This is the ninth remedy in this document argued soundly and refuted by
+measurement, and the second proposed by this audit rather than the literature.**
+Neither remedy is adopted as a default. On this evidence `fourier_features = 32`
+is the better single choice, because it is the only arm that improves the
+temperatures *and* moves voided length toward the reference; the modified MLP wins
+the temperatures and gives up the front.
+
+**A note on seed counts.** §7.2.5's two-seed figures were −12.8% and −18.9%; at
+three seeds they are −11.1% and −16.1%. The third seed moderated both. The
+direction held, the magnitude did not.
+
+### 7.3 Backend parity
+
+Two tables, a year apart in understanding. §7.3.1 is kept because the *reason* it
+was wrong is the finding; §7.3.2 is the current measurement.
+
+#### 7.3.1 The first table, and the wrong-axis bug that produced it
 
 | | T_f | T_cl | T_s | T_c | config |
 |---|---|---|---|---|---|
@@ -640,145 +748,9 @@ establish "statistically indistinguishable" and this table does not claim it —
 but the systematic gap that made D40 a defect is gone. Multi-seed parity
 statistics remain TBD; that is compute, not development.
 
-### 7.3 Optimiser bake-off
+#### 7.3.2 Re-measured after the closure
 
-**TBD — not started.** The plan called for SSBroyden/SSBFGS
-([arXiv:2501.16371](https://arxiv.org/abs/2501.16371)) first, since they drop into
-the same schedule slot as L-BFGS with no new machinery, then NysNewton-CG
-([ICML 2024](https://proceedings.mlr.press/v235/rathore24a.html)). Deferred
-deliberately: with the reference unconverged in `α` and the two backends 3–10×
-apart, an optimiser comparison would be measuring the ruler.
-
-### 7.4 Pseudo-time stepping
-
-Implemented (`pts_every`, `pts_dtau`, `pts_growth`) and smoke-tested; **accuracy
-TBD** — the ablation run was killed before its three configurations finished.
-
-### 7.5 GPU timing
-
-**TBD — not started.**
-
-### 7.6 What M7 did deliver
-
-The JAX twin itself (`axial/pinn_jax.py`), sharing the residual functions with the
-torch backend and satisfying every hard constraint exactly. It has already earned
-its cost twice: it showed the pre-fix failure was *not* backend-specific, which
-implicated the formulation; and the post-fix divergence exposed the frozen
-collocation bug. Both are findings a single backend could not have produced.
-
-## 7.6 What is still open
-
-| topic | status |
-|---|---|
-| Fourier + modified MLP combined | **measured, and it fails** — §7.2.6 |
-| Plan A, multiple seeds | **TBD** — one seed measured (§7.5) |
-| Backend parity, post-closure | **TBD** — the structure is at parity and tested; the accuracy comparison has not been re-run |
-| Optimiser bake-off (SSBroyden / SSBFGS) | **TBD — not started** |
-| GPU timing | **TBD — not started** |
-| Pseudo-time stepping accuracy | measured harmful (§7.2.5); no further work planned |
-| M4 acceptance: onset within 0.5 s and one cell | **not met.** The front now forms, but onset is late. Under D-TH-3 the front is the level set `T_c = T_sat + ΔT_sup`, so this is bounded by `T_c` accuracy |
-| The 1% bar on temperatures | **not met** — see §7.2.5 for the current figures |
-
-## 8. What to do next
-
-In order, and none of it is "add another method":
-
-1. **Fix the measurement first.** Score against `n_axial ≥ 160`, and re-derive the
-   acceptance bar so it sits above the reference's own error. Some unknown part of
-   the "PINN failure" is the ruler.
-2. **Score `α` on a metric a front can satisfy** — voided length, onset time and
-   location — rather than a pointwise norm across an unconverged discontinuity.
-3. **Only then** re-run the ablation. Remedies aimed at a moving front cannot be
-   judged against a reference that resolves the front to 10%.
-
-Until (1) and (2) are done, no accuracy number from this model should be quoted,
-and none is quoted in this repository outside this document.
-
-Everything marked `TBD` above is measurable with the code as it stands; none of it
-needs new development, only compute and a corrected reference.
-
-### 7.2.5 N6 — re-ablated against the algebraic closure, and D38 is half wrong
-
-Every remedy in §7.2.x was measured against the *old* formulation: differential
-void, unbounded block weights, no residual scaling. All of that has changed, so
-D38's conclusion — "the §7 remedy list is not applicable here, and applying it
-hurt" — was re-tested. Seven arms × two seeds, 3000 Adam + 300 L-BFGS, reference
-`n = 160`, on top of the current defaults:
-
-| arm | T_f | T_cl | T_s | T_c | `L_void` | `max α` | mean ΔT |
-|---|---|---|---|---|---|---|---|
-| base | 0.1376 | 0.1886 | 0.0749 | 0.0751 | 0.1805 | 1.0000 | — |
-| `n_windows=4` | 0.1385 | 0.1895 | 0.0751 | 0.0752 | 0.1830 | 1.0000 | +0.4% |
-| **`fourier_features=32`** | 0.1286 | 0.1787 | 0.0600 | 0.0604 | **0.1878** | 0.9696 | **−12.8%** |
-| **`modified_mlp`** | **0.1270** | **0.1786** | **0.0509** | **0.0521** | 0.1121 | 0.9919 | **−18.9%** |
-| `weight_max_ratio=10` | 0.1409 | 0.1927 | 0.0789 | 0.0804 | 0.1632 | 1.0000 | +4.3% |
-| `causal_eps=5` | 0.1938 | 0.2625 | 0.1591 | 0.1598 | **0.0000** | **0.0000** | +76.3% |
-| `pts_every=500` | 0.2112 | 0.2822 | 0.1829 | 0.1834 | **0.0000** | **0.0000** | +97.9% |
-| reference | — | — | — | — | 0.3812 | 1.0000 | |
-
-**D38 is retracted for the two architecture remedies and confirmed for the loss
-ones.** The modified MLP — jaxpi's default, previously recorded as *3.3× worse* —
-is now the best arm on all four temperatures, by 19%. Fourier features,
-previously 0.255, now improve every field by 13% *and* move voided length toward
-the reference. Time windowing is neutral. Causal weighting and pseudo-time
-stepping remain catastrophic, and now visibly so: under both the boiling front
-never forms at all, `max α = 0.0000`.
-
-The reading that survives is narrower than D38's and more useful. A remedy aimed
-at **representation** — spectral bias, depth — was being masked by a formulation
-whose loss was dominated by a block carrying a normalised rate of 8.5e4. Remove
-that (D-TH-3) and the representation remedies pay. A remedy aimed at
-**reweighting** the loss was, and remains, harmful here, because the imbalance it
-targets is now removed analytically rather than adaptively.
-
-**This is the first time in this project that adding something helped.** Every
-prior improvement — the algebraic closure, bounding the block weights, truncating
-the horizon — was a subtraction.
-
-Not yet adopted as defaults. The modified MLP buys the best temperatures and the
-*worst* voided length of the three working arms (0.1121 against the base 0.1805,
-reference 0.3812), so it trades the front for the fields; Fourier improves both.
-The combination is untested.
-
-### 7.2.6 The two winners do not compose
-
-§7.2.5 found two remedies that help. Combining them is the obvious next step, and
-it is the one the recipe would have taken without measuring. Four arms, **three**
-seeds each, so the two-seed figures in §7.2.5 are superseded by these:
-
-| arm | T_f | T_cl | T_s | T_c | `L_void` | `max α` | mean ΔT |
-|---|---|---|---|---|---|---|---|
-| base | 0.1360 | 0.1874 | 0.0707 | 0.0711 | 0.1630 | 0.9998 | — |
-| `fourier_features = 32` | 0.1279 | 0.1776 | 0.0590 | 0.0594 | **0.2070** | 0.9797 | **−11.1%** |
-| `modified_mlp` | **0.1271** | 0.1790 | **0.0513** | **0.0526** | 0.0932 | 0.9606 | **−16.1%** |
-| **both** | 0.1360 | 0.1875 | 0.0776 | 0.0778 | 0.1037 | **0.8813** | **+4.8%** |
-| reference | — | — | — | — | 0.3812 | 1.0000 | |
-
-**Each helps alone; together they are worse than neither.** The combination lands
-at +4.8% against base, so it gives back everything both remedies won and a little
-more, and it has the worst `max α` of any working arm — 0.88, meaning the front
-only partly forms on two of three seeds.
-
-Both remedies attack **spectral bias**, by different routes: Fourier features lift
-the input into a high-frequency basis, the modified MLP carries the input to every
-layer through multiplicative gating. Applying both appears to over-correct, and
-the void field — the sharpest feature in the problem, and the one with no residual
-of its own under D-TH-3 — is what pays for it.
-
-**This is the ninth remedy in this document argued soundly and refuted by
-measurement, and the second proposed by this audit rather than the literature.**
-Neither remedy is adopted as a default. On this evidence `fourier_features = 32`
-is the better single choice, because it is the only arm that improves the
-temperatures *and* moves voided length toward the reference; the modified MLP wins
-the temperatures and gives up the front.
-
-**A note on seed counts.** §7.2.5's two-seed figures were −12.8% and −18.9%; at
-three seeds they are −11.1% and −16.1%. The third seed moderated both. The
-direction held, the magnitude did not.
-
-## 7.4 Backend parity, re-measured after the closure
-
-§7.2's parity table was marked superseded because it compared two models rather
+§7.3.1's parity table was marked superseded because it compared two models rather
 than two backends. With the knob sets now equal and tested, the comparison is
 valid again. Identical config, identical budget (3000 Adam + 300 L-BFGS),
 identical `n = 160` ruler, three seeds each:
@@ -829,7 +801,7 @@ should be reported as an observation, not explained.
 **So M7's acceptance is still not met, for a much narrower reason.** Two fields
 agree, two differ by a consistent 21%.
 
-### 7.4.1 RAR is not the cause
+#### 7.3.3 RAR is not the cause
 
 The obvious suspect was the last structural asymmetry: torch grows an RAR
 reservoir up to `rar_cap`, JAX keeps a fixed `rar_keep` set so `jit` never
@@ -853,7 +825,7 @@ The direction is at least consistent with the asymmetry: RAR *helps* torch
 what a backend receiving twice as many high-residual points would show. The
 effect is simply too small to account for the gap.
 
-### 7.4.2 The L-BFGS polish is the whole remaining gap
+#### 7.3.4 The L-BFGS polish is the whole remaining gap
 
 The last genuinely different implementation: torch uses `torch.optim.LBFGS` with
 a strong-Wolfe line search and a snapshot/revert guard, JAX uses `optax.lbfgs`
@@ -888,12 +860,12 @@ iterations do. The quasi-Newton polish is not a refinement here — it is the st
 that finds the front, which makes the choice of L-BFGS implementation a physics
 question rather than a tuning one.
 
-That reframes §7.3's deferred optimiser bake-off: SSBroyden and SSBFGS
+That reframes §7.5's deferred optimiser bake-off: SSBroyden and SSBFGS
 ([arXiv:2501.16371](https://arxiv.org/abs/2501.16371)) drop into exactly this
 slot, and this is now the highest-value untested item in the project rather than
 a nice-to-have. **TBD.**
 
-## 7.5 N5 — Plan A measured end to end
+### 7.4 N5 — Plan A measured end to end
 
 M6 shipped the prompt-jump closure in the network and never scored it; §6.4 said
 so and marked the acceptance criterion unverified. It is now measured. Quadrature
@@ -930,3 +902,92 @@ power and on the tripwire; they do not agree on the trajectory, and the
 reactivity balance does not close to tolerance.
 
 Single seed. Given §7.1's history, that is a measurement and not a statistic.
+
+### 7.5 Optimiser bake-off
+
+**TBD — not started, and now the highest-value untested item in the project.**
+The plan calls for SSBroyden/SSBFGS
+([arXiv:2501.16371](https://arxiv.org/abs/2501.16371)) first, since they drop into
+the same schedule slot as L-BFGS with no new machinery, then NysNewton-CG
+([ICML 2024](https://proceedings.mlr.press/v235/rathore24a.html)).
+
+It was deferred on the grounds that with the reference unconverged in `α` and the
+two backends 3–10× apart, an optimiser comparison would be measuring the ruler.
+**Half of that reason is gone and the other half inverted.** The parity gap was a
+causal-weighting axis bug and is now 0.9–1.3× (§7.3.1–§7.3.2), so there is no
+longer a backend confound. And §7.3.4 measured that the L-BFGS polish is not a
+refinement here but the step that *forms the boiling front* — Adam alone leaves
+`max α = 0` in both backends. That makes the quasi-Newton stage the single most
+load-bearing component of the recipe, so its implementation is a physics question.
+The `α` ruler is still unconverged (§6.5), which bounds what the comparison can
+conclude about the front, not what it can conclude about the temperatures.
+
+### 7.6 Pseudo-time stepping
+
+Implemented (`pts_every`, `pts_dtau`, `pts_growth`), and **measured harmful** in
+the §7.2.5 re-ablation — it is off by default and no further work is planned. An
+earlier ablation run was killed before finishing, which is why an interim version
+of this section recorded the accuracy as TBD.
+
+### 7.7 GPU timing
+
+**Not a goal, rather than a gap.** CPU is the target: these networks are far too
+small to saturate a device, and the float64 the problem needs is throttled to
+roughly 1/32–1/64 of FP32 on consumer NVIDIA hardware. The axial model has never
+been benchmarked on a GPU and there is no plan to. What *does* need pinning before
+any timing here is quoted is `OMP_NUM_THREADS` — the default is every core, so two
+concurrent runs oversubscribe, and thread count changes float reduction order. With
+it pinned the torch backend reproduces run to run to four digits, which is what made
+the post-refactor regression check in §4 meaningful. §7.3.2 states which of its
+wall-clocks were contended and which were not, for exactly this reason.
+
+The one timing question that *is* open is a CPU one: the 2.4× JAX advantage in
+§7.3.2, which remains unattributed.
+
+### 7.8 What M7 did deliver
+
+The JAX twin itself (`axial/pinn_jax.py`), sharing the residual functions with the
+torch backend and satisfying every hard constraint exactly. It has already earned
+its cost twice: it showed the pre-fix failure was *not* backend-specific, which
+implicated the formulation; and the post-fix divergence exposed the frozen
+collocation bug. Both are findings a single backend could not have produced.
+
+### 7.9 What is still open
+
+| topic | status |
+|---|---|
+| Fourier + modified MLP combined | **measured, and it fails** — §7.2.6 |
+| Plan A, multiple seeds | **TBD** — one seed measured (§7.4) |
+| Backend parity, post-closure | **measured** — §7.3.2. Accuracy 1.04–1.22×, but `T_s` and `T_c` do not overlap at three seeds and the 21% torch advantage there is unexplained |
+| The 2.4× JAX speed advantage | **unattributed** — §7.3.2. `torch.compile` accounts for 1.06× of it and is not the answer |
+| Optimiser bake-off (SSBroyden / SSBFGS) | **TBD — not started**, and §7.3.4 makes it the highest-value remaining item |
+| GPU timing | **not a goal** — §7.7. CPU is the target |
+| Pseudo-time stepping accuracy | measured harmful (§7.2.5); no further work planned |
+| M4 acceptance: onset within 0.5 s and one cell | **not met.** The front now forms, but onset is late. Under D-TH-3 the front is the level set `T_c = T_sat + ΔT_sup`, so this is bounded by `T_c` accuracy |
+| The 1% bar on temperatures | **not met** — see §7.2.5 for the current figures |
+
+## 8. What to do next
+
+In order, and none of it is "add another method". Nine remedies have now been
+argued soundly and refuted by measurement (§5.4, §7.2.1, §7.2.5, §7.2.6); the tenth
+would not be different.
+
+1. **The optimiser bake-off** — §7.5. §7.3.4 measured that L-BFGS is not polishing
+   anything here: it is the step that forms the boiling front, and Adam alone leaves
+   `max α = 0` in both backends. That makes the quasi-Newton stage the most
+   load-bearing component of the recipe and the least examined. SSBroyden/SSBFGS
+   drop into the same slot with no new machinery.
+2. **Explain the 21% on `T_s` and `T_c`** — §7.3.2. Two backends running the same
+   equations, the same budget and the same ruler disagree consistently on two of
+   four fields and agree on the other two. That is a bug-shaped result, and every
+   previous backend disagreement in this document turned out to be one.
+3. **Converge the ruler in `α`, then re-derive the acceptance bar** so it sits above
+   the reference's own error. The reference resolves the front to ~10% at the
+   default resolution (§6.5), so an accuracy target below that is scoring the ruler.
+   Temperatures are already scored against `n_axial = 160`; the void is the gap.
+4. **Plan A at more than one seed** — §7.4. Given §7.1's 12.5× seed spread, the
+   single Plan A measurement is an observation and is labelled as one.
+
+Everything above is measurable with the code as it stands; none of it needs new
+development, only compute and a converged void reference. No accuracy number from
+this model should be quoted outside this document, and none is.

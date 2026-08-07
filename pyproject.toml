@@ -118,7 +118,13 @@ target-version = "py313"
 src = ["src", "tests"]
 # Notebooks use compact, idiomatic cell style (inline imports, semicolons in
 # plotting cells); lint the package, not the teaching notebook.
-extend-exclude = ["notebooks"]
+#
+# Markdown is excluded too. Ruff formats fenced Python inside `.md`, but the
+# pre-commit hook is `types_or: [python, pyi]` and never did — so `ruff format .`
+# and the actual gate disagreed, and the only thing the reflow achieved was to
+# break the hand-aligned `TrainConfig` block in docs/usage.md into one argument
+# per line. Documentation code is illustrative, not compiled; the gate decides.
+extend-exclude = ["notebooks", "*.md"]
 
 [tool.ruff.lint]
 select = ["ALL"]
