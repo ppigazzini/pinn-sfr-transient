@@ -10,9 +10,11 @@ including the results that came out badly, which are most of them.
 
 ## 0. Status quo
 
-Everything below is measured at three seeds against an `n_axial = 160` reference
-unless it says otherwise, and every table is reproducible by a sub-command of
-[`tools/axial_study.py`](../tools/axial_study.py).
+Everything below is measured at **three seeds** against an `n_axial = 160`
+reference, and every table is reproducible by a sub-command of
+[`tools/axial_study.py`](../tools/axial_study.py). All six studies are complete:
+`ruler`, `horizon`, `budget`, `optimizer`, `parity`, `plan-a`, `combo`, `regime`
+and `regime-sign`.
 
 ### 0.1 Where the accuracy stands
 
@@ -1467,8 +1469,8 @@ smoothing should do against it. So:
 | A (shipped default) | 0.1373 | 0.0739 `[.0677–.0786]` | 0.0742 | 0.1505 `[.1212–.1670]` | 1.0000 | +20.5, +17.2, +9.8 K |
 | C (budget only) | 0.1247 | 0.0434 `[.0379–.0464]` | 0.0450 | 0.0724 `[.0495–.1068]` | 0.8702 | — |
 | **C + fourier** | **0.1143** `[.1084–.1201]` | **0.0353** `[.0315–.0380]` | **0.0364** `[.0324–.0393]` | **0.2270** `[.2010–.2455]` | **1.0000** | +18.6, +13.5, +7.6 K |
-| C + modified_mlp | 0.1250 | 0.0452 (2 seeds) | 0.0467 | 0.0851 | 0.95 | **+0.6, +2.4 K** |
-| A + fourier | 0.1284 | 0.0583 (2 seeds) | 0.0588 | 0.1773 | 0.91 | **+3.7, −0.4 K** |
+| C + modified_mlp | 0.1248 `[.1244–.1251]` | 0.0447 `[.0438–.0460]` | 0.0462 | 0.0734 `[.0500–.0928]` | 0.9260 | **+0.6, +2.4, −0.0 K** |
+| A + fourier | 0.1277 `[.1253–.1314]` | 0.0578 `[.0519–.0646]` | 0.0588 | 0.1883 `[.0865–.2681]` | 0.9425 | **+3.7, −0.4, +12.7 K** |
 | reference | — | — | — | 0.3812 | 1.0000 | — |
 
 **`C + fourier` is the best result this model has produced, on every metric at
@@ -1482,20 +1484,24 @@ the margin predicts.**
 
 `C + modified_mlp` pairs the same mean-winning budget with a peak-*lowering*
 remedy. The prediction was that the mean would stall and the margin collapse; it
-did both — temperatures no better than plain arm C, margins of **+0.6 and +2.4 K**,
-the front sitting on the threshold.
+did both, on all three seeds — temperatures no better than plain arm C, and margins
+of **+0.6, +2.4 and −0.0 K**. The front sits exactly on the threshold every time,
+which is about as clean a confirmation as a three-seed control can give.
 
 `A + fourier` isolates the Fourier effect and is the sharpest illustration of
-§7.2.8 in the document. At seed 0 it produces the **largest `L_void` of any arm**
-(0.2681) on a margin of just +3.7 K. At seed 1 the margin goes **negative**
-(−0.4 K) and `L_void` collapses to 0.0865. A configuration whose peak sits on the
-threshold is decided by the seed, and that is not a defect in the remedy — it is
-what §7.2.8 says a threshold crossing must look like from there.
+§7.2.8 in the document. Its margins are **+3.7, −0.4 and +12.7 K** and its `L_void`
+tracks them precisely: **0.2681, 0.0865, 0.2103**. One seed in three lands below
+saturation and the voided length collapses by 3×. That is not a defect in the
+remedy — it is what §7.2.8 says a threshold crossing must look like when the peak
+sits on it. The seed spread on `L_void` is **3.1×**, against 1.22× for
+`C + fourier`.
 
-**`C + fourier` is the only arm with margin to spare on every seed**, which is why
-it is the only one whose `L_void` range is disjoint from the default's. Both effects
-are real and they add: Fourier widens the super-saturated region, the quasi-Newton
-budget sharpens the mean, and neither alone is stable.
+**`C + fourier` is the only arm with margin to spare on every seed** — its worst is
++7.6 K where the two controls reach −0.0 and −0.4 K — and it is the only one whose
+`L_void` range is disjoint from the default's. Both effects are real and they add:
+Fourier widens the super-saturated region, the quasi-Newton budget sharpens the
+mean, and **neither alone is stable**. `A + fourier` has the higher single-seed
+`L_void` and a 3.1× seed spread; `C` alone has the mean and loses the front.
 
 That is §7.2.8 predicting a three-arm comparison in advance — which arm keeps its
 margin, which spends it, and which is decided by the seed. Nothing in this document
