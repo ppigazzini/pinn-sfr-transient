@@ -293,6 +293,8 @@ def test_the_two_backends_share_every_default():
         "n_time",
         "seed",
         "optimizer",
+        "front_frac",
+        "front_level_set",
     ):
         assert getattr(j, name) == getattr(t, name), name
 
@@ -552,3 +554,52 @@ def test_both_evaluators_report_the_front_margin():
     # The reference does boil, so its margin is positive; that is what the network
     # has to clear.
     assert t_out["margin_K_ref"] > 0.0
+
+
+def test_level_set_sampling_concentrates_on_saturation():
+    """The level-set sampler must actually place points near `T_c = T_boil`.
+
+    A sampler that returns uniform points would look identical in every metric
+    until it silently failed to fix anything -- the `front_frac` knob was declared
+    in the JAX config and read by nothing once already (`docs/axial_nn.md` section
+    4). Assert the property rather than the plumbing: the drawn points must sit
+    closer to saturation than a uniform draw does.
+    """
+    from pinn_sfr_transient.axial import sodium
+    from pinn_sfr_transient.axial.jaxpinn.ansatz import normalised_state
+    from pinn_sfr_transient.axial.jaxpinn.samplers import _level_set_points
+
+    p = AxialParams()
+    cfg = pj.AxialTrainConfig(width=16, depth=3, n_colloc=512, front_level_set=True)
+    model = pj.AxialPinn(cfg, jax.random.PRNGKey(0))
+    T_boil = sodium.saturation_temperature(p.p_system) + p.dT_superheat
+    dT = p.P_0 / (p.w_0 * p.c_c)
+
+    def dist(pts):
+        th = jax.vmap(lambda a, b: normalised_state(model, p, a, b, cfg))(pts[:, 0:1], pts[:, 1:2])
+        return float(jnp.abs(p.T_in + th[:, 3] * dT - T_boil).mean())
+
+    picked = _level_set_points(model, p, cfg, jax.random.PRNGKey(1), 1.0)
+    uniform = jax.random.uniform(jax.random.PRNGKey(2), (picked.shape[0], 2))
+    assert dist(picked) < dist(uniform), (dist(picked), dist(uniform))
+
+
+def test_level_set_and_front_net_are_exclusive():
+    """`front_net` wins when both are set, and the level set needs no front network.
+
+    Under D-TH-3 the front IS the level set, so the M8 front-position network -- which
+    measured worse on every metric -- is not a prerequisite for front-aware sampling.
+    Both backends must agree on which branch runs.
+    """
+    torch = pytest.importorskip("torch")
+    from pinn_sfr_transient.axial import pinn_torch as pt
+
+    p = AxialParams()
+    cfg = pt.AxialTrainConfig(width=8, depth=2, n_colloc=64, front_level_set=True)
+    trainer = pt.Trainer(pt.AxialPinn(p, cfg), cfg)
+    assert not trainer.model.use_front, "the level set must not require the front network"
+    pts = trainer._level_set_points(16, 1.0)
+    assert pts.shape == (16, 2)
+    assert float(pts.min()) >= 0.0
+    assert float(pts.max()) <= 1.0
+    assert torch.isfinite(pts).all()
