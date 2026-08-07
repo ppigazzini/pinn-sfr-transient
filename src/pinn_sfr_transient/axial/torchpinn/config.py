@@ -133,6 +133,29 @@ class AxialTrainConfig:
     pts_dtau: float = 1.0
     pts_growth: float = 1.5
 
+    # Quasi-Newton stage. `docs/axial_nn.md` section 7.3.4 measured that this
+    # stage is not a polish here -- it is the step that forms the boiling front,
+    # since Adam alone leaves `max alpha = 0` in both backends. So the choice of
+    # implementation is a physics question, not a tuning one.
+    #
+    # "lbfgs"        -- the framework's own: `torch.optim.LBFGS` in torch,
+    #                   `optax.lbfgs` in JAX. The default, unchanged, so no
+    #                   published number moves. NOTE that this is the one knob
+    #                   whose *implementation* differs between the backends.
+    # "lbfgs-shared" -- this repository's own L-BFGS, bit-comparable across
+    #                   backends (a test pins the two to 1e-10 on a quadratic).
+    #                   Exists to answer section 7.3.4: it removes the last
+    #                   implementation difference between the backends, so if the
+    #                   21% `T_s`/`T_c` gap survives it, the framework L-BFGS is
+    #                   not the cause.
+    # "ssbfgs"       -- limited-memory self-scaled BFGS [Oren & Luenberger 1974;
+    #                   Al-Baali 1998], the family Kiyani et al. (arXiv:2501.16371)
+    #                   report beating L-BFGS across PINN benchmarks. Measured here
+    #                   on stiff quadratics and Rosenbrock BEFORE the PINN: it loses
+    #                   to plain L-BFGS on both. Kept because that comparison is the
+    #                   point, and because a PINN loss is not a quadratic.
+    optimizer: str = "lbfgs"
+
     device: str = "cpu"
     seed: int = 0
     log_every: int = 1000

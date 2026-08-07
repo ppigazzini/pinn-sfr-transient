@@ -292,6 +292,7 @@ def test_the_two_backends_share_every_default():
         "feedback",
         "n_time",
         "seed",
+        "optimizer",
     ):
         assert getattr(j, name) == getattr(t, name), name
 
@@ -327,3 +328,153 @@ def test_float64_is_enabled_by_importing_the_backend():
         .weight.dtype
         == jnp.float64
     )
+
+
+def test_self_scaled_bfgs_agrees_across_backends():
+    """The `optimizer` knob must select the same algorithm in both backends.
+
+    The two implementations differ in form -- a closure-driven class in torch, a
+    function over a flat vector in JAX -- because the frameworks force it. What
+    must not differ is the arithmetic. Run both on the same ill-conditioned
+    quadratic from the same start and require the same minimiser.
+    """
+    torch = pytest.importorskip("torch")
+    from pinn_sfr_transient.axial.jaxpinn.optimizers import minimize
+    from pinn_sfr_transient.axial.torchpinn.optimizers import SelfScaledLBFGS
+
+    n = 40
+    d_np = np.logspace(0.0, 4.0, n)
+    x0_np = np.ones(n)
+
+    d_t = torch.tensor(d_np, dtype=torch.float64)
+    x_t = torch.tensor(x0_np, dtype=torch.float64, requires_grad=True)
+    opt = SelfScaledLBFGS([x_t], max_iter=25, self_scale=True)
+
+    def closure():
+        x_t.grad = None
+        loss = 0.5 * (d_t * x_t * x_t).sum()
+        loss.backward()
+        return loss
+
+    opt.step(closure)
+
+    d_j = jnp.asarray(d_np)
+
+    def value_and_grad(x):
+        return 0.5 * jnp.sum(d_j * x * x), d_j * x
+
+    x_j, _ = minimize(value_and_grad, jnp.asarray(x0_np), max_iter=25, self_scale=True)
+
+    np.testing.assert_allclose(np.asarray(x_j), x_t.detach().numpy(), rtol=1e-10, atol=1e-12)
+
+
+def test_self_scaling_off_reproduces_textbook_lbfgs():
+    """`self_scale=False` must be plain L-BFGS, so the comparison has a control.
+
+    Without this the self-scaled arm has nothing to be measured against inside
+    the same implementation, and a difference could be the scaling or could be
+    the line search.
+    """
+    torch = pytest.importorskip("torch")
+    from pinn_sfr_transient.axial.torchpinn.optimizers import SelfScaledLBFGS
+
+    def rosenbrock(x):
+        return (100.0 * (x[1:] - x[:-1] ** 2) ** 2 + (1.0 - x[:-1]) ** 2).sum()
+
+    x0 = torch.full((20,), -1.2, dtype=torch.float64)
+    x0[1::2] = 1.0
+
+    def run(make):
+        x = x0.clone().requires_grad_(True)
+        opt = make([x])
+
+        def closure():
+            if isinstance(opt, torch.optim.LBFGS):
+                opt.zero_grad()
+            else:
+                x.grad = None
+            loss = rosenbrock(x)
+            loss.backward()
+            return loss
+
+        opt.step(closure)
+        return float(rosenbrock(x).detach())
+
+    ours = run(lambda ps: SelfScaledLBFGS(ps, max_iter=200, self_scale=False))
+    theirs = run(
+        lambda ps: torch.optim.LBFGS(
+            ps, max_iter=200, history_size=50, line_search_fn="strong_wolfe"
+        )
+    )
+    # Not bit-equal -- the zoom interpolates differently -- so the assertion is
+    # that both solve it, not that they agree digit for digit. Rosenbrock starts
+    # near 5e3 here; anything below 1e-6 has found the valley floor.
+    assert ours < 1e-6, ours
+    assert theirs < 1e-6, theirs
+
+
+def test_residual_blocks_are_identical_given_identical_parameters():
+    """Transplant torch's weights into the Equinox model; every block must match.
+
+    The two backends disagree by a consistent 21% on `T_s` and `T_c` after
+    training (`docs/axial_nn.md` section 7.3.2), and every previous backend
+    disagreement in this project turned out to be a bug. This separates the two
+    possible causes: if the residuals differ at identical parameters, the
+    equations forked; if they agree to round-off, the difference is training
+    dynamics and the equations are exonerated.
+
+    They agree to ~1e-14 relative. Keep it that way.
+    """
+    torch = pytest.importorskip("torch")
+    import equinox as eqx
+
+    from pinn_sfr_transient.axial import pinn_torch as pt
+    from pinn_sfr_transient.axial.jaxpinn.ansatz import normalised_state as j_state
+    from pinn_sfr_transient.axial.jaxpinn.residuals import residual_blocks as j_blocks
+
+    width, depth, n = 16, 3, 129
+    p = AxialParams()
+    tcfg, jcfg = (
+        pt.AxialTrainConfig(width=width, depth=depth),
+        pj.AxialTrainConfig(width=width, depth=depth),
+    )
+    torch.manual_seed(0)
+    tm = pt.AxialPinn(p, tcfg)
+    jm = pj.AxialPinn(jcfg, jax.random.PRNGKey(0))
+
+    t_linear = [m for m in tm.modules() if isinstance(m, torch.nn.Linear)]
+    assert len(t_linear) == len(jm.mlp.layers)
+    for i, tl in enumerate(t_linear):
+        jm = eqx.tree_at(
+            lambda m, i=i: m.mlp.layers[i].weight, jm, jnp.asarray(tl.weight.detach().numpy())
+        )
+        jm = eqx.tree_at(
+            lambda m, i=i: m.mlp.layers[i].bias, jm, jnp.asarray(tl.bias.detach().numpy())
+        )
+
+    rng = np.random.default_rng(0)
+    zeta = rng.uniform(0.0, 1.0, (n, 1))
+    that = rng.uniform(0.0, 1.0, (n, 1))
+    zt = torch.tensor(zeta, dtype=torch.float64)
+    tt = torch.tensor(that, dtype=torch.float64)
+
+    np.testing.assert_allclose(
+        np.asarray(
+            jax.vmap(lambda a, b: j_state(jm, p, a, b, jcfg))(jnp.asarray(zeta), jnp.asarray(that))
+        ),
+        tm.normalised_state(zt, tt).detach().numpy(),
+        rtol=1e-11,
+        atol=1e-13,
+    )
+
+    tb = tm.residual_blocks(zt, tt)
+    jb = j_blocks(jm, p, jnp.asarray(zeta), jnp.asarray(that), jcfg)
+    assert len(tb) == len(jb)
+    for k, (a, b) in enumerate(zip(tb, jb, strict=True)):
+        np.testing.assert_allclose(
+            np.asarray(b).ravel(),
+            a.detach().numpy().ravel(),
+            rtol=1e-10,
+            atol=1e-13,
+            err_msg=f"residual block {k} differs between backends",
+        )
