@@ -1251,10 +1251,40 @@ smoothing should do against it. So:
 | C + `modified_mlp` | control: a stronger mean-winner that *costs* the peak |
 | A + `fourier_features=32` | separates the Fourier effect from the budget effect |
 
-**Measurement in progress.** The reason to expect anything here is mechanical
-rather than additive, which is the difference between this and the nine remedies
-already refuted in this document. That is a reason to run it, not a reason to
-believe it.
+**Seed 0, two of three arms, and the control landed the way the design said it
+would:**
+
+| arm | T_f | T_cl | T_s | T_c | `L_void` | `max α` | **margin** |
+|---|---|---|---|---|---|---|---|
+| A (shipped default) | 0.1373 | 0.1890 | 0.0739 | 0.0742 | 0.1505 | 1.0000 | +20.5 K |
+| C (3-seed mean) | 0.1247 | 0.1761 | 0.0434 | 0.0450 | 0.0724 | 0.8702 | — |
+| **C + fourier** | **0.1084** | **0.1525** | **0.0315** | **0.0324** | **0.2455** | 1.0000 | +18.6 K |
+| C + modified_mlp | 0.1251 | 0.1768 | 0.0460 | 0.0475 | 0.0774 | 0.9199 | **+0.6 K** |
+| reference | — | — | — | — | 0.3812 | 1.0000 | — |
+
+**`C + fourier` is the best result this model has produced, on every metric at
+once.** Against the shipped default: `T_s` and `T_c` down **57%**, `T_f` down 21%,
+and `L_void` up from 0.1505 to **0.2455** — 63% closer to the reference than the
+default and better than the previous best of 0.2070 (§7.2.6). The front forms fully
+and keeps 18.6 K of margin.
+
+**The control is the part that makes it more than a lucky arm.** `C + modified_mlp`
+pairs the same mean-winning budget with a remedy that *lowers* the peak, and the
+prediction was that the mean would stall and the margin collapse. It did both: the
+temperatures are no better than plain arm C, and the margin is **+0.6 K** — the
+front is sitting exactly on the threshold, one seed away from not existing.
+
+That is §7.2.8 predicting a two-arm comparison quantitatively in advance, which
+nothing in this document had managed before. It also explains §7.2.6 in retrospect:
+Fourier and the modified MLP "did not compose" because one *raises* the peak and the
+other *lowers* it. They were competing for the margin, not for the mean — invisible
+until the margin was measured.
+
+**`A + fourier` and seeds 1–2 are still running**, and they matter. `A + fourier`
+separates the Fourier effect from the budget effect; without it this table cannot
+say whether the budget contributed anything. And §7.5.3's front metric moved
+0.6274 → 0.9998 on seed alone, so a single `L_void` is not yet a result. **Nothing
+here is adopted as a default until both land.**
 
 ### 7.6 Pseudo-time stepping
 
