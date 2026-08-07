@@ -656,8 +656,8 @@ this model should be quoted as a physical prediction.
 | **M3** | Plan B PINN — prescribed power, no feedback | **done** |
 | **M4** | Boiling onset and void field | **done** |
 | **M5** | Film / dryout heat path (§12.5.1) | **done** |
-| **M6** | Prompt-jump kinetics closure — Plan B → Plan A | **reference done; PINN not extended** |
-| **M7** | Hardening, seeds, JAX port | see [`axial_nn.md`](axial_nn.md) |
+| **M6** | Prompt-jump kinetics closure — Plan B → Plan A | reference done; PINN measured and **failed** — `L2(P)` 0.1110 at three seeds against a 1% bar, with 26–28% too little negative feedback on every seed ([`axial_nn.md`](axial_nn.md) §7.4.1) |
+| **M7** | Hardening, seeds, JAX port | **done** — backend parity closed: residuals agree to 1e-14 and the 16.8% accuracy gap is the framework L-BFGS, 0.999 with a shared implementation ([`axial_nn.md`](axial_nn.md) §7.3.2) |
 | M8 | single-bubble Chapter 12 comparison | superseded — the void is now closed algebraically (D-TH-3), and the front-position network it would have used measured worse |
 | M9 | parametric sweep / regime map | **reference half done — §10. The parametric PINN is not attempted**, and that is a decision: the single-point network misses its bar by 7–19×, so extending it over a parameter family would measure nothing |
 
