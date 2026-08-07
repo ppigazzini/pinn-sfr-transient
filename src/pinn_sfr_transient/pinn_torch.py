@@ -75,12 +75,19 @@ class TrainConfig:
     rar_add: int = 200
     rar_cap: int = 4000
 
-    # Modern-PyTorch knobs. There is no `torch.compile` knob: the hot path is
-    # `residual_blocks`, and torch 2.12.1 refuses it in both autodiff modes --
-    # "does not currently support double backward" in reverse mode, and
-    # "ZeroTensors are immutable" for the `jvp`+`vmap` composition in forward
-    # mode.
+    # Modern-PyTorch knobs.
     jacobian: Literal["forward", "reverse"] = "forward"
+    # `torch.compile`. Off by default because it is **measured not to pay**, not
+    # because it breaks: on the axial twin it buys 1.06x at 17 s of compile time,
+    # since 88% of the step is forward-plus-backward through `torch.func.jvp` in
+    # float64 -- BLAS-bound work Inductor cannot improve (`docs/axial_nn.md`
+    # section 7.3.2). At small budgets it is a net loss.
+    #
+    # An earlier note here said `compile` "can interact awkwardly with `func`
+    # transforms on some builds". That was never verified and does not reproduce
+    # on torch 2.13 / CPython 3.14, where both paths train cleanly. Kept as a knob
+    # so the claim stays testable rather than folklore.
+    compile: bool = False
     device: str = "cpu"
     seed: int = 0
 
