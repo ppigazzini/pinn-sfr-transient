@@ -850,7 +850,9 @@ among them depends on anything else. That leaves the wall-clocks contended and t
 accuracy untouched, and both halves of that are measured rather than assumed:
 `torch/lbfgs` at seed 0 returns 0.1379 / 0.1892 / 0.0753 / 0.0756 with
 `L_void` 0.1634 in the contended parity run and **the same four digits** in the
-uncontended budget run, at 876 s against 592 s. Thread count changes float
+uncontended budget run, at 876 s against 592 s. Three separate processes — the
+`budget`, `parity` and `optimizer` studies — have now reproduced that
+configuration, and seed 1's, to every digit printed. Thread count changes float
 reduction order and so changes answers; concurrency at a fixed thread count does
 not. Every study row records its own `load1` and `OMP_NUM_THREADS` so no timing here
 can be mistaken for a clean one.
