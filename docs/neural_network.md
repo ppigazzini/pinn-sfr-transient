@@ -198,11 +198,15 @@ The implementation uses current PyTorch idioms:
 
 * **`torch.func.jvp` + `vmap`** — used by default for the forward-mode Jacobian
   (§4.4); the modern, vectorised way to differentiate a scalar→vector map.
-* **no `torch.compile`** — the hot path is `residual_blocks`, and torch 2.12.1
-  refuses to compile it in either autodiff mode: reverse mode raises "does not
-  currently support double backward", forward mode raises "ZeroTensors are
-  immutable" on the `jvp`+`vmap` composition. Compiling the module instead is
-  not a substitute, because the training loop never calls `forward`.
+* **`torch.compile`** — opt-in via `TrainConfig(compile=True)`; graph capture +
+  kernel fusion for the dense MLP. **Off by default because it is measured not to
+  pay, not because it breaks.** On the axial twin it buys **1.06×** at 17 s of
+  compile time, since 88% of the step is forward-plus-backward through
+  `torch.func.jvp` in float64 — BLAS-bound work Inductor cannot improve
+  ([`axial_nn.md`](axial_nn.md) §7.3.2). An earlier version of this line said
+  `compile` "can interact awkwardly with `func` transforms on some builds"; that
+  was never verified and does not reproduce on torch 2.13 / CPython 3.14, where
+  both paths train cleanly.
 * **`torch.float64`** throughout — required for this stiff problem.
 * **device-agnostic** — `TrainConfig(device=...)` selects CPU / CUDA / MPS.
 
