@@ -1149,6 +1149,38 @@ reactivity balance does not close to tolerance.
 
 Single seed. Given §7.1's history, that is a measurement and not a statistic.
 
+#### 7.4.1 Re-measured at the shipped budget, two seeds
+
+**The budget above is not the shipped one.** §7.4 ran 3000 Adam + 300 L-BFGS;
+`AxialTrainConfig` ships **8000 + 500**, which is what a reader running the model
+gets. Re-measured there, `uv run python tools/axial_study.py plan-a`:
+
+| seed | `L2(P)` | `P(0)` | peak `P` | min `P` | `min ρ/β` | `max ρ/β` | time |
+|---|---|---|---|---|---|---|---|
+| 0 | 0.1060 | 1.000000 | 1.0000 | 0.4659 | −0.1482 | **+0.0000** | 2748 s |
+| 1 | 0.1128 | 1.000000 | 1.0000 | 0.4622 | −0.1505 | **+0.0000** | 2478 s |
+| reference | — | — | 1.0000 | 0.5021 | −0.2052 | +0.0000 | — |
+
+**`L2(P)` is 0.106–0.113 against §7.4's 0.2497 — but that is a 4× compute
+difference, not an improvement in method.** Read it as: Plan A is
+optimisation-limited too, which is the third independent sign of that after §7.5.3
+and §7.3.4.
+
+**The failure mode is unchanged and is now reproducible.** Both seeds find
+`min ρ/β ≈ −0.149` against the reference's −0.2052 — **27% less negative feedback**
+— and both under-shoot the power minimum (0.462–0.466 against 0.5021) where §7.4's
+smaller budget over-shot it (0.5380). More optimisation moved the error across the
+reference without changing its character: the network still cannot find the
+reactivity swing.
+
+What passes still passes exactly: `P(0) = 1.000000` to six figures because the
+closure is hard-constrained rather than penalised, and the pole tripwire reads
+`+0.0000` on both seeds, independently reproducing D49.
+
+**Two seeds, 6% apart. Seed 2 is running.** M6's acceptance criterion remains
+**failed** — 11% against a 1% bar — but it is now failed reproducibly rather than
+once.
+
 ### 7.5 Optimiser bake-off
 
 The bake-off was deferred on the grounds that with the reference unconverged in
