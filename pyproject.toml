@@ -179,6 +179,11 @@ known-first-party = ["pinn_sfr_transient"]
                #     so a job without it skips rather than errors at collection
     "INP001",  # tests/ is a collection dir, not an importable package
 ]
+"src/pinn_sfr_transient/axial/jaxpinn/__init__.py" = [
+    # `jax_enable_x64` must run before any array is created, so it must precede
+    # the submodule imports. That ordering is the whole point of the file.
+    "E402",
+]
 "tools/**" = [
     "INP001",  # standalone scripts, not an importable package
     "T201",    # progress output is the point
@@ -214,6 +219,9 @@ exclude = [
     # arity ty cannot infer, and `requires_grad_` is missing from the stubs.
     "src/pinn_sfr_transient/axial/pinn_torch.py",
     "src/pinn_sfr_transient/axial/pinn_jax.py",
+    # Same reason, and the same code: `jaxpinn/` is `pinn_jax.py` split into
+    # modules, so it inherits the exclusion rather than earning a new one.
+    "src/pinn_sfr_transient/axial/jaxpinn/",
 ]
 
 [tool.ty.rules]

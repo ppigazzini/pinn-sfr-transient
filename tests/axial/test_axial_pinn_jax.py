@@ -311,3 +311,19 @@ def test_void_closure_agrees_across_backends():
     j = np.asarray(quasi_steady_void(jnp.asarray(T), p))
     t = quasi_steady_void(torch.tensor(T, dtype=torch.float64), p).numpy()
     np.testing.assert_allclose(j, t, rtol=0.0, atol=1e-5)
+
+
+def test_float64_is_enabled_by_importing_the_backend():
+    """float64 is a correctness setting for this model, and it is easy to lose.
+
+    `jax_enable_x64` must be applied before any array exists. A refactor once
+    moved the module that set it, and the whole backend silently ran in float32 —
+    no error, no warning, ~2% different answers. Assert it rather than trust it.
+    """
+    assert jnp.zeros(1).dtype == jnp.float64
+    assert (
+        pj.AxialPinn(pj.AxialTrainConfig(width=8, depth=2), jax.random.PRNGKey(0))
+        .mlp.layers[0]
+        .weight.dtype
+        == jnp.float64
+    )
