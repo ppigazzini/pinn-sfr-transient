@@ -148,6 +148,21 @@ the fields — and because their **combination is worse than either alone** (§7
 
 ## 4. Two backends, and why
 
+> **Both are packages, not modules.** Each is split after
+> [jaxpi2](https://github.com/sifanexisted/jaxpi2) into config / architectures /
+> ansatz / residuals / weighting / sampling / training / evaluation, with the
+> dependency graph a DAG in that order, and `axial.pinn_jax` / `axial.pinn_torch`
+> re-exporting the public surface. What it buys is that an ablation — a different
+> architecture, weighting or sampler — is a config change rather than an edit to
+> one long file, and that `evaluate` never being imported by `training` makes
+> "the reference never enters the loss" structural instead of a convention.
+>
+> Two modules do not mirror each other, both because of torch's idiom rather than
+> a design choice: `nn.Module` owns its parameters and its forward pass, so the
+> ansatz and the residuals share `torchpinn.model`; and the sampler needs the
+> model to place points on the front while the loop needs mutable optimiser
+> state, so both share `Trainer` in `torchpinn.training`.
+
 > **Parity is a tested property, not an intention.** Both backends expose the
 > same knobs with the same defaults, asserted field by field. The only
 > asymmetries are framework-imposed and deliberate: JAX sets its device globally
