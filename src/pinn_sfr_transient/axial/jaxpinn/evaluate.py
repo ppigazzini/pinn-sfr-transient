@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 import numpy as np
 
+from pinn_sfr_transient.axial import sodium
 from pinn_sfr_transient.axial.jaxpinn.ansatz import (
     horizon,
     normalised_state,
@@ -90,4 +91,28 @@ def relative_l2(
     out["L_void_max_err_m"] = float(
         np.max(np.abs(fields[N_TEMPS].sum(axis=0) * dz - traj.voided_length))  # type: ignore[attr-defined]
     )
-    return out
+    return out | front_metrics(fields, traj, p)
+
+
+def front_metrics(fields: tuple, traj: object, p: AxialParams) -> dict[str, float]:
+    """Metrics the front actually depends on, which a relative ``L2`` cannot see.
+
+    Under D-TH-3 the void is a function of ``T_c`` alone, so "the front forms" is
+    the single inequality ``max T_c > T_sat + dT_superheat``. That is an
+    **extremum**; a relative ``L2`` is an **average**, and the two move
+    independently -- a smoother fit scores better in the mean and can drop the peak
+    below threshold, switching the front off with no warning in any temperature
+    metric (`docs/axial_nn.md` section 7.2.8). Report the margin, so a run that
+    loses the front says so.
+    """
+    threshold = sodium.saturation_temperature(p.p_system) + p.dT_superheat
+    max_T_c = float(fields[3].max())
+    return {
+        "max_T_c": max_T_c,
+        "T_boil": float(threshold),
+        # Negative means the network never reaches saturation anywhere, so
+        # `alpha` is identically zero and there is no front at all.
+        "margin_K": max_T_c - float(threshold),
+        "margin_K_ref": float(traj.T_c.max()) - float(threshold),  # type: ignore[attr-defined]
+        "max_alpha": float(fields[4].max()),
+    }

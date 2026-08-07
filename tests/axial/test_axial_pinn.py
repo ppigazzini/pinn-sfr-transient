@@ -330,8 +330,26 @@ def test_seed_makes_training_reproducible():
 
 
 def test_relative_l2_reports_every_field(model):
+    """The exact key set is the scoring contract; adding to it is a deliberate act.
+
+    `margin_K` joined it because a relative `L2` cannot detect front failure: the
+    void is a function of `T_c` alone, so the front is the extremum
+    `max T_c > T_boil` while the `L2` scores are averages, and the two move
+    independently (`docs/axial_nn.md` section 7.2.8).
+    """
     err = relative_l2(model, solve_reference(AxialParams(), n_out=21))
-    assert set(err) == {"T_f", "T_cl", "T_s", "T_c", "L_void_max_err_m"}
+    assert set(err) == {
+        "T_f",
+        "T_cl",
+        "T_s",
+        "T_c",
+        "L_void_max_err_m",
+        "max_T_c",
+        "T_boil",
+        "margin_K",
+        "margin_K_ref",
+        "max_alpha",
+    }
     assert all(np.isfinite(v) for v in err.values())
 
 
