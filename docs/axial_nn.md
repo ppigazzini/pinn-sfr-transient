@@ -790,9 +790,26 @@ consistently ~21% better. That is a real residual difference, not noise, and it 
 unexplained. Both backends reach `max α = 1.0000`, so the front forms in both.
 
 **Speed: JAX is 2.4× faster at identical budget**, and the figure is robust —
-2.36× from the contended three-seed runs, 2.41× from a clean uncontended 500-iteration
-pair (torch 105.9 s, jax 44.0 s). `eqx.filter_jit` compiles the whole step; torch
-runs eager. On CPU, for this problem size, that is the whole difference.
+2.36× from the contended three-seed runs, 2.41× from a clean uncontended
+500-iteration pair (torch 105.9 s, jax 44.0 s).
+
+**The cause is not compilation, contrary to what this section previously claimed.**
+The obvious explanation was that `eqx.filter_jit` compiles the whole step while
+torch runs eager. Measured, it is wrong. `torch.compile` on the torch step buys
+**1.06×**, at 17 s of compile time — for a 3000-iteration run that is ~19 s saved
+against 17 s spent, so it does not earn its place and is not adopted.
+
+The profile says why. Of a 211 ms torch step: forward 116 ms, backward 71 ms,
+optimiser 25 ms. **88% is forward-plus-backward through `torch.func.jvp` in
+float64** — dense BLAS-bound linear algebra, which Inductor cannot improve. The
+optimiser is 12%, and `foreach` is indistinguishable from noise here (198.5 ms
+against 199.9 ms with it off) because the model has 12 parameter tensors and
+17k parameters, so there is almost nothing to fuse.
+
+**The 2.4× is therefore unattributed.** The remaining candidates are how XLA fuses
+`vmap`-of-`jvp` against `torch.func.jvp`, and the float64 CPU kernels each stack
+dispatches to. Neither has been measured. **TBD** — and until it is, the number
+should be reported as an observation, not explained.
 
 **So M7's acceptance is still not met, for a much narrower reason.** Two fields
 agree, two differ by a consistent 21%.
