@@ -336,6 +336,10 @@ def test_relative_l2_reports_every_field(model):
     void is a function of `T_c` alone, so the front is the extremum
     `max T_c > T_boil` while the `L2` scores are averages, and the two move
     independently (`docs/axial_nn.md` section 7.2.8).
+
+    `onset_t_err_s` and `onset_zeta_err` joined it because they are M4's actual
+    acceptance criterion -- onset within 0.5 s and one cell -- and nothing reported
+    them, so M4 could be neither passed nor failed.
     """
     err = relative_l2(model, solve_reference(AxialParams(), n_out=21))
     assert set(err) == {
@@ -349,8 +353,17 @@ def test_relative_l2_reports_every_field(model):
         "margin_K",
         "margin_K_ref",
         "max_alpha",
+        "onset_t",
+        "onset_zeta",
+        "onset_t_err_s",
+        "onset_zeta_err",
+        "L_void_max",
+        "L_void_max_ref",
     }
-    assert all(np.isfinite(v) for v in err.values())
+    # onset_* are NaN when the network never boils, which is a failure rather than
+    # a missing measurement -- so they are excluded from the finiteness check
+    # rather than defaulted to zero, which would read as "onset exactly right".
+    assert all(np.isfinite(v) for k, v in err.items() if not k.startswith("onset"))
 
 
 # --- M6: the PINN with the kinetics closed ---------------------------------
