@@ -1629,6 +1629,39 @@ this document was measured on the default, moving it invalidates all of them at
 once, and it costs 52% more wall-clock. The re-measurement is compute, not
 development, and it is the single highest-value thing left to do here.
 
+#### 7.5.7 M4, scored for the first time
+
+M4's acceptance is *onset within 0.5 s and one cell* — 0.5 s and 0.00625 at the
+`n = 160` ruler. §6.5 established that both are measurable; nothing had ever
+reported them. Three seeds, both backends,
+`uv run python tools/axial_study.py default`:
+
+| | `T_s` | `L_void` | `max α` | onset `t` error | onset `ζ` error |
+|---|---|---|---|---|---|
+| shipped default, torch | 0.0434 | 0.0367 | 0.685 | 2.50–4.00 s | — |
+| shipped default, jax | 0.0497 | 0.0410 | 0.692 | 3.25–4.25 s | — |
+| **C+fourier, torch** | **0.0353** | **0.2270** | **1.0000** | **0.50–0.75 s** | 0.013–0.025 |
+| C+fourier, jax | 0.0386 | 0.2064 | 0.9987 | 1.00–1.50 s | 0.013–0.025 |
+| **bar** | — | — | — | **≤ 0.5 s** | **≤ 0.00625** |
+
+**M4 fails on every configuration.** `C+fourier` is **3–5× closer on onset time**,
+with one run landing exactly at the bar; onset location misses by 2–4 cells
+everywhere.
+
+> **A metric artefact, caught and fixed.** The first version of this table showed
+> the *shipped default* passing onset location — 0.00000 on one seed, better than
+> the arm that forms a front. It is not a result. With `max α = 0.685` and
+> `L_void = 0.037` against the reference's 0.381, the default's front is
+> **vestigial**, and "the first point where `α > 0.01`" is well defined for a trace
+> of void and lands anywhere. The metric was rewarding the absence of the thing it
+> measures.
+>
+> `scoring.py` now reports onset as `NaN` below `max α = 0.9`, which is about 2 K
+> of margin — the point at which there is a front rather than a trace of one. The
+> dashes above are that guard firing. It is the same rule that already made onset
+> `NaN` when the network never boils: **a position is only meaningful if the thing
+> has a position.**
+
 ### 7.6 Pseudo-time stepping
 
 Implemented (`pts_every`, `pts_dtau`, `pts_growth`), and **measured harmful** in
