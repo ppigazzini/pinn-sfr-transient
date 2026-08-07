@@ -761,6 +761,45 @@ the temperatures and gives up the front.
 three seeds they are −11.1% and −16.1%. The third seed moderated both. The
 direction held, the magnitude did not.
 
+## 7.4 Backend parity, re-measured after the closure
+
+§7.2's parity table was marked superseded because it compared two models rather
+than two backends. With the knob sets now equal and tested, the comparison is
+valid again. Identical config, identical budget (3000 Adam + 300 L-BFGS),
+identical `n = 160` ruler, three seeds each:
+
+| | T_f | T_cl | T_s | T_c | `L_void` | time |
+|---|---|---|---|---|---|---|
+| torch | **0.1363** | **0.1879** | **0.0707** | **0.0713** | 0.1471 | 938 s |
+| jax | 0.1428 | 0.1948 | 0.0863 | 0.0865 | 0.1555 | **398 s** |
+| ratio | 1.05× | 1.04× | 1.22× | 1.21× | 1.06× | **0.42×** |
+
+**Accuracy: 1.04–1.22×, against 2.7–10× before.** D40 is closed. But *statistically
+indistinguishable* — M7's actual criterion — is met on only half the fields. Per-seed
+ranges:
+
+| field | torch | jax | overlap |
+|---|---|---|---|
+| `T_f` | 0.1329–0.1394 | 0.1382–0.1466 | **yes** |
+| `T_cl` | 0.1849–0.1915 | 0.1891–0.1997 | **yes** |
+| `T_s` | 0.0622–0.0765 | 0.0784–0.0925 | **no** |
+| `T_c` | 0.0632–0.0771 | 0.0785–0.0929 | **no** |
+
+On `T_s` and `T_c` the ranges do not overlap at three seeds: torch is
+consistently ~21% better. That is a real residual difference, not noise, and it is
+unexplained. Both backends reach `max α = 1.0000`, so the front forms in both.
+
+**Speed: JAX is 2.4× faster at identical budget**, and the figure is robust —
+2.36× from the contended three-seed runs, 2.41× from a clean uncontended 500-iteration
+pair (torch 105.9 s, jax 44.0 s). `eqx.filter_jit` compiles the whole step; torch
+runs eager. On CPU, for this problem size, that is the whole difference.
+
+**So M7's acceptance is still not met, for a much narrower reason.** Two fields
+agree, two differ by a consistent 21%. The remaining suspect is the one never
+tested: the RAR implementations genuinely differ — torch grows a reservoir to
+`rar_cap`, JAX keeps a fixed `rar_keep` set so `jit` never recompiles — and that
+is the last structural asymmetry between them. **TBD.**
+
 ## 7.5 N5 — Plan A measured end to end
 
 M6 shipped the prompt-jump closure in the network and never scored it; §6.4 said
