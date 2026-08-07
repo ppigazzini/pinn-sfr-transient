@@ -639,6 +639,57 @@ def study_margin(out: Path) -> None:
         )
 
 
+def study_scaling(out: Path) -> None:
+    """Measure whether more optimisation still converges -- section 7.5.5.
+
+    Does the mean keep improving with budget, or has it stopped?
+
+    Twelve published tables use 3000 Adam + 300 L-BFGS; the config ships 8000 + 500
+    and nothing had ever run it (section 7.2.9). The first row measured said the
+    shipped budget has a **better mean** and **no front**, which raises the obvious
+    question: is the mean still improving with budget, or has it converged and the
+    extra iterations only smooth the peak away?
+
+    A ladder at a fixed 10:1 Adam-to-quasi-Newton ratio, so budget is the only
+    thing varying. Both backends, because a convergence claim about one optimiser
+    stack is a claim about that stack.
+
+    Watch `margin_K` alongside `T_s`: section 7.2.8 predicts they move in opposite
+    directions, and if they do, "more epochs" has a ceiling set by the front rather
+    than by the mean.
+    """
+    traj = ruler()
+    ladder = (
+        ("3k/300 (published)", 3000, 300),
+        ("8k/500 (shipped)", 8000, 500),
+        ("16k/1000", 16000, 1000),
+    )
+    rows = run_all(
+        traj,
+        [
+            (
+                f"{label} [{backend}]",
+                {"backend": backend, "adam_iters": adam, "lbfgs_iters": qn, "seed": seed},
+            )
+            for seed in SEEDS
+            for backend in BACKENDS
+            for label, adam, qn in ladder
+        ],
+        out,
+    )
+    mean_table(rows)
+    print("\nconvergence: does the mean keep improving, and what does the peak do?")
+    for label in dict.fromkeys(r["arm"] for r in rows):
+        v = [r for r in rows if r["arm"] == label]
+        ts = [r["T_s"] for r in v]
+        mg = [r["margin_K"] for r in v]
+        print(
+            f"  {label:26s} T_s {sum(ts) / len(ts):.4f} [{min(ts):.4f}-{max(ts):.4f}]   "
+            f"margin min {min(mg):+6.1f} K   "
+            f"{'front on every seed' if min(mg) > 0 else 'FRONT LOST ON >=1 SEED'}"
+        )
+
+
 STUDIES = {
     "ruler": study_ruler,
     "horizon": study_horizon,
@@ -651,6 +702,7 @@ STUDIES = {
     "regime-sign": study_regime_sign,
     "default": study_default,
     "margin": study_margin,
+    "scaling": study_scaling,
 }
 
 
