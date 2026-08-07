@@ -62,11 +62,14 @@ The heavy lifting is in the docs and notebooks:
   [SAS4A/SASSYS-1 manual](https://sas-doc.nse.anl.gov/latest/) — four material
   fields, real sodium properties, saturation-plus-superheat boiling onset, film
   dryout, and a prompt-jump kinetics closure. The reference solver is verified;
-  the page doubles as the register of every deviation from the manual.
+  the page doubles as the register of every deviation from the manual, which is a
+  contract rather than a commentary — an unregistered deviation is a bug.
 - [`docs/axial_nn.md`](docs/axial_nn.md) — **work in progress**: the axial PINN —
   ansatz, hard constraints, training recipe, both backends, and every measured
-  result including the negative ones. The network does **not** yet meet its
-  accuracy bar; that page says so and explains what is known about why.
+  result including the negative ones — of which there are more than the positive
+  ones. The network does **not** meet its accuracy bar; that page says so, marks
+  which of its own earlier conclusions have since been retracted, and labels every
+  figure that predates the current formulation.
 - [`docs/usage.md`](docs/usage.md) — install, run, train, use as a library,
   compute requirements, troubleshooting.
 - [`docs/references.md`](docs/references.md) — annotated bibliography

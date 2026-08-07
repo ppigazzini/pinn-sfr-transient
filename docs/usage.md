@@ -216,7 +216,36 @@ a GPU runtime XLA compiles and runs the whole step on the GPU, several times fas
 than CPU on an NVIDIA T4; the CPU wall-clock varies a lot by machine. (Use a
 GPU, not a TPU: TPUs lack the required float64.)
 
-### 5.3 DeepXDE variant
+### 5.3 The axial boiling model
+
+The 1D axially resolved channel has its own sub-commands. It needs only
+numpy/scipy/matplotlib for the reference and the figures:
+
+```bash
+uv run pinn-sfr axial reference                 # prescribed power -> results/axial_reference.npz
+uv run pinn-sfr axial reference --feedback      # closed prompt-jump kinetics
+uv run pinn-sfr axial reference --n-axial 320   # 160 or more is mesh-converged
+uv run pinn-sfr axial figures                   # -> docs/img/axial_*.png
+```
+
+The reference sub-command prints boiling onset time and location, peak cladding
+temperature, voided length, the energy-balance closure and — under `--feedback` —
+the `ρ/β` pole tripwire together with the Doppler and void components separately.
+That split matters: the net reactivity is not small because the two mechanisms
+cancel. See [`axial_physics.md`](axial_physics.md).
+
+Training the axial PINN is a Python entry point rather than a CLI sub-command,
+because it takes tens of minutes on CPU:
+
+```bash
+uv run python -m pinn_sfr_transient.axial.pinn_torch
+uv run python -m pinn_sfr_transient.axial.pinn_jax
+```
+
+**Accuracy: do not quote it from here.** [`axial_nn.md`](axial_nn.md) §7 carries
+every measurement, including which of them are superseded.
+
+### 5.4 DeepXDE variant
 
 ```bash
 uv sync --extra deepxde --extra torch-cpu

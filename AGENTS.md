@@ -54,9 +54,20 @@ contents; the CLI recreates the directory on demand.
   `R_p` are intentional; the `N8xx` naming rules are disabled for this reason.
 - Docstrings follow the **numpy** convention; line length is **100**.
 - The numpy `physics.py` RHS and every PINN backend's residuals must stay
-  algebraically identical — `tests/test_consistency.py` enforces this. If you
-  touch the model, update `physics.py` **and** all backends (`pinn_torch`,
-  `pinn_jax`, `pinn_deepxde`) together and keep that test green.
+  algebraically identical — `tests/test_consistency.py` enforces this for the 0D
+  model and `tests/axial/test_axial_pinn.py` for the axial one. If you touch a
+  model, update its `physics.py` **and** all its backends together and keep those
+  tests green.
+- **The axial model has two backends and they must expose the same knobs.** A
+  feature that lands in `axial/pinn_torch.py` and not `axial/pinn_jax.py` forks
+  the model silently and makes every cross-backend number a comparison of two
+  different things; that happened once and cost a published table.
+  `tests/axial/test_axial_pinn_jax.py` asserts equal block counts, equal input
+  widths and field-by-field equal defaults.
+- **Deviations from the manual are a contract, not a comment.** Anything the
+  axial model does differently from SAS4A belongs in the `docs/axial_physics.md`
+  register with its equation number. An unregistered deviation is a bug. New
+  physics goes in **off by default**, so no published number moves when it lands.
 
 ## Docs & Markdown math (GitHub renders these)
 

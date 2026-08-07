@@ -7,13 +7,22 @@ lumped 0D model of [`physics_theory.md`](physics_theory.md), which it does not
 replace — the 0D model remains the fast regression harness and the pedagogical
 entry point.
 
-> **Status: milestone M7.** Implemented: parameters, mesh and shapes (M0); the
-> thirteen §12.13 sodium correlations (M1); the Chapter 3 energy balance and its
-> stiff reference solver (M2); the PINN with prescribed power (M3); §12.4 boiling
-> onset with a mixture void field (M4); §12.5.1 film degradation and dryout (M5);
-> the prompt-jump kinetics closure in both the reference and the PINN (M6); and
-> the JAX twin (M7). M8 (single-bubble Chapter 12 comparison) and M9 (parametric
-> sweep) are not started.
+> **Status: M0–M7 built; M8 attempted, one half adopted.** Parameters, mesh and
+> shapes (M0); the thirteen §12.13 sodium correlations (M1); the Chapter 3 energy
+> balance and its stiff reference solver (M2); the PINN with prescribed power
+> (M3); §12.4 boiling onset with a mixture void field (M4); §12.5.1 film
+> degradation and dryout (M5); the prompt-jump kinetics closure in both the
+> reference and the PINN (M6); the JAX twin (M7).
+>
+> **M8 was attempted from two directions.** Eliminating the void algebraically
+> (D-TH-3) is adopted and is the change that made the boiling front form at all.
+> A front-position network was built, measured worse on every metric, and is off
+> by default. M9 (parametric sweep) is not started.
+>
+> **Four mechanisms have since been added, all off by default and all
+> registered**: condensation (D-TH-4), decay heat (D-KIN-3), axial fuel expansion
+> (D-FB-4) and the vapour-expansion flow term (D-TH-2, implemented but not
+> usable). Defaults are unchanged, so no previously published number moves.
 >
 > **The reference solver is verified — with one measured exception in §6.5, where
 > the void fraction is not mesh-converged at the default resolution. The PINN is
@@ -44,7 +53,10 @@ onset and feedback laws from the manual.
 | Pre-boiling momentum, `w = w(t)` independent of `z` | Eq. 3.9-1 | **done** |
 | Point kinetics (prompt jump) | Eq. 4.2-4 | **done** (`prompt_jump_power`) |
 | Delayed-neutron precursors | Eq. 4.3-1 | **done** |
-| Decay heat, `ψ_t = ψ_f + ψ_h`, ANS standard | Eq. 4.2-2, §4.4 | **not implemented** (D-KIN-2, open) |
+| Decay heat, `ψ_t = ψ_f + ψ_h`, ANS standard | Eq. 4.2-2, §4.4 | **done**, three groups, off by default (D-KIN-3) |
+| Condensation as the negative branch of the film heat flow | §12.5 | **done**, off by default (D-TH-4) |
+| Axial fuel expansion feedback | §4.5.4 | **done**, off by default (D-FB-4) |
+| Vapour expansion accelerating the flow | §12.2, §12.6 | **implemented, not usable** (D-TH-2) |
 | **Doppler, logarithmic**, flooded↔voided interpolation | Eq. 4.5-2, 4.5-3 | **done** (`alpha_D`, `reactivity`) |
 | **Coolant density + void as one worth sum** | Eq. 4.5-25 | **done** (`void_worth`, `reactivity`) |
 | Boiling onset: saturation + superheat | §12.4 | **done** (`boiling_fraction`) |
@@ -191,7 +203,33 @@ This is the deviation a reviewer will challenge first. It is deliberate, and M8
 proposes a single-bubble two-interface case as the direct comparison against
 §12.5 where Chapter 12 *is* tractable.
 
-### D-TH-3 — Condensation present but off by default *(settled — experimental)*
+### D-TH-3 — The void eliminated algebraically *(settled)*
+
+**Departs from:** §12.4/§12.5 as a *differential* void. **Status: adopted,
+`void_closure = True`.**
+
+The vapour source fills a node in 0.71 ms against a 0.113 s transport time, so
+`α` is a fast variable slaved to the temperature field. It is eliminated
+algebraically — `α = 1 − (1 − b)³`, with `b` the superheat switch — and its
+residual removed from the PINN loss, which is the manoeuvre Stiff-PINN applies to
+fast chemical species and D-KIN-1 already applies to the prompt neutron mode.
+
+The reference solver still integrates the differential void; the closure is a
+**PINN-side** approximation, validated against it at 1.2% on maximum voided
+length, inside the reference's own 2.6% mesh error. See
+[`axial_nn.md`](axial_nn.md) §7.2.3.
+
+Two exact properties make it sound rather than convenient. Below saturation `b`
+underflows to **exactly** zero, so the void equation is pure advection there and
+`α = 0` is its unique solution under a zero initial and inlet condition. And the
+source is non-negative everywhere — there is no condensation at the default
+settings — so the superheated set is contained in the voided set.
+
+The closure is what made the boiling front form at all. It also supplies the
+void-free initial and inlet conditions for free, so the gate and sigmoid head the
+ansatz previously used are unnecessary.
+
+### D-TH-4 — Condensation present but off by default *(settled — experimental)*
 
 **Departs from:** §12.5. **Status: implemented, disabled.**
 
@@ -291,19 +329,11 @@ them is therefore **non-conservative**: this model will over-predict the
 excursion. That is acceptable for a PINN methodology study and unacceptable in a
 safety claim. It must be stated in those words wherever results are reported.
 
-### D-KIN-2 — Decay heat *(open — needs the owner)*
+### D-KIN-2 — Decay heat *(closed by D-KIN-3)*
 
-**Departs from:** Eq. 4.2-2, §4.4. **Status: open.**
-
-The manual splits the power amplitude as `ψ_t = ψ_f + ψ_h`, fission plus decay,
-with `ψ_h` from the ANS decay heat power standard. This model currently has only
-`ψ_f`.
-
-The omission is structural, not cosmetic: with no decay-heat term the homogeneous
-kinetics have **no source**, so `P = c = 0` is an attractor and a sustained
-negative reactivity drives power to zero with nothing to stop it. Real fission
-product decay heat is ~6–7 % of nominal immediately after shutdown. If decay heat
-is adopted, follow §4.4 rather than inventing a two-group model.
+**Superseded.** Decay heat was open and is now implemented; the live entry is
+D-KIN-3. The identifier is retained because earlier revisions of the milestone
+report cite it.
 
 ### D-SCOPE-1 — No pin failure or material relocation *(settled)*
 
@@ -628,4 +658,5 @@ this model should be quoted as a physical prediction.
 | **M5** | Film / dryout heat path (§12.5.1) | **done** |
 | **M6** | Prompt-jump kinetics closure — Plan B → Plan A | **reference done; PINN not extended** |
 | **M7** | Hardening, seeds, JAX port | see [`axial_nn.md`](axial_nn.md) |
-| M8–M9 | Chapter 12 single-bubble comparison, parametric sweep | not started |
+| M8 | single-bubble Chapter 12 comparison | superseded — the void is now closed algebraically (D-TH-3), and the front-position network it would have used measured worse |
+| M9 | parametric sweep / regime map | not started. Needs `with_positive_void_worth()`, since the default set never samples the void positive |
