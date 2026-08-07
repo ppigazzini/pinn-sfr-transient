@@ -1152,8 +1152,57 @@ equal total iterations, three seeds, `n = 160` ruler:
 | B | 1000 | 2300 |
 | C | 300 | 3000 |
 
-**Measurement in progress.** Arm A reproduces the §7.3.2 configuration, so it
-doubles as a check that the harness has not drifted.
+Arm A reproduces the §7.3.2 configuration, so it doubles as a check that the
+harness has not drifted — and that is how §7.2.7 was found.
+
+**Seed 0, and the trend is monotonic in both directions at once:**
+
+| arm | T_f | T_cl | T_s | T_c | `max α` | `L_void` | time |
+|---|---|---|---|---|---|---|---|
+| A 3000/300 | 0.1379 | 0.1892 | 0.0753 | 0.0756 | **1.0000** | **0.1634** | 592 s |
+| B 1000/2300 | 0.1260 | 0.1778 | 0.0478 | 0.0492 | 0.9662 | 0.0778 | 670 s |
+| C 300/3000 | **0.1222** | **0.1732** | **0.0379** | **0.0396** | 0.6274 | 0.0495 | 715 s |
+| reference | — | — | — | — | 1.0000 | 0.3812 | — |
+
+**The external result is confirmed for the mean and refuted for the front.** Moving
+budget into the quasi-Newton stage improves every temperature monotonically — `T_s`
+by **50%** and `T_c` by **48%** from A to C — for 21% more wall-clock at equal
+iteration count. It degrades the front monotonically over the same range.
+
+§7.2.8 says why, and it is not a defect in the optimiser: the temperature scores
+are averages and the front is the extremum `max T_c > T_boil`. A better-fitting,
+smoother `T_c` has a lower peak. The two criteria are close to independent, and
+this sweep is the cleanest demonstration of it in the document.
+
+Neither arm is adopted as a default. Arm A is what every published table was
+measured on, and moving the default would move all of them; arm C wins the metric
+this project has been optimising and loses the metric M4 actually asks for. That
+choice needs the §7.5.4 result first.
+
+**Remaining seeds in progress.** Seed 1 reproduces the ordering (A `T_c` 0.0786,
+B 0.0479), so the effect is not a seed artefact, but the seed statistics are not
+complete.
+
+#### 7.5.4 Pairing a mean-winner with a peak-winner
+
+§7.2.6 measured that the two representation remedies do not compose, and both were
+mean-winners. §7.2.8 changes what "compose" should mean here: the mean and the
+peak are close to independent, so the pairing worth trying is one remedy for each.
+
+Fourier features are the only change measured to improve **both** — §7.2.5 gives
+−12.8% on the mean *and* `L_void` 0.1878 against a 0.1805 base — which is what
+reducing spectral bias should do to an extremum. So:
+
+| arm | what it tests |
+|---|---|
+| C + `fourier_features=32` | the mean-winning budget with the peak-winning representation |
+| C + `modified_mlp` | control: a stronger mean-winner that *costs* the peak |
+| A + `fourier_features=32` | separates the Fourier effect from the budget effect |
+
+**Measurement in progress.** The reason to expect anything here is mechanical
+rather than additive, which is the difference between this and the nine remedies
+already refuted in this document. That is a reason to run it, not a reason to
+believe it.
 
 ### 7.6 Pseudo-time stepping
 
