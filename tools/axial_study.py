@@ -558,6 +558,41 @@ def _sign_point(args: tuple[float, float]) -> dict:
     }
 
 
+def study_default(out: Path) -> None:
+    """Re-baseline: the shipped default against the best known configuration.
+
+    Section 0.5 holds `C + fourier` back from being the default because every
+    published table was measured on the old one. This measures both, on both
+    backends, at three seeds, with the M4 onset metrics that nothing reported
+    before -- which is the re-baseline that unblocks the change.
+    """
+    traj = ruler()
+    arms = (
+        ("default", {}),
+        ("C+fourier", {"adam_iters": 300, "lbfgs_iters": 3000, "fourier_features": 32}),
+    )
+    rows = run_all(
+        traj,
+        [
+            (f"{label} [{backend}]", {"backend": backend, "seed": seed, **kw})
+            for seed in SEEDS
+            for backend in BACKENDS
+            for label, kw in arms
+        ],
+        out,
+    )
+    mean_table(rows)
+    print("\nM4 acceptance: onset within 0.5 s and one cell (0.00625 at n = 160)")
+    for r in rows:
+        ok_t = r["onset_t_err_s"] <= 0.5
+        ok_z = r["onset_zeta_err"] <= 0.00625
+        print(
+            f"  {r['arm']:24s} seed={r['seed']} onset_t_err={r['onset_t_err_s']:6.2f} s "
+            f"{'PASS' if ok_t else 'FAIL':4s}   onset_zeta_err={r['onset_zeta_err']:.5f} "
+            f"{'PASS' if ok_z else 'FAIL'}"
+        )
+
+
 STUDIES = {
     "ruler": study_ruler,
     "horizon": study_horizon,
@@ -568,6 +603,7 @@ STUDIES = {
     "combo": study_combo,
     "regime": study_regime,
     "regime-sign": study_regime_sign,
+    "default": study_default,
 }
 
 
