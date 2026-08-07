@@ -100,6 +100,12 @@ count changes float reduction order.
 - [`docs/sas4a/`](docs/sas4a/) — a local text mirror of the SAS4A/SASSYS-1 manual,
   so an equation citation can be checked without a network round-trip. Fetched by
   [`tools/fetch_sas_manual.py`](tools/fetch_sas_manual.py).
+- [`tools/axial_study.py`](tools/axial_study.py) — one sub-command per published
+  axial study (`ruler`, `horizon`, `budget`, `optimizer`, `parity`, `plan-a`,
+  `combo`, `regime`, `regime-sign`). Every table in `axial_nn.md` and
+  `axial_physics.md` §10 is reproducible by one of them. This exists because it
+  once did not: a published configuration differed from the shipped default and
+  nobody could tell, since the measurement lived in an uncommitted scratch file.
 - [`docs/usage.md`](docs/usage.md) — install, run, train, use as a library, compute
   requirements, troubleshooting.
 - [`docs/references.md`](docs/references.md) — annotated bibliography
@@ -137,7 +143,12 @@ pinn-sfr-transient/
 ├── tests/               # pytest: consistency, physics, CLI, both PINNs, parity
 ├── docs/                # theory, usage, references; img/ holds ALL figures;
 │                        #   sas4a/ mirrors the manual
-├── tools/               # fetch_sas_manual.py
+├── tools/               # axial_study.py       — every published axial table, one
+│                        #   sub-command per study, because a number is reproducible
+│                        #   when its configuration is in the repository
+│                        # check_published_accuracy.py — the 0D claim, from defaults
+│                        # check_markdown.py    — the AGENTS.md rendering rules
+│                        # fetch_sas_manual.py  — mirrors the SAS4A manual
 ├── notebooks/           # guided walkthroughs (outputs stripped; run to reproduce)
 └── results/             # held-out reference .npz files (gitignored)
 ```
