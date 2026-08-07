@@ -39,15 +39,15 @@ channel axially and takes its thermophysics, boiling onset and feedback laws fro
 [SAS4A/SASSYS-1 manual](https://sas-doc.nse.anl.gov/latest/) (ANL/NSE-SAS/5.8.1).
 
 **Status, stated plainly.** The reference solver is verified. The PINN trains and
-satisfies every hard constraint exactly, and **does not meet its 1% accuracy bar** —
-currently 0.08 to 0.19 relative L2 on the temperatures. The boiling front does form,
-after the void was eliminated algebraically — but only inside a narrow training
-horizon, and until recently the shipped default sat outside it, so the code as
-delivered produced no front while the documentation said it did. Every measurement
-lives in
-[`docs/axial_nn.md`](docs/axial_nn.md) §5–§7, including the negative results, which
-outnumber the positive ones, and including which of that document's own earlier
-conclusions have since been retracted.
+satisfies every hard constraint exactly, and **does not meet its 1% accuracy bar**:
+0.075 to 0.19 relative L2 on the temperatures at the shipped defaults. The boiling
+front does form, after the void was eliminated algebraically — but only inside a
+narrow training horizon, and until recently the shipped default sat outside it, so
+the code as delivered produced no front while the documentation said it did.
+
+Every measurement lives in [`docs/axial_nn.md`](docs/axial_nn.md) §5–§7, including
+the negative results, which outnumber the positive ones, and including which of
+that document's own earlier conclusions have since been retracted.
 
 **Every deviation from the manual is registered** in
 [`docs/axial_physics.md`](docs/axial_physics.md) §3 with its equation number. That
