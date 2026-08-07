@@ -69,6 +69,30 @@ contents; the CLI recreates the directory on demand.
   register with its equation number. An unregistered deviation is a bug. New
   physics goes in **off by default**, so no published number moves when it lands.
 
+## Measurements
+
+The axial model's seed spread has been as large as 12.5x (`docs/axial_nn.md` §7.1),
+and single-seed conclusions in this project have been overturned by the next seed
+four times: D38, D39, the budget sweep's "monotonic" front degradation, and §7.3.2's
+"consistent 21%" backend gap.
+
+- **Never write a comparative headline from one seed.** Three seeds with per-seed
+  ranges, or say "seed N, one sample" in the sentence that states the result — not
+  in a caveat further down. A hedge below a confident headline does not work.
+- **Every published table must be reproducible by a committed command.**
+  `tools/axial_study.py` has one sub-command per study. A number measured by an
+  uncommitted script is not reproducible, however carefully it was measured: D67 is
+  the case where that hid a default which produced no boiling front at all, for four
+  milestones.
+- **Include a control arm that reproduces something already published**, and check
+  it before reading the new arms. That is what caught D67.
+- **A wall-clock needs a stated thread budget and contention level.**
+  `OMP_NUM_THREADS` defaults to every core, and thread count changes float
+  reduction order — so it changes answers, not just timings. Concurrency at a
+  *fixed* thread count does not (measured: identical digits, 1.48x the time).
+- **An ablation is a statement about the formulation it was run on.** Change the
+  formulation and every negative result on the shelf is provisional again (D59).
+
 ## Docs & Markdown math (GitHub renders these)
 
 Broken inline LaTeX is a recurring problem — GitHub's renderer is strict. Rules:
