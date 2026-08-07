@@ -104,6 +104,15 @@ def front_metrics(fields: tuple, traj: object, p: AxialParams) -> dict[str, floa
     below threshold, switching the front off with no warning in any temperature
     metric (`docs/axial_nn.md` section 7.2.8). Report the margin, so a run that
     loses the front says so.
+
+    ``max_alpha`` is returned for continuity with the published tables, but it is
+    **derived from the margin, not independent of it**: the closure is invertible,
+    so ``margin -> max_alpha`` is exact and measured so (`axial_nn.md` section
+    7.2.8, four arms, four exact matches). It also saturates by about 8 K of
+    margin, past which it cannot distinguish a front that barely exists from one
+    with 20 K of headroom. The informative pair is ``margin_K`` and
+    ``L_void_max_err_m``: the first gates whether a front exists, the second says
+    how much of the channel is in it.
     """
     threshold = sodium.saturation_temperature(p.p_system) + p.dT_superheat
     max_T_c = float(fields[3].max())
