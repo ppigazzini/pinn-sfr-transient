@@ -218,6 +218,9 @@ exclude = [
     # Same reason as the 0D backend above: `torch.func.jvp` returns a tuple whose
     # arity ty cannot infer, and `requires_grad_` is missing from the stubs.
     "src/pinn_sfr_transient/axial/pinn_torch.py",
+    # Same reason, and the same code: `torchpinn/` is `pinn_torch.py` split
+    # into modules, so it inherits the exclusion rather than earning a new one.
+    "src/pinn_sfr_transient/axial/torchpinn/",
     "src/pinn_sfr_transient/axial/pinn_jax.py",
     # Same reason, and the same code: `jaxpinn/` is `pinn_jax.py` split into
     # modules, so it inherits the exclusion rather than earning a new one.
