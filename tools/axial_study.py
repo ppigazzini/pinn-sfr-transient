@@ -690,6 +690,55 @@ def study_scaling(out: Path) -> None:
         )
 
 
+def study_levelset(out: Path) -> None:
+    """Fix the measure: sample collocation on the saturation level set -- section 7.5.6.
+
+    The loss is a **mean over the domain** and the front occupies a few percent of
+    the channel, so the front contributes a few percent of the objective however
+    long training runs. That is why 8000+500 iterations beat 3000+300 by 47% on
+    `T_s` and lose the front entirely (section 7.5.5): more optimisation converges
+    more precisely to a minimiser whose peak is wrong.
+
+    RAR cannot fix it -- after the algebraic closure the residual is small
+    everywhere, including across the front, so residual-magnitude sampling has no
+    signal. Sampling the level set `T_c = T_sat + dT_sup` does, and needs no
+    front-position network because under D-TH-3 the front IS that level set.
+
+    Run at the budget that loses the front, so the question is direct: does
+    front-aware sampling let more optimisation help the front instead of costing it?
+    """
+    traj = ruler()
+    big = {"adam_iters": 8000, "lbfgs_iters": 500}
+    arms = (
+        ("8k/500 plain", big),
+        ("8k/500 +levelset", {**big, "front_level_set": True, "front_frac": 0.25}),
+        (
+            "8k/500 +levelset+f128",
+            {**big, "front_level_set": True, "front_frac": 0.25, "fourier_features": 128},
+        ),
+    )
+    rows = run_all(
+        traj,
+        [
+            (f"{label} [{backend}]", {"backend": backend, "seed": seed, **kw})
+            for seed in SEEDS
+            for backend in BACKENDS
+            for label, kw in arms
+        ],
+        out,
+    )
+    mean_table(rows)
+    print("\ndoes front-aware sampling let a large budget keep the front?")
+    for label in dict.fromkeys(r["arm"] for r in rows):
+        v = [r for r in rows if r["arm"] == label]
+        mg = [r["margin_K"] for r in v]
+        ts = [r["T_s"] for r in v]
+        print(
+            f"  {label:28s} T_s {sum(ts) / len(ts):.4f}   margin min {min(mg):+6.1f} K   "
+            f"{'FRONT ON EVERY SEED' if min(mg) > 0 else 'front lost on >=1 seed'}"
+        )
+
+
 STUDIES = {
     "ruler": study_ruler,
     "horizon": study_horizon,
@@ -703,6 +752,7 @@ STUDIES = {
     "default": study_default,
     "margin": study_margin,
     "scaling": study_scaling,
+    "levelset": study_levelset,
 }
 
 

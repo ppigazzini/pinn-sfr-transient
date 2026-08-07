@@ -118,6 +118,26 @@ class AxialTrainConfig:
     # measurement, like the other remedies in `docs/axial_nn.md`.
     front_net: bool = False
     front_frac: float = 0.25  # share of collocation drawn near the predicted front
+    # Share of collocation drawn on the **saturation level set** -- the points
+    # where the network's own `T_c` is near `T_sat + dT_superheat`.
+    #
+    # **This is a fix for a measure bug, not another loss term.** The loss is a
+    # mean over the domain and the front occupies a few percent of the channel, so
+    # the front region contributes a few percent of the objective no matter how
+    # long training runs. More optimisation therefore converges more accurately to
+    # a minimiser whose peak is wrong: 8000+500 iterations beat 3000+300 by 47% on
+    # `T_s` and lose the front entirely (`docs/axial_nn.md` section 7.5.5).
+    #
+    # RAR cannot supply these points. Once the void is closed algebraically the
+    # field residual is small *everywhere*, including across the front, so
+    # residual-magnitude sampling has no signal to follow -- the torch sampler has
+    # carried a comment saying exactly that since M8.
+    #
+    # It needs no front-position network: under D-TH-3 the front IS the level set
+    # `T_c = T_sat + dT_superheat`, and the network knows its own `T_c`.
+    # `front_level_set` selects that; `front_net` selects the M8 front network,
+    # which measured worse on every metric.
+    front_level_set: bool = False
 
     # Residual-based adaptive refinement [Wu et al. 2023]
     rar_every: int = 2000

@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 
 import numpy as np
 
+from pinn_sfr_transient.axial import sodium
 from pinn_sfr_transient.axial.config import AxialParams
 from pinn_sfr_transient.axial.torchpinn.config import AxialTrainConfig
 from pinn_sfr_transient.axial.torchpinn.model import AxialPinn
@@ -29,6 +30,9 @@ from pinn_sfr_transient.axial.torchpinn.weighting import (
     _bounded_weights,
     _causal_weights,
 )
+
+# Candidates drawn per kept point when sampling the level set.
+_LEVEL_SET_POOL = 8
 
 
 class Trainer:
@@ -48,6 +52,8 @@ class Trainer:
         # Explicit generator: collocation draws must not depend on global RNG
         # state, or a run is only reproducible if nothing else touched it.
         self.gen = torch.Generator(device=self.dev).manual_seed(cfg.seed)
+        p = model.p
+        self.T_boil = float(sodium.saturation_temperature(p.p_system) + p.dT_superheat)
 
     def _rand(self, *shape: int) -> torch.Tensor:
         """Uniform draw from this trainer's own generator, never the global one."""
@@ -76,6 +82,8 @@ class Trainer:
         parts = [pts, early, *([self.rar] if self.rar.numel() else [])]
         if self.model.use_front and self.cfg.front_frac > 0.0:
             parts.append(self._front_points(int(n * self.cfg.front_frac), t_max))
+        elif self.cfg.front_level_set and self.cfg.front_frac > 0.0:
+            parts.append(self._level_set_points(int(n * self.cfg.front_frac), t_max))
         allp = torch.cat(parts, dim=0)
         return allp[:, 0:1], allp[:, 1:2]
 
@@ -93,6 +101,28 @@ class Trainer:
         spread = 0.05 * torch.randn(n, 1, dtype=torch.float64, device=self.dev, generator=self.gen)
         zeta = (z_f + spread).clamp(0.0, 1.0)
         return torch.cat([zeta, that], dim=1)
+
+    @torch.no_grad()
+    def _level_set_points(self, n: int, t_max: float) -> torch.Tensor:
+        """Collocation on the saturation level set, found from the model's own ``T_c``.
+
+        Rejection-sample: draw a candidate cloud, evaluate ``T_c``, keep the ``n``
+        points closest to ``T_sat + dT_superheat``. That is importance sampling by
+        the front indicator rather than by residual magnitude, which is what RAR
+        does and what cannot work here — after the algebraic closure the residual
+        is small everywhere, including across the front.
+
+        The point is to fix a **measure**, not to add a term. The loss averages
+        over the domain and the front is a few percent of it, so the objective
+        under-weights the front no matter how long training runs; more iterations
+        then converge more precisely to a minimiser whose peak is wrong.
+        """
+        cand = self._rand(n * _LEVEL_SET_POOL, 2)
+        cand[:, 1] *= t_max
+        state = self.model.normalised_state(cand[:, 0:1], cand[:, 1:2])
+        T_c = self.model.to_physical(state)[3]
+        idx = torch.topk((T_c - self.T_boil).abs().squeeze(1), n, largest=False).indices
+        return cand[idx]
 
     def _anchor_points(self, t_max: float) -> tuple[torch.Tensor, torch.Tensor]:
         """Build a genuine ``(zeta, t_hat)`` pair for the pseudo-time anchor.
