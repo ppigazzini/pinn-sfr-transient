@@ -659,4 +659,68 @@ this model should be quoted as a physical prediction.
 | **M6** | Prompt-jump kinetics closure — Plan B → Plan A | **reference done; PINN not extended** |
 | **M7** | Hardening, seeds, JAX port | see [`axial_nn.md`](axial_nn.md) |
 | M8 | single-bubble Chapter 12 comparison | superseded — the void is now closed algebraically (D-TH-3), and the front-position network it would have used measured worse |
-| M9 | parametric sweep / regime map | not started. Needs `with_positive_void_worth()`, since the default set never samples the void positive |
+| M9 | parametric sweep / regime map | **reference half done — §10. The parametric PINN is not attempted**, and that is a decision: the single-point network misses its bar by 7–19×, so extending it over a parameter family would measure nothing |
+
+---
+
+## 10. M9 — the Objective 2 regime map, from the reference
+
+M9 asks for a parametric PINN on `(ζ, t, α_void, τ_pump)` whose regime
+*classification* matches a reference sweep. **Only the reference half is
+delivered.** The single-point network misses its accuracy bar by 7–19×
+([`axial_nn.md`](axial_nn.md) §7.3.2), and a parametric extension of a model that
+fails at one parameter value measures nothing. This project has refused nine
+remedies on measurement; refusing a stretch milestone on the same grounds is the
+same standard.
+
+The reference half stands alone, because Objective 2 is a physics question:
+*does the positive sodium void coefficient drive a power excursion?*
+
+### 10.1 The sweep, and the answer
+
+Thirty closed-loop points, `n_axial = 80`, `void_worth_net` from 0 to
+1.6e-2 (8× the default) against `tau_pump` from 1 to 20 s. Reproduce with
+`uv run python tools/axial_study.py regime`.
+
+| result | value |
+|---|---|
+| points solved | 30 / 30 |
+| **positive void worth exercised** | **0 / 30** |
+| **peak power** | **1.0000 at every point** |
+| **max `ρ/β`** | **+0.0000 at every point** |
+| regimes found | `boiling-bounded` 24, `no-boiling` 6 |
+| regimes *not* found | `power-excursion`, `prompt-critical` |
+
+**There is no excursion anywhere in this family, and there cannot be.** Boiling
+starts at `ζ ≈ 0.96` and the void worth changes sign at `zeta_sign = 0.80`, so the
+voided region lies entirely inside the **negative** lobe. Scaling `void_worth_net`
+scales a term that is only ever evaluated where it is negative.
+
+The signature of that is in the table and is worth stating plainly: at fixed
+`tau_pump`, **raising the void worth *reduces* the voided length** — at
+`tau_pump = 2.5 s`, `L_void` falls 0.2428 → 0.1454 as the worth goes 0 → 1.6e-2.
+More sodium void worth makes this transient *safer*. That is the correct behaviour
+for a void that only voids where its worth is negative, and it is the opposite of
+the mechanism the project exists to study.
+
+Onset time depends only on `tau_pump` (4.50, 8.25, 15.25, 32.50 s, then no boiling
+at 20 s) and not at all on the void worth, which is the same fact seen from the
+other side: the worth never reaches the power.
+
+### 10.2 What this closes, and what it does not
+
+**It closes D49 and issue I6 in the stronger form.** D49 recorded that the
+*default* parameter set never samples the void positive. This shows that is not a
+property of the default but of the whole `(void_worth_net, tau_pump)` family:
+`max ρ/β = 0` describes the geometry, not the transient, and **Objective 2 cannot
+be answered by scaling `void_worth_net`** — the conclusion D49 reached by argument,
+now measured across 30 points.
+
+**It does not close Objective 2.** The parameter that governs it is `zeta_sign`,
+the sign-change height, which must sit *above* where boiling starts for the
+positive branch to be sampled at all. `AxialParams.with_positive_void_worth()`
+exists for exactly this and sets `zeta_sign = 0.995`. §10.3 sweeps it.
+
+The regime map above is therefore a **negative control** — it establishes that the
+benign outcome is robust to the two knobs a reader would reach for first, which is
+worth knowing before any positive result is claimed from the third.
