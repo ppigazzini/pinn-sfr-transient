@@ -1174,48 +1174,40 @@ equal total iterations, three seeds, `n = 160` ruler:
 Arm A reproduces the §7.3.2 configuration, so it doubles as a check that the
 harness has not drifted — and that is how §7.2.7 was found.
 
-**Seed 0, and the trend is monotonic in both directions at once:**
+**Three seeds, `n = 160` ruler, means with per-seed ranges:**
 
 | arm | T_f | T_cl | T_s | T_c | `max α` | `L_void` | time |
 |---|---|---|---|---|---|---|---|
-| A 3000/300 | 0.1379 | 0.1892 | 0.0753 | 0.0756 | **1.0000** | **0.1634** | 592 s |
-| B 1000/2300 | 0.1260 | 0.1778 | 0.0478 | 0.0492 | 0.9662 | 0.0778 | 670 s |
-| C 300/3000 | **0.1222** | **0.1732** | **0.0379** | **0.0396** | 0.6274 | 0.0495 | 715 s |
+| A 3000/300 | 0.1373 | 0.1890 | 0.0739 | 0.0742 | **1.0000** | **0.1505** | 597 s |
+| | 0.1348–0.1392 | 0.1870–0.1908 | 0.0677–0.0786 | 0.0684–0.0786 | 1.0000–1.0000 | 0.1212–0.1670 | |
+| B 1000/2300 | 0.1267 | 0.1784 | 0.0485 | 0.0499 | 0.9567 | 0.0853 | 792 s |
+| | 0.1260–0.1278 | 0.1778–0.1792 | 0.0463–0.0515 | 0.0479–0.0527 | 0.9040–1.0000 | 0.0571–0.1208 | |
+| C 300/3000 | **0.1247** | **0.1761** | **0.0434** | **0.0450** | 0.8702 | 0.0724 | 905 s |
+| | 0.1222–0.1260 | 0.1732–0.1779 | 0.0379–0.0464 | 0.0396–0.0480 | **0.6274–0.9998** | 0.0495–0.1068 | |
 | reference | — | — | — | — | 1.0000 | 0.3812 | — |
 
-**The external result is confirmed for the mean.** Moving budget into the
-quasi-Newton stage improves every temperature monotonically — `T_s` by **50%** and
-`T_c` by **48%** from A to C — for 21% more wall-clock at equal iteration count.
-That much is reproducible across seeds.
+**The external result is confirmed for the mean, and the seed ranges do not
+overlap.** Moving budget into the quasi-Newton stage improves every temperature —
+`T_s` by **41%** and `T_c` by **39%** from A to C — and `T_f`, `T_cl`, `T_s` and
+`T_c` all separate cleanly arm by arm. It costs 52% more wall-clock at equal
+iteration count, because a quasi-Newton iteration carries a line search and an Adam
+iteration does not.
 
-**What it does to the front is seed-dependent, not monotonic** — see the note
-below. The seed-0 column reads as a clean trade and the second seed does not
-support that reading.
+**The front tells the opposite story, and it is a spread rather than a trend.**
+`max α` is **1.0000 on all three seeds** in arm A and ranges **0.6274–0.9998** in
+arm C. The mean falls monotonically, but a mean over a near-binary quantity is a
+poor summary: what arm C actually does is make the front *unreliable*, not
+uniformly worse.
 
-§7.2.8 says why, and it is not a defect in the optimiser: the temperature scores
-are averages and the front is the extremum `max T_c > T_boil`. A better-fitting,
-smoother `T_c` has a lower peak. The two criteria are close to independent, and
-this sweep is the cleanest demonstration of it in the document.
+§7.2.8 says why, and §7.2.8's own measurement is the number to hold on to: at arm A
+the peak `T_c` clears saturation by **20.5 K**. The temperature scores are averages
+and the front is the extremum `max T_c > T_boil`; a smoother, better-in-the-mean
+fit gives up a few tens of kelvin at the peak, and a few tens of kelvin is the whole
+margin. Arm C sits on the threshold and its front outcome is decided by the seed.
 
-Neither arm is adopted as a default. Arm A is what every published table was
-measured on, and moving the default would move all of them; arm C wins the metric
-this project has been optimising and loses the metric M4 actually asks for. That
-choice needs the §7.5.4 result first.
-
-**Remaining seeds in progress, and seed 1 already qualifies the front half of
-this.** The temperature ordering reproduces exactly — `T_c` 0.0786 / 0.0479 /
-0.0474 for A / B / C — so the mean improvement is not a seed artefact. The front
-does **not** reproduce: seed 1's arm C gives `max α = 0.9998` and `L_void` 0.1068
-against seed 0's 0.6274 and 0.0495.
-
-So the accurate statement is narrower than the seed-0 table suggests: **moving
-budget into the quasi-Newton stage improves the temperatures reliably and makes the
-front erratic**, rather than degrading it monotonically. Under §7.2.8 that is what a
-threshold crossing should look like once the peak sits near it — `max T_c` lands
-just above 1169 K on one seed and just below on another, and a metric that is a
-step function of a marginal quantity has no reason to be smooth in the seed.
-
-The seed-averaged table replaces this one when seed 2 lands.
+**Neither arm is adopted.** Arm A is what every published table was measured on, and
+arm C trades the criterion M4 asks for against the criterion this project has been
+optimising. §7.5.4 is the attempt to stop trading.
 
 #### 7.5.4 Pairing a mean-winner with a peak-winner
 
