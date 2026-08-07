@@ -295,7 +295,16 @@ def study_plan_a(out: Path) -> None:
     """Measure closed-loop power at three seeds -- section 7.4 has only one."""
     from pinn_sfr_transient.axial.torchpinn import AxialTrainConfig, train  # noqa: PLC0415
 
+    # Say so before the long silence: the closed-loop reference at n = 160 plus the
+    # first Plan A training is ~25 minutes before anything prints, and a study that
+    # looks hung is a study someone kills.
+    print("solving the closed-loop reference at n_axial=160 ...", flush=True)
     ref = ruler(feedback=True)
+    print(
+        f"reference: peak={ref.power.max():.4f} min={ref.power.min():.4f} "
+        f"max rho/beta={ref.peak_rho_over_beta:+.4f}; training {len(SEEDS)} seeds",
+        flush=True,
+    )
     rows = []
     for seed in SEEDS:
         t0 = time.perf_counter()
@@ -324,10 +333,6 @@ def study_plan_a(out: Path) -> None:
             f"rho/beta=[{row['min_rho_beta']:.4f},{row['max_rho_beta']:.4f}] {dt:.0f}s",
             flush=True,
         )
-    print(
-        f"\nreference: peak={ref.power.max():.4f} min={ref.power.min():.4f} "
-        f"max rho/beta={ref.peak_rho_over_beta:+.4f}"
-    )
     write(rows, out)
 
 
