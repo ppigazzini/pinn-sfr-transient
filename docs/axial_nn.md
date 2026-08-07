@@ -971,6 +971,40 @@ reduction order and so changes answers; concurrency at a fixed thread count does
 not. Every study row records its own `load1` and `OMP_NUM_THREADS` so no timing here
 can be mistaken for a clean one.
 
+#### 7.2.9 D67 again, on a second axis: the budget
+
+§7.2.7 found that the shipped `t_train_frac` disagreed with every published table
+and fixed it. **It fixed one of two mismatches.**
+
+Twelve tables in this document state **"3000 Adam + 300 L-BFGS"**.
+`AxialTrainConfig` ships **8000 Adam + 500 L-BFGS**. No table was ever measured at
+the shipped budget, and the mismatch was invisible for the same reason as the
+first: every study passed the budget explicitly, so nothing ever ran the default.
+
+Measured at the true default — `t_train_frac = 0.275`, 8000 + 500, seed 0, torch:
+
+| | `T_s` | `L_void` | `max α` | margin |
+|---|---|---|---|---|
+| **true shipped default** (8000/500) | **0.0371** | 0.0440 | 0.7383 | **−1.1 K** |
+| published tables (3000/300) | 0.0739 | 0.1505 | 1.0000 | +20.5 K |
+
+**The shipped default still does not form a front.** Its peak `T_c` sits 1.1 K
+*below* saturation.
+
+And the mechanism is §7.2.8 for the third independent time: the true default has a
+**better mean** than every published table — `T_s` 0.0371 against 0.0739 — and
+loses the front, because more optimisation gives a smoother fit and a lower peak.
+The first two instances were the budget sweep (§7.5.3) and the training horizon
+(§7.2.7). This is the same trade arriving through the one knob nobody had varied
+because everyone was overriding it.
+
+**The lesson is narrower than "check your defaults".** It is: *a parameter you
+always pass explicitly is a parameter whose default is never tested.* Both D67
+defects were of exactly that kind, and the control arm that caught the first one
+could not catch the second, because the control arm also passed the budget
+explicitly. `tools/axial_study.py default` now runs with **no overrides at all**,
+which is the only arm that can detect this class.
+
 ### 7.3 Backend parity
 
 Two tables, a year apart in understanding. §7.3.1 is kept because the *reason* it
