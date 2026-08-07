@@ -289,6 +289,34 @@ def study_plan_a(out: Path) -> None:
     write(rows, out)
 
 
+def study_combo(out: Path) -> None:
+    """Attack the mean and the extremum with different tools -- section 7.5.4.
+
+    Section 7.2.8 established that the two scores are close to independent: the
+    front is ``max T_c > T_boil`` and the temperature scores are averages. The
+    budget sweep improves the mean and costs the peak, monotonically.
+
+    So pair the arm that wins the mean with the remedy that wins the peak. Fourier
+    features are the one change measured to improve **both** (section 7.2.5:
+    -12.8% mean and `L_void` 0.1878 against a 0.1805 base) -- which is what
+    reducing spectral bias should do to an extremum. The modified MLP wins the mean
+    harder and costs the peak, so it is the control.
+
+    This is not the section 7.2.6 combination. That paired two mean-winners and
+    they did not compose. This pairs a mean-winner with a peak-winner, and the
+    reason to expect anything is mechanical rather than additive.
+    """
+    traj = ruler()
+    arms = (
+        ("C+fourier", {"adam_iters": 300, "lbfgs_iters": 3000, "fourier_features": 32}),
+        ("C+modified_mlp", {"adam_iters": 300, "lbfgs_iters": 3000, "modified_mlp": True}),
+        ("A+fourier", {"adam_iters": 3000, "lbfgs_iters": 300, "fourier_features": 32}),
+    )
+    rows = [run_arm(traj, label, "torch", seed=seed, **kw) for seed in SEEDS for label, kw in arms]
+    write(rows, out)
+    mean_table(rows)
+
+
 STUDIES = {
     "ruler": study_ruler,
     "horizon": study_horizon,
@@ -296,6 +324,7 @@ STUDIES = {
     "optimizer": study_optimizer,
     "parity": study_parity,
     "plan-a": study_plan_a,
+    "combo": study_combo,
 }
 
 
