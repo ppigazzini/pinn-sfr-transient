@@ -325,16 +325,36 @@ failure rather than applying a recipe.
 `T_f` 0.14–0.21, `T_cl` 0.19–0.37, `T_s` 0.07–0.28, `T_c` 0.03–0.23. No lucky
 seed; the failure was systematic, not variance.
 
-### 5.3 Budget — **non-monotonic**
+### 5.3 Budget — **retracted; see §7.5.3 and §7.5.5**
+
+> **This section's conclusion was wrong, and it closed the question for the rest of
+> the project.** Two points, one seed, on the pre-D-TH-3 formulation. Every study
+> for the following nine sections then ran at a single fixed budget without asking
+> again — including every remedy ablation, every backend comparison and every
+> parity table. The budget was the one axis nobody varied, on the strength of the
+> sentence below.
 
 | Adam iters | T_f | T_cl | T_s | T_c |
 |---|---|---|---|---|
 | 3000 | **0.062** | 0.120 | **0.032** | 0.034 |
 | 8000 | 0.246 | 0.095 | 0.075 | 0.028 |
 
-`T_f` gets **4× worse** with more training. Non-monotonic in budget means the
-optimiser wanders between minima rather than converging slowly, so more iterations
-will not fix this.
+The original claim: *"`T_f` gets 4× worse with more training. Non-monotonic in
+budget means the optimiser wanders between minima rather than converging slowly, so
+more iterations will not fix this."*
+
+**Measured against the current formulation, the opposite holds.** §7.5.3 moves
+budget into the quasi-Newton stage and every temperature improves — `T_s` by 41%,
+`T_c` by 39% — with **non-overlapping seed ranges** across three seeds. §7.2.9 then
+found the shipped 8000/500 default has a *better* mean than every published table.
+The model is optimisation-limited from three independent directions (§0.3), which
+is precisely what "more iterations will not fix this" denied.
+
+This is the fourth conclusion in this document overturned by D59's rule — *an
+ablation is a statement about the formulation it was run on* — and the most
+expensive, because unlike D38 and D39 it was never re-tested. A negative result
+that closes an axis deserves more evidence than one that opens one, and this had
+two points and one seed.
 
 ### 5.4 Remedy ablation — **every one made it worse**
 
