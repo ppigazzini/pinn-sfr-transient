@@ -49,11 +49,17 @@ if TYPE_CHECKING:
 RULER_N = 160
 FINEST_N = 640
 SEEDS = (0, 1, 2)
+# Fourier ladder for the margin study. Extended to 256 to find where the trend
+# turns: 32 -> 128 improved T_s, L_void and the margin monotonically on both
+# backends, and a monotone trend with no measured end is an untested extrapolation.
+MARGIN_FEATURES = (32, 64, 128, 256)
 # Every study sweeps both backends. Two independent implementations agreeing is
 # the strongest check this project has, and it is the reason the JAX twin exists
 # (`docs/axial_nn.md` section 4) -- a result measured on one backend is a result
 # about that backend.
 BACKENDS = ("torch", "jax")
+# Set by --only; filters arms so an extended ladder need not re-run measured points.
+_ONLY: str | None = None
 FIELDS = ("T_f", "T_cl", "T_s", "T_c")
 
 
@@ -144,6 +150,9 @@ def run_all(
     has already lost an ablation that way ("the ablation run was killed before its
     three configurations finished", section 7.6).
     """
+    if _ONLY is not None:
+        specs = [(label, kw) for label, kw in specs if _ONLY in label]
+        print(f"--only {_ONLY!r}: {len(specs)} arm(s)", flush=True)
     rows: list[dict] = []
     for label, kw in specs:
         rows.append(run_arm(traj, label, kw.pop("backend", backend), **kw))
@@ -614,11 +623,7 @@ def study_margin(out: Path) -> None:
     """
     traj = ruler()
     base = {"adam_iters": 300, "lbfgs_iters": 3000}
-    arms = (
-        ("f32 (best known)", {**base, "fourier_features": 32}),
-        ("f64", {**base, "fourier_features": 64}),
-        ("f128", {**base, "fourier_features": 128}),
-    )
+    arms = tuple((f"f{n}", {**base, "fourier_features": n}) for n in MARGIN_FEATURES)
     rows = run_all(
         traj,
         [
@@ -763,9 +768,17 @@ def main() -> int:
     )
     ap.add_argument("study", choices=sorted(STUDIES))
     ap.add_argument("--out", type=Path, default=None, help="JSON output path")
+    ap.add_argument(
+        "--only",
+        default=None,
+        help="run only arms whose label contains this substring, so a ladder can be "
+        "extended without re-running what is already measured",
+    )
     args = ap.parse_args()
     out = args.out or Path(f"results/axial_study_{args.study}.json")
     out.parent.mkdir(parents=True, exist_ok=True)
+    global _ONLY  # noqa: PLW0603 - one filter for the whole run
+    _ONLY = args.only
     STUDIES[args.study](out)
     return 0
 
