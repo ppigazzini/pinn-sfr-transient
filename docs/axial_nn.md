@@ -1318,13 +1318,24 @@ Single seed. Given §7.1's history, that is a measurement and not a statistic.
 `AxialTrainConfig` ships **8000 + 500**, which is what a reader running the model
 gets. Re-measured there, `uv run python tools/axial_study.py plan-a`:
 
-| seed | `L2(P)` | `P(0)` | peak `P` | min `P` | `min ρ/β` | `max ρ/β` | time |
-|---|---|---|---|---|---|---|---|
-| 0 | 0.1060 | 1.000000 | 1.0000 | 0.4659 | −0.1482 | **+0.0000** | 2748 s |
-| 1 | 0.1128 | 1.000000 | 1.0000 | 0.4622 | −0.1505 | **+0.0000** | 2478 s |
-| 2 | 0.1142 | 1.000000 | 1.0000 | 0.4601 | −0.1521 | **+0.0000** | 2361 s |
-| **mean** | **0.1110** | 1.000000 | 1.0000 | 0.4627 | −0.1503 | **+0.0000** | 2529 s |
-| reference | — | — | 1.0000 | 0.5021 | −0.2052 | +0.0000 | — |
+Three seeds, **both backends**:
+
+| | `L2(P)` | `min ρ/β` | vs reference | min `P` | `max ρ/β` |
+|---|---|---|---|---|---|
+| **torch** | **0.1110** `[.1060–.1142]` | −0.1503 `[−.1521,−.1482]` | **73%** | 0.4627 | **+0.0000** |
+| **jax** | 0.1324 `[.1092–.1549]` | **−0.1773** `[−.1862,−.1646]` | **86%** | 0.4672 | **+0.0000** |
+| reference | — | −0.2052 | — | 0.5021 | +0.0000 |
+
+`P(0) = 1.000000` to six figures on all six runs, and `max ρ/β = +0.0000` on all
+six — the closure is hard-constrained rather than penalised, and D49 is
+independently reproduced twelve times over.
+
+**The two backends miss by different amounts — 27% and 14%.** That alone rules out
+an error in the reactivity *formulation*, since both compute `ρ` from the same
+shared function. And they trade: torch fits the power trajectory better (`L2(P)`
+0.1110 against 0.1324) while JAX finds substantially more of the negative
+reactivity. Neither is uniformly better, which is the same configuration-dependent
+backend behaviour §7.3.2 shows.
 
 **`L2(P)` is 0.106–0.113 against §7.4's 0.2497 — but that is a 4× compute
 difference, not an improvement in method.** Read it as: Plan A is
