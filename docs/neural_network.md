@@ -315,7 +315,19 @@ mechanics:
   `jax.config.update("jax_enable_x64", True)`.
 
 At the same budget the two backends reach **comparable accuracy** — a few
-$\times 10^{-3}$ relative $L_2$ on each field, neither meaningfully ahead. This
+$\times 10^{-3}$ relative $L_2$ on each field, neither meaningfully ahead.
+
+> **Reproduced from the shipped defaults, and the figure above is conservative.**
+> `TrainConfig()` and `SFRParams()` exactly as delivered, seed 0, `OMP_NUM_THREADS=4`,
+> 835 s: $P$ 5.68e-4, $T_f$ 4.79e-5, $T_c$ 1.50e-5. Worst field **5.7e-4**, roughly
+> five times better than "a few $\times 10^{-3}$".
+>
+> This check exists because the *axial* model failed it. Its published tables were
+> measured at a `t_train_frac` that was not the shipped default, and at the default
+> it produced no boiling front at all ([`axial_nn.md`](axial_nn.md) §7.2.7). That is
+> a defect in practice rather than in either model, so the same question was put to
+> this one. It answers cleanly: the documented command reproduces the documented
+> claim. This
 parity depends on a shared detail: both initialise weights *and* biases from
 $\mathcal{U}(\pm 1/\sqrt{n_{\mathrm{in}}})$ (fan-in $n_{\mathrm{in}}$). With
 PyTorch's earlier `xavier_normal` weights and zero bias the gradient-norm scheme
