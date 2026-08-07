@@ -25,6 +25,11 @@ if TYPE_CHECKING:
 
 FIELDS = ("T_f", "T_cl", "T_s", "T_c")
 ONSET_THRESHOLD = 0.01
+# Below this peak void fraction the front is vestigial and its position is noise.
+# Not a tuning knob: `max alpha` is a saturating function of the saturation
+# margin, and 0.9 corresponds to roughly 2 K above threshold -- the point at
+# which there is a front rather than a trace of one.
+MIN_ALPHA_FOR_ONSET = 0.9
 
 
 def onset(alpha: np.ndarray, zeta: np.ndarray, t: np.ndarray) -> tuple[float, float]:
@@ -58,6 +63,10 @@ def front_metrics(fields: tuple, traj: AxialTrajectory, p: AxialParams) -> dict[
     matches). It also saturates by about 8 K of margin, past which it cannot
     distinguish a front that barely exists from one with 20 K of headroom.
 
+    Onset is reported as ``nan`` unless ``max_alpha`` clears
+    :data:`MIN_ALPHA_FOR_ONSET`, because a vestigial front still has a first point
+    above the void threshold and that point can land anywhere.
+
     ``onset_t_err_s`` and ``onset_zeta_err`` are **M4's actual acceptance
     criterion** — onset within 0.5 s and one cell — and until they were added
     nothing reported them, so M4 could be neither passed nor failed. Both are
@@ -69,6 +78,14 @@ def front_metrics(fields: tuple, traj: AxialTrajectory, p: AxialParams) -> dict[
     max_T_c = float(fields[3].max())
     t_on, z_on = onset(fields[4], traj.zeta, traj.t)
     t_ref, z_ref = traj.onset()
+    # A front that barely exists still has a "first point where alpha > 0.01", and
+    # that point can land anywhere -- so a configuration with a vestigial front can
+    # score WELL on onset location. Measured: the shipped default reaches
+    # `max alpha = 0.685` and `L_void = 0.037` against the reference's 0.381, and
+    # scored onset_zeta_err = 0.00000 on one seed, better than the arm that
+    # actually forms a front. Require a front before reporting where it is.
+    if float(fields[4].max()) < MIN_ALPHA_FOR_ONSET:
+        t_on = z_on = float("nan")
     return {
         "max_T_c": max_T_c,
         "T_boil": threshold,

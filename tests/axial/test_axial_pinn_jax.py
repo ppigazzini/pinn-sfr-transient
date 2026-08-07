@@ -603,3 +603,32 @@ def test_level_set_and_front_net_are_exclusive():
     assert float(pts.min()) >= 0.0
     assert float(pts.max()) <= 1.0
     assert torch.isfinite(pts).all()
+
+
+def test_onset_is_not_reported_for_a_vestigial_front():
+    """A front that barely exists must not score well on where it is.
+
+    The shipped default reaches `max alpha = 0.685` and `L_void = 0.037` against
+    the reference's 0.381, and on one seed scored `onset_zeta_err = 0.00000` —
+    better than the arm that actually forms a front. "First point where alpha
+    exceeds 0.01" is well defined for a trace of void and lands anywhere, so the
+    metric rewarded the absence of the thing it measures.
+    """
+    from pinn_sfr_transient.axial.reference import solve_reference
+    from pinn_sfr_transient.axial.scoring import MIN_ALPHA_FOR_ONSET, front_metrics
+
+    p = AxialParams(n_axial=20)
+    traj = solve_reference(p, n_out=9)
+    shape = (len(traj.zeta), len(traj.t))
+    temps = tuple(np.full(shape, 900.0) for _ in range(4))
+
+    # A front that is present: alpha saturates somewhere.
+    strong = front_metrics((*temps, np.full(shape, 1.0)), traj, p)
+    assert np.isfinite(strong["onset_t"])
+
+    # A trace of void, above the onset threshold but below a real front.
+    weak_alpha = np.zeros(shape)
+    weak_alpha[-1, -1] = 0.5 * (MIN_ALPHA_FOR_ONSET + 0.01)
+    weak = front_metrics((*temps, weak_alpha), traj, p)
+    assert np.isnan(weak["onset_t"]), weak["onset_t"]
+    assert np.isnan(weak["onset_zeta_err"]), weak["onset_zeta_err"]
