@@ -624,9 +624,9 @@ def derivatives(  # noqa: PLR0913, PLR0917 - five coupled fields plus the drivin
     T_up = xp.concatenate([inlet, T_c[:-1]])
     w = flow_rate(t, p)
     if p.flow_expansion:
-        w = w + expansion_velocity(
-            vapour_source(T_c, alpha, q_wall / geo.dz, p), p, geo.dz
-        ) * (p.rho_c * p.A_c)
+        w = w + expansion_velocity(vapour_source(T_c, alpha, q_wall / geo.dz, p), p, geo.dz) * (
+            p.rho_c * p.A_c
+        )
     advection = w * p.c_c * (T_up - T_c)
 
     # Void advects at the liquid velocity; the inlet is subcooled, so none enters.

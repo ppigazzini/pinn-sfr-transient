@@ -148,6 +148,22 @@ the fields — and because their **combination is worse than either alone** (§7
 
 ## 4. Two backends, and why
 
+> **Parity is a tested property, not an intention.** Both backends expose the
+> same knobs with the same defaults, asserted field by field. The only
+> asymmetries are framework-imposed and deliberate: JAX sets its device globally
+> where torch takes `device`, and JAX's RAR keeps a **fixed-size** set so `jit`
+> never recompiles where torch grows a reservoir (`rar_keep` against
+> `rar_add`/`rar_cap`).
+>
+> This has failed twice and both failures were silent. The algebraic void closure
+> landed in torch first, which made a published parity table a comparison of two
+> different models. And `front_frac` was declared in the JAX config and read by
+> nothing, so setting it did nothing and reported nothing — the same class of
+> defect as the causal weighting that variable scaling switched off. There are now
+> three tests: the knob *sets* must match up to the documented exceptions, the
+> shared defaults must be equal, and each ported knob must actually train and
+> preserve every hard constraint.
+
 `pinn_torch.py` is object-oriented and eager; `pinn_jax.py` is functional
 (Equinox + Optax). They share the residual functions and differ only in training
 mechanics. That is the point: a disagreement between them is informative.

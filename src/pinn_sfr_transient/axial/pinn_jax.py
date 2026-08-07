@@ -121,7 +121,25 @@ class AxialTrainConfig:
     # Front-position network (M8 option 2). Measured worse on every metric; see
     # the torch twin for the table.
     front_net: bool = False
-    front_frac: float = 0.25
+    front_frac: float = 0.25  # share of collocation drawn near the predicted front
+
+    # --- remedies for the moving front; every one measured in docs/axial_nn.md --
+    # Time-window curriculum: train [0, w t_end] for growing w. Neutral in the
+    # section 7.2.5 re-ablation.
+    n_windows: int = 1
+    # Random Fourier features against spectral bias [Tancik et al. 2020]. Measured
+    # -11.1% at three seeds (section 7.2.6) but NOT adopted: it does not compose
+    # with `modified_mlp`. 0 disables.
+    fourier_features: int = 0
+    fourier_scale: float = 2.0
+    # Two-encoder "modified MLP" [Wang, Teng & Perdikaris 2021]. Measured -16.1%,
+    # and likewise not adopted -- see section 7.2.6.
+    modified_mlp: bool = False
+    # Pseudo-time stepping [Wang, Koohy, Lu & Perdikaris, arXiv:2604.23528].
+    # Measured harmful: under it the boiling front does not form at all. 0 disables.
+    pts_every: int = 0
+    pts_dtau: float = 1.0
+    pts_growth: float = 1.5
 
     # RAR keeps a FIXED count so `jit` never recompiles (the torch twin grows an
     # unbounded reservoir instead — same idea, framework-appropriate form).
@@ -135,6 +153,55 @@ class AxialTrainConfig:
     log_every: int = 1000
 
 
+class FourierEmbedding(eqx.Module):
+    """Random Fourier features, ``x -> [sin(2 pi B x), cos(2 pi B x)]``.
+
+    ``B`` is frozen: it is drawn once and held under ``stop_gradient``, matching
+    the torch twin's ``register_buffer``.
+    """
+
+    B: jax.Array
+
+    def __init__(self, n_in: int, n_features: int, scale: float, key: jax.Array) -> None:
+        self.B = jax.random.normal(key, (n_in, n_features)) * scale
+
+    def __call__(self, x: jax.Array) -> jax.Array:
+        proj = 2.0 * jnp.pi * (x @ jax.lax.stop_gradient(self.B))
+        return jnp.concatenate([jnp.sin(proj), jnp.cos(proj)])
+
+
+class ModifiedMLP(eqx.Module):
+    """Two-encoder MLP of [Wang, Teng & Perdikaris 2021], the architecture jaxpi uses.
+
+    Encoders ``U`` and ``V`` are computed once from the input and mixed into every
+    hidden layer, ``h <- (1 - z) U + z V``, so the input reaches the last layer
+    undiminished. Equinox's default ``Linear`` init is ``U(+/-1/sqrt(fan_in))`` on
+    weights and biases, which is what the torch twin sets explicitly.
+    """
+
+    u: eqx.nn.Linear
+    v: eqx.nn.Linear
+    first: eqx.nn.Linear
+    hidden: list
+    out: eqx.nn.Linear
+
+    def __init__(self, n_in: int, n_out: int, width: int, depth: int, key: jax.Array) -> None:
+        keys = jax.random.split(key, depth + 3)
+        self.u = eqx.nn.Linear(n_in, width, key=keys[0])
+        self.v = eqx.nn.Linear(n_in, width, key=keys[1])
+        self.first = eqx.nn.Linear(n_in, width, key=keys[2])
+        self.hidden = [eqx.nn.Linear(width, width, key=k) for k in keys[3 : depth + 2]]
+        self.out = eqx.nn.Linear(width, n_out, key=keys[depth + 2])
+
+    def __call__(self, x: jax.Array) -> jax.Array:
+        u, v = jnp.tanh(self.u(x)), jnp.tanh(self.v(x))
+        h = jnp.tanh(self.first(x))
+        for layer in self.hidden:
+            z = jnp.tanh(layer(h))
+            h = (1.0 - z) * u + z * v
+        return self.out(h)
+
+
 class AxialPinn(eqx.Module):
     """Field network, plus a precursor network when the kinetics loop is closed.
 
@@ -143,20 +210,33 @@ class AxialPinn(eqx.Module):
     operations require to be hashable — the same split the 0D JAX backend uses.
     """
 
-    mlp: eqx.nn.MLP
+    mlp: eqx.nn.MLP | ModifiedMLP
     kin: eqx.nn.MLP | None
     front: eqx.nn.MLP | None
+    embed: FourierEmbedding | None
 
     def __init__(self, cfg: AxialTrainConfig, key: jax.Array) -> None:
-        k_field, k_kin, k_front = jax.random.split(key, 3)
+        k_field, k_kin, k_front, k_emb = jax.random.split(key, 4)
         use_front = bool(cfg.front_net and cfg.void_closure)
-        self.mlp = eqx.nn.MLP(
-            in_size=3 if use_front else 2,
-            out_size=len(FIELDS),
-            width_size=cfg.width,
-            depth=cfg.depth,
-            activation=jnp.tanh,
-            key=k_field,
+        n_in = 3 if use_front else 2
+        self.embed = (
+            FourierEmbedding(n_in, cfg.fourier_features, cfg.fourier_scale, k_emb)
+            if cfg.fourier_features
+            else None
+        )
+        if cfg.fourier_features:
+            n_in = 2 * cfg.fourier_features
+        self.mlp = (
+            ModifiedMLP(n_in, len(FIELDS), cfg.width, cfg.depth, k_field)
+            if cfg.modified_mlp
+            else eqx.nn.MLP(
+                in_size=n_in,
+                out_size=len(FIELDS),
+                width_size=cfg.width,
+                depth=cfg.depth,
+                activation=jnp.tanh,
+                key=k_field,
+            )
         )
         # Precursors are functions of time alone, so a separate smaller network.
         self.kin = (
@@ -260,7 +340,7 @@ def normalised_state(
         if use_front
         else (jnp.concatenate([zeta, that]))
     )
-    raw = model.mlp(x)
+    raw = model.mlp(model.embed(x) if model.embed is not None else x)
     base = theta0(p, zeta)
     temps = base[:N_TEMPS] * _bounded_exp(that * raw[:N_TEMPS])
     if cfg.void_closure:
@@ -457,8 +537,30 @@ def causal_weights(losses: jax.Array, eps: float) -> jax.Array:
     return jnp.exp(-eps * prefix / (losses.sum() + 1e-30))
 
 
-def causal_loss(
-    model: AxialPinn, p: AxialParams, cfg: AxialTrainConfig, pts: tuple, w: jax.Array
+def pts_penalty(
+    model: AxialPinn, p: AxialParams, cfg: AxialTrainConfig, anchor: tuple | None
+) -> jax.Array:
+    """Proximal term ``||u - u_prev||^2 / dtau``; zero when the anchor is unset.
+
+    Plain residual minimisation may sit in any low-residual basin, including ones
+    no physical solution occupies. The implicit-Euler form adds a pull toward the
+    previous iterate, so the optimiser has to walk to a solution rather than
+    teleport to one [arXiv:2604.23528]. Measured harmful here (§7.2.5).
+    """
+    if anchor is None:
+        return jnp.zeros(())
+    zeta, that, prev, dtau = anchor
+    now = jax.vmap(lambda a, b: normalised_state(model, p, a, b, cfg))(zeta, that)
+    return ((now - prev) ** 2).mean() / dtau
+
+
+def causal_loss(  # noqa: PLR0913, PLR0917 - the proximal anchor is optional state
+    model: AxialPinn,
+    p: AxialParams,
+    cfg: AxialTrainConfig,
+    pts: tuple,
+    w: jax.Array,
+    anchor: tuple | None = None,
 ) -> jax.Array:
     """Time-chunked loss with causal weights [Wang, Sankaran & Perdikaris 2024].
 
@@ -479,7 +581,7 @@ def causal_loss(
     sums = jnp.bincount(idx, weights=e, length=cfg.causal_chunks)
     losses = sums / jnp.maximum(counts, 1)
     cw = jax.lax.stop_gradient(causal_weights(losses, cfg.causal_eps))
-    return (cw * losses).mean()
+    return (cw * losses).mean() + pts_penalty(model, p, cfg, anchor)
 
 
 def _block_grad_norms(
@@ -510,23 +612,43 @@ def bounded_weights(target: jax.Array, cap: float) -> jax.Array:
 
 
 # --- collocation ------------------------------------------------------------
-def _collocation(p: AxialParams, cfg: AxialTrainConfig, key: jax.Array) -> tuple:
-    """Uniform points with an early-time cluster; time-only when feedback is on."""
+def _collocation(
+    p: AxialParams,
+    cfg: AxialTrainConfig,
+    key: jax.Array,
+    t_max: float = 1.0,
+    model: AxialPinn | None = None,
+) -> tuple:
+    """Uniform points with an early-time cluster; time-only when feedback is on.
+
+    ``t_max`` is the time-window curriculum of ``n_windows``. When the front
+    network is on, a share ``front_frac`` of the points is drawn near the
+    predicted front: RAR cannot supply those, because it samples by residual
+    magnitude and the field residual is small everywhere once the void is closed
+    algebraically.
+    """
     if cfg.feedback:
         k1, k2 = jax.random.split(key)
         that = jnp.concatenate(
             [
-                jax.random.uniform(k1, (cfg.n_time, 1)),
-                jax.random.uniform(k2, (cfg.n_time // 2, 1)) * 0.4,
+                jax.random.uniform(k1, (cfg.n_time, 1)) * t_max,
+                jax.random.uniform(k2, (cfg.n_time // 2, 1)) * 0.4 * t_max,
             ]
         )
         zeta_q = jnp.asarray(p.zeta_nodes().reshape(-1, 1))
         weights = tuple(jnp.asarray(w) for w in kinetics_weights(p))
         return that, zeta_q, weights
-    k1, k2 = jax.random.split(key)
-    pts = jax.random.uniform(k1, (cfg.n_colloc, 2))
-    early = jax.random.uniform(k2, (cfg.n_colloc // 2, 2)).at[:, 1].multiply(0.4)
-    allp = jnp.concatenate([pts, early])
+    k1, k2, k3, k4 = jax.random.split(key, 4)
+    pts = jax.random.uniform(k1, (cfg.n_colloc, 2)).at[:, 1].multiply(t_max)
+    early = jax.random.uniform(k2, (cfg.n_colloc // 2, 2)).at[:, 1].multiply(0.4 * t_max)
+    parts = [pts, early]
+    if model is not None and uses_front(cfg) and cfg.front_frac > 0.0:
+        n = int(cfg.n_colloc * cfg.front_frac)
+        t_f = jax.random.uniform(k3, (n, 1)) * t_max
+        z_f = jax.vmap(lambda h: front_position(model, h))(t_f)
+        spread = 0.05 * jax.random.normal(k4, (n, 1))
+        parts.append(jnp.concatenate([jnp.clip(z_f + spread, 0.0, 1.0), t_f], axis=1))
+    allp = jnp.concatenate(parts)
     return allp[:, 0:1], allp[:, 1:2]
 
 
@@ -574,14 +696,24 @@ def train(
     opt_state = optimizer.init(eqx.filter(model, eqx.is_inexact_array))
 
     @eqx.filter_jit
-    def step(model: AxialPinn, opt_state: optax.OptState, pts: tuple, w: jax.Array) -> tuple:
-        loss, grads = eqx.filter_value_and_grad(lambda m: causal_loss(m, p, cfg, pts, w))(model)
+    def step(
+        model: AxialPinn, opt_state: optax.OptState, pts: tuple, w: jax.Array, anchor: tuple | None
+    ) -> tuple:
+        loss, grads = eqx.filter_value_and_grad(lambda m: causal_loss(m, p, cfg, pts, w, anchor))(
+            model
+        )
         params = eqx.filter(model, eqx.is_inexact_array)
         updates, opt_state = optimizer.update(grads, opt_state, params)
         return eqx.apply_updates(model, updates), opt_state, loss
 
     rar: tuple | None = None
+    anchor: tuple | None = None
+    dtau = cfg.pts_dtau
     for it in range(cfg.adam_iters):
+        # Time-window curriculum: the horizon opens from 1/n_windows to 1 over
+        # training, matching the torch twin. With n_windows = 1 this is a no-op.
+        stage = min(int(it / max(cfg.adam_iters, 1) * cfg.n_windows) + 1, cfg.n_windows)
+        t_max = stage / cfg.n_windows
         if it and it % cfg.rar_every == 0:
             key, rk = jax.random.split(key)
             rar = _rar_points(model, p, cfg, rk, w)
@@ -592,12 +724,23 @@ def train(
         # what made this backend stall at ~0.24 relative L2 while the torch twin
         # — which resamples every step — reached ~0.06 on the identical budget.
         key, ck = jax.random.split(key)
-        pts = _merge(_collocation(p, cfg, ck), rar, feedback=cfg.feedback)
+        pts = _merge(_collocation(p, cfg, ck, t_max, model), rar, feedback=cfg.feedback)
+        if cfg.pts_every and it % cfg.pts_every == 0:
+            # Re-anchor and relax. The anchor points are RESAMPLED every step:
+            # the paper is explicit that pseudo-time stepping and resampling work
+            # together, since a fixed anchor set is one more thing to overfit.
+            key, ak = jax.random.split(key)
+            a_zeta, a_that = _collocation(p, cfg, ak, t_max, model)[:2]
+            a_state = jax.lax.stop_gradient(
+                jax.vmap(lambda a, b, m=model: normalised_state(m, p, a, b, cfg))(a_zeta, a_that)
+            )
+            anchor = (a_zeta, a_that, a_state, dtau)
+            dtau *= cfg.pts_growth
         if cfg.weight_max_ratio > 1.0 and it and it % cfg.weight_update_every == 0:
             gn = _block_grad_norms(model, p, cfg, pts)
             target = bounded_weights(gn.mean() / (gn + 1e-12), cfg.weight_max_ratio)
             w = cfg.weight_momentum * w + (1.0 - cfg.weight_momentum) * target
-        model, opt_state, loss = step(model, opt_state, pts, w)
+        model, opt_state, loss = step(model, opt_state, pts, w, anchor)
         if verbose and it % cfg.log_every == 0:
             print(f"[adam {it:6d}] loss={float(loss):.3e}")
 
@@ -619,7 +762,7 @@ def _lbfgs_polish(  # noqa: PLR0913 - polish needs the model, params, points and
     params, static = eqx.partition(model, eqx.is_inexact_array)
 
     def loss_fn(params: AxialPinn) -> jax.Array:
-        return causal_loss(eqx.combine(params, static), p, cfg, pts, w)
+        return causal_loss(eqx.combine(params, static), p, cfg, pts, w)  # no proximal term
 
     before = float(loss_fn(params))
     opt = optax.lbfgs()
