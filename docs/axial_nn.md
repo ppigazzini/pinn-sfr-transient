@@ -22,14 +22,15 @@ and `regime-sign`.
 |---|---|---|---|---|---|
 | **shipped default** | 0.1373 `[.1348–.1392]` | 0.0739 `[.0677–.0786]` | 0.0742 `[.0684–.0786]` | 0.1505 `[.1212–.1670]` | 1.0000 |
 | quasi-Newton budget (§7.5.3 arm C) | 0.1247 | 0.0434 | 0.0450 | 0.0724 `[.0495–.1068]` | 0.87 `[.63–1.00]` |
-| **best known (§7.5.4)** | **0.1143** `[.1084–.1201]` | **0.0353** `[.0315–.0380]` | **0.0364** `[.0324–.0393]` | **0.2270** `[.2010–.2455]` | 1.0000 |
+| best known at f32 (§7.5.4) | 0.1143 | 0.0353 | 0.0364 | 0.2270 | 1.0000 |
+| **best known (§7.5.8, f128)** | **0.1024** | **0.0314** | **0.0323** | **0.2424** | **1.0000** |
 | reference | — | — | — | 0.3812 | 1.0000 |
 | **acceptance bar** | 0.01 | 0.01 | 0.01 | — | — |
 
-**The bar is missed by 3.5× to 11×.** The best known configuration —
-`adam_iters=300, lbfgs_iters=3000, fourier_features=32` — is **52% better than the
-shipped default on `T_s` and `T_c` and 51% better on `L_void`, with disjoint seed
-ranges on all four**. It is not the default: see §0.5.
+**The bar is missed by 3.1× to 10×.** The best known configuration —
+`adam_iters=300, lbfgs_iters=3000, fourier_features=128` — is **28% better than the
+shipped default on `T_s`, 6.6× better on `L_void`, and forms the front on every
+seed where the default forms it on none**. It is not the default: see §0.5.
 
 The ruler is not the limit. At `n = 160` the reference's own error is 1.1–1.6e-3
 (§6.5), so the 1% bar sits 6–9× above it and the PINN's failure is **45–120× the
@@ -79,19 +80,31 @@ on a 4× budget increase (§7.4.1).
 
 ### 0.5 Why the best known configuration is not the default
 
-`adam_iters=300, lbfgs_iters=3000, fourier_features=32` beats the default on every
-metric with disjoint seed ranges. It is nonetheless **not** shipped as the default,
-for three reasons:
+`adam_iters=300, lbfgs_iters=3000, fourier_features=128` beats the default on every
+metric, on both backends, at three seeds — and forms the boiling front on every seed
+where the **default forms it on none** (§7.2.9, six runs, both backends). It is
+nonetheless **not** shipped as the default, for three reasons:
 
 * **Every published table in this document was measured on the default.** Moving it
   invalidates all of them at once, and this project has just spent a revision
   recovering from a default that silently disagreed with its own tables (§7.2.7).
-* **It is 52% more wall-clock** — 905 s against 597 s for the budget alone.
+* **It is more wall-clock** — 52% for the budget change alone, and `f128` adds
+  further cost on top of that.
 * **`AGENTS.md` requires new behaviour to land off by default** so no published
   number moves when it does.
 
 The correct sequence is to re-measure the document against it and then move both
-together. That is a compute task, not a development one.
+together. That is a compute task, not a development one, and
+`tools/axial_study.py default` is the arm that does it — it runs with **no
+overrides at all**, which is the only configuration that can catch a
+default/documentation mismatch. Two such mismatches have been found this way
+(§7.2.7, §7.2.9), and both were invisible to every other arm because every other
+arm passes its knobs explicitly.
+
+**The case for moving it is now stronger than "better numbers".** The shipped
+default does not produce the repository's headline result: it forms no boiling
+front, on either backend, on every seed measured. A default that cannot reproduce
+the documentation is a defect regardless of what the alternative scores.
 
 ### 0.6 Method notes that changed the answers
 
@@ -1661,6 +1674,44 @@ everywhere.
 > dashes above are that guard firing. It is the same rule that already made onset
 > `NaN` when the network never boils: **a position is only meaningful if the thing
 > has a position.**
+
+#### 7.5.8 Raising the margin deliberately — the first thing aimed at it
+
+§7.5.4 found that Fourier features raise the saturation margin as a side effect.
+Nothing had ever aimed at the margin. This does: `fourier_features` swept 32 → 64 →
+128 on top of the quasi-Newton budget, three seeds, both backends,
+`uv run python tools/axial_study.py margin`.
+
+Success is `margin_K` at **every** seed, not the mean — a margin large on average
+and negative once is the `A + fourier` failure of §7.5.4.
+
+| | `T_s` | `L_void` | margin min | margin mean |
+|---|---|---|---|---|
+| f32, torch | 0.0353 | 0.2270 | +7.6 K | +13.3 K |
+| f64, torch | 0.0340 | 0.2397 | +13.8 K | +16.5 K |
+| **f128, torch** | **0.0314** | **0.2424** | **+17.5 K** | **+21.9 K** |
+| f32, jax | 0.0386 | 0.2064 | +3.5 K | +8.4 K |
+| f64, jax | 0.0375 | 0.2194 | +4.3 K | +7.7 K |
+| **f128, jax** | **0.0363** | 0.2178 | **+9.5 K** | **+12.2 K** |
+| shipped default, torch | 0.0434 | 0.0367 | **−1.1 K** | **−1.5 K** |
+| reference | — | 0.3812 | — | — |
+
+**Monotone in `T_s` on both backends, monotone in margin-minimum on both, and
+positive on every seed of every arm.** Targeting the margin raised it **2.3× on
+torch and 2.7× on JAX** and improved the mean at the same time — the only lever in
+this document that moves the average and the extremum the same way, which is what
+§7.2.8 predicts of a change that relieves spectral bias.
+
+`f128` on torch is the best configuration this project has produced: `T_s` **0.0314**
+against the shipped default's 0.0434, and `L_void` **0.2424** against 0.0367 —
+**6.6× more voided length**, at 64% of the reference's.
+
+> **A two-seed claim, retracted.** An earlier revision reported JAX as
+> *non-monotone* — "f32 +16.9 K, f64 +4.5 K, f128 +11.6 K" — and called the effect
+> torch-specific. That was two seeds. At three, JAX is monotone in both `T_s` and
+> the margin minimum. **Fifth two-seed claim overturned at three in this study**,
+> after the budget sweep's monotone front, the backend gap's disappearance,
+> `ssbfgs`'s 0.1% variance, and the vestigial-front onset artefact of §7.5.7.
 
 ### 7.6 Pseudo-time stepping
 
