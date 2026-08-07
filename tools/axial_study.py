@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -104,13 +105,24 @@ def run_arm(traj: Any, label: str, backend: str, **kw: Any) -> dict:  # noqa: AN
     t0 = time.perf_counter()
     predict = (train_torch if backend == "torch" else train_jax)(**kw)
     dt = time.perf_counter() - t0
-    row = score(predict(traj), traj) | {"arm": label, "backend": backend, "sec": dt, **kw}
+    # Record the load average with every timing. A wall-clock is only a
+    # measurement against a stated thread budget AND a stated contention level,
+    # and these studies are sometimes run concurrently -- putting it in the row
+    # means a later reader cannot mistake a contended time for a clean one.
+    row = score(predict(traj), traj) | {
+        "arm": label,
+        "backend": backend,
+        "sec": dt,
+        "load1": os.getloadavg()[0],
+        "omp": os.environ.get("OMP_NUM_THREADS", "unset"),
+        **kw,
+    }
     print(
         f"{label:24s} {backend:5s} "
         + " ".join(f"{k}={row[k]:.4f}" for k in FIELDS)
         + f" maxA={row['max_alpha']:.4f} L_void={row['L_void_max']:.4f}"
         + f" maxTc={row['max_T_c']:.1f}K (thr {row['T_boil']:.1f}, margin {row['margin_K']:+.1f})"
-        + f" {dt:.0f}s",
+        + f" {dt:.0f}s (load {row['load1']:.1f}, OMP {row['omp']})",
         flush=True,
     )
     return row
