@@ -1177,6 +1177,8 @@ gets. Re-measured there, `uv run python tools/axial_study.py plan-a`:
 |---|---|---|---|---|---|---|---|
 | 0 | 0.1060 | 1.000000 | 1.0000 | 0.4659 | −0.1482 | **+0.0000** | 2748 s |
 | 1 | 0.1128 | 1.000000 | 1.0000 | 0.4622 | −0.1505 | **+0.0000** | 2478 s |
+| 2 | 0.1142 | 1.000000 | 1.0000 | 0.4601 | −0.1521 | **+0.0000** | 2361 s |
+| **mean** | **0.1110** | 1.000000 | 1.0000 | 0.4627 | −0.1503 | **+0.0000** | 2529 s |
 | reference | — | — | 1.0000 | 0.5021 | −0.2052 | +0.0000 | — |
 
 **`L2(P)` is 0.106–0.113 against §7.4's 0.2497 — but that is a 4× compute
@@ -1195,9 +1197,14 @@ What passes still passes exactly: `P(0) = 1.000000` to six figures because the
 closure is hard-constrained rather than penalised, and the pole tripwire reads
 `+0.0000` on both seeds, independently reproducing D49.
 
-**Two seeds, 6% apart. Seed 2 is running.** M6's acceptance criterion remains
-**failed** — 11% against a 1% bar — but it is now failed reproducibly rather than
-once.
+**Three seeds, 7.7% apart, and the failure is the most reproducible thing in this
+document.** `min ρ/β` is −0.1482 / −0.1505 / −0.1521 against the reference's
+−0.2052: the network finds **26–28% less negative feedback** on every seed, and the
+spread on that quantity is 2.6%. It is not variance, it is a systematic deficit in
+the reactivity balance.
+
+M6's acceptance criterion is **failed** — 11.1% against a 1% bar — and now failed
+with a number that will not move on re-running.
 
 ### 7.5 Optimiser bake-off
 
@@ -1269,33 +1276,34 @@ quasi-Newton stage **30000** iterations against 300 here, where asymptotic
 behaviour is what is being compared. The second of those is testable on its own,
 and is §7.5.3.
 
-**On the PINN it also loses the mean — and it is the most reproducible method
-here by two orders of magnitude.** Two seeds, torch, 3000 Adam + 300 quasi-Newton,
-`n = 160` ruler:
+**On the PINN it also loses the mean — and the stability belongs to the
+implementation, not to the self-scaling.** Three seeds, torch, 3000 Adam + 300
+quasi-Newton, `n = 160` ruler:
 
-| optimiser | `T_s` per seed | spread | margin per seed |
-|---|---|---|---|
-| `lbfgs` (torch's) | 0.0753, 0.0786 | 4.4% | +20.5, +17.2 K |
-| `lbfgs-shared` (ours, the fair control) | 0.0769, 0.0789 | 2.6% | +20.6, +16.1 K |
-| `ssbfgs` | 0.0853, 0.0852 | **0.1%** | **+21.2, +21.1 K** |
+| optimiser | `T_s` mean | per seed | spread | margin per seed |
+|---|---|---|---|---|
+| `lbfgs` (torch's) | **0.0739** | 0.0753, 0.0786, 0.0677 | **16.2%** | +20.5, +17.2, +9.8 K |
+| `lbfgs-shared` (ours, plain) | 0.0775 | 0.0769, 0.0789, 0.0766 | **3.0%** | +20.6, +16.1, +12.0 K |
+| `ssbfgs` (ours, self-scaled) | 0.0862 | 0.0853, 0.0852, 0.0880 | **3.4%** | +21.2, +21.1, +14.9 K |
 
-Self-scaled BFGS is **8–11% worse in the mean** than its own-implementation control
-at both seeds, which confirms the test-problem result and refutes the paper's
-accuracy claim for this problem at this budget.
+**Self-scaling costs 11% of the mean and buys nothing in variance.** `ssbfgs` and
+`lbfgs-shared` have the same spread to within noise (3.4% against 3.0%), so the
+paper's method is simply worse here — on quadratics, on Rosenbrock and on the PINN.
 
-**But its seed spread is 0.1% against 2.6–4.4%, and its margin varies by 0.1 K
-against 3–4.5 K.** It converges to essentially the same point regardless of
-initialisation. That is the damping doing what it is built to do: `τ ≤ 1` caps step
-growth, so the trajectory is far less sensitive to where it started.
+**What is real is that this repository's L-BFGS is 5× more seed-stable than
+torch's**: 3.0% against 16.2%, and a margin range of 8.6 K against 10.7 K. It pays
+for that with 4.6% of the mean. The likely cause is the line search — `torch.optim.LBFGS`
+interpolates cubically inside the zoom where this implementation bisects, which
+converges faster and lands in more varied places.
 
-That is not a footnote in this project. §7.1 recorded a **12.5× seed spread**; two
-conclusions in this document have been overturned by seed variance; and §7.5.4's
-whole difficulty is that the front metric can swing 0.63 → 1.00 on the seed alone.
-A method that trades 10% of the mean for a 30× reduction in seed spread is worth
-having available, and it is — as `optimizer = "ssbfgs"`, off by default.
-
-**Two seeds.** The spread figure in particular is a two-sample estimate of a
-variance, which is the weakest kind of claim in this table. Seed 2 is running.
+> An earlier revision of this section reported a **0.1% seed spread** for `ssbfgs`
+> and called it "a 30× reduction worth having". That was two seeds: 0.0853 and
+> 0.0852, which happened to coincide. The third is 0.0880 and the spread is 3.4%.
+>
+> **Every two-seed claim made during this study was wrong at three** — the budget
+> sweep's monotonic front, the backend gap's disappearance, and this. A two-sample
+> estimate of a *variance* is worse still, and this one is why `AGENTS.md` now says
+> three seeds with ranges or say the sample size in the sentence.
 
 #### 7.5.3 The budget split
 
