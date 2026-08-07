@@ -43,6 +43,15 @@ repos:
         types_or: [python, pyi]
         require_serial: true
 
+      - id: markdown
+        name: markdown rendering rules
+        # GitHub's inline math renderer fails silently: the page still renders,
+        # just wrongly. AGENTS.md lists the rules and says to scan after every
+        # edit; a hook does that more reliably than a person does.
+        entry: uv run python tools/check_markdown.py
+        language: system
+        files: \.md$
+
       - id: ty
         name: ty check
         entry: uv run ty check
