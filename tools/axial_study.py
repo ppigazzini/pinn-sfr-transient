@@ -37,6 +37,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from pinn_sfr_transient.axial import sodium
 from pinn_sfr_transient.axial.config import AxialParams
 from pinn_sfr_transient.axial.reference import solve_reference
 
@@ -66,6 +67,19 @@ def score(fields: tuple, traj: Any) -> dict[str, float]:  # noqa: ANN401
     dz = (traj.zeta[1] - traj.zeta[0]) * traj.H
     out["max_alpha"] = float(fields[4].max())
     out["L_void_max"] = float((fields[4].sum(axis=0) * dz).max())
+
+    # Under D-TH-3 the void is a function of `T_c` alone, so "the front forms" is
+    # not a separate phenomenon: it is the single inequality
+    # `max T_c > T_sat + dT_superheat`. Record the margin, because relative `L2`
+    # is an average and this is an extremum -- a fit can improve on one while
+    # losing the other, which is exactly what the budget sweep shows.
+    p_ax = AxialParams()
+    threshold = sodium.saturation_temperature(p_ax.p_system) + p_ax.dT_superheat
+    out["max_T_c"] = float(fields[3].max())
+    out["max_T_c_ref"] = float(traj.T_c.max())
+    out["T_boil"] = float(threshold)
+    out["margin_K"] = out["max_T_c"] - threshold
+    out["margin_K_ref"] = out["max_T_c_ref"] - threshold
     return out
 
 
@@ -94,7 +108,9 @@ def run_arm(traj: Any, label: str, backend: str, **kw: Any) -> dict:  # noqa: AN
     print(
         f"{label:24s} {backend:5s} "
         + " ".join(f"{k}={row[k]:.4f}" for k in FIELDS)
-        + f" maxA={row['max_alpha']:.4f} L_void={row['L_void_max']:.4f} {dt:.0f}s",
+        + f" maxA={row['max_alpha']:.4f} L_void={row['L_void_max']:.4f}"
+        + f" maxTc={row['max_T_c']:.1f}K (thr {row['T_boil']:.1f}, margin {row['margin_K']:+.1f})"
+        + f" {dt:.0f}s",
         flush=True,
     )
     return row

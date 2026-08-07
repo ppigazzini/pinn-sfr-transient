@@ -717,6 +717,46 @@ score against the reference would be fitting the problem statement to the ruler 
 the one thing `t_train_frac` is documented as *not* being. The better number is
 recorded here so the choice is visible rather than quietly taken.
 
+#### 7.2.8 There is no front mechanism — it is one inequality on `T_c`
+
+The cliff in §7.2.7 and the L-BFGS switch in §7.3.4 look like two unrelated knobs
+producing the same binary outcome. They are not two mechanisms. Under D-TH-3 the
+void is a function of the network's own `T_c` and nothing else:
+
+```math
+\alpha = 1 - \big(1 - b(T_c)\big)^3,
+\qquad
+b(T_c) = \tfrac{1}{2}\left(1 + \tanh \frac{T_c - T_{\mathrm{sat}} - \Delta T_{\mathrm{sup}}}{2\,\Delta T_{\mathrm{smooth}}}\right)
+```
+
+so **"the front forms" is the single inequality**
+`max T_c > T_sat + ΔT_sup = 1169.0 K`. There is no separate front to get right.
+Every knob that switches `max α` between 0 and 1 does so by moving the *peak* of
+`T_c` across one threshold.
+
+That resolves what looked paradoxical. **Relative `L2` is an average and the front
+is an extremum**, so a change can improve one while destroying the other — and
+`T_c`'s relative `L2` barely moves across the cliff (0.0756 → 0.0955) precisely
+because the norm is dominated by the subcooled bulk, where nothing happened, while
+the peak that matters slipped below 1169 K.
+
+The budget sweep of §7.5.3 is the same trade in continuous form: as the
+quasi-Newton stage takes more of the budget, `T_c` improves monotonically in `L2`
+(0.0756 → 0.0492 → 0.0396) and the front degrades monotonically
+(`max α` 1.0000 → 0.9662 → 0.6274). A smoother, better-in-the-mean fit has a lower
+peak. That is not a defect in the optimiser; it is the metric and the physics
+asking for different things.
+
+Two consequences worth stating:
+
+* **Scoring temperatures in relative `L2` cannot detect front failure**, and this
+  document has reported both side by side for long enough to have noticed. Every
+  study now records `max T_c` and its margin to 1169 K, which is the quantity the
+  front actually depends on.
+* **A 1% bar on `T_c` in `L2` does not imply the front forms.** The two criteria
+  are close to independent. M4's acceptance is a statement about the peak; §7.2.5's
+  is a statement about the mean.
+
 #### 7.2.5 N6 — re-ablated against the algebraic closure, and D38 is half wrong
 
 Every remedy in §7.2.x was measured against the *old* formulation: differential
