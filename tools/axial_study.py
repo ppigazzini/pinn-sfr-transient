@@ -296,11 +296,12 @@ def study_combo(out: Path) -> None:
     front is ``max T_c > T_boil`` and the temperature scores are averages. The
     budget sweep improves the mean and costs the peak, monotonically.
 
-    So pair the arm that wins the mean with the remedy that wins the peak. Fourier
-    features are the one change measured to improve **both** (section 7.2.5:
-    -12.8% mean and `L_void` 0.1878 against a 0.1805 base) -- which is what
-    reducing spectral bias should do to an extremum. The modified MLP wins the mean
-    harder and costs the peak, so it is the control.
+    So pair the arm that wins the mean with the remedy that wins the peak. Section
+    7.2.6's three-seed table separates them cleanly: Fourier features give `L_void`
+    0.2070 against a 0.1630 base while taking 11.1% off the mean, and the modified
+    MLP takes 16.1% off the mean while *halving* `L_void` to 0.0932. One raises the
+    peak, the other lowers it -- which is what reducing spectral bias should do to
+    an extremum, and what smoothing should do against it.
 
     This is not the section 7.2.6 combination. That paired two mean-winners and
     they did not compose. This pairs a mean-winner with a peak-winner, and the
