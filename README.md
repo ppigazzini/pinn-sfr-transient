@@ -38,16 +38,24 @@ which is what a loss-of-flow safety argument turns on — a second model resolve
 channel axially and takes its thermophysics, boiling onset and feedback laws from the
 [SAS4A/SASSYS-1 manual](https://sas-doc.nse.anl.gov/latest/) (ANL/NSE-SAS/5.8.1).
 
-**Status, stated plainly.** The reference solver is verified. The PINN trains and
-satisfies every hard constraint exactly, and **does not meet its 1% accuracy bar**:
-0.075 to 0.19 relative L2 on the temperatures at the shipped defaults. The boiling
-front does form, after the void was eliminated algebraically — but only inside a
-narrow training horizon, and until recently the shipped default sat outside it, so
-the code as delivered produced no front while the documentation said it did.
+**Status, stated plainly.** The reference solver is verified and the physics
+question is answered: the positive sodium void coefficient **does** drive a power
+excursion, to 5.3× nominal, governed by the height at which the void worth changes
+sign rather than by its magnitude ([`docs/axial_physics.md`](docs/axial_physics.md)
+§10).
 
-Every measurement lives in [`docs/axial_nn.md`](docs/axial_nn.md) §5–§7, including
-the negative results, which outnumber the positive ones, and including which of
-that document's own earlier conclusions have since been retracted.
+The PINN trains, satisfies every hard constraint exactly, and **does not meet its
+1% accuracy bar** — 0.074 relative L2 on `T_s` and `T_c` at the shipped defaults,
+0.035 at the best known configuration. The boiling front forms, and it forms by
+clearing saturation by 20.5 K out of a 590 K range, which is why it is fragile.
+The reference's own error is 1.1–1.6e-3, so the bar sits 6–9× above the ruler and
+the failure is the network's.
+
+[`docs/axial_nn.md`](docs/axial_nn.md) **§0 is the status quo** — accuracy, what is
+settled, what is open, and why the best known configuration is not the default.
+§5–§7 carry every measurement, including the negative results, which outnumber the
+positive ones, and including which of that document's own conclusions have been
+retracted — three of them during the study that produced §0.
 
 **Every deviation from the manual is registered** in
 [`docs/axial_physics.md`](docs/axial_physics.md) §3 with its equation number. That

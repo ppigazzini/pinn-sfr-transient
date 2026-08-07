@@ -1477,45 +1477,38 @@ once, and the seed ranges are disjoint from the default's on all four.** `T_s` a
 against 0.1505, where the reference is 0.3812. `max α = 1.0000` on all three seeds,
 with 7.6–18.6 K of margin.
 
-**The control is the part that makes it more than a lucky arm.** `C + modified_mlp`
-pairs the same mean-winning budget with a remedy that *lowers* the peak, and the
-prediction was that the mean would stall and the margin collapse. It did both: the
-temperatures are no better than plain arm C, and the margin is **+0.6 K** — the
-front is sitting exactly on the threshold, one seed away from not existing.
+**Both controls behaved as designed, and both are seed-fragile in exactly the way
+the margin predicts.**
 
-That is §7.2.8 predicting a two-arm comparison quantitatively in advance, which
-nothing in this document had managed before. It also explains §7.2.6 in retrospect:
-Fourier and the modified MLP "did not compose" because one *raises* the peak and the
-other *lowers* it. They were competing for the margin, not for the mean — invisible
-until the margin was measured.
+`C + modified_mlp` pairs the same mean-winning budget with a peak-*lowering*
+remedy. The prediction was that the mean would stall and the margin collapse; it
+did both — temperatures no better than plain arm C, margins of **+0.6 and +2.4 K**,
+the front sitting on the threshold.
 
-**`A + fourier` has now landed, and it separates the two effects cleanly:**
+`A + fourier` isolates the Fourier effect and is the sharpest illustration of
+§7.2.8 in the document. At seed 0 it produces the **largest `L_void` of any arm**
+(0.2681) on a margin of just +3.7 K. At seed 1 the margin goes **negative**
+(−0.4 K) and `L_void` collapses to 0.0865. A configuration whose peak sits on the
+threshold is decided by the seed, and that is not a defect in the remedy — it is
+what §7.2.8 says a threshold crossing must look like from there.
 
-| arm | T_f | T_cl | T_s | T_c | `L_void` | margin |
-|---|---|---|---|---|---|---|
-| A (shipped default) | 0.1379 | 0.1892 | 0.0753 | 0.0756 | 0.1634 | +20.5 K |
-| A + fourier | 0.1253 | 0.1748 | 0.0519 | 0.0525 | **0.2681** | +3.7 K |
-| C (seed 0) | 0.1222 | 0.1732 | 0.0379 | 0.0396 | 0.0495 | — |
-| **C + fourier** | **0.1084** | **0.1525** | **0.0315** | **0.0324** | 0.2455 | +18.6 K |
-| C + modified_mlp | 0.1251 | 0.1768 | 0.0460 | 0.0475 | 0.0774 | +0.6 K |
-| reference | — | — | — | — | 0.3812 | — |
+**`C + fourier` is the only arm with margin to spare on every seed**, which is why
+it is the only one whose `L_void` range is disjoint from the default's. Both effects
+are real and they add: Fourier widens the super-saturated region, the quasi-Newton
+budget sharpens the mean, and neither alone is stable.
 
-**Both effects are real and they add.** Fourier alone (`A + fourier`) takes `T_s`
-down 31% *and* lifts `L_void` from 0.1634 to 0.2681 — the largest voided length any
-arm has produced. The budget alone (`C`) takes `T_s` down 50% and costs the front.
-Together they give the best temperatures in the project by a wide margin, with the
-front intact.
+That is §7.2.8 predicting a three-arm comparison in advance — which arm keeps its
+margin, which spends it, and which is decided by the seed. Nothing in this document
+had produced a prediction before; everything else here was explanation after the
+fact. It also settles §7.2.6 in retrospect: Fourier and the modified MLP "did not
+compose" because one *raises* the peak and the other *lowers* it. They were
+competing for the margin, not for the mean — invisible until the margin was
+measured, which happened only because the front failure forced the diagnostic.
 
-**The two best arms are not the same arm, and the choice is a real one.**
-`C + fourier` wins every temperature; `A + fourier` wins `L_void`. Under the
-decomposition in §7.2.8 that is exactly the mean/extent trade, not a contradiction:
-the quasi-Newton budget sharpens the fit in the mean and narrows the super-saturated
-region, while Fourier widens it.
-
-**Seeds 1–2 are still running.** §7.5.3's front metric moved 0.6274 → 0.9998 on seed
-alone, so a single `L_void` is not a result. **Nothing here is adopted as a default
-until they land** — but for the first time the thing to adopt is a question of
-which arm rather than whether any.
+**Not adopted as the default**, for the reasons in §0.5: every published table in
+this document was measured on the default, moving it invalidates all of them at
+once, and it costs 52% more wall-clock. The re-measurement is compute, not
+development, and it is the single highest-value thing left to do here.
 
 ### 7.6 Pseudo-time stepping
 
