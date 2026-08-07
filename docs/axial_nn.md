@@ -821,11 +821,45 @@ The direction is at least consistent with the asymmetry: RAR *helps* torch
 what a backend receiving twice as many high-residual points would show. The
 effect is simply too small to account for the gap.
 
-**Remaining suspect: the L-BFGS polish.** It is the last genuinely different
-implementation — torch uses `torch.optim.LBFGS` with a strong-Wolfe line search
-and a snapshot/revert guard, JAX uses `optax.lbfgs` with its own default line
-search. Everything else the two backends do is now shared source or verified
-equal. **TBD.**
+### 7.4.2 The L-BFGS polish is the whole remaining gap
+
+The last genuinely different implementation: torch uses `torch.optim.LBFGS` with
+a strong-Wolfe line search and a snapshot/revert guard, JAX uses `optax.lbfgs`
+with its own default. Tested the same way, by removal — Adam only, three seeds
+each:
+
+| | T_f | T_cl | T_s | T_c | all ranges overlap? |
+|---|---|---|---|---|---|
+| ratio jax/torch, **polish on** | 1.048 | 1.037 | 1.220 | 1.213 | no (`T_s`, `T_c`) |
+| ratio jax/torch, **polish off** | 0.971 | 0.973 | **0.949** | **0.949** | **yes, all four** |
+
+**Remove the polish and the gap does not merely close — it reverses.** Adam-only,
+JAX is 3–5% *better* than torch and every per-seed range overlaps. That is M7's
+criterion met, on a configuration nobody would ship.
+
+So the difference is not in the model, the residuals, the collocation or the
+optimiser's first phase. It is that **`torch.optim.LBFGS` extracts more from this
+loss than `optax.lbfgs` does**:
+
+| | Adam only | + polish | gain |
+|---|---|---|---|
+| torch `T_s` | 0.1483 | 0.0707 | **2.10×** |
+| jax `T_s` | 0.1407 | 0.0863 | 1.63× |
+
+Both benefit; torch benefits more, and the difference between 2.10× and 1.63× is
+the entire 21%.
+
+**The larger finding is not about parity at all.** With the polish off, `L_void`
+is 0.0000 and `max α` is 0.0000 in **both** backends, on every seed. Three
+thousand Adam iterations never form the boiling front; three hundred L-BFGS
+iterations do. The quasi-Newton polish is not a refinement here — it is the step
+that finds the front, which makes the choice of L-BFGS implementation a physics
+question rather than a tuning one.
+
+That reframes §7.3's deferred optimiser bake-off: SSBroyden and SSBFGS
+([arXiv:2501.16371](https://arxiv.org/abs/2501.16371)) drop into exactly this
+slot, and this is now the highest-value untested item in the project rather than
+a nice-to-have. **TBD.**
 
 ## 7.5 N5 — Plan A measured end to end
 
