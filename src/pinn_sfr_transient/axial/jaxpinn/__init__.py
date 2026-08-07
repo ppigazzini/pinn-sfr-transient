@@ -59,7 +59,12 @@ from pinn_sfr_transient.axial.jaxpinn.archs import (
     ModifiedMLP,
 )
 from pinn_sfr_transient.axial.jaxpinn.config import AxialTrainConfig
-from pinn_sfr_transient.axial.jaxpinn.evaluate import predict, predict_power, relative_l2
+from pinn_sfr_transient.axial.jaxpinn.evaluate import (
+    predict,
+    predict_power,
+    predict_reactivity_components,
+    relative_l2,
+)
 from pinn_sfr_transient.axial.jaxpinn.residuals import (
     closed_loop_blocks,
     front_residual,
@@ -102,6 +107,7 @@ __all__ = [
     "precursors",
     "predict",
     "predict_power",
+    "predict_reactivity_components",
     "pts_penalty",
     "relative_l2",
     "residual_blocks",

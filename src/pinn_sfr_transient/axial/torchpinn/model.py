@@ -38,6 +38,7 @@ from pinn_sfr_transient.axial.physics import (
     prompt_jump_power,
     quasi_steady_void,
     reactivity,
+    reactivity_components,
     residual_normalisation,
 )
 from pinn_sfr_transient.axial.torchpinn.ansatz import (
@@ -349,6 +350,32 @@ class AxialPinn(nn.Module):
         c = _precursors(self, that)
         power = prompt_jump_power(c, rho.reshape(-1, 1), self.p)
         return power.cpu().numpy().ravel(), rho.cpu().numpy().ravel()
+
+    @torch.no_grad()
+    def predict_reactivity_components(self, t: FloatArray) -> tuple[FloatArray, FloatArray]:
+        """Doppler and void reactivity separately, as the reference reports them.
+
+        `predict_power` returns the net, and the net hides which mechanism is
+        wrong. Plan A under-predicts `min rho/beta` by 26-28% on every seed
+        (`docs/axial_nn.md` section 7.4.1); attributing that needs the split the
+        reference already exposes as `rho_doppler` and `rho_void`.
+        """
+        that = torch.tensor(
+            (np.asarray(t) / self.t_end).reshape(-1, 1), dtype=torch.float64, device=self.cfg.device
+        )
+        n_z = self.zeta_q.shape[0]
+        zeta = self.zeta_q.repeat(that.shape[0], 1)
+        fields = self.to_physical(self.normalised_state(zeta, that.repeat_interleave(n_z, dim=0)))
+        T_f0 = self.p.T_in + self.theta0(self.zeta_q)[:, 0:1] * self.dT
+        dop, void = reactivity_components(
+            fields[0].reshape(-1, n_z),
+            fields[4].reshape(-1, n_z),
+            T_f0.reshape(1, n_z),
+            self.w_D,
+            self.w_void,
+            self.p,
+        )
+        return dop.cpu().numpy().ravel(), void.cpu().numpy().ravel()
 
     @torch.no_grad()
     def predict(self, zeta: FloatArray, t: FloatArray) -> tuple[FloatArray, ...]:
