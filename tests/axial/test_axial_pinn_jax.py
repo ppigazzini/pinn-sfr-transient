@@ -513,3 +513,42 @@ def test_self_scaling_actually_changes_the_iterates():
         return x.detach().numpy().copy()
 
     assert not np.allclose(run(self_scale=True), run(self_scale=False), rtol=1e-9, atol=1e-12)
+
+
+def test_both_evaluators_report_the_front_margin():
+    """A relative `L2` cannot detect front failure; the margin can.
+
+    Under D-TH-3 the void is a function of `T_c` alone, so the front is the single
+    inequality `max T_c > T_sat + dT_superheat`. That is an extremum and the `L2`
+    scores are averages, so a run can improve every temperature score while the
+    peak drops below threshold and the front vanishes — measured, in the budget
+    sweep of `docs/axial_nn.md` section 7.5.3. Both backends must report it, and
+    must agree on the threshold.
+    """
+    torch = pytest.importorskip("torch")
+
+    from pinn_sfr_transient.axial import pinn_torch as pt
+    from pinn_sfr_transient.axial.reference import solve_reference
+
+    p = AxialParams(n_axial=20)
+    traj = solve_reference(p, n_out=9)
+    tiny = {"width": 8, "depth": 2}
+
+    torch.manual_seed(0)
+    t_out = pt.relative_l2(pt.AxialPinn(p, pt.AxialTrainConfig(**tiny)), traj)
+    j_out = pj.relative_l2(
+        pj.AxialPinn(pj.AxialTrainConfig(**tiny), jax.random.PRNGKey(0)),
+        p,
+        traj,
+        pj.AxialTrainConfig(**tiny),
+    )
+
+    for out in (t_out, j_out):
+        assert {"max_T_c", "T_boil", "margin_K", "margin_K_ref", "max_alpha"} <= set(out)
+        assert out["margin_K"] == pytest.approx(out["max_T_c"] - out["T_boil"])
+
+    # Same physics, so the threshold is the same number in both backends.
+    assert t_out["T_boil"] == pytest.approx(j_out["T_boil"], rel=1e-12)
+    # The reference does boil, so its margin is positive; that is what the network
+    # has to clear.
+    assert t_out["margin_K_ref"] > 0.0
