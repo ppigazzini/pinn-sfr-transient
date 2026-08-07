@@ -1008,34 +1008,44 @@ That is now directly testable: `optimizer = "lbfgs-shared"` selects this
 repository's own L-BFGS in **both** backends, pinned to agree to 1e-10 by
 `test_self_scaled_bfgs_agrees_across_backends`.
 
-**Tested. It closes most of the gap and not all of it.** Seed 0, identical config,
-identical ruler — `jax / torch` ratios:
+**Tested, and the answer is not the one seed 0 gave.** `jax / torch` ratio on
+`T_s`, per seed:
 
-| optimiser | T_f | T_cl | T_s | T_c |
-|---|---|---|---|---|
-| `lbfgs` (each framework's own) | 1.042 | 1.034 | **1.167** | **1.164** |
-| `lbfgs-shared` (one implementation) | 1.019 | 1.015 | **1.065** | **1.063** |
+| seed | `lbfgs` (each framework's own) | `lbfgs-shared` (one implementation) |
+|---|---|---|
+| 0 | **1.167** | 1.065 |
+| 1 | **0.997** | **0.906** |
+| 2 | *running* | *running* |
 
-The `T_s` gap falls from **+16.7% to +6.5%** and `T_c` from **+16.4% to +6.3%**;
-`T_f` and `T_cl` roughly halve too. So the framework L-BFGS implementations are the
-**largest single contributor** to the disagreement — about 60% of it — which is
-what §7.3.4 pointed at and is now measured rather than inferred.
+At seed 0 the shared optimiser closes the gap from +16.7% to +6.5%, which reads as
+"the framework L-BFGS is most of it". **At seed 1 there is no gap to close** — JAX
+matches torch with the framework optimisers (0.997) and *beats* it with the shared
+one (0.906).
 
-The remaining ~6% is not the equations (1e-14, §7.3.2), not RAR (§7.3.3) and not
-the optimiser. What is left unshared is the sampler and the float64 CPU kernels
-each stack dispatches to, and neither has been isolated. **TBD.**
+**So the headline claim of §7.3.2 — "torch is consistently ~21% better on `T_s` and
+`T_c`" — does not reproduce here.** Two seeds give 1.167 and 0.997 for the same
+comparison at the same budget and the same ruler.
 
-One diagnostic worth carrying: torch clears saturation by **+20.5 K** and JAX by
-**+17.1 K** on the same configuration. The backends differ in exactly the quantity
-§7.2.8 says the front depends on, and JAX is the one with less margin.
+Two candidate explanations, and they are not exclusive:
 
-**Seed 0 only.** Two more seeds are running. Given §7.5.3's front metric spread,
-these ratios are a measurement and not yet a statistic.
+* **The gap was never systematic.** §7.3.2's three seeds may have been an unlucky
+  draw, and its "the ranges do not overlap" was computed from them alone.
+* **§7.3.2 is not reproducible as documented.** Its torch row is 0.1363 / 0.1879 /
+  0.0707 / 0.0713; the same nominal configuration now gives 0.1379 / 0.1892 /
+  0.0753 / 0.0756 at seed 0 — outside the per-seed range §7.3.2 itself quotes for
+  `T_s` (0.0622–0.0765 at the top edge). That is D67's shape again: a table whose
+  exact configuration was never committed cannot be checked, only approximated.
 
-One incidental measurement worth recording: at initialisation the four residual
-blocks are `T_f` 4.5e-2, `T_cl` 1.4e-1, `T_s` 2.6e-2, **`T_c` 2.4e0** — the
-coolant block is 17–95× the others *after* variable scaling, because it is the one
-carrying the boiling nonlinearity.
+**What survives.** The residuals are identical to 1e-14 (below), RAR is excluded
+(§7.3.3), and the optimiser implementation *does* move the numbers — just not
+consistently in one direction. **The honest position is that the backend
+disagreement is seed-scale, not systematic**, and that §7.3.2's claim to the
+contrary is retracted pending its third seed.
+
+One diagnostic worth carrying: the margins are 20.5 / 17.1 K at seed 0 (torch /
+JAX) and 17.2 / **26.0** K at seed 1 — JAX has the *larger* margin at seed 1 and
+the larger `L_void` (0.1967 against 0.1670). Whatever separates the backends is not
+a fixed advantage to either.
 
 #### 7.3.3 RAR is not the cause
 
