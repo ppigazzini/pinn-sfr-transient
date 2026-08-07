@@ -147,6 +147,26 @@ def mean_table(rows: list[dict], key: str = "arm") -> None:
         )
 
 
+def run_all(
+    traj: Any,  # noqa: ANN401
+    specs: list[tuple[str, dict]],
+    out: Path,
+    backend: str = "torch",
+) -> list[dict]:
+    """Run every spec, writing after each so a killed study keeps what it measured.
+
+    These studies run for hours. Collecting rows and writing once at the end means
+    a machine reboot, an OOM or a stray kill loses everything -- and this project
+    has already lost an ablation that way ("the ablation run was killed before its
+    three configurations finished", section 7.6).
+    """
+    rows: list[dict] = []
+    for label, kw in specs:
+        rows.append(run_arm(traj, label, kw.pop("backend", backend), **kw))
+        write(rows, out)
+    return rows
+
+
 # --- studies ----------------------------------------------------------------
 def study_ruler(out: Path) -> None:
     """Measure how wrong the reference is -- section 6.5."""
@@ -213,24 +233,30 @@ def study_budget(out: Path) -> None:
         ("B adam1000/qn2300", 1000, 2300),
         ("C adam300/qn3000", 300, 3000),
     )
-    rows = [
-        run_arm(traj, label, "torch", adam_iters=adam, lbfgs_iters=qn, seed=seed)
-        for seed in SEEDS
-        for label, adam, qn in arms
-    ]
-    write(rows, out)
+    rows = run_all(
+        traj,
+        [
+            (label, {"adam_iters": adam, "lbfgs_iters": qn, "seed": seed})
+            for seed in SEEDS
+            for label, adam, qn in arms
+        ],
+        out,
+    )
     mean_table(rows)
 
 
 def study_optimizer(out: Path) -> None:
     """Compare self-scaled BFGS against L-BFGS at the shipped split -- section 7.5."""
     traj = ruler()
-    rows = [
-        run_arm(traj, opt, "torch", optimizer=opt, seed=seed, adam_iters=3000, lbfgs_iters=300)
-        for seed in SEEDS
-        for opt in ("lbfgs", "lbfgs-shared", "ssbfgs")
-    ]
-    write(rows, out)
+    rows = run_all(
+        traj,
+        [
+            (opt, {"optimizer": opt, "seed": seed, "adam_iters": 3000, "lbfgs_iters": 300})
+            for seed in SEEDS
+            for opt in ("lbfgs", "lbfgs-shared", "ssbfgs")
+        ],
+        out,
+    )
     mean_table(rows)
 
 
@@ -243,21 +269,25 @@ def study_parity(out: Path) -> None:
     the equations nor the optimiser implementation.
     """
     traj = ruler()
-    rows = [
-        run_arm(
-            traj,
-            f"{backend}/{opt}",
-            backend,
-            optimizer=opt,
-            seed=seed,
-            adam_iters=3000,
-            lbfgs_iters=300,
-        )
-        for seed in SEEDS
-        for backend in ("torch", "jax")
-        for opt in ("lbfgs", "lbfgs-shared")
-    ]
-    write(rows, out)
+    rows = run_all(
+        traj,
+        [
+            (
+                f"{backend}/{opt}",
+                {
+                    "backend": backend,
+                    "optimizer": opt,
+                    "seed": seed,
+                    "adam_iters": 3000,
+                    "lbfgs_iters": 300,
+                },
+            )
+            for seed in SEEDS
+            for backend in ("torch", "jax")
+            for opt in ("lbfgs", "lbfgs-shared")
+        ],
+        out,
+    )
     mean_table(rows)
 
 
