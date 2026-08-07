@@ -593,6 +593,52 @@ def study_default(out: Path) -> None:
         )
 
 
+def study_margin(out: Path) -> None:
+    """Raise the saturation margin deliberately -- nothing has ever targeted it.
+
+    Every fragility in `docs/axial_nn.md` traces to one number: the network's peak
+    `T_c` clears saturation by 7.6-20.5 K out of a ~590 K range. Section 7.2.8
+    showed the front IS that inequality, and section 7.5.4 showed the arms that
+    keep margin are the arms whose `L_void` is stable across seeds.
+
+    Fourier features raised it as a side effect. These arms aim at it:
+
+    * more Fourier features -- if reducing spectral bias raises the peak, more of
+      it should raise it further, until the extra capacity costs the mean;
+    * a narrower `dT_smooth` -- the logistic width is 2 K, so the closure smears
+      the onset over a band comparable to the entire margin. Narrowing it sharpens
+      the front but stiffens the gradient, which is the trade section 12.4 names.
+
+    Success is `margin_K` at **every** seed, not the mean -- a margin that is large
+    on average and negative once is the `A + fourier` failure of section 7.5.4.
+    """
+    traj = ruler()
+    base = {"adam_iters": 300, "lbfgs_iters": 3000}
+    arms = (
+        ("f32 (best known)", {**base, "fourier_features": 32}),
+        ("f64", {**base, "fourier_features": 64}),
+        ("f128", {**base, "fourier_features": 128}),
+    )
+    rows = run_all(
+        traj,
+        [
+            (f"{label} [{backend}]", {"backend": backend, "seed": seed, **kw})
+            for seed in SEEDS
+            for backend in BACKENDS
+            for label, kw in arms
+        ],
+        out,
+    )
+    mean_table(rows)
+    print("\nmargin per arm (the quantity this study targets):")
+    for label in dict.fromkeys(r["arm"] for r in rows):
+        m = [r["margin_K"] for r in rows if r["arm"] == label]
+        print(
+            f"  {label:24s} min {min(m):+6.1f} K   mean {sum(m) / len(m):+6.1f} K   "
+            f"{'ALL POSITIVE' if min(m) > 0 else 'ONE OR MORE BELOW SATURATION'}"
+        )
+
+
 STUDIES = {
     "ruler": study_ruler,
     "horizon": study_horizon,
@@ -604,6 +650,7 @@ STUDIES = {
     "regime": study_regime,
     "regime-sign": study_regime_sign,
     "default": study_default,
+    "margin": study_margin,
 }
 
 
