@@ -98,9 +98,10 @@ Broken inline LaTeX is a recurring problem — GitHub's renderer is strict. Rule
   `* `** — Markdown turns it into a bullet and shatters the paragraph (e.g. a line
   break before `+ zero-bias`). Move the operator to the end of the previous line or
   reword. (Lines inside a ` ```math ` block are exempt — they're LaTeX.)
-- After editing any `.md`, scan for these: split tokens (`}$` glued to a letter),
-  bare `$^`/`$_`, escaped `\_`/`\^` in `\text`, `\!` (or `\,`/`\;`) in inline `$...$`,
-  and odd `$` counts.
+- **The scan is a command, not a habit:** `uv run python tools/check_markdown.py`
+  checks every tracked `.md` against all of the above plus dead relative links, and
+  runs as a pre-commit hook. It strips inline code spans first, so a document may
+  quote the broken forms deliberately (this one does).
 
 ## Testing
 
