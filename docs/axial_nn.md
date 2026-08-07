@@ -1344,12 +1344,56 @@ closure is hard-constrained rather than penalised, and the pole tripwire reads
 
 **Three seeds, 7.7% apart, and the failure is the most reproducible thing in this
 document.** `min ρ/β` is −0.1482 / −0.1505 / −0.1521 against the reference's
-−0.2052: the network finds **26–28% less negative feedback** on every seed, and the
-spread on that quantity is 2.6%. It is not variance, it is a systematic deficit in
-the reactivity balance.
+−0.2052: the network finds **26–28% less negative feedback** on every seed, with a
+2.6% spread. It is not variance.
+
+**It is also not a deficit in the reactivity balance**, which is what this section
+said before the terms were separated. §7.4.2 splits it: the Doppler integral is
+right and the *void* term is 84–92% short. Plan A's power error is the front
+failure.
 
 M6's acceptance criterion is **failed** — 11.1% against a 1% bar — and now failed
 with a number that will not move on re-running.
+
+#### 7.4.2 The reactivity deficit is the void term — which is the front
+
+§7.4.1 reported that Plan A finds 26–28% less negative reactivity than the
+reference and called it a systematic deficit in the reactivity balance. **That
+framing was wrong, and the decomposition says so.**
+
+`predict_reactivity_components` splits the network's `ρ` the way the reference
+already reported it — Doppler (with axial expansion) and void — at seed 0, both
+backends:
+
+| | Doppler | vs reference | void | vs reference |
+|---|---|---|---|---|
+| reference | −0.1779 | — | **−0.0344** | — |
+| torch | −0.1481 | 0.832 | **−0.0027** | **0.077** |
+| jax | −0.1809 | **1.017** | **−0.0054** | **0.157** |
+
+**The deficit is the void term.** JAX reproduces the Doppler integral essentially
+exactly — 1.017 — and still misses **84% of the void reactivity**. Torch is 17%
+short on Doppler and **92% short on the void**.
+
+That is not a second defect. The void worth is integrated against `α`, `α` is a
+function of `T_c` alone (D-TH-3), and Plan A runs at `t_train_frac = 1.0` where the
+front is weakest. **Plan A's power error is the front failure, read through the
+reactivity.**
+
+So one mechanism now accounts for: the temperature/front trade (§7.2.8), the
+seed fragility of every marginal arm (§7.5.4), the shipped default's failure
+(§7.2.9), and Plan A's acceptance failure. The margin is not one problem among
+several — it is the problem.
+
+> **A note on how §7.4.1 got it wrong.** The inference ran: the reference has the
+> most negative `ρ` *and* the highest power floor, while both networks have less
+> negative `ρ` and dip lower, so the precursors must be under-predicted. That
+> compares `min ρ` with `min P` as though they occur at the same instant. They need
+> not, and the closure `P = Σβᵢcᵢ/(β − ρ)` is pointwise in time, not in extrema.
+> The decomposition took one run to produce and answers the question directly.
+> **Reasoning from two summary statistics is not a measurement**, and this project
+> has a tool for that reasoning — `reactivity_components` — which had existed for
+> weeks and had never been called on a network.
 
 ### 7.5 Optimiser bake-off
 
