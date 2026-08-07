@@ -49,10 +49,15 @@ if TYPE_CHECKING:
 RULER_N = 160
 FINEST_N = 640
 SEEDS = (0, 1, 2)
-# Fourier ladder for the margin study. Extended to 256 to find where the trend
-# turns: 32 -> 128 improved T_s, L_void and the margin monotonically on both
-# backends, and a monotone trend with no measured end is an untested extrapolation.
-MARGIN_FEATURES = (32, 64, 128, 256)
+# Fourier ladder for the margin study. Extended until the trend turns: 32 -> 256
+# improved T_s, L_void and the saturation margin monotonically on both backends,
+# and a monotone trend with no measured end is an untested extrapolation.
+#
+# The embedding is `x -> [sin(2 pi B x), cos(2 pi B x)]`, so `n` features give a
+# `2n`-wide input layer. At width 64 the first layer is `2n x 64` and the other
+# four are `64 x 64`, so cost is roughly linear in `n` once `2n >> 64`: f1024 is
+# about 3x f256. That is the price of finding the end of the ladder.
+MARGIN_FEATURES = (32, 64, 128, 256, 512, 1024)
 # Every study sweeps both backends. Two independent implementations agreeing is
 # the strongest check this project has, and it is the reason the JAX twin exists
 # (`docs/axial_nn.md` section 4) -- a result measured on one backend is a result
@@ -151,8 +156,9 @@ def run_all(
     three configurations finished", section 7.6).
     """
     if _ONLY is not None:
-        specs = [(label, kw) for label, kw in specs if _ONLY in label]
-        print(f"--only {_ONLY!r}: {len(specs)} arm(s)", flush=True)
+        wanted = [w.strip() for w in _ONLY.split(",") if w.strip()]
+        specs = [(label, kw) for label, kw in specs if any(w in label for w in wanted)]
+        print(f"--only {wanted}: {len(specs)} arm(s)", flush=True)
     rows: list[dict] = []
     for label, kw in specs:
         rows.append(run_arm(traj, label, kw.pop("backend", backend), **kw))
@@ -771,8 +777,9 @@ def main() -> int:
     ap.add_argument(
         "--only",
         default=None,
-        help="run only arms whose label contains this substring, so a ladder can be "
-        "extended without re-running what is already measured",
+        help="run only arms whose label contains one of these comma-separated "
+        "substrings, so a ladder can be extended without re-running what is "
+        "already measured",
     )
     args = ap.parse_args()
     out = args.out or Path(f"results/axial_study_{args.study}.json")
