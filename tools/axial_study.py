@@ -38,9 +38,9 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from pinn_sfr_transient.axial import sodium
 from pinn_sfr_transient.axial.config import AxialParams
 from pinn_sfr_transient.axial.reference import solve_reference
+from pinn_sfr_transient.axial.scoring import relative_l2
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -49,6 +49,11 @@ if TYPE_CHECKING:
 RULER_N = 160
 FINEST_N = 640
 SEEDS = (0, 1, 2)
+# Every study sweeps both backends. Two independent implementations agreeing is
+# the strongest check this project has, and it is the reason the JAX twin exists
+# (`docs/axial_nn.md` section 4) -- a result measured on one backend is a result
+# about that backend.
+BACKENDS = ("torch", "jax")
 FIELDS = ("T_f", "T_cl", "T_s", "T_c")
 
 
@@ -59,29 +64,8 @@ def ruler(n: int = RULER_N, *, feedback: bool = False) -> Any:  # noqa: ANN401
 
 
 def score(fields: tuple, traj: Any) -> dict[str, float]:  # noqa: ANN401
-    """Relative ``L2`` per temperature, plus the two front metrics."""
-    ref = (traj.T_f, traj.T_cl, traj.T_s, traj.T_c)
-    out = {
-        name: float(np.linalg.norm(f - r) / np.linalg.norm(r))
-        for name, f, r in zip(FIELDS, fields[:4], ref, strict=True)
-    }
-    dz = (traj.zeta[1] - traj.zeta[0]) * traj.H
-    out["max_alpha"] = float(fields[4].max())
-    out["L_void_max"] = float((fields[4].sum(axis=0) * dz).max())
-
-    # Under D-TH-3 the void is a function of `T_c` alone, so "the front forms" is
-    # not a separate phenomenon: it is the single inequality
-    # `max T_c > T_sat + dT_superheat`. Record the margin, because relative `L2`
-    # is an average and this is an extremum -- a fit can improve on one while
-    # losing the other, which is exactly what the budget sweep shows.
-    p_ax = AxialParams()
-    threshold = sodium.saturation_temperature(p_ax.p_system) + p_ax.dT_superheat
-    out["max_T_c"] = float(fields[3].max())
-    out["max_T_c_ref"] = float(traj.T_c.max())
-    out["T_boil"] = float(threshold)
-    out["margin_K"] = out["max_T_c"] - threshold
-    out["margin_K_ref"] = out["max_T_c_ref"] - threshold
-    return out
+    """Delegate to the one scorer, so a metric added there appears here too."""
+    return relative_l2(fields, traj, AxialParams())
 
 
 def train_torch(**kw: Any) -> Callable[[Any], tuple]:  # noqa: ANN401
@@ -205,19 +189,25 @@ def _interp(traj: Any, field: np.ndarray, zeta: np.ndarray, t: np.ndarray) -> np
 def study_horizon(out: Path) -> None:
     """Sweep the training horizon, the knob whose default formed no front -- section 7.2.7."""
     traj = ruler()
-    rows = [
-        run_arm(
-            traj,
-            f"t_train_frac={ttf}",
-            "torch",
-            t_train_frac=ttf,
-            seed=0,
-            adam_iters=3000,
-            lbfgs_iters=300,
-        )
-        for ttf in (0.25, 0.275, 0.30, 1.0)
-    ]
-    write(rows, out)
+    rows = run_all(
+        traj,
+        [
+            (
+                f"t_train_frac={ttf} [{backend}]",
+                {
+                    "backend": backend,
+                    "t_train_frac": ttf,
+                    "seed": 0,
+                    "adam_iters": 3000,
+                    "lbfgs_iters": 300,
+                },
+            )
+            for backend in BACKENDS
+            for ttf in (0.25, 0.275, 0.30, 1.0)
+        ],
+        out,
+    )
+    mean_table(rows)
 
 
 def study_budget(out: Path) -> None:
@@ -236,8 +226,12 @@ def study_budget(out: Path) -> None:
     rows = run_all(
         traj,
         [
-            (label, {"adam_iters": adam, "lbfgs_iters": qn, "seed": seed})
+            (
+                f"{label} [{backend}]",
+                {"backend": backend, "adam_iters": adam, "lbfgs_iters": qn, "seed": seed},
+            )
             for seed in SEEDS
+            for backend in BACKENDS
             for label, adam, qn in arms
         ],
         out,
@@ -251,8 +245,18 @@ def study_optimizer(out: Path) -> None:
     rows = run_all(
         traj,
         [
-            (opt, {"optimizer": opt, "seed": seed, "adam_iters": 3000, "lbfgs_iters": 300})
+            (
+                f"{opt} [{backend}]",
+                {
+                    "backend": backend,
+                    "optimizer": opt,
+                    "seed": seed,
+                    "adam_iters": 3000,
+                    "lbfgs_iters": 300,
+                },
+            )
             for seed in SEEDS
+            for backend in BACKENDS
             for opt in ("lbfgs", "lbfgs-shared", "ssbfgs")
         ],
         out,
@@ -303,8 +307,6 @@ def study_plan_a(out: Path) -> None:
     Plan A takes the full horizon: with feedback the transient is self-limiting and
     completes 60 s inside the property range, so `t_train_frac` stays at 1.0.
     """
-    from pinn_sfr_transient.axial.torchpinn import AxialTrainConfig, train  # noqa: PLC0415
-
     # Say so before the long silence: the closed-loop reference at n = 160 plus the
     # first Plan A training is ~25 minutes before anything prints, and a study that
     # looks hung is a study someone kills.
@@ -312,38 +314,60 @@ def study_plan_a(out: Path) -> None:
     ref = ruler(feedback=True)
     print(
         f"reference: peak={ref.power.max():.4f} min={ref.power.min():.4f} "
-        f"max rho/beta={ref.peak_rho_over_beta:+.4f}; training {len(SEEDS)} seeds",
+        f"max rho/beta={ref.peak_rho_over_beta:+.4f}; "
+        f"{len(SEEDS)} seeds x {len(BACKENDS)} backends",
         flush=True,
     )
     rows = []
     for seed in SEEDS:
-        t0 = time.perf_counter()
-        # Plan A needs no truncation: with feedback the transient is self-limiting
-        # and completes 60 s inside the property range.
+        for backend in BACKENDS:
+            t0 = time.perf_counter()
+            power, rho = _plan_a_power(backend, seed, ref.t)
+            dt = time.perf_counter() - t0
+            row = {
+                "arm": f"planA [{backend}]",
+                "backend": backend,
+                "seed": seed,
+                "L2_P": float(np.linalg.norm(power - ref.power) / np.linalg.norm(ref.power)),
+                "P0": float(power[0]),
+                "peak_P": float(power.max()),
+                "min_P": float(power.min()),
+                "max_rho_beta": float(rho.max() / ref._beta),  # noqa: SLF001
+                "min_rho_beta": float(rho.min() / ref._beta),  # noqa: SLF001
+                "min_rho_beta_ref": float(ref.rho.min() / ref._beta),  # noqa: SLF001
+                "sec": dt,
+                "load1": os.getloadavg()[0],
+                "omp": os.environ.get("OMP_NUM_THREADS", "unset"),
+            }
+            rows.append(row)
+            print(
+                f"[planA {backend:5s}] seed={seed} L2(P)={row['L2_P']:.4f} "
+                f"P(0)={row['P0']:.6f} peak={row['peak_P']:.4f} min={row['min_P']:.4f} "
+                f"rho/beta=[{row['min_rho_beta']:.4f},{row['max_rho_beta']:.4f}] {dt:.0f}s",
+                flush=True,
+            )
+            write(rows, out)
+
+
+def _plan_a_power(backend: str, seed: int, t: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Train Plan A on one backend and return its power and reactivity traces.
+
+    Plan A needs no horizon truncation: with feedback the transient is
+    self-limiting and completes 60 s inside the property range.
+    """
+    if backend == "torch":
+        from pinn_sfr_transient.axial.torchpinn import AxialTrainConfig, train  # noqa: PLC0415
+
         model = train(
             AxialParams(),
             AxialTrainConfig(feedback=True, seed=seed, t_train_frac=1.0, log_every=10**9),
         )
-        dt = time.perf_counter() - t0
-        power, rho = model.predict_power(ref.t)
-        row = {
-            "seed": seed,
-            "L2_P": float(np.linalg.norm(power - ref.power) / np.linalg.norm(ref.power)),
-            "P0": float(power[0]),
-            "peak_P": float(power.max()),
-            "min_P": float(power.min()),
-            "max_rho_beta": float(rho.max() / ref._beta),  # noqa: SLF001
-            "min_rho_beta": float(rho.min() / ref._beta),  # noqa: SLF001
-            "sec": dt,
-        }
-        rows.append(row)
-        print(
-            f"seed={seed} L2(P)={row['L2_P']:.4f} P(0)={row['P0']:.6f} "
-            f"peak={row['peak_P']:.4f} min={row['min_P']:.4f} "
-            f"rho/beta=[{row['min_rho_beta']:.4f},{row['max_rho_beta']:.4f}] {dt:.0f}s",
-            flush=True,
-        )
-    write(rows, out)
+        return model.predict_power(t)
+    from pinn_sfr_transient.axial import pinn_jax as pj  # noqa: PLC0415
+
+    cfg = pj.AxialTrainConfig(feedback=True, seed=seed, t_train_frac=1.0, log_every=10**9)
+    model, p_ax, out_cfg = pj.train(AxialParams(), cfg, verbose=False)
+    return pj.predict_power(model, p_ax, t, out_cfg)
 
 
 def study_combo(out: Path) -> None:

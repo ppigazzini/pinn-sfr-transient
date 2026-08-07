@@ -22,6 +22,7 @@ Two deliberate asymmetries, both framework-imposed:
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 import jax
@@ -29,6 +30,41 @@ import jax.numpy as jnp
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+
+def _cubic_min(  # noqa: PLR0913, PLR0917 - two points with value and slope IS six
+    a_lo: float,
+    f_lo: float,
+    g_lo: float,
+    a_hi: float,
+    f_hi: float,
+    g_hi: float,
+) -> float | None:
+    """Minimiser of the cubic through two points with known value and slope.
+
+    Nocedal & Wright eq. 3.59. `torch.optim.LBFGS` uses this inside its zoom and
+    this implementation used bisection, which cost **4.6% of the mean** on the
+    PINN (`docs/axial_nn.md` section 7.5.2) -- a real difference, measured, from
+    one interpolation rule. Returns ``None`` when the cubic is degenerate or its
+    minimiser falls outside the bracket, and the caller bisects instead.
+    """
+    d1 = g_lo + g_hi - 3.0 * (f_lo - f_hi) / (a_lo - a_hi)
+    sq = d1 * d1 - g_lo * g_hi
+    if sq < 0.0:
+        return None
+    d2 = (1.0 if a_hi >= a_lo else -1.0) * math.sqrt(sq)
+    denom = g_hi - g_lo + 2.0 * d2
+    if denom == 0.0:
+        return None
+    step = a_hi - (a_hi - a_lo) * ((g_hi + d2 - d1) / denom)
+    lo, hi = min(a_lo, a_hi), max(a_lo, a_hi)
+    # Keep it strictly inside the bracket, and away from the ends where a cubic
+    # fit routinely lands and then makes no progress.
+    edge = 0.1 * (hi - lo)
+    if not (lo + edge <= step <= hi - edge) or not math.isfinite(step):
+        return None
+    return step
+
 
 # Strong-Wolfe constants, as stated in arXiv:2501.16371. Identical to the torch twin.
 C1 = 1e-4
@@ -104,7 +140,8 @@ def _line_search(  # noqa: PLR0913, PLR0917, C901, PLR0912 - a line search needs
     for _ in range(_MAX_LS_ITERS):
         if abs(hi[0] - lo[0]) < 1e-16:
             break
-        mid = point(0.5 * (lo[0] + hi[0]))
+        trial = _cubic_min(lo[0], lo[1], lo[3], hi[0], hi[1], hi[3])
+        mid = point(trial if trial is not None else 0.5 * (lo[0] + hi[0]))
         step, f, g, dphi = mid
         if not armijo(step, f) or f >= lo[1]:
             hi = mid
