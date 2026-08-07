@@ -826,6 +826,14 @@ quasi-Newton stage takes more of the budget, `T_c` improves monotonically in `L2
 peak. That is not a defect in the optimiser; it is the metric and the physics
 asking for different things.
 
+**The margin is 20.5 K, and that is the whole result.** At the shipped
+configuration the network's peak `T_c` is **1189.4 K** against a threshold of
+**1169.0 K** — it clears saturation by 20.5 K out of a ~590 K range, about 3.5%.
+Every "the boiling front forms" statement in this document rests on that margin.
+It is why the front is stable in arm A of §7.5.3 and erratic in arms B and C: a
+smoother fit gives up a few tens of kelvin at the peak, and a few tens of kelvin is
+all there is.
+
 Two consequences worth stating:
 
 * **Scoring temperatures in relative `L2` cannot detect front failure**, and this
@@ -835,6 +843,17 @@ Two consequences worth stating:
 * **A 1% bar on `T_c` in `L2` does not imply the front forms.** The two criteria
   are close to independent. M4's acceptance is a statement about the peak; §7.2.5's
   is a statement about the mean.
+
+**A note on how these runs were timed.** §7.5.3 and the studies after it were run
+five at a time on a 48-core machine at `OMP_NUM_THREADS=8` each, because nothing
+among them depends on anything else. That leaves the wall-clocks contended and the
+accuracy untouched, and both halves of that are measured rather than assumed:
+`torch/lbfgs` at seed 0 returns 0.1379 / 0.1892 / 0.0753 / 0.0756 with
+`L_void` 0.1634 in the contended parity run and **the same four digits** in the
+uncontended budget run, at 876 s against 592 s. Thread count changes float
+reduction order and so changes answers; concurrency at a fixed thread count does
+not. Every study row records its own `load1` and `OMP_NUM_THREADS` so no timing here
+can be mistaken for a clean one.
 
 ### 7.3 Backend parity
 
