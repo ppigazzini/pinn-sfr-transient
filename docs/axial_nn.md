@@ -1164,10 +1164,14 @@ harness has not drifted — and that is how §7.2.7 was found.
 | C 300/3000 | **0.1222** | **0.1732** | **0.0379** | **0.0396** | 0.6274 | 0.0495 | 715 s |
 | reference | — | — | — | — | 1.0000 | 0.3812 | — |
 
-**The external result is confirmed for the mean and refuted for the front.** Moving
-budget into the quasi-Newton stage improves every temperature monotonically — `T_s`
-by **50%** and `T_c` by **48%** from A to C — for 21% more wall-clock at equal
-iteration count. It degrades the front monotonically over the same range.
+**The external result is confirmed for the mean.** Moving budget into the
+quasi-Newton stage improves every temperature monotonically — `T_s` by **50%** and
+`T_c` by **48%** from A to C — for 21% more wall-clock at equal iteration count.
+That much is reproducible across seeds.
+
+**What it does to the front is seed-dependent, not monotonic** — see the note
+below. The seed-0 column reads as a clean trade and the second seed does not
+support that reading.
 
 §7.2.8 says why, and it is not a defect in the optimiser: the temperature scores
 are averages and the front is the extremum `max T_c > T_boil`. A better-fitting,
@@ -1179,9 +1183,20 @@ measured on, and moving the default would move all of them; arm C wins the metri
 this project has been optimising and loses the metric M4 actually asks for. That
 choice needs the §7.5.4 result first.
 
-**Remaining seeds in progress.** Seed 1 reproduces the ordering (A `T_c` 0.0786,
-B 0.0479), so the effect is not a seed artefact, but the seed statistics are not
-complete.
+**Remaining seeds in progress, and seed 1 already qualifies the front half of
+this.** The temperature ordering reproduces exactly — `T_c` 0.0786 / 0.0479 /
+0.0474 for A / B / C — so the mean improvement is not a seed artefact. The front
+does **not** reproduce: seed 1's arm C gives `max α = 0.9998` and `L_void` 0.1068
+against seed 0's 0.6274 and 0.0495.
+
+So the accurate statement is narrower than the seed-0 table suggests: **moving
+budget into the quasi-Newton stage improves the temperatures reliably and makes the
+front erratic**, rather than degrading it monotonically. Under §7.2.8 that is what a
+threshold crossing should look like once the peak sits near it — `max T_c` lands
+just above 1169 K on one seed and just below on another, and a metric that is a
+step function of a marginal quantity has no reason to be smooth in the seed.
+
+The seed-averaged table replaces this one when seed 2 lands.
 
 #### 7.5.4 Pairing a mean-winner with a peak-winner
 
