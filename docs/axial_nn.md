@@ -12,6 +12,12 @@ including the results that came out badly, which are most of them.
 > `P(t)` (§7.4). The boiling front does now form, `max α = 1.0000` against the
 > reference's 1.0000, since the void was eliminated algebraically (§7.2.3–§7.2.4).
 > None of this is presented as a working result.
+>
+> **The front forms only inside a narrow training horizon, and until now the
+> shipped default was outside it** (§7.2.7). At `t_train_frac = 1.0` — what the
+> repository actually ran — `max α = 0.0000`. The default is now 0.275, tied by a
+> test to the 16.5 s at which the reference stops being valid. Every table below
+> was measured at 0.275; none of them said so.
 
 ---
 
@@ -133,7 +139,7 @@ happens when the two disagree.
 | `void_closure` | `True` | the algebraic void, D-TH-3; §7.2.3–§7.2.4 |
 | `weight_max_ratio` | `1.0` (off) | adaptive block weights measured harmful; §7.2.1 |
 | `causal_eps` | `0.0` (off) | causal weighting measured harmful; §7.2.4 |
-| `t_train_frac` | `1.0` | set below 1 for Plan B, whose validity window ends before `t_end`; §7.2.4 |
+| `t_train_frac` | `0.275` | the model's validity horizon, 16.5 s of 60 s. **Was `1.0`, which forms no front at all**; §7.2.4, §7.2.7 |
 | `front_net` | `False` | front-position network, measured worse on every metric |
 | `n_windows` | `1` (off) | neutral in the re-ablation; §7.2.5 |
 | `fourier_features` | `0` (off) | **now measured better** (−11.1% at 3 seeds); not adopted — see below |
@@ -652,6 +658,56 @@ why: `dα/dt̂` must reach 8.5e4 inside a front spanning a few percent of the
 domain. It is a resolution problem, not a weighting one, and the remedies for it
 are the free-boundary and level-set formulations of REPORT-01 §7.4 — a
 formulation change, which is M8's subject, not another loss term.
+
+#### 7.2.7 The training horizon was undocumented, and it is a cliff
+
+> Numbered out of sequence because it was found last, by a control arm, and it
+> conditions every table in §7.2.5 onward.
+
+A budget-split study (§7.5.3) included an arm reproducing §7.3.2's configuration,
+purely as a check that the harness had not drifted. It came back
+`T_f = 0.2247` against a published `0.1363`, and `max α = 0.0000` — **no boiling
+front at all.**
+
+The cause is `t_train_frac`. Its shipped default was `1.0`, and every table from
+§7.2.5 onward was measured at **0.275** while being described as "the current
+defaults". The value appeared nowhere — not in the config, the docs, the report or
+a committed script. Three values, seed 0, 3000 Adam + 300 L-BFGS, `n = 160` ruler:
+
+| `t_train_frac` | horizon | T_f | T_cl | T_s | T_c | `max α` | `L_void` |
+|---|---|---|---|---|---|---|---|
+| 0.250 | 15.0 s | **0.1250** | **0.1720** | **0.0592** | **0.0585** | 1.0000 | 0.2759 |
+| **0.275** | **16.5 s** | 0.1379 | 0.1892 | 0.0753 | 0.0756 | 1.0000 | 0.1634 |
+| 0.300 | 18.0 s | 0.1515 | 0.2062 | 0.0950 | 0.0955 | **0.0000** | **0.0000** |
+| 1.000 | 60.0 s | 0.2247 | 0.2996 | 0.1987 | 0.1990 | **0.0000** | **0.0000** |
+| §7.2.5 base | — | 0.1376 | 0.1886 | 0.0749 | 0.0751 | 1.0000 | 0.1805 |
+
+0.275 reproduces the published row to three or four digits on all four fields, so
+that is the value, and it is now the default in both backends. `16.5 / 60 = 0.275`
+is not a fitted number: **the reference stops at 16.5 s on every mesh from `n = 40`
+to `n = 640`** (§6.5), because that is where the channel leaves the §12.13 property
+range. A test now ties the default to that measured stop time, so a change in the
+physics cannot silently invalidate it again.
+
+**Two things this exposes, and the second is worse than the first.**
+
+*The repository did not produce its own headline result.* At the shipped default,
+`python -m pinn_sfr_transient.axial.pinn_torch` formed no front. "The boiling front
+does now form" was true of the measurements and false of the code as delivered, for
+every reader who ran it.
+
+*And the result sits on a cliff.* 0.300 is 0.025 away and the front does not form —
+not degraded, **absent**, `max α` exactly 0. The temperatures barely move across
+that boundary (0.0756 → 0.0955 on `T_c`), so nothing in the temperature metrics
+warns you. Whatever forms the front is bistable in this knob, and §7.3.4 already
+found the other half of that story: with the L-BFGS stage off, `max α = 0` too.
+Two unrelated-looking knobs, the same binary outcome.
+
+**0.250 is better on all four fields and is rejected.** 15 s is not where this
+model stops being valid; 16.5 s is, and it is measured. Choosing the horizon by its
+score against the reference would be fitting the problem statement to the ruler —
+the one thing `t_train_frac` is documented as *not* being. The better number is
+recorded here so the choice is visible rather than quietly taken.
 
 #### 7.2.5 N6 — re-ablated against the algebraic closure, and D38 is half wrong
 
