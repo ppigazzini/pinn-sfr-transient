@@ -29,6 +29,7 @@ from pinn_sfr_transient.axial.physics import (
     kinetics_weights,
     prompt_jump_power,
     reactivity,
+    reactivity_components,
 )
 from pinn_sfr_transient.axial.scoring import relative_l2 as _score
 
@@ -75,6 +76,31 @@ def predict_power(
     c = jax.vmap(lambda x: precursors(model, x))(that)
     power = prompt_jump_power(c, rho.reshape(-1, 1), p)
     return np.asarray(power).ravel(), np.asarray(rho).ravel()
+
+
+def predict_reactivity_components(
+    model: AxialPinn, p: AxialParams, t: FloatArray, cfg: AxialTrainConfig | None = None
+) -> tuple[FloatArray, FloatArray]:
+    """Doppler and void reactivity separately, as the reference reports them.
+
+    The torch twin of this docstring explains why: the net reactivity hides which
+    mechanism is wrong, and Plan A under-predicts `min rho/beta` by 26-28%.
+    """
+    dT = p.P_0 / (p.w_0 * p.c_c)
+    cfg = cfg or AxialTrainConfig()
+    t_end = horizon(p, cfg)
+    zeta_q = jnp.asarray(p.zeta_nodes().reshape(-1, 1))
+    w_D, w_void = (jnp.asarray(x) for x in kinetics_weights(p))
+    that = jnp.asarray((np.asarray(t) / t_end).reshape(-1, 1))
+    n_t, n_z = that.shape[0], zeta_q.shape[0]
+    zeta = jnp.tile(zeta_q, (n_t, 1))
+    t_rep = jnp.repeat(that, n_z, axis=0)
+    theta = jax.vmap(lambda a, b: normalised_state(model, p, a, b, cfg))(zeta, t_rep)
+    T_f = p.T_in + theta[:, 0].reshape(n_t, n_z) * dT
+    alpha = theta[:, N_TEMPS].reshape(n_t, n_z)
+    T_f0 = p.T_in + jax.vmap(lambda z: theta0(p, z))(zeta_q)[:, 0] * dT
+    dop, void = reactivity_components(T_f, alpha, T_f0[None, :], w_D, w_void, p)
+    return np.asarray(dop).ravel(), np.asarray(void).ravel()
 
 
 def relative_l2(
