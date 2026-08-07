@@ -139,6 +139,7 @@ happens when the two disagree.
 | `fourier_features` | `0` (off) | **now measured better** (−11.1% at 3 seeds); not adopted — see below |
 | `modified_mlp` | `False` (off) | **now measured better** (−16.1% at 3 seeds); not adopted — see below |
 | `pts_every` | `0` (off) | pseudo-time stepping measured harmful; §7.2.5 |
+| `optimizer` | `"lbfgs"` | the quasi-Newton stage. `"ssbfgs"` selects limited-memory self-scaled BFGS; §7.5 |
 
 **Two defaults are open questions rather than settled ones.** §7.2.5 shows
 Fourier features and the modified MLP both improve every temperature under the
@@ -302,15 +303,20 @@ On the reference grid, mean squared residual by time:
 Five orders of magnitude across boiling onset, and not an artefact — present at the
 grid points themselves.
 
-### 6.4 The reference is not converged in `α`
+### 6.4 The reference is not converged in `α` — at `n = 40`
+
+> **Superseded in its general form; see §6.5.** This section was measured on the
+> `n_axial = 40` reference. Scoring moved to `n = 160` in §7.2.1 and the ruler was
+> never re-measured there. It has been now, and at `n = 160` the temperature
+> conclusion below does not hold.
 
 | reference `n = 40` vs `n = 320` | T_f | T_cl | T_c | **alpha** |
 |---|---|---|---|---|
 | relative `L2` | 5.1e-3 | 7.2e-3 | 5.4e-3 | **1.03e-1** |
 
-**The reference the PINN has been scored against is itself ~10% wrong in the void
+**The reference the PINN was scored against was itself ~10% wrong in the void
 fraction**, because it is first-order upwind at `n_axial = 40` and the front spans
-2–6 cells. The temperatures are converged to ~5e-3 — which sits right at the 1e-2
+2–6 cells. The temperatures were converged to ~5e-3 — which sits right at the 1e-2
 acceptance bar, leaving almost no headroom.
 
 Two consequences:
@@ -321,6 +327,42 @@ Two consequences:
   field's non-convergence went unmeasured. That is a gap in the test design, not in
   the solver: everything `axial_physics.md` §5 claims about the reference — exact
   steady state, energy conservation, convergence orders — was verified and stands.
+
+### 6.5 The ruler at the mesh actually used — and the excuse it removes
+
+Five meshes, same solver settings, `n_out = 241`, field errors relative `L2`
+against `n = 640` bilinearly interpolated onto its grid:
+
+| `n_axial` | onset `t` | onset `ζ` | `L_void` max | peak clad | `T_f` | `T_cl` | `T_s` | `T_c` | `α` |
+|---|---|---|---|---|---|---|---|---|---|
+| 40 | 10.75 s | 0.9625 | 0.39109 m | 2148.63 K | 5.56e-3 | 7.77e-3 | 5.84e-3 | 5.89e-3 | 1.127e-1 |
+| 80 | 10.75 s | 0.9563 | 0.38380 m | 2154.29 K | 2.53e-3 | 3.66e-3 | 2.72e-3 | 2.75e-3 | 6.46e-2 |
+| **160** | 10.75 s | 0.9594 | 0.38116 m | 2156.55 K | **1.08e-3** | **1.59e-3** | **1.16e-3** | **1.18e-3** | **3.15e-2** |
+| 320 | 10.75 s | 0.9609 | 0.37973 m | 2157.95 K | 3.63e-4 | 5.43e-4 | 3.88e-4 | 3.94e-4 | 1.14e-2 |
+| 640 | 10.75 s | 0.9602 | 0.37901 m | 2158.66 K | — | — | — | — | — |
+
+The whole study costs 42 s. It should have been run when scoring moved to
+`n = 160`, and was not.
+
+**At the mesh used for scoring, the temperature ruler is 1.1–1.6e-3.** The 1%
+acceptance bar sits **6–9× above** it, not at it. So the hedge §6.4 licensed — that
+some unknown part of the failure is the ruler — **does not apply to any temperature
+number in this document.** The PINN reports 0.071–0.188 (§7.3.2) against a ruler
+good to 0.0016: the failure is 45–120× the ruler, and it is the network.
+
+Three further results:
+
+* **Onset time is mesh-independent** — 10.75 s on all five meshes, i.e. resolved to
+  the 0.25 s output interval. M4's 0.5 s criterion is measurable, and the PINN's
+  5 s miss is entirely the PINN's.
+* **Onset location is converged to one cell, non-monotonically** — 0.9625, 0.9563,
+  0.9594, 0.9609, 0.9602. The spread is 0.006 and one cell at `n = 160` is 0.00625,
+  so "within one cell" is the tightest criterion this metric can carry — which is
+  exactly what M4 asks for.
+* **`L_void` converges first order; `n = 160` is 0.57% high.** A 1% bar on voided
+  length clears the ruler. A 1% bar on the *pointwise* `α` field does not (3.15e-2),
+  which is why the front is scored on length. That choice is now quantified rather
+  than argued.
 
 ## 7. M7 — hardening and backend parity
 
@@ -801,6 +843,26 @@ should be reported as an observation, not explained.
 **So M7's acceptance is still not met, for a much narrower reason.** Two fields
 agree, two differ by a consistent 21%.
 
+**The equations are exonerated.** Transplanting the torch model's weights into the
+Equinox model — so both backends hold *identical* parameters — and evaluating every
+residual block at identical points gives agreement to **1e-14 relative**, on every
+block including `T_s` and `T_c`, with the ansatz itself matching to 1.8e-15. So the
+21% is training dynamics, not a forked equation, and a test now pins that
+(`test_residual_blocks_are_identical_given_identical_parameters`). Combined with
+§7.3.3 (RAR is not the cause) and §7.3.4 (the gap is the quasi-Newton stage), the
+remaining suspect is the *implementation* of L-BFGS — `torch.optim.LBFGS` against
+`optax.lbfgs`, the last thing in the pipeline that is not shared source.
+
+That is now directly testable: `optimizer = "lbfgs-shared"` selects this
+repository's own L-BFGS in **both** backends, pinned to agree to 1e-10 by
+`test_self_scaled_bfgs_agrees_across_backends`. If the 21% survives it, the
+framework optimisers are not the cause.
+
+One incidental measurement worth recording: at initialisation the four residual
+blocks are `T_f` 4.5e-2, `T_cl` 1.4e-1, `T_s` 2.6e-2, **`T_c` 2.4e0** — the
+coolant block is 17–95× the others *after* variable scaling, because it is the one
+carrying the boiling nonlinearity.
+
 #### 7.3.3 RAR is not the cause
 
 The obvious suspect was the last structural asymmetry: torch grows an RAR
@@ -905,22 +967,89 @@ Single seed. Given §7.1's history, that is a measurement and not a statistic.
 
 ### 7.5 Optimiser bake-off
 
-**TBD — not started, and now the highest-value untested item in the project.**
-The plan calls for SSBroyden/SSBFGS
-([arXiv:2501.16371](https://arxiv.org/abs/2501.16371)) first, since they drop into
-the same schedule slot as L-BFGS with no new machinery, then NysNewton-CG
-([ICML 2024](https://proceedings.mlr.press/v235/rathore24a.html)).
+The bake-off was deferred on the grounds that with the reference unconverged in
+`α` and the two backends 3–10× apart, an optimiser comparison would be measuring
+the ruler. **Both halves of that reason are now gone.** The parity gap was a
+causal-weighting axis bug and is 0.9–1.3× (§7.3.1–§7.3.2). The temperature ruler is
+1.1–1.6e-3 at the scoring mesh (§6.5). And §7.3.4 measured that the L-BFGS stage is
+not a refinement but the step that *forms the boiling front*. That makes the
+quasi-Newton stage the most load-bearing component of the recipe and the only one
+never varied.
 
-It was deferred on the grounds that with the reference unconverged in `α` and the
-two backends 3–10× apart, an optimiser comparison would be measuring the ruler.
-**Half of that reason is gone and the other half inverted.** The parity gap was a
-causal-weighting axis bug and is now 0.9–1.3× (§7.3.1–§7.3.2), so there is no
-longer a backend confound. And §7.3.4 measured that the L-BFGS polish is not a
-refinement here but the step that *forms the boiling front* — Adam alone leaves
-`max α = 0` in both backends. That makes the quasi-Newton stage the single most
-load-bearing component of the recipe, so its implementation is a physics question.
-The `α` ruler is still unconverged (§6.5), which bounds what the comparison can
-conclude about the front, not what it can conclude about the temperatures.
+#### 7.5.1 Self-scaled BFGS, implemented in both backends
+
+Plain L-BFGS applies the Oren–Luenberger scaling once, to `H₀`:
+`γ = (sᵀy)/(yᵀy)`. Self-scaled BFGS applies a scaling at **every** update
+[Oren & Luenberger 1974; Al-Baali 1998], the family
+[arXiv:2501.16371](https://arxiv.org/abs/2501.16371) reports beating L-BFGS across
+PINN benchmarks:
+
+```math
+H_{k+1} = (I - \rho s y^\top)\,\tau_k H_k\,(I - \rho y s^\top) + \rho s s^\top,
+\qquad \rho = \frac{1}{y^\top s},
+\qquad \tau_k = \min\!\left(1, \frac{1}{b_k}\right),
+\qquad b_k = \frac{y^\top H_k y}{y^\top s}
+```
+
+The secant condition `H_{k+1} y = s` holds for any symmetric matrix in the middle,
+so `τ` is free. It is fixed by requiring the scaled operator to reproduce the
+observed curvature along `y`: `yᵀ(τH_k)y = yᵀs` gives `τ = 1/b_k` exactly. Capping
+at 1 makes it a damper only. In limited memory it enters the second loop of the
+two-loop recursion as a multiplication immediately before pair `i`'s correction.
+
+Both backends implement it, with a strong-Wolfe line search at `c₁ = 1e-4`,
+`c₂ = 0.9`. `optimizer` defaults to `"lbfgs"`, so no published number moves.
+
+**The scaling direction was wrong on the first attempt, and nothing failed.** With
+`H_k/τ_k` instead of `τ_k H_k` the method still satisfies the secant condition,
+still descends and still converges — it just converges worse, and it burned six
+line-search evaluations per iteration instead of one. It was caught because the
+implementation is checked against `torch.optim.LBFGS` on problems whose minima are
+known *before* it is allowed near the PINN. Nothing about the PINN's loss would
+have revealed it.
+
+#### 7.5.2 On test problems, self-scaling loses
+
+Five variants, `H₀` scaling and the `min(1, ·)` cap swept, against
+`torch.optim.LBFGS`. Objective value after N iterations, function evaluations in
+brackets:
+
+| variant | quadratic, cond 1e8 (500 it) | Rosenbrock n=100 (500 it) |
+|---|---|---|
+| `torch.optim.LBFGS` | 1.272e+03 (537) | 2.820e-12 (592) |
+| ours, `self_scale=False` | 1.309e+03 (530) | 3.429e-10 (581) |
+| ours, capped, `H₀` scaled | 2.383e+03 (501) | 6.566e+01 (503) |
+| ours, capped, no `H₀` | 2.808e+03 (701) | 3.250e+01 (515) |
+| ours, uncapped, `H₀` scaled | 2.580e+03 (516) | 5.155e+01 (516) |
+| ours, uncapped, no `H₀` | 1.913e+03 (725) | 2.964e+01 (530) |
+
+Two things to read here. **The control works**: `self_scale=False` tracks
+`torch.optim.LBFGS` on both problems, so the line search and recursion are sound
+and any difference in the other rows is the scaling. **And every self-scaled
+variant loses**, on both problems, at every budget — decisively on Rosenbrock.
+
+That is a negative result about *these* problems, not about the paper. Two
+differences are known and neither is dismissible: a PINN loss is not a quadratic,
+which is the paper's whole premise; and the paper's winning configuration gives the
+quasi-Newton stage **30000** iterations against 300 here, where asymptotic
+behaviour is what is being compared. The second of those is testable on its own,
+and is §7.5.3.
+
+#### 7.5.3 The budget split
+
+The paper's other conclusion is the more interesting one for this model. Its
+winning schedule is **Adam[1000] + quasi-Newton[30000]** — ~97% quasi-Newton. This
+project gives the stage that forms the front **9%** of its budget. Three splits at
+equal total iterations, three seeds, `n = 160` ruler:
+
+| arm | Adam | quasi-Newton |
+|---|---|---|
+| A | 3000 | 300 |
+| B | 1000 | 2300 |
+| C | 300 | 3000 |
+
+**Measurement in progress.** Arm A reproduces the §7.3.2 configuration, so it
+doubles as a check that the harness has not drifted.
 
 ### 7.6 Pseudo-time stepping
 
@@ -981,10 +1110,11 @@ would not be different.
    equations, the same budget and the same ruler disagree consistently on two of
    four fields and agree on the other two. That is a bug-shaped result, and every
    previous backend disagreement in this document turned out to be one.
-3. **Converge the ruler in `α`, then re-derive the acceptance bar** so it sits above
-   the reference's own error. The reference resolves the front to ~10% at the
-   default resolution (§6.5), so an accuracy target below that is scoring the ruler.
-   Temperatures are already scored against `n_axial = 160`; the void is the gap.
+3. ~~**Converge the ruler in `α`, then re-derive the acceptance bar.**~~ **Done —
+   §6.5.** The bar stands at 1% for the temperatures, where the ruler is 1.1–1.6e-3,
+   and for `L_void`, where it is 0.57%. The pointwise `α` field cannot carry a 1%
+   bar (3.15e-2) and is not scored on one. This removed an excuse rather than a
+   problem: the temperature failure is 45–120× the ruler.
 4. **Plan A at more than one seed** — §7.4. Given §7.1's 12.5× seed spread, the
    single Plan A measurement is an observation and is labelled as one.
 

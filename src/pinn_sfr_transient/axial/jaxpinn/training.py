@@ -18,11 +18,13 @@ if TYPE_CHECKING:
 import equinox as eqx
 import numpy as np
 import optax
+from jax.flatten_util import ravel_pytree
 
 from pinn_sfr_transient.axial.config import AxialParams
 from pinn_sfr_transient.axial.jaxpinn.ansatz import normalised_state
 from pinn_sfr_transient.axial.jaxpinn.archs import AxialPinn
 from pinn_sfr_transient.axial.jaxpinn.config import AxialTrainConfig
+from pinn_sfr_transient.axial.jaxpinn.optimizers import minimize as ssbfgs_minimize
 from pinn_sfr_transient.axial.jaxpinn.residuals import n_field_blocks, uses_front
 from pinn_sfr_transient.axial.jaxpinn.samplers import _collocation, _merge, _rar_points
 from pinn_sfr_transient.axial.jaxpinn.weighting import (
@@ -119,6 +121,25 @@ def _lbfgs_polish(  # noqa: PLR0913 - polish needs the model, params, points and
         return causal_loss(eqx.combine(params, static), p, cfg, pts, w)  # no proximal term
 
     before = float(loss_fn(params))
+    if cfg.optimizer in ("ssbfgs", "lbfgs-shared"):
+        flat0, unravel = ravel_pytree(params)
+        vg = eqx.filter_jit(jax.value_and_grad(lambda z: loss_fn(unravel(z))))
+        flat, after = ssbfgs_minimize(
+            vg,
+            flat0,
+            max_iter=cfg.lbfgs_iters,
+            history_size=50,
+            self_scale=cfg.optimizer == "ssbfgs",
+        )
+        params = unravel(flat)
+        if not np.isfinite(after) or after > before:
+            if verbose:
+                print(f"[{cfg.optimizer}] reverted: {before:.3e} -> {after:.3e} (kept Adam)")
+            return model
+        if verbose:
+            print(f"[{cfg.optimizer} done] loss={after:.3e}")
+        return eqx.combine(params, static)
+
     opt = optax.lbfgs()
     state = opt.init(params)
     value_and_grad = optax.value_and_grad_from_state(loss_fn)

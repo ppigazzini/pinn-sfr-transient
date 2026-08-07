@@ -24,6 +24,7 @@ import numpy as np
 from pinn_sfr_transient.axial.config import AxialParams
 from pinn_sfr_transient.axial.torchpinn.config import AxialTrainConfig
 from pinn_sfr_transient.axial.torchpinn.model import AxialPinn
+from pinn_sfr_transient.axial.torchpinn.optimizers import SelfScaledLBFGS
 from pinn_sfr_transient.axial.torchpinn.weighting import (
     _bounded_weights,
     _causal_weights,
@@ -263,17 +264,28 @@ class Trainer:
         zeta, that = self.collocation()
         before = self.causal_loss(zeta, that).item()
         snapshot = [q.detach().clone() for q in self.model.parameters()]
-        opt = torch.optim.LBFGS(
-            self.model.parameters(),
-            max_iter=self.cfg.lbfgs_iters,
-            history_size=50,
-            line_search_fn="strong_wolfe",
-            tolerance_grad=1e-12,
-            tolerance_change=1e-14,
-        )
+        if self.cfg.optimizer in ("ssbfgs", "lbfgs-shared"):
+            opt = SelfScaledLBFGS(
+                self.model.parameters(),
+                max_iter=self.cfg.lbfgs_iters,
+                history_size=50,
+                self_scale=self.cfg.optimizer == "ssbfgs",
+                tolerance_grad=1e-12,
+                tolerance_change=1e-14,
+            )
+        else:
+            opt = torch.optim.LBFGS(
+                self.model.parameters(),
+                max_iter=self.cfg.lbfgs_iters,
+                history_size=50,
+                line_search_fn="strong_wolfe",
+                tolerance_grad=1e-12,
+                tolerance_change=1e-14,
+            )
 
         def closure() -> torch.Tensor:
-            opt.zero_grad()
+            for q in self.model.parameters():
+                q.grad = None
             loss = self.causal_loss(zeta, that)
             loss.backward()
             return loss
