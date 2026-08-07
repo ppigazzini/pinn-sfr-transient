@@ -446,6 +446,14 @@ That was §7.2's last untested suspect. It has now been tested; see §7.2.1.
 
 ### 7.2 The formulation fixes
 
+> **Every table below is reproducible by a committed command.** Each study in this
+> section and in §7.3–§7.5 is a sub-command of
+> [`tools/axial_study.py`](../tools/axial_study.py) — `ruler`, `horizon`, `budget`,
+> `optimizer`, `parity`, `plan-a`. Before that existed, every number here came from
+> a scratch file, and one of those used a `t_train_frac` that differed from the
+> shipped default without saying so (§7.2.7).
+
+
 Six measurements, in the order they were taken. Together they are why the boiling
 front forms at all; §7.2.3 is the single change that did it. Read §7.2.4 before
 quoting §7.2.3 — the second retracts a result of the first.
