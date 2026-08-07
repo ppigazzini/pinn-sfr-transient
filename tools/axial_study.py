@@ -318,6 +318,88 @@ def study_combo(out: Path) -> None:
     mean_table(rows)
 
 
+def study_regime(out: Path) -> None:
+    """M9's reference half: the Objective 2 regime map.
+
+    M9 asks for a parametric PINN on ``(zeta, t, alpha_void, tau_pump)`` whose
+    regime *classification* matches a reference sweep. The PINN half is not
+    attempted here: the single-point network misses its bar by 7-19x, and a
+    parametric extension of a model that fails at one parameter value would be
+    measuring nothing.
+
+    The reference half stands on its own, and it attacks D49 directly. At the
+    shipped defaults the sodium void worth is never sampled positive, because
+    ``zeta_sign = 0.80`` sits below where boiling starts (``zeta`` ~ 0.96) -- so
+    ``max rho/beta = 0`` is a statement about the parameter set, not about the
+    transient. A sweep says whether **any** point in the family exercises the
+    positive branch, which is what Objective 2 turns on.
+    """
+    from concurrent.futures import ProcessPoolExecutor  # noqa: PLC0415
+
+    grid = [
+        (float(w), float(t))
+        for w in (0.0, 1.0e-3, 2.0e-3, 4.0e-3, 8.0e-3, 1.6e-2)
+        for t in (1.0, 2.5, 5.0, 10.0, 20.0)
+    ]
+    print(f"{len(grid)} points, n_axial=80, closed loop", flush=True)
+    with ProcessPoolExecutor(max_workers=10) as ex:
+        rows = list(ex.map(_regime_point, grid))
+    write(rows, out)
+
+    ok = [r for r in rows if "error" not in r]
+    print(
+        f"\n{'worth':>8s} {'tau':>6s} {'regime':>17s} {'peakP':>7s} "
+        f"{'maxrho/b':>9s} {'exercised':>9s} {'onset':>8s} {'L_void':>7s}"
+    )
+    for r in ok:
+        onset = r["onset_t"] if np.isfinite(r["onset_t"]) else float("nan")
+        print(
+            f"{r['void_worth_net']:8.1e} {r['tau_pump']:6.1f} {r['regime']:>17s} "
+            f"{r['peak_power']:7.4f} {r['max_rho_beta']:+9.4f} "
+            f"{r['void_exercised']!s:>9s} {onset:8.2f} {r['L_void_max']:7.4f}"
+        )
+    exercised = [r for r in ok if r["void_exercised"]]
+    print(f"\npositive void worth exercised at {len(exercised)}/{len(ok)} points")
+    if exercised:
+        print(f"max rho/beta over those: {max(r['max_rho_beta'] for r in exercised):+.4f}")
+
+
+def _regime_point(args: tuple[float, float]) -> dict:
+    """Solve one closed-loop point and classify it. Top level, so it can be pickled."""
+    worth, tau = args
+    p = AxialParams(n_axial=80, void_worth_net=worth, tau_pump=tau)
+    try:
+        traj = solve_reference(p, n_out=241, feedback=True)
+    except Exception as exc:  # noqa: BLE001 - a failed point is data, not a crash
+        return {"void_worth_net": worth, "tau_pump": tau, "error": repr(exc)[:200]}
+    t_on, z_on = traj.onset()
+    max_rb = float(traj.peak_rho_over_beta)
+    return {
+        "void_worth_net": worth,
+        "tau_pump": tau,
+        "boils": bool(np.isfinite(t_on)),
+        "onset_t": t_on,
+        "onset_zeta": z_on,
+        "L_void_max": float(traj.voided_length.max()),
+        "peak_power": float(traj.power.max()),
+        "min_power": float(traj.power.min()),
+        "max_rho_beta": max_rb,
+        "min_rho_beta": float(traj.rho.min() / traj._beta),  # noqa: SLF001
+        "void_exercised": bool(traj.void_worth_is_exercised()),
+        "peak_clad": float(traj.peak_clad),
+        "t_final": float(traj.t[-1]),
+        "regime": (
+            "prompt-critical"
+            if max_rb >= 1.0
+            else "power-excursion"
+            if traj.power.max() > 1.01
+            else "boiling-bounded"
+            if np.isfinite(t_on)
+            else "no-boiling"
+        ),
+    }
+
+
 STUDIES = {
     "ruler": study_ruler,
     "horizon": study_horizon,
@@ -326,6 +408,7 @@ STUDIES = {
     "parity": study_parity,
     "plan-a": study_plan_a,
     "combo": study_combo,
+    "regime": study_regime,
 }
 
 
