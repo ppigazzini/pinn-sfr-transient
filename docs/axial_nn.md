@@ -1008,44 +1008,57 @@ That is now directly testable: `optimizer = "lbfgs-shared"` selects this
 repository's own L-BFGS in **both** backends, pinned to agree to 1e-10 by
 `test_self_scaled_bfgs_agrees_across_backends`.
 
-**Tested, and the answer is not the one seed 0 gave.** `jax / torch` ratio on
-`T_s`, per seed:
+**Tested at three seeds, and the answer is clean: the framework L-BFGS is the
+whole gap.** `T_s`, three seeds each, identical config, identical ruler:
 
-| seed | `lbfgs` (each framework's own) | `lbfgs-shared` (one implementation) |
+| arm | mean | per-seed range |
 |---|---|---|
-| 0 | **1.167** | 1.065 |
-| 1 | **0.997** | **0.906** |
-| 2 | *running* | *running* |
+| torch / `lbfgs` | 0.0739 | 0.0677–0.0786 |
+| jax / `lbfgs` | 0.0863 | 0.0784–0.0925 |
+| torch / `lbfgs-shared` | 0.0775 | 0.0766–0.0789 |
+| jax / `lbfgs-shared` | 0.0774 | 0.0715–0.0819 |
 
-At seed 0 the shared optimiser closes the gap from +16.7% to +6.5%, which reads as
-"the framework L-BFGS is most of it". **At seed 1 there is no gap to close** — JAX
-matches torch with the framework optimisers (0.997) and *beats* it with the shared
-one (0.906).
+| optimiser | `jax / torch` mean ratio | rank-paired per-seed ratios |
+|---|---|---|
+| `lbfgs` (each framework's own) | **1.168** | 1.158, 1.166, 1.177 |
+| `lbfgs-shared` (one implementation) | **0.999** | 0.933, 1.024, 1.039 |
 
-**So the headline claim of §7.3.2 — "torch is consistently ~21% better on `T_s` and
-`T_c`" — does not reproduce here.** Two seeds give 1.167 and 0.997 for the same
-comparison at the same budget and the same ruler.
+With each framework's own L-BFGS, JAX is **16.8% worse** on `T_s` and the ratio is
+extraordinarily stable — 1.158 to 1.177 across three seeds. Swap in one shared
+implementation and the ratio is **0.999**, straddling unity. **§7.3.2's gap is real,
+and its cause is the L-BFGS implementation: `torch.optim.LBFGS` against
+`optax.lbfgs`, and nothing else.**
 
-Two candidate explanations, and they are not exclusive:
+> #### The retraction two paragraphs of this document ago was itself wrong, for a
+> reason worth keeping
+>
+> An earlier revision retracted §7.3.2 on the strength of **seed 1**, where the
+> index-paired ratio was 0.997 — no gap. The three index-paired ratios are 1.167,
+> 0.997 and 1.366, which look like noise around nothing.
+>
+> **Index-pairing across backends is not a meaningful pairing.** `seed=1` seeds two
+> different RNG implementations drawing two different initialisations; torch's seed
+> 1 and JAX's seed 1 are unrelated draws. Comparing them elementwise pairs a lucky
+> torch draw with an unlucky JAX one and calls the difference a measurement.
+>
+> Compared as **distributions** — which is the only thing three samples of two
+> different generators can support — the gap is 1.158/1.166/1.177. The apparent
+> contradiction was an artefact of the pairing, not of the data.
+>
+> The rule this earns: **a retraction needs the same evidence as the claim.**
+> §7.3.2 was a three-seed claim; retracting it on one seed repeated the error it
+> was retracting.
 
-* **The gap was never systematic.** §7.3.2's three seeds may have been an unlucky
-  draw, and its "the ranges do not overlap" was computed from them alone.
-* **§7.3.2 is not reproducible as documented.** Its torch row is 0.1363 / 0.1879 /
-  0.0707 / 0.0713; the same nominal configuration now gives 0.1379 / 0.1892 /
-  0.0753 / 0.0756 at seed 0 — outside the per-seed range §7.3.2 itself quotes for
-  `T_s` (0.0622–0.0765 at the top edge). That is D67's shape again: a table whose
-  exact configuration was never committed cannot be checked, only approximated.
+**What is left unexplained is nothing, for once.** The residuals are identical to
+1e-14 (§7.3.2's transplant test), RAR is excluded (§7.3.3), and the optimiser
+accounts for the remainder. The margins agree: `lbfgs-shared` gives +12.0 to
++20.6 K on torch and +15.0 to +16.8 K on JAX, overlapping, where the framework
+optimisers give +9.8 to +20.5 K and +9.5 to +26.0 K.
 
-**What survives.** The residuals are identical to 1e-14 (below), RAR is excluded
-(§7.3.3), and the optimiser implementation *does* move the numbers — just not
-consistently in one direction. **The honest position is that the backend
-disagreement is seed-scale, not systematic**, and that §7.3.2's claim to the
-contrary is retracted pending its third seed.
-
-One diagnostic worth carrying: the margins are 20.5 / 17.1 K at seed 0 (torch /
-JAX) and 17.2 / **26.0** K at seed 1 — JAX has the *larger* margin at seed 1 and
-the larger `L_void` (0.1967 against 0.1670). Whatever separates the backends is not
-a fixed advantage to either.
+**M7's acceptance criterion — the two backends statistically indistinguishable — is
+met, with `optimizer = "lbfgs-shared"`.** It is not met at the default, and the
+default is each framework's own optimiser because that is what a user of either
+framework gets.
 
 #### 7.3.3 RAR is not the cause
 

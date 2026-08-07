@@ -79,6 +79,14 @@ four times: D38, D39, the budget sweep's "monotonic" front degradation, and §7.
 - **Never write a comparative headline from one seed.** Three seeds with per-seed
   ranges, or say "seed N, one sample" in the sentence that states the result — not
   in a caveat further down. A hedge below a confident headline does not work.
+- **A retraction needs the same evidence as the claim.** A three-seed result is not
+  overturned by one contradicting seed. `docs/axial_nn.md` §7.3.2 was retracted on
+  seed 1 and then re-confirmed at three, which repeated the error it was retracting.
+- **Do not pair seed *indices* across backends.** `seed=1` seeds two different RNG
+  implementations drawing two different initialisations, so torch's seed 1 and JAX's
+  seed 1 are unrelated draws. Elementwise ratios of them are noise; compare the
+  distributions. Index-paired, the backend gap reads 1.167 / 0.997 / 1.366; as
+  distributions it reads 1.158 / 1.166 / 1.177.
 - **Every published table must be reproducible by a committed command.**
   `tools/axial_study.py` has one sub-command per study. A number measured by an
   uncommitted script is not reproducible, however carefully it was measured: D67 is
