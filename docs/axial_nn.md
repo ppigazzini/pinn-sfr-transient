@@ -128,7 +128,38 @@ default does not produce the repository's headline result: it forms no boiling
 front, on either backend, on every seed measured. A default that cannot reproduce
 the documentation is a defect regardless of what the alternative scores.
 
-### 0.6 Method notes that changed the answers
+### 0.6 Which configuration to use
+
+Every configuration below forms the boiling front on every seed. The shipped
+default does not, and is listed only as the thing to avoid. Wall-clocks are
+**contended** — 2–5 jobs at `OMP_NUM_THREADS=8` — so treat them as ratios, not
+benchmarks; accuracy is unaffected (§7.2.8).
+
+| purpose | configuration | `T_s` | `L_void` | worst margin | sec |
+|---|---|---|---|---|---|
+| **best accuracy** | `300/3000`, f512, **torch** | **0.0216** | **0.3012** | **+34.6 K** | 3392 |
+| **best value** | `300/3000`, f512, **jax** | 0.0310 | 0.2481 | +19.2 K | **780** |
+| **cheapest trustworthy** | `300/3000`, f128, **jax** | 0.0363 | 0.2178 | +9.5 K | **314** |
+| *avoid* | shipped default (`8000/500`, f0) | 0.0434 | 0.0367 | **−2.3 K** | 2337 |
+
+**Best accuracy** is `f512`. `f1024` costs 2.2× more and is not better — the
+ladder's endpoint is measured, not assumed (§7.5.8).
+
+**Best value** is the same configuration on JAX: within 43% of the best accuracy at
+**23% of the cost**. `f256` on JAX is poor value by comparison — 63% more cost than
+`f128` for 1% better `T_s`.
+
+**Cheapest trustworthy** is `f128` on JAX, not `f32`. `f32/jax` runs in 206 s at
+`T_s` 0.0386, but its worst-seed margin is **+3.5 K** — near enough the threshold
+that a seed can lose the front, which is the `A + fourier` failure of §7.5.4.
+**Margin, not mean, is what makes a configuration safe to recommend.**
+
+**The shipped default is dominated on every axis**: slower than `f512/jax`, 40% less
+accurate, `L_void` at a tenth, and no front on any seed of either backend (§7.2.9).
+
+None of these meets the 1% bar. The best is 2.2× away.
+
+### 0.7 Method notes that changed the answers
 
 * **Three seeds, or say the sample size in the sentence.** Every two-seed claim made
   during this study was wrong at three: the budget sweep's "monotonic" front, the
