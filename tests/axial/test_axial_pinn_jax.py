@@ -632,3 +632,51 @@ def test_onset_is_not_reported_for_a_vestigial_front():
     weak = front_metrics((*temps, weak_alpha), traj, p)
     assert np.isnan(weak["onset_t"]), weak["onset_t"]
     assert np.isnan(weak["onset_zeta_err"]), weak["onset_zeta_err"]
+
+
+def test_lbfgs_iters_means_the_same_thing_in_both_backends():
+    """`lbfgs_iters` is asserted equal across backends; the loops are not equal.
+
+    JAX runs `jax.lax.fori_loop(0, n, ...)` — exactly n iterations, unconditionally,
+    no tolerance and no early exit. torch runs `torch.optim.LBFGS(max_iter=n)` with
+    `tolerance_grad` and `tolerance_change` set, which runs AT MOST n. If torch
+    stops early the shared knob is not a shared budget, and every cross-backend
+    number measured at that budget has an uncontrolled variable in it.
+
+    Measured: torch runs the full count at the budgets this project uses. Pin it, so
+    a change in torch's defaults or in the tolerances shows up here rather than as a
+    quiet asymmetry in a parity table.
+    """
+    torch = pytest.importorskip("torch")
+
+    from pinn_sfr_transient.axial import pinn_torch as pt
+
+    want = 40
+    cfg = pt.AxialTrainConfig(
+        width=8, depth=2, n_colloc=64, adam_iters=20, lbfgs_iters=0, seed=0, log_every=10**9
+    )
+    trainer = pt.Trainer(pt.AxialPinn(AxialParams(), cfg), cfg)
+    trainer.train(verbose=False)
+    zeta, that = trainer.collocation()
+    opt = torch.optim.LBFGS(
+        trainer.model.parameters(),
+        max_iter=want,
+        history_size=50,
+        line_search_fn="strong_wolfe",
+        tolerance_grad=1e-12,
+        tolerance_change=1e-14,
+    )
+
+    def closure():
+        for q in trainer.model.parameters():
+            q.grad = None
+        loss = trainer.causal_loss(zeta, that)
+        loss.backward()
+        return loss
+
+    opt.step(closure)
+    n_iter = opt.state[opt._params[0]]["n_iter"]
+    assert n_iter == want, (
+        f"torch L-BFGS stopped at {n_iter} of {want}: the knob is not a shared budget, "
+        "and cross-backend comparisons at this setting are not like-for-like"
+    )
