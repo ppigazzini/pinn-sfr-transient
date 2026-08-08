@@ -56,14 +56,25 @@ therefore formed no front at all**, on any seed of either backend, while the
 documentation said otherwise. Both the horizon and the budget that caused that are
 fixed and pinned by tests.
 
-**What the current round is measuring.** Two things are in flight and neither has
-its third seed yet, so neither has moved a number above. A 54-run sweep of Adam
-against quasi-Newton iterations finds the **quasi-Newton budget is the axis that
-forms the front** — the Adam axis is flat over two decades once it is funded, which
-is awkward, because the Adam count is what the shipped default was tuned on
-([`docs/axial_nn.md`](docs/axial_nn.md) §7.5.11). And three ways of aiming capacity
-at the front are being swept one knob at a time; one of them reproduced the
-reference's peak saturation margin to 0.1 K on a single seed (§7.5.12–§7.5.14).
+**What the current round is measuring.** A 54-run sweep of Adam against
+quasi-Newton iterations, now complete on PyTorch at three seeds, finds that **the
+quasi-Newton budget is the axis that forms the front**: the Adam axis is flat over
+two decades once it is funded, which is awkward, because the Adam count is what the
+shipped default was tuned on ([`docs/axial_nn.md`](docs/axial_nn.md) §7.5.11). Four
+more sweeps are in flight at one or two seeds, so none of them has moved a number
+above — the most promising covers the solution's smooth bulk and its sharp front
+with several Fourier bands at once, and beats the control on both accuracy *and*
+front size on both backends (§7.5.12–§7.5.14).
+
+**Why boiling onset never improved, after everything else did.** Onset was never in
+the objective — every knob was ranked on an average or a peak, and neither is a
+*position*. And it was read off by thresholding a field at its own maximum, where
+the profile is 11.6× flatter than at its steepest and one mesh cell is 0.4 K of
+coolant temperature; recovering a position from a value error there scales as a
+square root. Both are now addressed by solving the tangency conditions instead, and
+by training against them (§7.5.16). The same arithmetic raises a question about the
+acceptance criterion itself: one cell is only 1.6–2.3× above the *reference
+solver's* own error.
 
 [`docs/axial_nn.md`](docs/axial_nn.md) **§0 is the status quo** — accuracy, what is
 settled, what is open, and **§0.6 says which configuration to use**. §5–§7 carry
