@@ -835,3 +835,38 @@ def test_bands_default_to_the_single_band_basis():
     torch.manual_seed(0)
     one = FourierEmbedding(2, 64, 3.0, None, bands=(1.0,)).B.detach().numpy()
     np.testing.assert_array_equal(plain, one)
+
+
+def test_predict_must_be_given_the_training_config():
+    """A JAX model trained under a non-default config must be scored under it.
+
+    The torch model carries its own `cfg`, so its evaluator cannot desync from
+    its training. The JAX twin is functional and `predict(..., cfg=None)` falls
+    back to `AxialTrainConfig()` — so dropping the returned config silently
+    scores an arm under the defaults. `horizon()` reads `t_train_frac` from it,
+    and the input width depends on `level_set_input` and `front_net`.
+
+    Asserted as a **raise**, not as a difference: with `level_set_input` the
+    mismatch changes an array shape and cannot pass quietly. That is the only
+    reason this was ever noticed — a knob that changes a *value* instead would
+    have produced a plausible, wrong number, which is D67's failure mode.
+    """
+    p = AxialParams()
+    cfg = pj.AxialTrainConfig(
+        width=8,
+        depth=2,
+        n_colloc=64,
+        adam_iters=2,
+        lbfgs_iters=1,
+        fourier_features=16,
+        level_set_input=True,
+        log_every=10**9,
+    )
+    model, params, cfg = pj.train(p, cfg, verbose=False)
+    zeta, t = np.linspace(0.0, 1.0, 5), np.linspace(0.0, 1.0, 3)
+
+    fields = pj.predict(model, params, zeta, t, cfg)
+    assert fields[0].shape == (5, 3)
+
+    with pytest.raises(TypeError):
+        pj.predict(model, params, zeta, t)
