@@ -61,6 +61,9 @@ MARGIN_FEATURES = (32, 64, 128, 256, 512, 1024)
 # Share of collocation placed on the saturation level set. 0.0 is the control:
 # level-set sampling off, so the arm reduces to plain training at that budget.
 FRONT_FRACS = (0.0, 0.05, 0.10, 0.25, 0.50)
+# Adam x quasi-Newton grid, decades apart, so each stage's own saturation point
+# is visible rather than inferred from a fixed-total split.
+GRID_ITERS = (30, 300, 3000)
 # Every study sweeps both backends. Two independent implementations agreeing is
 # the strongest check this project has, and it is the reason the JAX twin exists
 # (`docs/axial_nn.md` section 4) -- a result measured on one backend is a result
@@ -844,6 +847,65 @@ def study_capacity_optimiser(out: Path) -> None:
             )
 
 
+def study_grid(out: Path) -> None:
+    """Cross Adam against quasi-Newton independently -- section 7.5.11.
+
+    Section 7.5.3 asked "which split of a fixed 3300 iterations", and section 7.5.5
+    asked "does a bigger total help" at a fixed 10:1 ratio. Neither asks how many
+    iterations each stage actually needs, and the answer to that has been inherited
+    rather than measured: `300 Adam + 3000 L-BFGS` reached "best known" by winning a
+    fixed-total sweep, and two later studies took it as their base.
+
+    A full cross removes the constraint. `fourier_features` is pinned at 128 so the
+    only thing varying is where the iterations go, and the capacity rung is one that
+    forms the front on every seed (section 7.5.8).
+
+    Watch two things the earlier sweeps could not separate: whether the quasi-Newton
+    stage saturates independently of Adam, and whether the front survives large Adam
+    budgets when the quasi-Newton stage is also large -- section 7.5.5 lost the front
+    at 8k/500 and could not say which half was responsible.
+    """
+    traj = ruler()
+    rows = run_all(
+        traj,
+        [
+            (
+                f"adam{a}/qn{q} [{backend}]",
+                {
+                    "backend": backend,
+                    "seed": seed,
+                    "adam_iters": a,
+                    "lbfgs_iters": q,
+                    "fourier_features": 128,
+                },
+            )
+            for seed in SEEDS
+            for backend in BACKENDS
+            for a in GRID_ITERS
+            for q in GRID_ITERS
+        ],
+        out,
+    )
+    mean_table(rows)
+    print("\nT_s surface (rows Adam, cols quasi-Newton), and the worst-seed margin:")
+    for backend in BACKENDS:
+        print(f"\n  [{backend}]")
+        header = "         " + "".join(f"{q:>12d}" for q in GRID_ITERS)
+        print(header)
+        for a in GRID_ITERS:
+            cells = []
+            for q in GRID_ITERS:
+                v = [r for r in rows if r["arm"] == f"adam{a}/qn{q} [{backend}]"]
+                if not v:
+                    cells.append(f"{'--':>12s}")
+                    continue
+                ts = sum(r["T_s"] for r in v) / len(v)
+                mg = min(r["margin_K"] for r in v)
+                cells.append(f"{ts:8.4f}{'*' if mg > 0 else '!':>4s}")
+            print(f"  {a:6d} " + "".join(cells))
+    print("\n  * front on every seed   ! front lost on at least one")
+
+
 STUDIES = {
     "ruler": study_ruler,
     "horizon": study_horizon,
@@ -860,6 +922,7 @@ STUDIES = {
     "levelset": study_levelset,
     "frontfrac": study_frontfrac,
     "capacity-optimiser": study_capacity_optimiser,
+    "grid": study_grid,
 }
 
 
