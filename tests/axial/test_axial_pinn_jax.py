@@ -296,6 +296,8 @@ def test_the_two_backends_share_every_default():
         "front_frac",
         "front_level_set",
         "fourier_features",
+        "fourier_scale",
+        "fourier_scale_zeta",
     ):
         assert getattr(j, name) == getattr(t, name), name
 
@@ -712,3 +714,55 @@ def test_the_default_is_a_configuration_that_forms_a_front():
         assert cfg.fourier_features == 256, cfg.fourier_features
         # The horizon is what made the old default form no front at all.
         assert cfg.t_train_frac == pytest.approx(0.275)
+
+
+def test_anisotropic_fourier_scales_only_zeta():
+    """`fourier_scale_zeta` must widen the spatial band and leave time alone.
+
+    One bandwidth for both inputs assumes isotropic frequency content, and the
+    solution's is not: the front is a near-discontinuity in `zeta` and smooth in
+    `t`. Assert the property — the `zeta` row of B is scaled and the `t` row is
+    not — rather than that the knob is plumbed, because a knob that is read and
+    ignored looks identical to one that works (`docs/axial_nn.md` section 4).
+    """
+    torch = pytest.importorskip("torch")
+
+    from pinn_sfr_transient.axial import pinn_torch as pt
+    from pinn_sfr_transient.axial.jaxpinn.archs import fourier_scale_vector
+
+    assert fourier_scale_vector(pj.AxialTrainConfig(fourier_scale_zeta=None), 2) is None
+    assert fourier_scale_vector(
+        pj.AxialTrainConfig(fourier_scale=2.0, fourier_scale_zeta=8.0), 2
+    ) == (16.0, 2.0)
+
+    p = AxialParams()
+    common = {"width": 8, "depth": 2, "fourier_features": 64, "fourier_scale": 2.0}
+    torch.manual_seed(0)
+    iso = pt.AxialPinn(p, pt.AxialTrainConfig(**common))
+    torch.manual_seed(0)
+    ani = pt.AxialPinn(p, pt.AxialTrainConfig(**common, fourier_scale_zeta=8.0))
+
+    b_iso = iso.embed.B.detach().numpy()
+    b_ani = ani.embed.B.detach().numpy()
+    # Same seed, so the underlying normal draw is identical; only the row scaling differs.
+    np.testing.assert_allclose(b_ani[0], b_iso[0] * 8.0, rtol=1e-12)
+    np.testing.assert_allclose(b_ani[1], b_iso[1], rtol=1e-12)
+    assert np.std(b_ani[0]) > 5 * np.std(b_ani[1]), "zeta band must be the wider one"
+
+
+def test_anisotropic_fourier_agrees_across_backends():
+    """The knob must scale the same rows in both backends."""
+    pytest.importorskip("torch")
+    from pinn_sfr_transient.axial import pinn_torch as pt
+    from pinn_sfr_transient.axial.jaxpinn.archs import (
+        fourier_scale_vector as jax_vec,
+    )
+    from pinn_sfr_transient.axial.torchpinn.archs import (
+        fourier_scale_vector as torch_vec,
+    )
+
+    for n_in in (2, 3):
+        for z in (None, 4.0):
+            j = jax_vec(pj.AxialTrainConfig(fourier_scale=3.0, fourier_scale_zeta=z), n_in)
+            t = torch_vec(pt.AxialTrainConfig(fourier_scale=3.0, fourier_scale_zeta=z), n_in)
+            assert j == t, (n_in, z, j, t)

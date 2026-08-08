@@ -113,6 +113,15 @@ class AxialTrainConfig:
     # default no more expensive than the one it replaced.
     fourier_features: int = 256
     fourier_scale: float = 2.0
+    # Bandwidth of the Fourier basis in `zeta`, as a multiple of `fourier_scale`.
+    # `None` keeps the basis isotropic, which is what a single `scale` assumes.
+    #
+    # **The solution is not isotropic.** The front is a near-discontinuity in `zeta`
+    # and smooth in `t`, so one bandwidth either under-resolves the front or spends
+    # conditioning on time structure that is not there. Values > 1 sharpen the basis
+    # in space only.
+    fourier_scale_zeta: float | None = None
+
     # Two-encoder "modified MLP" [Wang, Teng & Perdikaris 2021]. Measured -16.1%,
     # and likewise not adopted -- see section 7.2.6.
     modified_mlp: bool = False

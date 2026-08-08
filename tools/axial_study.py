@@ -64,6 +64,9 @@ FRONT_FRACS = (0.0, 0.05, 0.10, 0.25, 0.50)
 # Adam x quasi-Newton grid, decades apart, so each stage's own saturation point
 # is visible rather than inferred from a fixed-total split.
 GRID_ITERS = (30, 300, 3000)
+# Spatial-band multipliers for the anisotropic embedding. None is the control:
+# isotropic, i.e. exactly the shipped default.
+ANISO_SCALES = (None, 2.0, 4.0, 8.0)
 # Every study sweeps both backends. Two independent implementations agreeing is
 # the strongest check this project has, and it is the reason the JAX twin exists
 # (`docs/axial_nn.md` section 4) -- a result measured on one backend is a result
@@ -906,6 +909,44 @@ def study_grid(out: Path) -> None:
     print("\n  * front on every seed   ! front lost on at least one")
 
 
+def study_aniso(out: Path) -> None:
+    """Idea 1 in isolation: anisotropic Fourier bandwidth -- section 7.5.12.
+
+    The embedding uses one `scale` for every input, which assumes the solution's
+    frequency content is isotropic. It is not: the front is a near-discontinuity in
+    `zeta` and smooth in `t`. `fourier_scale_zeta` multiplies the spatial band only.
+
+    Isolated: the base is the shipped default and **only** this knob moves, so the
+    effect cannot be confounded with capacity or budget. 1.0 is the control and
+    reproduces the default exactly.
+    """
+    traj = ruler()
+    rows = run_all(
+        traj,
+        [
+            (
+                f"zeta_scale={z or 1.0} [{backend}]",
+                {"backend": backend, "seed": seed, "fourier_scale_zeta": z},
+            )
+            for seed in SEEDS
+            for backend in BACKENDS
+            for z in ANISO_SCALES
+        ],
+        out,
+    )
+    mean_table(rows)
+    print("\nis a wider spatial band better, and does the margin hold on every seed?")
+    for label in dict.fromkeys(r["arm"] for r in rows):
+        v = [r for r in rows if r["arm"] == label]
+        mg = [r["margin_K"] for r in v]
+        print(
+            f"  {label:26s} T_s {sum(r['T_s'] for r in v) / len(v):.4f}   "
+            f"L_void {sum(r['L_void_max'] for r in v) / len(v):.4f}   "
+            f"margin min {min(mg):+6.1f} K   "
+            f"{'front every seed' if min(mg) > 0 else 'FRONT LOST'}"
+        )
+
+
 STUDIES = {
     "ruler": study_ruler,
     "horizon": study_horizon,
@@ -923,6 +964,7 @@ STUDIES = {
     "frontfrac": study_frontfrac,
     "capacity-optimiser": study_capacity_optimiser,
     "grid": study_grid,
+    "aniso": study_aniso,
 }
 
 

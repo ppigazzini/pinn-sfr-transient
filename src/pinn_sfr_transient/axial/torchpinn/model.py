@@ -56,6 +56,7 @@ from pinn_sfr_transient.axial.torchpinn.archs import (
     FourierEmbedding,
     ModifiedMLP,
     _bounded_exp,
+    fourier_scale_vector,
 )
 from pinn_sfr_transient.axial.torchpinn.config import AxialTrainConfig
 
@@ -72,7 +73,12 @@ class AxialPinn(nn.Module):
         self.embed: nn.Module | None = None
         if cfg.fourier_features:
             self.embed = (
-                FourierEmbedding(n_in, cfg.fourier_features, cfg.fourier_scale)
+                FourierEmbedding(
+                    n_in,
+                    cfg.fourier_features,
+                    cfg.fourier_scale,
+                    fourier_scale_vector(cfg, n_in),
+                )
                 .to(cfg.device)
                 .double()
             )
