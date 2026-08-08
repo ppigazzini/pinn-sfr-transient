@@ -298,7 +298,7 @@ class Trainer:
             opt = SelfScaledLBFGS(
                 self.model.parameters(),
                 max_iter=self.cfg.lbfgs_iters,
-                history_size=50,
+                history_size=self.cfg.lbfgs_history,
                 self_scale=self.cfg.optimizer == "ssbfgs",
                 tolerance_grad=1e-12,
                 tolerance_change=1e-14,
@@ -307,7 +307,7 @@ class Trainer:
             opt = torch.optim.LBFGS(
                 self.model.parameters(),
                 max_iter=self.cfg.lbfgs_iters,
-                history_size=50,
+                history_size=self.cfg.lbfgs_history,
                 line_search_fn="strong_wolfe",
                 tolerance_grad=1e-12,
                 tolerance_change=1e-14,

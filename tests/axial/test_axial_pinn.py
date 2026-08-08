@@ -340,6 +340,13 @@ def test_relative_l2_reports_every_field(model):
     `onset_t_err_s` and `onset_zeta_err` joined it because they are M4's actual
     acceptance criterion -- onset within 0.5 s and one cell -- and nothing reported
     them, so M4 could be neither passed nor failed.
+
+    The `*_tan` four joined it because onset sits at the *maximum* of `T_c`, where
+    reading a position off a threshold crossing is `sqrt`-conditioned in the field
+    error while the stationarity condition is linear in it. They are reported
+    ALONGSIDE the threshold pair rather than replacing it: every published onset
+    number was measured the old way, and a metric that changes definition silently
+    makes its own history unreadable (`docs/axial_nn.md` section 7.5.16).
     """
     err = relative_l2(model, solve_reference(AxialParams(), n_out=21))
     assert set(err) == {
@@ -357,6 +364,10 @@ def test_relative_l2_reports_every_field(model):
         "onset_zeta",
         "onset_t_err_s",
         "onset_zeta_err",
+        "onset_t_tan",
+        "onset_zeta_tan",
+        "onset_t_err_tan_s",
+        "onset_zeta_err_tan",
         "L_void_max",
         "L_void_max_ref",
     }

@@ -133,7 +133,7 @@ def _lbfgs_polish(  # noqa: PLR0913 - polish needs the model, params, points and
             vg,
             flat0,
             max_iter=cfg.lbfgs_iters,
-            history_size=50,
+            history_size=cfg.lbfgs_history,
             self_scale=cfg.optimizer == "ssbfgs",
         )
         params = unravel(flat)
@@ -145,7 +145,9 @@ def _lbfgs_polish(  # noqa: PLR0913 - polish needs the model, params, points and
             print(f"[{cfg.optimizer} done] loss={after:.3e}")
         return eqx.combine(params, static)
 
-    opt = optax.lbfgs()
+    # Never call this bare: the default memory_size is 10 against torch's 50,
+    # and that single argument was the entire cross-backend accuracy gap.
+    opt = optax.lbfgs(memory_size=cfg.lbfgs_history)
     state = opt.init(params)
     value_and_grad = optax.value_and_grad_from_state(loss_fn)
 
