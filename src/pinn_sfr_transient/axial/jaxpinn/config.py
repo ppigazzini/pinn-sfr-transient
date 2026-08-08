@@ -166,6 +166,17 @@ class AxialTrainConfig:
     # which is the first reason M4 never moved.
     onset_head: bool = False
 
+    # Curvature pairs kept by the quasi-Newton stage. Explicit and shared, because
+    # it was neither: torch passed `history_size=50` while the JAX default path
+    # called `optax.lbfgs()` bare, whose default `memory_size` is **10**. Measured
+    # on an identical objective from identical weights, that one argument IS the
+    # whole torch/JAX gap -- torch at 10 degrades to JAX's curve (1.71x at 300
+    # iterations), and optax at 50 matches torch's to within 2%.
+    #
+    # 50 is not tuned; it is what torch was already using, kept so the fix moves
+    # JAX onto the published torch behaviour rather than moving both somewhere new.
+    lbfgs_history: int = 50
+
     # Two-encoder "modified MLP" [Wang, Teng & Perdikaris 2021]. Measured -16.1%,
     # and likewise not adopted -- see section 7.2.6.
     modified_mlp: bool = False

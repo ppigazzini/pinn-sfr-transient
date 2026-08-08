@@ -301,6 +301,7 @@ def test_the_two_backends_share_every_default():
         "fourier_bands",
         "level_set_input",
         "onset_head",
+        "lbfgs_history",
     ):
         assert getattr(j, name) == getattr(t, name), name
 
@@ -962,3 +963,38 @@ def test_tangency_onset_reports_nan_when_saturation_is_never_reached():
     t_on, z_on = onset_by_tangency(cold, zeta, t, 1169.0)
     assert np.isnan(t_on)
     assert np.isnan(z_on)
+
+
+def test_quasi_newton_memory_is_the_same_in_both_backends():
+    """The curvature memory must be one shared number, not two library defaults.
+
+    This is the defect the test exists for, not a hypothetical. torch passed
+    `history_size=50`; the JAX default path called `optax.lbfgs()` bare, whose
+    default `memory_size` is 10. Measured from identical weights on an identical
+    objective, that one argument was the ENTIRE cross-backend accuracy gap: torch
+    at memory 10 reproduces JAX's loss curve to 3% (1.71x worse at 300 iterations
+    than torch at 50), and optax at 50 reproduces torch's to 2%.
+
+    Asserted three ways, because each failed differently: the configs agree, the
+    knob is actually threaded into `optax.lbfgs` rather than left to its default,
+    and the shipped value is torch's old one so the fix moves JAX onto the
+    published behaviour instead of moving both backends somewhere new.
+    """
+    pytest.importorskip("torch")
+    import inspect
+
+    import optax
+
+    from pinn_sfr_transient.axial import pinn_torch as pt
+    from pinn_sfr_transient.axial.jaxpinn import training as j_train
+
+    assert pj.AxialTrainConfig().lbfgs_history == pt.AxialTrainConfig().lbfgs_history
+    assert pj.AxialTrainConfig().lbfgs_history == 50
+
+    # optax's own default is the trap; if it ever equals ours this test still
+    # passes for the right reason, so assert the call site, not the library.
+    src = inspect.getsource(j_train._lbfgs_polish)
+    assert "optax.lbfgs(memory_size=" in src, "optax.lbfgs must never be called bare"
+    assert inspect.signature(optax.lbfgs).parameters["memory_size"].default != 50, (
+        "optax's default changed; the comment explaining this fix needs updating"
+    )
