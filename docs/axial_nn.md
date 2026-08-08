@@ -1158,6 +1158,11 @@ statistics remain TBD; that is compute, not development.
 
 #### 7.3.2 Re-measured after the closure
 
+> **Superseded — §7.5.17.** This section's JAX column was measured with
+> `optax.lbfgs` at `memory_size=10` against torch's `history_size=50`. The
+> "1.168 with each framework's own L-BFGS" was comparing 50 curvature pairs
+> against 10, not two implementations. Re-runs are in flight.
+
 §7.3.1's parity table was marked superseded because it compared two models rather
 than two backends. With the knob sets now equal and tested, the comparison is
 valid again. Identical config, identical budget (3000 Adam + 300 L-BFGS),
@@ -1891,6 +1896,11 @@ reference, against the shipped default's 10% — with a worst-seed margin of
 **+34.6 K**, against the 20.5 K the whole "the front forms" claim rested on before
 this study.
 
+> **The JAX column here is superseded — §7.5.17.** It was measured at
+> `memory_size=10`, and the headline below is the artefact: more parameters need
+> more curvature pairs, so a fixed 10 degrades faster with capacity. The torch
+> column stands.
+
 **Both backends improve; torch improves faster, and the gap grows monotonically.**
 Across f32 → f512, torch gains **39%** on `T_s` and JAX **20%**, so `jax/torch`
 climbs **1.09× → 1.44×**. The architectures and residuals are identical — verified
@@ -1933,6 +1943,9 @@ configuration-bound conclusion in this document, after D67 and §5.3.
 Every study in `tools/axial_study.py` is now running or finished. `frontfrac` and
 `capacity-optimiser` had been committed with their designs fixed and never
 executed, which is the weak form of D67 — a study that exists only as an intention.
+
+> **The 27 JAX runs of this surface are superseded — §7.5.17** (`memory_size=10`).
+> The torch half stands, and the three conclusions below hold on torch alone.
 
 **§7.5.11, the grid — complete.** Adam ∈ {30, 300, 3000} × quasi-Newton ∈ {30, 300,
 3000} at f128, **all 54 runs: nine cells, three seeds, both backends**. Mean `T_s`,
@@ -2178,6 +2191,125 @@ of the level set in this model, after §7.5.6's sampling measure, the front netw
 interface parameterisation, and §7.5.13's input coordinate. Overlapping mechanisms
 are how one collects another's credit.
 
+#### 7.5.17 The cross-backend gap was one unset argument
+
+Every accuracy comparison between the two backends in this document is wrong, in
+one direction, for one reason. `jaxpinn/training.py` called
+
+```python
+opt = optax.lbfgs()
+```
+
+bare. `optax.lbfgs`'s default `memory_size` is **10**. The torch twin passed
+`history_size=50`, and so did both shared-implementation paths. Three of the four
+quasi-Newton paths kept 50 curvature pairs; **the JAX default path — the one every
+published JAX number was measured with — kept 10.**
+
+**The completed grid says the gap lives in that stage and nowhere else.** The
+`jax/torch` ratio on `T_s`, from the 54-run surface, is a pure function of the
+quasi-Newton axis and independent of Adam:
+
+| | qn30 | qn300 | qn3000 |
+|---|---|---|---|
+| adam30 | **1.01×** | 1.46× | 1.15× |
+| adam300 | **1.01×** | 1.46× | 1.16× |
+| adam3000 | 1.08× | 1.20× | 1.18× |
+
+At `qn30` the backends agree to 1%. The ansatz, the residuals, the initialisation,
+Adam, the sampling and the causal weighting are identical in every cell of that
+table, so they are all exonerated: the divergence appears only when L-BFGS does
+work. And the shape is what a memory difference predicts — zero when neither
+optimiser has filled ten pairs, maximal when torch has fifty and JAX has ten,
+partially recovering when extra iterations compensate for a worse Hessian model.
+
+**Isolated, the causation is direct.** Torch weights were copied into the JAX
+module, the same collocation points used, and the objective checked first: `torch =
+3.3506486090e+00`, `jax = 3.3506486090e+00`, **relative difference exactly 0** at
+the small size and 1.2e-16 — one ulp — at f512. Only the optimiser then varied:
+
+| optimiser | it100 | it300 | it1000 |
+|---|---|---|---|
+| torch `history=50` | 7.18e-03 | 1.50e-03 | 4.22e-04 |
+| **torch `history=10`** | 8.08e-03 | 2.57e-03 (1.71×) | 7.98e-04 (1.89×) |
+| **optax `memory=10`** (shipped) | 8.24e-03 | 2.50e-03 (1.66×) | 7.74e-04 (1.83×) |
+| **optax `memory=50`** | 6.22e-03 | 1.48e-03 (0.98×) | 4.32e-04 (1.02×) |
+
+**Torch at memory 10 becomes JAX** (within 3%) and **optax at memory 50 becomes
+torch** (within 2%). The two L-BFGS implementations are equivalent at equal memory.
+It is not the zoom line search, not `scale_init_precond`, not the framework.
+
+##### 7.5.17a The ladder, and why its first reading was wrong
+
+Swept further at f512 the memory kept paying — at **equal iterations**:
+
+| memory | loss @600 it | vs mem50 | ms/it | curvature MB |
+|---|---|---|---|---|
+| 50 | 6.4257e-04 | 1.000× | 195.3 | 67 |
+| 100 | 5.4730e-04 | 0.852× | 225.0 | 134 |
+| 200 | 4.7590e-04 | 0.741× | 282.1 | 267 |
+| 300 | 4.2898e-04 | **0.668×** | 339.6 | 401 |
+
+Monotone, no turning point, mem300 half again as good as mem50. On that table the
+obvious conclusion is "push higher".
+
+**It is the wrong axis.** More memory costs time — mem300 runs at 1.74× the ms/it
+of mem50 — so the question a default turns on is which is better for a fixed
+*compute* budget. Re-run at **equal wall-clock**, 200 s per arm, each running as
+many iterations as it fits:
+
+| memory | loss @50 s | @100 s | @200 s | iterations done |
+|---|---|---|---|---|
+| 50 | **1.4778e-03** | 7.5809e-04 | 3.9447e-04 | 1100 |
+| 100 | 1.4964e-03 | **7.1074e-04** | **3.5687e-04 (0.905×)** | 950 |
+| 200 | 2.2655e-03 | 8.2093e-04 | 3.9030e-04 (0.989×) | 750 |
+| 300 | 3.0198e-03 | 1.0229e-03 | 4.2898e-04 (**1.087×**) | 625 |
+
+**The ranking reverses.** mem300 goes from 1.50× *better* to 1.087× *worse*. The
+ladder turns at 100, and at short budgets the shipped 50 beats everything — a large
+memory starts hundreds of iterations behind and has to earn that back.
+
+The crossover also moves with the budget: mem200 runs 1.533× → 1.083× → 0.989×
+across the three marks, still improving. The shipped recipe spends **3000**
+quasi-Newton iterations, roughly 550 s, which is 2.75× the largest budget measured
+here — so where the optimum sits at the budget this model actually uses is **not
+measured**, and extrapolating the trend would repeat the error this subsection
+exists to record.
+
+##### 7.5.17b What was changed, and what it costs
+
+`lbfgs_history` is now an explicit knob in both configs, threaded into all four
+quasi-Newton paths, with a `--lbfgs-history` flag on `axial_study.py` so a sweep is
+a command rather than an edited default.
+
+**It stays at 50**, deliberately, though 100 is the best measured value at 200 s.
+Fifty is what torch has always used, so the fix lands JAX on the *published* torch
+behaviour instead of moving both backends somewhere new — and the ~9.5% that 100
+buys is small next to the 1.8× that 10 was costing.
+
+Timing, measured back to back at constant contention: JAX pays **11–13%** for
+50 over 10. Torch gets **5–9% faster**, which is not a paradox — the `O(m·n)`
+two-loop recursion is negligible beside a residual evaluation that differentiates
+the network, so a better search direction wins by making the strong-Wolfe line
+search accept `α = 1` more often, and that saves whole function evaluations.
+
+##### 7.5.17c What is now superseded
+
+**Every JAX accuracy number in this document was measured at memory 10.** The torch
+numbers are untouched — torch always passed 50. Specifically:
+
+| | status |
+|---|---|
+| §7.3.2, the parity claim | **superseded.** 1.168 with each framework's own L-BFGS was measuring 50 against 10, not two implementations |
+| §7.5.8, the capacity ladder's JAX column | **superseded**, including "the gap grows with capacity" — more parameters need more curvature pairs, so a fixed 10 degrades faster |
+| §7.5.10, `capacity-optimiser` | **partly explained.** `lbfgs-shared` improved JAX 1.27× because that path already passed 50; part of what looked like a better algorithm was more memory |
+| §7.5.11, the grid's JAX half | **superseded** — 27 of its 54 runs |
+| §7.5.12–§7.5.16, the JAX arms | **superseded**; being re-run |
+
+The re-runs use `--only "[jax]" --lbfgs-history 50`, into separate files, so each
+study keeps a **paired** memory-10/memory-50 comparison at the same arms and seeds.
+That pairing measures at training scale what the isolated bake-off could only
+measure on the loss.
+
 ### 7.6 Pseudo-time stepping
 
 Implemented (`pts_every`, `pts_dtau`, `pts_growth`), and **measured harmful** in
@@ -2224,6 +2356,7 @@ collocation bug. Both are findings a single backend could not have produced.
 | Is M4's one-cell criterion sound? | **doubtful, and unchecked** — §7.5.16. One cell is 0.405 K of `T_c`, i.e. relative `L2` of 0.0026 — 4× tighter than the 1% bar and only 1.6–2.3× above the *reference's own* error. This is D35's failure mode and the criterion has never been checked against the ruler |
 | Is Adam needed at all? | **never tested** — §7.5.11's floor is `adam30`, not `adam0`. "30 is as good as 3000" is measured; "Adam is unnecessary" is not |
 | Where the quasi-Newton axis ends | **not measured** — §7.5.11 is monotone over two decades with no interior optimum, and by §7.5.8's own rule an unterminated monotone trend is an extrapolation. Kiyani et al. run 30000 quasi-Newton iterations against this model's 3000 |
+| Where the memory optimum sits at the real budget | **not measured** — §7.5.17a. The iso-time optimum is 100 at 200 s, but the recipe spends ~550 s and the crossover moves with the budget |
 | The 1% bar on temperatures | **not met** — see §7.2.5 for the current figures |
 
 ## 8. What to do next

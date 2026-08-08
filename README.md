@@ -84,11 +84,21 @@ the fit worse, which is recorded rather than quietly dropped (§7.5.16). The sam
 arithmetic raises a question about the acceptance criterion itself: one cell is only
 1.6–2.3× above the *reference solver's* own error.
 
+**The two backends were never actually different.** PyTorch had been beating JAX in
+every experiment, by a margin that grew with model size — on identical residuals,
+which for deterministic mathematics should not happen. It was one unset argument:
+`optax.lbfgs()` defaults to keeping **10** curvature pairs and the PyTorch side was
+passing **50**. Copy one backend's weights into the other, verify the objective
+matches to the last bit, and vary only the optimiser: PyTorch at 10 reproduces
+JAX's curve, and JAX at 50 reproduces PyTorch's. Fixed, with the memory now an
+explicit shared setting — and **every JAX accuracy number in the documentation is
+superseded and being re-measured** (§7.5.17). The PyTorch numbers are unaffected.
+
 [`docs/axial_nn.md`](docs/axial_nn.md) **§0 is the status quo** — accuracy, what is
 settled, what is open, and **§0.6 says which configuration to use**. §5–§7 carry
 every measurement, including the negative results, which outnumber the positive
 ones, and including which of that document's own conclusions have been retracted —
-ten so far, seven during the study that produced §0 and three more since.
+eleven so far, and one of them is a whole column of this document's JAX results.
 
 **Every deviation from the manual is registered** in
 [`docs/axial_physics.md`](docs/axial_physics.md) §3 with its equation number. That
