@@ -45,17 +45,22 @@ sign rather than by its magnitude ([`docs/axial_physics.md`](docs/axial_physics.
 §10).
 
 The PINN trains, satisfies every hard constraint exactly, and **does not meet its
-1% accuracy bar** — 0.074 relative L2 on `T_s` and `T_c` at the shipped defaults,
-0.035 at the best known configuration. The boiling front forms, and it forms by
-clearing saturation by 20.5 K out of a 590 K range, which is why it is fragile.
-The reference's own error is 1.1–1.6e-3, so the bar sits 6–9× above the ruler and
-the failure is the network's.
+1% accuracy bar** — 0.028 relative L2 on `T_s` at the shipped defaults, 0.022 at the
+documented best. The reference's own error is 1.1–1.6e-3, so the bar sits 6–9× above
+the ruler and the failure is the network's.
+
+The boiling front forms on every seed of both backends, and it forms by clearing
+saturation by 24 K out of a 590 K range — a margin, not a mechanism, which is why
+it was fragile for so long. **The previous default cleared it by −2.3 K and
+therefore formed no front at all**, on any seed of either backend, while the
+documentation said otherwise. Both the horizon and the budget that caused that are
+fixed and pinned by tests.
 
 [`docs/axial_nn.md`](docs/axial_nn.md) **§0 is the status quo** — accuracy, what is
-settled, what is open, and why the best known configuration is not the default.
-§5–§7 carry every measurement, including the negative results, which outnumber the
-positive ones, and including which of that document's own conclusions have been
-retracted — three of them during the study that produced §0.
+settled, what is open, and **§0.6 says which configuration to use**. §5–§7 carry
+every measurement, including the negative results, which outnumber the positive
+ones, and including which of that document's own conclusions have been retracted —
+seven of them during the study that produced §0.
 
 **Every deviation from the manual is registered** in
 [`docs/axial_physics.md`](docs/axial_physics.md) §3 with its equation number. That
