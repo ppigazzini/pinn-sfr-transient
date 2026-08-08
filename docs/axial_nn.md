@@ -1928,63 +1928,130 @@ configuration-bound conclusion in this document, after D67 and §5.3.
 > after the budget sweep's monotone front, the backend gap's disappearance,
 > `ssbfgs`'s 0.1% variance, and the vestigial-front onset artefact of §7.5.7.
 
-#### 7.5.9–7.5.11 Three sweeps still running
+#### 7.5.9–7.5.11 The epoch surface, and two sweeps still running
 
-Committed, launched, **no numbers yet**. Each has a section number reserved so the
-code that produces it can cite where it will be written up, and each is listed here
-rather than left as a dangling reference.
+| § | study | state |
+|---|---|---|
+| 7.5.9 | `frontfrac` | **not started.** How much collocation should go to the front — the split between §7.5.6's measure and §7.5.8's capacity |
+| 7.5.10 | `capacity-optimiser` | **running, 1 of 4 arms.** f512 under each framework's own L-BFGS and under the shared one, both backends — the arm §7.5.8 says settles whether JAX's slower conversion of capacity into accuracy is `optax.lbfgs` |
+| 7.5.11 | `grid` | **43 of 54 runs.** Adam ∈ {30, 300, 3000} × quasi-Newton ∈ {30, 300, 3000}, f128, both backends, three seeds |
 
-| § | study | question | design |
+**§7.5.11, the grid.** Torch has three seeds in seven of nine cells, JAX two in all
+nine. Mean `T_s`, worst-seed margin, and whether the front formed on every seed:
+
+| | qn30 | qn300 | qn3000 |
 |---|---|---|---|
-| 7.5.9 | `frontfrac` | how much collocation should go to the front? | §7.5.6 showed level-set sampling alone fails and §7.5.8 showed capacity alone is not enough; this sweeps the split between them |
-| 7.5.10 | `capacity-optimiser` | is JAX's slower conversion of capacity into accuracy `optax.lbfgs`? | f512 under each framework's own L-BFGS and under the shared one, both backends — the one arm §7.5.8 says settles it |
-| 7.5.11 | `grid` | how many epochs does it actually need? | Adam ∈ {30, 300, 3000} crossed with quasi-Newton ∈ {30, 300, 3000} at f128, both backends, three seeds — 54 runs |
+| **adam30** [torch] | 0.2314 · **no front** | 0.0657 · +5.1 K | **0.0303** · +19.0 K |
+| **adam300** [torch] | 0.1906 · **no front** | 0.0603 · +6.3 K | 0.0314 · +17.5 K |
+| **adam3000** [torch] | 0.0707 · +0.7 K | 0.0459 · +4.1 K | 0.0309 · +14.4 K |
+| **adam30** [jax] | 0.2357 · **no front** | 0.0973 · +3.4 K | **0.0361** · +9.8 K |
+| **adam300** [jax] | 0.1992 · **no front** | 0.0896 · +4.0 K | 0.0373 · +9.5 K |
+| **adam3000** [jax] | 0.0798 · +2.4 K | 0.0562 · +3.7 K | 0.0358 · +5.3 K |
 
-Partial `grid` surface (**two seeds torch, one to two JAX** — reported as partial,
-not as a result): quasi-Newton is monotone across two decades on both backends,
-and once `qn3000` is set the Adam axis is nearly flat — 0.0306 / 0.0314 / 0.0309 on
-torch across two decades of Adam. So the surface does **not** show the interior
-Adam optimum at 300 that the current default rests on; it shows the quasi-Newton
-axis doing the work and the Adam axis barely mattering. `qn30` loses the front at
-`adam30` and `adam300`, and `adam3000` buys it back at 100× the iterations for a
-much worse `T_s` (0.0740 against 0.0306) — Adam can substitute for the quasi-Newton
-stage, it is simply a bad trade. Not stated more strongly than this because the
-third seed is still running and §7.5.8 lists five claims overturned for exactly
-that.
+Three readings, all holding on both backends:
+
+- **The quasi-Newton axis is monotone across two decades.** Every row improves
+  left to right, in `T_s` and in margin, on both backends. No interior optimum
+  anywhere in the range swept.
+- **Once `qn3000` is set, the Adam axis is flat.** Torch reads 0.0303 / 0.0314 /
+  0.0309 across two decades of Adam; JAX reads 0.0361 / 0.0373 / 0.0358. The
+  differences are inside the seed spread — `adam300/qn3000` alone ranges
+  0.0285–0.0344 over its three seeds. **So the axis the shipped default was tuned
+  on is the axis that matters least**, and `adam300` is not distinguishable from
+  `adam30` at ten times the cost.
+- **A starved quasi-Newton stage cannot be bought back with Adam.** `qn30` forms
+  no front at all at `adam30` or `adam300`. At `adam3000` it technically does —
+  but the worst seed sits at **+0.7 K** of margin, which is a front in name only,
+  for `T_s` 0.0707 against `adam30/qn3000`'s 0.0303 at comparable wall-clock.
+
+> **Corrected here.** At two seeds this cell read +8.2 K and was written up as Adam
+> substituting for the quasi-Newton stage at a bad exchange rate. The third seed
+> brought the worst margin to +0.7 K, so it is closer to *not* substituting.
+> `adam3000/qn30` was also the widest-spread cell in the surface. Same lesson as
+> §7.5.8's five: a two-seed cell is a hypothesis.
+
+The default's `300 Adam / 3000 L-BFGS` came from the `budget` study, which measured
+three points on a *diagonal* and ranked them on a **mean** — it predates
+`front_metrics` and could not see the front at all. This surface replaces it, and
+says the quasi-Newton budget is what to spend on.
 
 #### 7.5.12–7.5.14 Three embeddings, each tested in isolation
 
-The front is a near-discontinuity in `zeta` that *moves* in `t`, and §7.2.8 says the
-loss cannot see it because the loss is a mean. §7.5.8 showed the one lever that does
-move both the mean and the extremum is **capacity aimed at the front**. These three
-are different ways of aiming it, and each is a change to the *input coordinates*
-rather than to the loss:
+The front is a near-discontinuity in `ζ` that *moves* in `t`. §7.2.8 says the loss
+cannot see it, because the loss is a mean; §7.5.8 says the one lever that moves the
+mean and the extremum together is **capacity aimed at the front**. These three aim
+it differently, and each is a change to the network's *input coordinates* rather
+than to the loss:
 
-| § | knob | mechanism | control arm |
+| § | knob | mechanism | control |
 |---|---|---|---|
-| 7.5.12 | `fourier_scale_zeta` | one bandwidth for both inputs assumes isotropic frequency content; the solution's is not. Scale the `ζ` row of `B` only | `None` (= 1.0), reproduces the default exactly |
-| 7.5.13 | `level_set_input` | the front sits at a fixed value of `φ = (T_c − T_sat − ΔT_sup)/ΔT`, not at a fixed `ζ`. Feed `φ` and the front is *stationary* in that coordinate — a co-moving frame | `False` |
-| 7.5.14 | `fourier_bands` | one `fourier_scale` commits to one frequency; the bulk is smooth and the front is not, so any single band is wrong for one of them. Several blocks of `B` at different bandwidths | `()`, asserted bit-identical to the single-band basis |
+| 7.5.12 | `fourier_scale_zeta` | one bandwidth for both inputs assumes isotropic frequency content; the solution's is not. Scale the `ζ` row of `B` only | `None` (= 1.0) |
+| 7.5.13 | `level_set_input` | the front sits at fixed `φ = (T_c − T_sat − ΔT_sup)/ΔT`, not at fixed `ζ`. Feed `φ` and the front is *stationary* in that coordinate | `False` |
+| 7.5.14 | `fourier_bands` | one `fourier_scale` commits to one frequency; the bulk is smooth and the front is not. Several `B` blocks at different bandwidths, at a **fixed feature total** | `()` |
 
-Two things make these measurements mean something, and both are deliberate:
+Two deliberate design choices. **Each moves exactly one knob from the shipped
+default**, because §7.2.6's compound Fourier + modified-MLP arm failed and could not
+say which half failed — and `level_set_input` is a *third* distinct use of the level
+set, beside §7.5.6's sampling measure and the front network's interface, which is
+exactly the overlap that lets one mechanism take another's credit. And **the band
+study holds the feature total fixed**, so a gain is the trade of within-band
+resolution for across-band coverage paying off, not the extra capacity §7.5.8
+already credits.
 
-**Each moves exactly one knob from the shipped default.** Nine remedies in this
-document were argued soundly and refuted (§5.4, §7.2.1, §7.2.5, §7.2.6), and the
-combined Fourier + modified-MLP arm of §7.2.6 is the reason: a compound arm that
-fails cannot say which half failed. So these three are not run together, and
-`level_set_input` in particular is a *third* distinct use of the level set — the
-other two are the sampling measure (§7.5.6) and the front network's interface
-parameterisation — which is exactly the kind of overlap that lets one mechanism
-collect another's credit.
+> **Everything below is one seed per arm.** The seed spread on this model has
+> reached 12.5× (§7.1) and five claims in §7.5.8 were overturned by a third seed.
+> None of these numbers is a result yet; they are listed because the sweeps take a
+> further ~15 h and the shape is already informative.
 
-**`fourier_bands` holds the feature total fixed**, so each band gets `1/n` of the
-width. That makes it a trade of resolution *within* a band for coverage *across*
-bands at constant cost, not more capacity — §7.5.8 already established that more
-capacity helps, and an arm that supplied both would be uninterpretable.
+**All three control arms reproduce the default to every digit** — `T_s` 0.0255,
+`L_void` 0.2987, margin +30.8 K, from three separately launched processes. That
+checks two things at once: the runs are deterministic at a fixed thread count, and
+the three new knobs are genuinely inert when off, end to end rather than only in the
+unit test.
 
-Status: all three implemented in both backends with parity tests on the property
-(the scaled row, the band ratios, the bit-identical control), all three sweeps
-running at three seeds × two backends. **Results TBD.**
+**§7.5.12, anisotropic bandwidth** (one seed per arm, both backends):
+
+| `zeta_scale` | `T_s` torch | margin torch | `T_s` jax | margin jax |
+|---|---|---|---|---|
+| 1.0 (control) | 0.0255 | +30.8 K | 0.0368 | +16.4 K |
+| 2.0 | 0.0275 | +23.9 K | 0.0343 | +16.4 K |
+| 4.0 | 0.0239 | +19.3 K | 0.0339 | +15.9 K |
+| 8.0 | **0.0178** | **+40.4 K** | 0.0404 | **+36.7 K** |
+
+The backends **agree** that the margin jumps at 8.0 — by 1.3× on torch and 2.2× on
+JAX — and **disagree** on the mean there: torch improves 1.43×, JAX degrades 1.10×.
+One seed each, so the disagreement may be two draws rather than two behaviours.
+What it does establish is that 8.0 is not the top of this ladder: it was picked as
+an endpoint, not found as an optimum, and the trend runs through it.
+
+**§7.5.13, the level-set coordinate** (one seed, torch):
+
+| arm | `T_s` | `L_void` | margin | s/run |
+|---|---|---|---|---|
+| off (control) | 0.0255 | 0.2987 | +30.8 K | 2385 |
+| on | 0.0257 | 0.2881 | +29.6 K | **4646** |
+
+Inert, at **1.95× the cost** — the bootstrap pass doubles the network evaluations
+and the gradient has to flow through it. If this holds at three seeds it is the
+tenth remedy argued soundly and refuted by measurement, and the most expensive.
+
+**§7.5.14, multi-scale bands** (one seed, torch):
+
+| arm | `T_s` | `L_void` | % of reference | margin | ref margin |
+|---|---|---|---|---|---|
+| single (control) | 0.0255 | 0.2987 | 78% | +30.8 K | +69.2 K |
+| (1, 4) | **0.0171** | 0.2756 | 72% | +15.3 K | +69.2 K |
+| (1, 4, 16) | 0.0247 | **0.3632** | **95%** | **+69.1 K** | +69.2 K |
+
+The three-band arm reproduces the reference's peak saturation margin to **0.1 K**
+and its voided length to 95%, against the control's 78% — at the same feature count
+and the same wall-clock. The two-band arm gives the best `T_s` measured anywhere in
+this project while being *worse* on the front, which is §7.2.8's mean-versus-extremum
+split appearing yet again, now inside a single study.
+
+If the three-band number survives two more seeds and the JAX backend it is the
+largest single improvement in this document. It is currently **one seed on one
+backend**, which is precisely the sample that produced every retraction in §7.5.8.
 
 ### 7.6 Pseudo-time stepping
 
@@ -2008,6 +2075,31 @@ wall-clocks were contended and which were not, for exactly this reason.
 The one timing question that *is* open is a CPU one: the 2.4× JAX advantage in
 §7.3.2, which remains unattributed.
 
+#### 7.5.15 A defect the level-set arm exposed: JAX arms were scored under the defaults
+
+`tools/axial_study.py`'s `train_jax` discarded the config it had just trained under
+and called `pj.predict(model, p, zeta, t)` with none. `predict` falls back to
+`AxialTrainConfig()` when given no config, so **every JAX arm was trained under its
+arm's settings and scored under the shipped defaults**.
+
+The torch path cannot do this. Its model carries its own `cfg`, so the evaluator is
+structurally unable to disagree with the training. The JAX twin is functional and
+must be *handed* the config, which makes forgetting it a silent operation rather
+than an impossible one — a real asymmetry between the two backends, and one worth
+recording rather than quietly patching.
+
+It surfaced as a **crash** only because `level_set_input` changes an array *shape*:
+the model was built with three inputs and the evaluator fed it two. `predict` also
+reads `t_train_frac` through `horizon()`, and that changes a *value* — an arm
+sweeping it would have returned a plausible, wrong score in complete silence. That
+is D67's failure mode exactly, in a different place.
+
+**Scope, checked rather than assumed.** `predict` reads `t_train_frac`,
+`level_set_input`, `front_net` and `void_closure`. No completed JAX study varied any
+of them from the defaults, so **no published JAX number moves**. The one arm that
+did vary one is the arm that crashed. Fixed, with a test that asserts the *raise* —
+and says why, so nobody later loosens it to a tolerance.
+
 ### 7.8 What M7 did deliver
 
 The JAX twin itself (`axial/pinn_jax.py`), sharing the residual functions with the
@@ -2024,7 +2116,9 @@ collocation bug. Both are findings a single backend could not have produced.
 | Plan A, multiple seeds | **TBD** — one seed measured (§7.4) |
 | Backend parity, post-closure | **closed** — §7.3.2. The gap is the framework L-BFGS: 1.168 with each framework's own, **0.999** with one shared implementation, three seeds each. M7's criterion is met with `optimizer = "lbfgs-shared"` |
 | The 2.4× JAX speed advantage | **unattributed** — §7.3.2. `torch.compile` accounts for 1.06× of it and is not the answer |
-| Optimiser bake-off (SSBroyden / SSBFGS) | **TBD — not started**, and §7.3.4 makes it the highest-value remaining item |
+| Optimiser bake-off (SSBroyden / SSBFGS) | **TBD — not started**, and §7.3.4 and §7.5.11 together make it the highest-value remaining item: the quasi-Newton axis is the only one that moves the front, and it is the least examined |
+| How many epochs it needs | **43 of 54 runs** — §7.5.11. The quasi-Newton axis is monotone over two decades; the Adam axis is flat once `qn3000` is set |
+| Three front-aimed embeddings | **running, one seed each** — §7.5.12–§7.5.14. `fourier_bands=(1,4,16)` reproduces the reference margin to 0.1 K on one torch seed; `level_set_input` is inert at 1.95× the cost |
 | GPU timing | **not a goal** — §7.7. CPU is the target |
 | Pseudo-time stepping accuracy | measured harmful (§7.2.5); no further work planned |
 | M4 acceptance: onset within 0.5 s and one cell | **not met.** The front now forms, but onset is late. Under D-TH-3 the front is the level set `T_c = T_sat + ΔT_sup`, so this is bounded by `T_c` accuracy |
