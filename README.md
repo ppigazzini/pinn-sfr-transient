@@ -60,21 +60,29 @@ fixed and pinned by tests.
 quasi-Newton iterations — now complete, three seeds on both backends — finds that
 **the quasi-Newton budget is the axis that forms the front**: the Adam axis is flat over
 two decades once it is funded, which is awkward, because the Adam count is what the
-shipped default was tuned on ([`docs/axial_nn.md`](docs/axial_nn.md) §7.5.11). Four
-more sweeps are in flight at one or two seeds, so none of them has moved a number
-above — the most promising covers the solution's smooth bulk and its sharp front
-with several Fourier bands at once, and beats the control on both accuracy *and*
-front size on both backends (§7.5.12–§7.5.14).
+shipped default was tuned on ([`docs/axial_nn.md`](docs/axial_nn.md) §7.5.11). Adam
+alone never produces a boiling front at all. That is what the loss landscape
+predicts — the residual differentiates the network, so its curvature is badly
+conditioned and strongly off-diagonal, which a first-order method with a diagonal
+preconditioner cannot address — and it means **the axis that has never been pushed
+is the one that matters**: the quasi-Newton budget is monotone with no measured end
+at 3000 iterations, while the literature this recipe comes from runs 30000.
+
+Five more sweeps are in flight at one or two seeds, so none of them has moved a
+number above — the most promising covers the solution's smooth bulk and its sharp
+front with several Fourier bands at once, and beats the control on both accuracy
+*and* front size on both backends (§7.5.12–§7.5.14).
 
 **Why boiling onset never improved, after everything else did.** Onset was never in
 the objective — every knob was ranked on an average or a peak, and neither is a
 *position*. And it was read off by thresholding a field at its own maximum, where
 the profile is 11.6× flatter than at its steepest and one mesh cell is 0.4 K of
 coolant temperature; recovering a position from a value error there scales as a
-square root. Both are now addressed by solving the tangency conditions instead, and
-by training against them (§7.5.16). The same arithmetic raises a question about the
-acceptance criterion itself: one cell is only 1.6–2.3× above the *reference
-solver's* own error.
+square root. Reading it by tangency instead measures 3.75× better on a trained
+network; training against the same conditions is degenerate as formulated and made
+the fit worse, which is recorded rather than quietly dropped (§7.5.16). The same
+arithmetic raises a question about the acceptance criterion itself: one cell is only
+1.6–2.3× above the *reference solver's* own error.
 
 [`docs/axial_nn.md`](docs/axial_nn.md) **§0 is the status quo** — accuracy, what is
 settled, what is open, and **§0.6 says which configuration to use**. §5–§7 carry

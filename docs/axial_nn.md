@@ -2136,12 +2136,42 @@ read-off), that the readout finds a parabola vertex placed deliberately between 
 points, and that a field never reaching saturation returns `nan` rather than zero
 error.
 
-> **One caveat already visible.** At `f128`/300/600 the control arm scores **0.0
-> cells on both readouts** — at that configuration the threshold readout is not
-> broken and there is nothing for tangency to fix. The 1–6 cell errors were measured
-> at f256/f512. The conditioning argument is sound but may bind only in some regimes,
-> which is why the study sweeps the shipped default across three seeds and both
-> backends rather than a convenient configuration. **Results TBD.**
+**First measurement, one seed, `f128`/300/600 — the two halves split.**
+
+| | `T_s` | margin | onset height, threshold | onset height, **tangency** |
+|---|---|---|---|---|
+| head off | 0.0431 | +10.3 K | 0.0 cells | 0.0 cells |
+| head on | 0.0581 | +6.8 K | 12.0 cells | **3.2 cells** |
+
+**The readout works.** On the same field, tangency gives 3.2 cells against
+thresholding's 12.0 — 3.75× better, on a trained network rather than a synthetic
+perturbation. (The control scores 0.0 on both, so at *that* configuration the
+threshold readout is not broken and there is nothing to fix; the 1–6 cell errors
+were measured at f256/f512, and whether the conditioning argument binds at the
+shipped default is what the sweep is for.)
+
+**The head, as formulated, is wrong — and the numbers say how.** It learnt
+`ζ* = 0.8814` from an initialisation of `0.8808`: it moved by 0.0006 and never left
+where it started, while `t*` landed at 14.99 s against the reference's 10.70 s. The
+field got *worse* on both metrics at the same time.
+
+That is the degeneracy the residual's own docstring flags. **The two conditions do
+not pin the point to the field; they pin the field to the point.** Bending `T_c`
+until it is tangent to `T_boil` at the wrong place is cheaper than moving
+`(ζ*, t*)` to the right one. And the conditions carry no new information — they are
+a *consequence* of the PDE, not additional physics — so as residuals they can only
+distort. Two ways out:
+
+- **Detach the field in the head's update** and the head in the field's, so the
+  point chases the field and cannot deform it.
+- **Solve the tangency system exactly on the current field** each step, with no
+  trainable head — which makes onset a *readout* again, just a well-conditioned one.
+  That is the half already measured to work.
+
+The second is the stronger reading of the evidence, and it is deliberately **not**
+acted on yet: this is one seed, and ten claims in this document died at a later one.
+The study runs the shipped default at three seeds on both backends, and its control
+arm measures the readout independently of the head. **Results TBD.**
 
 Isolated, and here that matters more than usual: this is the **fourth** distinct use
 of the level set in this model, after §7.5.6's sampling measure, the front network's
@@ -2192,6 +2222,8 @@ collocation bug. Both are findings a single backend could not have produced.
 | How much collocation goes to the front | **running** — §7.5.9. The only free parameter in the measure fix, and 25% was picked rather than measured |
 | M4 acceptance: onset within 0.5 s and one cell | **not met, and now diagnosed** — §7.5.16. The *time* passes (0.25 s on 8 of 9 runs); the *height* is 1–6 cells out. Two causes: onset was never in the objective, and the threshold readout is `√` conditioned at a maximum (13 cells at the best published accuracy). Both addressed; results TBD |
 | Is M4's one-cell criterion sound? | **doubtful, and unchecked** — §7.5.16. One cell is 0.405 K of `T_c`, i.e. relative `L2` of 0.0026 — 4× tighter than the 1% bar and only 1.6–2.3× above the *reference's own* error. This is D35's failure mode and the criterion has never been checked against the ruler |
+| Is Adam needed at all? | **never tested** — §7.5.11's floor is `adam30`, not `adam0`. "30 is as good as 3000" is measured; "Adam is unnecessary" is not |
+| Where the quasi-Newton axis ends | **not measured** — §7.5.11 is monotone over two decades with no interior optimum, and by §7.5.8's own rule an unterminated monotone trend is an extrapolation. Kiyani et al. run 30000 quasi-Newton iterations against this model's 3000 |
 | The 1% bar on temperatures | **not met** — see §7.2.5 for the current figures |
 
 ## 8. What to do next
@@ -2200,21 +2232,48 @@ In order, and none of it is "add another method". Nine remedies have now been
 argued soundly and refuted by measurement (§5.4, §7.2.1, §7.2.5, §7.2.6); the tenth
 would not be different.
 
-1. **The optimiser bake-off** — §7.5. §7.3.4 measured that L-BFGS is not polishing
-   anything here: it is the step that forms the boiling front, and Adam alone leaves
-   `max α = 0` in both backends. That makes the quasi-Newton stage the most
-   load-bearing component of the recipe and the least examined. SSBroyden/SSBFGS
-   drop into the same slot with no new machinery.
-2. ~~**Explain the 21% on `T_s` and `T_c`.**~~ **Done — §7.3.2.** It is the L-BFGS
-   implementation: 1.168 with each framework's own, 0.999 with one shared. As with
-   every previous backend disagreement in this document, it was bug-shaped and it
-   was a bug — this time in a dependency rather than in this code.
-3. ~~**Converge the ruler in `α`, then re-derive the acceptance bar.**~~ **Done —
+1. **Spend on the quasi-Newton axis, and find out where it ends** — §7.5.11. The
+   completed 54-run surface says the Adam budget does no measurable work and the
+   quasi-Newton budget does all of it. Two cells of that statement are **not
+   measured** and both are cheap:
+
+   - **`adam = 0`.** The grid's floor is 30. "30 is as good as 3000" is measured;
+     "Adam is unnecessary" is not. A short warm start may still matter, because
+     quasi-Newton from a random init with an identity inverse-Hessian can take a bad
+     first step — and 30 iterations is cheap insurance. But it has never been tested.
+   - **`qn > 3000`.** The axis is **monotone with no interior optimum in the range
+     swept**, and this document's own rule — applied to the Fourier ladder in §7.5.8
+     — is that a monotone trend with no measured end is an untested extrapolation.
+     Kiyani et al. run Adam[1000] + SSBroyden[**30000**], a 1:30 ratio; this model
+     runs 300 + 3000 and the 300 is doing nothing.
+
+   If the axis keeps improving, the current `T_s` of 0.0216 is a **budget** limit
+   rather than the model's, and the 1% bar may be reachable by spending on the right
+   axis instead of by adding a method.
+
+   **Why quasi-Newton should dominate here is not mysterious.** Adam is built for
+   noisy stochastic gradients over large datasets; this loss is full-batch and
+   essentially deterministic, so Adam's variance machinery buys nothing and what
+   remains is a *diagonal* preconditioner. Meanwhile the residual contains
+   derivatives of the network, and differentiating amplifies exactly the
+   high-frequency content spectral bias suppresses — so the Hessian spectrum spans
+   orders of magnitude with strong off-diagonal structure, which a diagonal scaling
+   cannot touch. That is Rathore et al.'s loss-landscape argument, and it predicts
+   the surface measured here.
+
+2. **The optimiser bake-off** — §7.5. Follows directly: SSBroyden/SSBFGS drop into
+   the quasi-Newton slot with no new machinery, and §7.5.11 has just established
+   that this is the slot that matters.
+3. ~~**Explain the 21% on `T_s` and `T_c`.**~~ **Done, then reopened — §7.5.10.**
+   §7.3.2 found the L-BFGS implementation: 1.168 with each framework's own, 0.999
+   with one shared. At f512 the shared optimiser closes only part of it and 1.73×
+   remains, so that answer was configuration-bound like its own caveat warned.
+4. ~~**Converge the ruler in `α`, then re-derive the acceptance bar.**~~ **Done —
    §6.5.** The bar stands at 1% for the temperatures, where the ruler is 1.1–1.6e-3,
    and for `L_void`, where it is 0.57%. The pointwise `α` field cannot carry a 1%
    bar (3.15e-2) and is not scored on one. This removed an excuse rather than a
    problem: the temperature failure is 45–120× the ruler.
-4. **Plan A at more than one seed** — §7.4. Given §7.1's 12.5× seed spread, the
+5. **Plan A at more than one seed** — §7.4. Given §7.1's 12.5× seed spread, the
    single Plan A measurement is an observation and is labelled as one.
 
 Everything above is measurable with the code as it stands; none of it needs new
