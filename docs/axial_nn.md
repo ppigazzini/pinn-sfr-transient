@@ -1661,6 +1661,32 @@ this document was measured on the default, moving it invalidates all of them at
 once, and it costs 52% more wall-clock. The re-measurement is compute, not
 development, and it is the single highest-value thing left to do here.
 
+#### 7.5.4b `lbfgs_iters` means the same thing in both backends
+
+The two quasi-Newton loops are different constructs and the parity test asserts only
+that the *number* matches. JAX runs `jax.lax.fori_loop(0, n, …)` — exactly `n`,
+unconditionally. torch runs `torch.optim.LBFGS(max_iter=n)` with
+`tolerance_grad = 1e-12` and `tolerance_change = 1e-14`, which runs **at most** `n`.
+If torch stopped early the shared knob would not be a shared budget, and every
+cross-backend number measured at that setting would carry an uncontrolled variable.
+
+Measured:
+
+| requested | torch `n_iter` | `func_evals` |
+|---|---|---|
+| 300 | **300** | 371 (1.24 per iteration) |
+| 3000 | **3000** | 3496 (1.17 per iteration) |
+
+**torch runs the full count at both budgets** — the tolerances are never reached on
+this problem. The knob is honest, and §7.3.2, §7.5.8 and the combo study are clean.
+The ~1.2 evaluations per iteration is the strong-Wolfe line search behaving
+normally, so the wall-clocks in these tables reflect work rather than search
+thrashing.
+
+Pinned by `test_lbfgs_iters_means_the_same_thing_in_both_backends`, so a change in
+torch's defaults surfaces as a failing test rather than as a quiet asymmetry inside
+a parity table.
+
 #### 7.5.5 How many epochs does it need? — the axis nobody varied
 
 §5.3 closed this question in one sentence on two points and one seed, and nine
