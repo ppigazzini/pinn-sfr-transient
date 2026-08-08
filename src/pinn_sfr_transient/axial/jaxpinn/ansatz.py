@@ -15,6 +15,7 @@ import jax.numpy as jnp
 if TYPE_CHECKING:
     from pinn_sfr_transient.axial.config import AxialParams
 
+from pinn_sfr_transient.axial import sodium
 from pinn_sfr_transient.axial.jaxpinn.archs import (
     _ALPHA_GATE,
     _FRONT_MAX,
@@ -74,6 +75,32 @@ def front_position(model: AxialPinn, that: jax.Array) -> jax.Array:
     return _FRONT_MAX * jax.nn.sigmoid(model.front(that))
 
 
+def _raw(model: AxialPinn, x: jax.Array) -> jax.Array:
+    """Network output for a prepared input, with the embedding if one is set."""
+    return model.mlp(model.embed(x) if model.embed is not None else x)
+
+
+def _level_set_coord(
+    model: AxialPinn, p: AxialParams, zeta: jax.Array, that: jax.Array
+) -> jax.Array:
+    """Level-set coordinate from a bootstrap pass; the torch twin has the rationale.
+
+    ``phi = (T_c - T_sat - dT_sup) / dT``. ``T_c`` is the network's own output, so
+    the coordinate depends on what it feeds: evaluate once with ``phi = 0`` and use
+    the resulting ``T_c``.
+
+    **No ``stop_gradient``.** The residual needs the total derivative, which
+    includes the term through ``phi``; detaching would be cheaper and would
+    silently drop it.
+    """
+    dT = p.P_0 / (p.w_0 * p.c_c)
+    zero = jnp.zeros_like(zeta)
+    raw0 = _raw(model, jnp.concatenate([zeta, that, zero]))
+    temps0 = theta0(p, zeta)[:N_TEMPS] * _bounded_exp(that * raw0[:N_TEMPS])
+    T_boil = sodium.saturation_temperature(p.p_system) + p.dT_superheat
+    return (p.T_in + temps0[3:4] * dT - T_boil) / dT
+
+
 def normalised_state(
     model: AxialPinn,
     p: AxialParams,
@@ -95,12 +122,13 @@ def normalised_state(
     """
     cfg = cfg or AxialTrainConfig()
     use_front = bool(cfg.front_net and cfg.void_closure and model.front is not None)
-    x = (
-        jnp.concatenate([zeta, that, zeta - front_position(model, that)])
-        if use_front
-        else (jnp.concatenate([zeta, that]))
-    )
-    raw = model.mlp(model.embed(x) if model.embed is not None else x)
+    if use_front:
+        x = jnp.concatenate([zeta, that, zeta - front_position(model, that)])
+    elif cfg.level_set_input:
+        x = jnp.concatenate([zeta, that, _level_set_coord(model, p, zeta, that)])
+    else:
+        x = jnp.concatenate([zeta, that])
+    raw = _raw(model, x)
     base = theta0(p, zeta)
     temps = base[:N_TEMPS] * _bounded_exp(that * raw[:N_TEMPS])
     if cfg.void_closure:

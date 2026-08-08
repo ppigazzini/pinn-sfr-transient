@@ -157,6 +157,25 @@ class AxialTrainConfig:
     # `front_level_set` selects that; `front_net` selects the M8 front network,
     # which measured worse on every metric.
     front_level_set: bool = False
+    # Feed the level-set coordinate `phi = (T_c - T_sat - dT_sup) / dT` as a third
+    # network input (idea 3).
+    #
+    # Under D-TH-3 the front IS the level set `phi = 0`, and the solution is
+    # **smooth in phi** where it is kinked in `zeta`. Giving the network that
+    # coordinate removes the sharpness rather than resolving it, which is a
+    # different move from the Fourier basis and, on paper, a stronger one.
+    #
+    # `T_c` is the network's own output, so the input depends on the output. This is
+    # resolved with a **bootstrap pass**: evaluate once with `phi = 0`, take the
+    # resulting `T_c`, and evaluate again with the real `phi`. **Gradients flow
+    # through both passes**, so the total derivative the residual needs includes the
+    # term through `phi`. Detaching `phi` would be cheaper and would silently make
+    # `d/dz` wrong -- it would train, produce plausible numbers, and corrupt the
+    # residual, which is the exact defect class this project keeps finding.
+    #
+    # Costs two forward passes and a deeper graph. Distinct from `front_net`, which
+    # fed `zeta - z_f(t)` from a SEPARATE learned network and measured worse.
+    level_set_input: bool = False
 
     # Residual-based adaptive refinement [Wu et al. 2023]
     rar_every: int = 2000
@@ -192,6 +211,15 @@ class AxialTrainConfig:
     # conditioning on time structure that is not there. Values > 1 sharpen the basis
     # in space only.
     fourier_scale_zeta: float | None = None
+    # Multi-scale Fourier: several frozen `B` blocks at different bandwidths,
+    # concatenated (idea 2). `()` is a single band and reproduces the default.
+    #
+    # A single bandwidth has to be chosen, and the solution has structure at more
+    # than one: a smooth bulk and a near-discontinuous front. Bands of, say,
+    # (1, 4, 16) cover both without picking one. The feature count is split evenly
+    # across bands, so `fourier_features` still sets the total width and this trades
+    # resolution *within* a band for coverage *across* bands.
+    fourier_bands: tuple[float, ...] = ()
 
     # Two-encoder "modified MLP" [Wang, Teng & Perdikaris 2021], the architecture
     # jaxpi uses by default; multiplicative interactions carry the inputs to every

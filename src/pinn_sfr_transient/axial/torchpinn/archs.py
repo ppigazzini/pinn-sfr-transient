@@ -89,6 +89,8 @@ class FourierEmbedding(nn.Module):
         n_features: int,
         scale: float,
         scale_per_input: tuple[float, ...] | None = None,
+        *,
+        bands: tuple[float, ...] = (),
     ) -> None:
         super().__init__()
         s = torch.full((n_in, 1), float(scale), dtype=torch.float64)
@@ -97,7 +99,19 @@ class FourierEmbedding(nn.Module):
                 msg = f"scale_per_input has {len(scale_per_input)} entries, need {n_in}"
                 raise ValueError(msg)
             s = torch.tensor(scale_per_input, dtype=torch.float64).reshape(n_in, 1)
-        self.register_buffer("B", torch.randn(n_in, n_features, dtype=torch.float64) * s)
+        mult = tuple(bands) or (1.0,)
+        per = n_features // len(mult)
+        blocks = [
+            torch.randn(
+                n_in,
+                per if k < len(mult) - 1 else n_features - per * (len(mult) - 1),
+                dtype=torch.float64,
+            )
+            * s
+            * float(b)
+            for k, b in enumerate(mult)
+        ]
+        self.register_buffer("B", torch.cat(blocks, dim=1))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         proj = 2.0 * np.pi * (x @ self.B)

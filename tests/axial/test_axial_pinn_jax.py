@@ -298,6 +298,8 @@ def test_the_two_backends_share_every_default():
         "fourier_features",
         "fourier_scale",
         "fourier_scale_zeta",
+        "fourier_bands",
+        "level_set_input",
     ):
         assert getattr(j, name) == getattr(t, name), name
 
@@ -766,3 +768,70 @@ def test_anisotropic_fourier_agrees_across_backends():
             j = jax_vec(pj.AxialTrainConfig(fourier_scale=3.0, fourier_scale_zeta=z), n_in)
             t = torch_vec(pt.AxialTrainConfig(fourier_scale=3.0, fourier_scale_zeta=z), n_in)
             assert j == t, (n_in, z, j, t)
+
+
+def test_multi_scale_fourier_splits_the_features_into_bands():
+    """`fourier_bands` must give each block its own bandwidth, same total width.
+
+    A single `fourier_scale` picks one frequency and the solution has structure at
+    more than one — a smooth bulk and a near-discontinuous front. Assert the
+    property (per-block standard deviations in the declared ratio, and `n_features`
+    unchanged) rather than that the knob is plumbed: a band vector that is read and
+    then collapsed to one scale looks identical to one that works.
+    """
+    torch = pytest.importorskip("torch")
+
+    from pinn_sfr_transient.axial import pinn_torch as pt
+
+    p = AxialParams()
+    common = {"width": 8, "depth": 2, "fourier_features": 90, "fourier_scale": 2.0}
+    torch.manual_seed(0)
+    banded = pt.AxialPinn(p, pt.AxialTrainConfig(**common, fourier_bands=(1.0, 4.0, 16.0)))
+    b = banded.embed.B.detach().numpy()
+    # Total width is set by `fourier_features`, not by the number of bands -- this
+    # trades resolution within a band for coverage across bands, at fixed cost.
+    assert b.shape == (2, 90)
+    sds = [float(np.std(b[:, k * 30 : (k + 1) * 30])) for k in range(3)]
+    assert sds[1] / sds[0] == pytest.approx(4.0, rel=0.35), sds
+    assert sds[2] / sds[1] == pytest.approx(4.0, rel=0.35), sds
+
+
+def test_multi_scale_fourier_agrees_across_backends():
+    """Same bands, same block widths, same ratios in torch and JAX.
+
+    The draws differ (different PRNGs), so compare the *structure*: identical shape
+    and per-block bandwidth ratios. AGENTS.md: a feature in one backend and not the
+    other forks the model silently.
+    """
+    pytest.importorskip("torch")
+    import jax
+
+    from pinn_sfr_transient.axial.jaxpinn.archs import FourierEmbedding as JaxEmbed
+    from pinn_sfr_transient.axial.torchpinn.archs import FourierEmbedding as TorchEmbed
+
+    bands = (1.0, 4.0, 16.0)
+    t_b = TorchEmbed(2, 90, 2.0, None, bands=bands).B.detach().numpy()
+    j_b = np.asarray(JaxEmbed(2, 90, 2.0, jax.random.key(0), None, bands=bands).B)
+    assert t_b.shape == j_b.shape == (2, 90)
+    for k in range(3):
+        sl = slice(k * 30, (k + 1) * 30)
+        assert float(np.std(j_b[:, sl])) / float(np.std(t_b[:, sl])) == pytest.approx(
+            1.0, rel=0.4
+        ), k
+
+
+def test_bands_default_to_the_single_band_basis():
+    """`()` must reproduce the isotropic embedding exactly, not approximately.
+
+    New physics goes in off by default (AGENTS.md), and "off" has to mean the same
+    numbers, or every published measurement moves the day the knob lands.
+    """
+    torch = pytest.importorskip("torch")
+
+    from pinn_sfr_transient.axial.torchpinn.archs import FourierEmbedding
+
+    torch.manual_seed(0)
+    plain = FourierEmbedding(2, 64, 3.0, None).B.detach().numpy()
+    torch.manual_seed(0)
+    one = FourierEmbedding(2, 64, 3.0, None, bands=(1.0,)).B.detach().numpy()
+    np.testing.assert_array_equal(plain, one)

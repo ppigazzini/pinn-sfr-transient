@@ -1928,6 +1928,58 @@ configuration-bound conclusion in this document, after D67 and §5.3.
 > after the budget sweep's monotone front, the backend gap's disappearance,
 > `ssbfgs`'s 0.1% variance, and the vestigial-front onset artefact of §7.5.7.
 
+#### 7.5.9–7.5.11 Three sweeps still running
+
+Committed, launched, **no numbers yet**. Each has a section number reserved so the
+code that produces it can cite where it will be written up, and each is listed here
+rather than left as a dangling reference.
+
+| § | study | question | design |
+|---|---|---|---|
+| 7.5.9 | `frontfrac` | how much collocation should go to the front? | §7.5.6 showed level-set sampling alone fails and §7.5.8 showed capacity alone is not enough; this sweeps the split between them |
+| 7.5.10 | `capacity-optimiser` | is JAX's slower conversion of capacity into accuracy `optax.lbfgs`? | f512 under each framework's own L-BFGS and under the shared one, both backends — the one arm §7.5.8 says settles it |
+| 7.5.11 | `grid` | how many epochs does it actually need? | Adam ∈ {30, 300, 3000} crossed with quasi-Newton ∈ {30, 300, 3000} at f128, both backends, three seeds — 54 runs |
+
+Partial `grid` surface (torch, **one seed** — reported as partial, not as a result):
+quasi-Newton is monotone across two decades while Adam has an interior optimum at
+300, which is what makes `adam300/qn3000` the best cell and is the evidence behind
+the current default. It is one seed on one backend and §7.5.8's five overturned
+claims are the reason it is not stated more strongly than that.
+
+#### 7.5.12–7.5.14 Three embeddings, each tested in isolation
+
+The front is a near-discontinuity in `zeta` that *moves* in `t`, and §7.2.8 says the
+loss cannot see it because the loss is a mean. §7.5.8 showed the one lever that does
+move both the mean and the extremum is **capacity aimed at the front**. These three
+are different ways of aiming it, and each is a change to the *input coordinates*
+rather than to the loss:
+
+| § | knob | mechanism | control arm |
+|---|---|---|---|
+| 7.5.12 | `fourier_scale_zeta` | one bandwidth for both inputs assumes isotropic frequency content; the solution's is not. Scale the `ζ` row of `B` only | `None` (= 1.0), reproduces the default exactly |
+| 7.5.13 | `level_set_input` | the front sits at a fixed value of `φ = (T_c − T_sat − ΔT_sup)/ΔT`, not at a fixed `ζ`. Feed `φ` and the front is *stationary* in that coordinate — a co-moving frame | `False` |
+| 7.5.14 | `fourier_bands` | one `fourier_scale` commits to one frequency; the bulk is smooth and the front is not, so any single band is wrong for one of them. Several blocks of `B` at different bandwidths | `()`, asserted bit-identical to the single-band basis |
+
+Two things make these measurements mean something, and both are deliberate:
+
+**Each moves exactly one knob from the shipped default.** Nine remedies in this
+document were argued soundly and refuted (§5.4, §7.2.1, §7.2.5, §7.2.6), and the
+combined Fourier + modified-MLP arm of §7.2.6 is the reason: a compound arm that
+fails cannot say which half failed. So these three are not run together, and
+`level_set_input` in particular is a *third* distinct use of the level set — the
+other two are the sampling measure (§7.5.6) and the front network's interface
+parameterisation — which is exactly the kind of overlap that lets one mechanism
+collect another's credit.
+
+**`fourier_bands` holds the feature total fixed**, so each band gets `1/n` of the
+width. That makes it a trade of resolution *within* a band for coverage *across*
+bands at constant cost, not more capacity — §7.5.8 already established that more
+capacity helps, and an arm that supplied both would be uninterpretable.
+
+Status: all three implemented in both backends with parity tests on the property
+(the scaled row, the band ratios, the bit-identical control), all three sweeps
+running at three seeds × two backends. **Results TBD.**
+
 ### 7.6 Pseudo-time stepping
 
 Implemented (`pts_every`, `pts_dtau`, `pts_growth`), and **measured harmful** in
