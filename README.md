@@ -57,8 +57,8 @@ documentation said otherwise. Both the horizon and the budget that caused that a
 fixed and pinned by tests.
 
 **What the current round is measuring.** A 54-run sweep of Adam against
-quasi-Newton iterations, now complete on PyTorch at three seeds, finds that **the
-quasi-Newton budget is the axis that forms the front**: the Adam axis is flat over
+quasi-Newton iterations — now complete, three seeds on both backends — finds that
+**the quasi-Newton budget is the axis that forms the front**: the Adam axis is flat over
 two decades once it is funded, which is awkward, because the Adam count is what the
 shipped default was tuned on ([`docs/axial_nn.md`](docs/axial_nn.md) §7.5.11). Four
 more sweeps are in flight at one or two seeds, so none of them has moved a number
