@@ -1726,18 +1726,48 @@ between minima rather than converging slowly, so more iterations will not fix th
 is wrong on both clauses: the mean improves 47% with more iterations, and the
 non-monotonicity is not wandering but two quantities moving in opposite directions.
 
-#### 7.5.6 Level-set collocation — fixing the measure
+#### 7.5.6 Level-set collocation — the measure fix, and why it is not enough alone
 
-The fix that §7.5.5 and Annex C imply: sample collocation where the network's own
-`T_c` is nearest saturation, so the objective stops under-weighting the few percent
-of the domain the front occupies. Importance sampling by the front indicator rather
-than by residual magnitude — which is what RAR does and what cannot work here, since
-the residual is small everywhere once the void is closed algebraically.
+The fix §7.5.5 and Annex C imply: sample collocation where the network's own `T_c`
+is nearest saturation, so the objective stops under-weighting the few percent of the
+domain the front occupies. Importance sampling by the front indicator rather than by
+residual magnitude — which is what RAR does, and what cannot work here, since the
+residual is small everywhere once the void is closed algebraically.
 
-Run at 8k/500, the budget that loses the front entirely, so the question is direct:
-does front-aware sampling let a large budget keep the front?
+Run at **8k/500**, the budget that loses the front entirely (§7.5.5), so the question
+is direct. Three seeds, both backends,
+`uv run python tools/axial_study.py levelset`:
 
-**Measurement in progress** — `uv run python tools/axial_study.py levelset`.
+| 8k/500 arm | `T_s` | `L_void` | `max α` | worst margin | front |
+|---|---|---|---|---|---|
+| plain, torch | **0.0405** | 0.0463 | 0.713 | −1.8 K | **no seed** |
+| +levelset, torch | 0.0541 | 0.0424 | 0.821 | −1.8 K | **no seed** |
+| **+levelset+f128, torch** | 0.0483 | **0.1610** | **0.998** | **+3.3 K** | **every seed** |
+| plain, jax | 0.0497 | 0.0410 | 0.692 | −2.4 K | **no seed** |
+| +levelset, jax | 0.0598 | 0.0198 | 0.582 | −2.5 K | **no seed** |
+| **+levelset+f128, jax** | 0.0498 | **0.1673** | **0.989** | **+2.4 K** | **every seed** |
+
+**The measure fix alone fails, on both backends.** The margin stays negative, and
+the mean gets *worse* — 0.0405 → 0.0541 on torch, 0.0497 → 0.0598 on JAX. Diverting
+a quarter of the collocation to a peak the network cannot represent costs the bulk
+and buys nothing.
+
+**Measure plus capacity works, on both backends.** The margin turns positive,
+`L_void` goes up 3.5×, `max α` reaches ~0.99. Neither ingredient is sufficient by
+itself and both are necessary at this budget.
+
+That is the two-constraint picture of §0.3 at its sharpest, and it is a stronger
+statement than either study alone could make: **the measure decides where the loss
+puts its weight; capacity decides whether there is anything there to find.** Point
+the loss at an unrepresentable peak and you lose twice.
+
+**What it does not show.** Even the working arm — `T_s` 0.0483, `L_void` 0.1610 — is
+well behind the best-known route of §7.5.8 (300/3000 + f512: `T_s` 0.0216, `L_void`
+0.3012). So front-aware sampling **validates the diagnosis without being the best
+path**: rescuing a large Adam budget is worse than not spending one. `front_frac`
+was fixed at 0.25 throughout and has never been swept
+(`tools/axial_study.py frontfrac`), so the arm is a demonstration of the mechanism
+rather than a tuned configuration.
 
 #### 7.5.7 M4, scored for the first time
 
