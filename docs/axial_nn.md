@@ -1294,6 +1294,12 @@ loss than `optax.lbfgs` does**:
 Both benefit; torch benefits more, and the difference between 2.10× and 1.63× is
 the entire 21%.
 
+> **Read this as "at zero iterations", not "only this stage can".** §7.5.11's grid
+> measures the stage at 30, 300 and 3000, and `adam3000/qn30` **does** form a front
+> (+8.2 K). Thirty quasi-Newton iterations suffice when Adam is large. What is true
+> is an exchange rate, not an exclusivity: at matched totals a quasi-Newton
+> iteration is worth roughly an order of magnitude more than an Adam one.
+
 **The larger finding is not about parity at all.** With the polish off, `L_void`
 is 0.0000 and `max α` is 0.0000 in **both** backends, on every seed. Three
 thousand Adam iterations never form the boiling front; three hundred L-BFGS
