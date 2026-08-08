@@ -98,6 +98,17 @@ four times: D38, D39, the budget sweep's "monotonic" front degradation, and §7.
   `OMP_NUM_THREADS` defaults to every core, and thread count changes float
   reduction order — so it changes answers, not just timings. Concurrency at a
   *fixed* thread count does not (measured: identical digits, 1.48x the time).
+- **Measure on the axis the decision is made on.** A curvature-memory sweep was
+  monotone at equal *iterations* — 300 pairs looked 1.50x better than 50, with no
+  turning point. At equal *wall-clock* the same arms reverse: 300 is 1.09x worse
+  and the optimum is 100. A ladder measured on the wrong x-axis is not a weak
+  result, it is an inverted one.
+- **Two implementations of the same algorithm must be compared at equal
+  hyper-parameters, and that has to be checked rather than assumed.** `optax.lbfgs`
+  defaults to `memory_size=10`; `torch.optim.LBFGS` was passed `history_size=50`.
+  That single unset argument was the entire cross-backend accuracy gap, and it was
+  read as a framework difference for four milestones. When two backends disagree,
+  diff the *arguments* before theorising about the libraries.
 - **An ablation is a statement about the formulation it was run on.** Change the
   formulation and every negative result on the shelf is provisional again (D59).
 
