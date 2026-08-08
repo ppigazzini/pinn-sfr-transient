@@ -58,6 +58,9 @@ SEEDS = (0, 1, 2)
 # four are `64 x 64`, so cost is roughly linear in `n` once `2n >> 64`: f1024 is
 # about 3x f256. That is the price of finding the end of the ladder.
 MARGIN_FEATURES = (32, 64, 128, 256, 512, 1024)
+# Share of collocation placed on the saturation level set. 0.0 is the control:
+# level-set sampling off, so the arm reduces to plain training at that budget.
+FRONT_FRACS = (0.0, 0.05, 0.10, 0.25, 0.50)
 # Every study sweeps both backends. Two independent implementations agreeing is
 # the strongest check this project has, and it is the reason the JAX twin exists
 # (`docs/axial_nn.md` section 4) -- a result measured on one backend is a result
@@ -750,6 +753,52 @@ def study_levelset(out: Path) -> None:
         )
 
 
+def study_frontfrac(out: Path) -> None:
+    """Sweep how much collocation goes to the front -- section 7.5.9.
+
+    Section 7.5.6 showed level-set sampling does what Annex C predicts: at a budget
+    that loses the front entirely, diverting collocation to the saturation level set
+    brings `max alpha` back from 0.735 to 0.998 and triples `L_void` -- and costs the
+    mean, 0.0365 to 0.0482 on `T_s`.
+
+    That is the measure controlling the trade, which is the mechanism. But 25% was
+    picked as a plausible number, not measured, and it is the only free parameter in
+    the fix. If the trade is smooth in `front_frac` there is a setting that buys the
+    front for less mean than 25% does; if it is not, the fix is blunter than the
+    diagnosis suggests and that is worth knowing too.
+
+    Judged on both quantities at once: `margin_K` at every seed AND `T_s`. An arm
+    that wins the front by giving up the mean is the `A + fourier` trade of section
+    7.5.4 again, not progress.
+    """
+    traj = ruler()
+    base = {"adam_iters": 8000, "lbfgs_iters": 500, "front_level_set": True}
+    rows = run_all(
+        traj,
+        [
+            (
+                f"front_frac={ff} [{backend}]",
+                {"backend": backend, "seed": seed, "front_frac": ff, **base},
+            )
+            for seed in SEEDS
+            for backend in BACKENDS
+            for ff in FRONT_FRACS
+        ],
+        out,
+    )
+    mean_table(rows)
+    print("\nthe trade, per arm -- does a smaller share buy the front for less mean?")
+    for label in dict.fromkeys(r["arm"] for r in rows):
+        v = [r for r in rows if r["arm"] == label]
+        mg = [r["margin_K"] for r in v]
+        ts = [r["T_s"] for r in v]
+        lv = [r["L_void_max"] for r in v]
+        print(
+            f"  {label:28s} T_s {sum(ts) / len(ts):.4f}   L_void {sum(lv) / len(lv):.4f}   "
+            f"margin min {min(mg):+6.1f} K"
+        )
+
+
 STUDIES = {
     "ruler": study_ruler,
     "horizon": study_horizon,
@@ -764,6 +813,7 @@ STUDIES = {
     "margin": study_margin,
     "scaling": study_scaling,
     "levelset": study_levelset,
+    "frontfrac": study_frontfrac,
 }
 
 
