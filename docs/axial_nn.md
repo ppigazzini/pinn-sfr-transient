@@ -1642,6 +1642,58 @@ this document was measured on the default, moving it invalidates all of them at
 once, and it costs 52% more wall-clock. The re-measurement is compute, not
 development, and it is the single highest-value thing left to do here.
 
+#### 7.5.5 How many epochs does it need? — the axis nobody varied
+
+§5.3 closed this question in one sentence on two points and one seed, and nine
+sections then ran at a single fixed budget. Reopened properly: a ladder at a fixed
+10:1 Adam-to-quasi-Newton ratio, three seeds, both backends,
+`uv run python tools/axial_study.py scaling`.
+
+| budget | `T_s` torch | range | margin min | front | `T_s` jax | margin min | front |
+|---|---|---|---|---|---|---|---|
+| **3k/300** (published) | 0.0765 | .0697–.0808 | **+12.5 K** | **every seed** | 0.0863 | **+9.5 K** | **every seed** |
+| 8k/500 (shipped) | **0.0405** | .0364–.0488 | −1.8 K | **lost** | 0.0497 | −2.4 K | **lost** |
+| 16k/1000 | 0.0438 | .0410–.0468 | −1.8 K | **lost** | **0.0432** | −2.1 K | **lost** |
+
+**Two answers, and they point opposite ways.**
+
+*The mean improves and then stops.* 3k → 8k is a **47% gain on torch** and 42% on
+JAX — the single largest budget effect measured here. 8k → 16k then **reverses on
+torch** (0.0405 → 0.0438) and adds 13% on JAX. So the mean saturates somewhere
+between 8k and 16k, and the exact point is backend-dependent.
+
+*The front is destroyed and never recovers.* Both large budgets lose it on at least
+one seed, on **both backends**, with negative worst-seed margins. **The published
+3k/300 budget is the only rung in this ladder that forms a front on every seed —
+and it has the worst mean of the three.**
+
+**So "more epochs make it worse" is half right and the important half is not the
+usual one.** Convergence does not degrade: the loss keeps falling and the
+temperature scores improve until they plateau. What degrades is a *derived
+threshold quantity* the loss never asked about. This is §7.2.8 measured on the one
+axis nobody had varied, and it is the sharpest statement of Annex C's measure bug in
+the document: **the objective is a mean over the domain, the front is a few percent
+of that domain, so more optimisation converges more precisely to a minimiser whose
+peak is wrong.**
+
+It also settles §5.3's claim. *"Non-monotonic in budget means the optimiser wanders
+between minima rather than converging slowly, so more iterations will not fix this"*
+is wrong on both clauses: the mean improves 47% with more iterations, and the
+non-monotonicity is not wandering but two quantities moving in opposite directions.
+
+#### 7.5.6 Level-set collocation — fixing the measure
+
+The fix that §7.5.5 and Annex C imply: sample collocation where the network's own
+`T_c` is nearest saturation, so the objective stops under-weighting the few percent
+of the domain the front occupies. Importance sampling by the front indicator rather
+than by residual magnitude — which is what RAR does and what cannot work here, since
+the residual is small everywhere once the void is closed algebraically.
+
+Run at 8k/500, the budget that loses the front entirely, so the question is direct:
+does front-aware sampling let a large budget keep the front?
+
+**Measurement in progress** — `uv run python tools/axial_study.py levelset`.
+
 #### 7.5.7 M4, scored for the first time
 
 M4's acceptance is *onset within 0.5 s and one cell* — 0.5 s and 0.00625 at the
