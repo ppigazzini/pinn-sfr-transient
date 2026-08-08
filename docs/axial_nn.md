@@ -1685,17 +1685,20 @@ Nothing had ever aimed at the margin. This does: `fourier_features` swept 32 →
 Success is `margin_K` at **every** seed, not the mean — a margin large on average
 and negative once is the `A + fourier` failure of §7.5.4.
 
-| | `T_s` torch | `T_s` jax | **jax/torch** | `L_void` torch | margin min torch |
-|---|---|---|---|---|---|
-| f32 | 0.0353 | 0.0386 | 1.09× | 0.2270 | +7.6 K |
-| f64 | 0.0340 | 0.0375 | 1.10× | 0.2397 | +13.8 K |
-| f128 | 0.0314 | 0.0363 | 1.16× | 0.2424 | +17.5 K |
-| **f256** | **0.0282** | 0.0358 | **1.27×** | **0.2834** | **+24.4 K** |
-| shipped default | 0.0434 | 0.0497 | 1.15× | 0.0367 | **−1.1 K** |
-| reference | — | — | — | 0.3812 | — |
+| | `T_s` torch | range | `T_s` jax | **jax/torch** | `L_void` torch | margin min torch |
+|---|---|---|---|---|---|---|
+| f32 | 0.0353 | .0315–.0380 | 0.0386 | 1.09× | 0.2270 | +7.6 K |
+| f64 | 0.0340 | .0300–.0369 | 0.0375 | 1.10× | 0.2397 | +13.8 K |
+| f128 | 0.0314 | .0285–.0344 | 0.0363 | 1.16× | 0.2424 | +17.5 K |
+| f256 | 0.0282 | .0251–.0301 | 0.0358 | 1.27× | 0.2834 | +24.4 K |
+| **f512** | **0.0216** | **.0148–.0253** | 0.0310 | **1.44×** | **0.3012** | **+34.6 K** |
+| shipped default | 0.0434 | — | 0.0497 | 1.15× | 0.0367 | **−1.1 K** |
+| reference | — | — | — | — | 0.3812 | — |
 
-Three seeds per cell, both backends. Every arm has a **positive margin on every
-seed**; the shipped default has a negative one on every seed.
+Three seeds per cell, both backends. Every arm holds a **positive margin on every
+seed**; the shipped default holds a negative one on every seed. `f1024` is running
+and is one seed per backend so far — not comparable to a three-seed mean and not
+tabulated.
 
 **Monotone in `T_s`, in `L_void` and in margin-minimum on both backends, positive
 on every seed of every arm.** Targeting the margin raised it and improved the mean
@@ -1703,17 +1706,29 @@ at the same time — the only lever in this document that moves the average and 
 extremum the same way, which is what §7.2.8 predicts of a change that relieves
 spectral bias.
 
-**But the two backends diverge, and the divergence grows with capacity.** Across
-the ladder torch gains **20%** on `T_s` (0.0353 → 0.0282) and JAX gains **7%**
-(0.0386 → 0.0358), so `jax/torch` climbs monotonically **1.09× → 1.27×**. JAX is
-flat from f128 to f256 (0.0363 → 0.0358). The architectures and residuals are
-identical — verified to 1e-14 (§7.3.2) — so something in the JAX stack does not
-convert capacity into accuracy.
+`f512` on torch reaches `T_s` **0.0216** and `L_void` **0.3012** — 79% of the
+reference, against the shipped default's 10% — with a worst-seed margin of
+**+34.6 K**, against the 20.5 K the whole "the front forms" claim rested on before
+this study.
 
-Seed 0 at **f512** sharpens it further: torch **0.0148**, JAX 0.0336, a ratio of
-**2.27×**, with torch reaching `L_void` 0.3297 (**86.5% of the reference**) and a
-margin of **+50.4 K**. `T_s = 0.0148` puts the 1% bar **1.5×** away, against 4.3× at
-the shipped default. One seed; f512 and f1024 are still running.
+**Both backends improve; torch improves faster, and the gap grows monotonically.**
+Across f32 → f512, torch gains **39%** on `T_s` and JAX **20%**, so `jax/torch`
+climbs **1.09× → 1.44×**. The architectures and residuals are identical — verified
+to 1e-14 (§7.3.2) — so something in the JAX stack converts capacity into accuracy
+less efficiently.
+
+**Variance grows with capacity, and it is the more useful signal.** The `T_s` seed
+range spans 1.20× at f256 and **1.71× at f512** (0.0148–0.0253). The best f512 seed
+reaches 0.0148 — the 1% bar 1.5× away — and the worst 0.0253. So the honest metric
+for this ladder is the **worst** seed, exactly as the margin already is: by that
+measure f512 gives 0.0253 against f256's 0.0301, which is a real but much smaller
+step than the means suggest.
+
+> An earlier revision of this section reported "JAX has saturated at ~f128" from the
+> f256 rung. JAX then gained a further 14% at f512. It was flat over **one** rung,
+> which is not saturation — the sixth partial-ladder claim in this study to need
+> revising within the hour. The rule now applied: report a ladder when its rungs are
+> complete, means with ranges, and let the interpretation follow the table.
 
 **The obvious suspect is the optimiser, and §7.3.2 already implicates it.** The
 framework L-BFGS was the *entire* backend gap at the shipped configuration — 1.168
