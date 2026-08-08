@@ -44,13 +44,18 @@ class FourierEmbedding(eqx.Module):
 
     B: jax.Array
 
-    def __init__(
+    # PLR0913/PLR0917: five knobs plus JAX's explicit PRNG key. The torch twin
+    # carries exactly the same five and passes; bundling them into a spec object
+    # here would fork the two signatures, which is the thing AGENTS.md forbids.
+    def __init__(  # noqa: PLR0913
         self,
         n_in: int,
         n_features: int,
         scale: float,
         key: jax.Array,
         scale_per_input: tuple[float, ...] | None = None,
+        *,
+        bands: tuple[float, ...] = (),
     ) -> None:
         s = jnp.full((n_in, 1), float(scale))
         if scale_per_input is not None:
@@ -58,7 +63,15 @@ class FourierEmbedding(eqx.Module):
                 msg = f"scale_per_input has {len(scale_per_input)} entries, need {n_in}"
                 raise ValueError(msg)
             s = jnp.asarray(scale_per_input, dtype=jnp.float64).reshape(n_in, 1)
-        self.B = jax.random.normal(key, (n_in, n_features)) * s
+        mult = tuple(bands) or (1.0,)
+        per = n_features // len(mult)
+        raw = jax.random.normal(key, (n_in, n_features))
+        cols, start = [], 0
+        for k, b in enumerate(mult):
+            n = per if k < len(mult) - 1 else n_features - per * (len(mult) - 1)
+            cols.append(raw[:, start : start + n] * s * float(b))
+            start += n
+        self.B = jnp.concatenate(cols, axis=1)
 
     def __call__(self, x: jax.Array) -> jax.Array:
         proj = 2.0 * jnp.pi * (x @ jax.lax.stop_gradient(self.B))
@@ -126,7 +139,7 @@ class AxialPinn(eqx.Module):
     def __init__(self, cfg: AxialTrainConfig, key: jax.Array) -> None:
         k_field, k_kin, k_front, k_emb = jax.random.split(key, 4)
         use_front = bool(cfg.front_net and cfg.void_closure)
-        n_in = 3 if use_front else 2
+        n_in = 3 if (use_front or cfg.level_set_input) else 2
         self.embed = (
             FourierEmbedding(
                 n_in,
@@ -134,6 +147,7 @@ class AxialPinn(eqx.Module):
                 cfg.fourier_scale,
                 k_emb,
                 fourier_scale_vector(cfg, n_in),
+                bands=cfg.fourier_bands,
             )
             if cfg.fourier_features
             else None

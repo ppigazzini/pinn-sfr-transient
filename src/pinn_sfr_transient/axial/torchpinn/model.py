@@ -69,7 +69,7 @@ class AxialPinn(nn.Module):
         self.p = p
         self.cfg = cfg
         torch.manual_seed(cfg.seed)  # before init: nn.init draws from the global RNG
-        n_in = 3 if (cfg.front_net and cfg.void_closure) else 2
+        n_in = 3 if (cfg.front_net and cfg.void_closure) or cfg.level_set_input else 2
         self.embed: nn.Module | None = None
         if cfg.fourier_features:
             self.embed = (
@@ -78,6 +78,7 @@ class AxialPinn(nn.Module):
                     cfg.fourier_features,
                     cfg.fourier_scale,
                     fourier_scale_vector(cfg, n_in),
+                    bands=cfg.fourier_bands,
                 )
                 .to(cfg.device)
                 .double()
@@ -96,6 +97,7 @@ class AxialPinn(nn.Module):
         # Front-position network: t_hat -> z_f. One input, one output, so it is
         # cheap next to the field network.
         self.use_front = bool(cfg.front_net and cfg.void_closure)
+        self.T_boil = float(sodium.saturation_temperature(p.p_system) + p.dT_superheat)
         self.front = (
             MLP(1, max(8, cfg.width // 4), 2, n_in=1).to(cfg.device).double()
             if self.use_front
@@ -152,6 +154,31 @@ class AxialPinn(nn.Module):
         return torch.cat(cols, dim=1)
 
     # -- the ansatz ---------------------------------------------------------
+
+    def _raw(self, x: torch.Tensor) -> torch.Tensor:
+        """Network output for a prepared input, with the embedding if one is set."""
+        return self.net(self.embed(x) if self.embed is not None else x)
+
+    def _level_set_coord(self, zeta: torch.Tensor, that: torch.Tensor) -> torch.Tensor:
+        """``phi = (T_c - T_sat - dT_sup) / dT`` from a bootstrap pass (idea 3).
+
+        `T_c` is this network's own output, so the coordinate depends on the thing
+        it feeds. Resolved by evaluating once with ``phi = 0`` and using the
+        resulting ``T_c``.
+
+        **No `detach` here, deliberately.** The residual needs the *total*
+        derivative of the state with respect to ``(zeta, t)``, and with ``phi`` in
+        the input that includes the term flowing through ``phi``. Detaching would be
+        cheaper, would still train, and would silently drop that term -- a wrong
+        residual that produces plausible numbers, which is the defect class this
+        project keeps finding. The cost is a second forward pass and a deeper graph.
+        """
+        zero = torch.zeros_like(zeta)
+        raw0 = self._raw(torch.cat([zeta, that, zero], dim=1))
+        temps0 = self.theta0(zeta)[:, :N_TEMPS] * _bounded_exp(that * raw0[:, :N_TEMPS])
+        T_c0 = self.p.T_in + temps0[:, 3:4] * self.dT
+        return (T_c0 - self.T_boil) / self.dT
+
     def normalised_state(self, zeta: torch.Tensor, that: torch.Tensor) -> torch.Tensor:
         """``theta(zeta, t_hat)`` with every hard constraint satisfied identically.
 
@@ -186,9 +213,11 @@ class AxialPinn(nn.Module):
             # Signed distance to the front. A field that is kinked in (zeta, t) is
             # smooth in phi, which is what lets `T_c` carry the kink at all.
             x = torch.cat([zeta, that, zeta - self.front_position(that)], dim=1)
+        elif self.cfg.level_set_input:
+            x = torch.cat([zeta, that, self._level_set_coord(zeta, that)], dim=1)
         else:
             x = torch.cat([zeta, that], dim=1)
-        raw = self.net(self.embed(x) if self.embed is not None else x)
+        raw = self._raw(x)
         temps = self.theta0(zeta)[:, :N_TEMPS] * _bounded_exp(that * raw[:, :N_TEMPS])
         if self.cfg.void_closure:
             # `b` underflows to exactly zero below saturation, so alpha = 0 at

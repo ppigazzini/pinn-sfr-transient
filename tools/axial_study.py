@@ -67,6 +67,11 @@ GRID_ITERS = (30, 300, 3000)
 # Spatial-band multipliers for the anisotropic embedding. None is the control:
 # isotropic, i.e. exactly the shipped default.
 ANISO_SCALES = (None, 2.0, 4.0, 8.0)
+# Idea 2: band multipliers on top of `fourier_scale`. `()` is the shipped single
+# band and is the control. The ladder widens the span, it does not shift it -- 1.0
+# is in every arm, so a gain is coverage of the extra scales and not a different
+# one.
+FOURIER_BANDS = ((), (1.0, 4.0), (1.0, 4.0, 16.0), (0.25, 1.0, 4.0, 16.0))
 # Every study sweeps both backends. Two independent implementations agreeing is
 # the strongest check this project has, and it is the reason the JAX twin exists
 # (`docs/axial_nn.md` section 4) -- a result measured on one backend is a result
@@ -936,15 +941,93 @@ def study_aniso(out: Path) -> None:
     )
     mean_table(rows)
     print("\nis a wider spatial band better, and does the margin hold on every seed?")
+    _arm_summary(rows)
+
+
+def _arm_summary(rows: list[dict]) -> None:
+    """Per-arm means plus the **worst** margin over seeds.
+
+    The mean of the margin is the wrong statistic: the front is an inequality
+    (`max T_c > T_sat + dT_sup`, section 7.2.8), so an arm that forms a front on
+    two seeds out of three has not formed a front. Report the minimum.
+    """
     for label in dict.fromkeys(r["arm"] for r in rows):
         v = [r for r in rows if r["arm"] == label]
         mg = [r["margin_K"] for r in v]
         print(
-            f"  {label:26s} T_s {sum(r['T_s'] for r in v) / len(v):.4f}   "
+            f"  {label:30s} T_s {sum(r['T_s'] for r in v) / len(v):.4f}   "
             f"L_void {sum(r['L_void_max'] for r in v) / len(v):.4f}   "
             f"margin min {min(mg):+6.1f} K   "
             f"{'front every seed' if min(mg) > 0 else 'FRONT LOST'}"
         )
+
+
+def study_lsinput(out: Path) -> None:
+    """Idea 3 in isolation: the level-set coordinate as a network input -- section 7.5.13.
+
+    The front is at a fixed value of `phi = (T_c - T_sat - dT_sup) / dT`, not at a
+    fixed `zeta`; in `(zeta, t)` its location moves and the network must learn that
+    motion. Feeding `phi` gives it a coordinate in which the front is *stationary*,
+    which is the same trick as a co-moving frame.
+
+    `phi` is built from the network's own `T_c`, so it comes from a bootstrap pass
+    with `phi = 0` -- and **without** `stop_gradient`, so the residual keeps the
+    term through `phi`.
+
+    Isolated: only `level_set_input` moves. It is a different mechanism from
+    `levelset` (which moves the *sampling* measure, section 7.5.6) and from the
+    `front_net` level set (which parameterises the interface); confounding the
+    three is how a mechanism gets credit for another's effect.
+    """
+    traj = ruler()
+    rows = run_all(
+        traj,
+        [
+            (
+                f"level_set_input={on} [{backend}]",
+                {"backend": backend, "seed": seed, "level_set_input": on},
+            )
+            for seed in SEEDS
+            for backend in BACKENDS
+            for on in (False, True)
+        ],
+        out,
+    )
+    mean_table(rows)
+    print("\ndoes a front-stationary coordinate buy anything, on every seed?")
+    _arm_summary(rows)
+
+
+def study_bands(out: Path) -> None:
+    """Idea 2 in isolation: multi-scale Fourier bands -- section 7.5.14.
+
+    One `fourier_scale` commits to one frequency. The solution has a smooth bulk
+    and a near-discontinuous front, so any single band is wrong for one of them:
+    too low and the front is smeared (which is exactly how the front is lost),
+    too high and the bulk is noisy. Bands cover several at once.
+
+    The feature *total* is held at the default, so each band gets `1/n` of the
+    width: this trades resolution within a band for coverage across bands at
+    **fixed cost**, and any gain is the trade paying off, not extra capacity. `()`
+    is the control and reproduces the shipped default exactly (asserted by test).
+    """
+    traj = ruler()
+    rows = run_all(
+        traj,
+        [
+            (
+                f"bands={list(b) or 'single'} [{backend}]",
+                {"backend": backend, "seed": seed, "fourier_bands": b},
+            )
+            for seed in SEEDS
+            for backend in BACKENDS
+            for b in FOURIER_BANDS
+        ],
+        out,
+    )
+    mean_table(rows)
+    print("\ndoes covering more scales at fixed width beat picking one?")
+    _arm_summary(rows)
 
 
 STUDIES = {
@@ -965,6 +1048,8 @@ STUDIES = {
     "capacity-optimiser": study_capacity_optimiser,
     "grid": study_grid,
     "aniso": study_aniso,
+    "lsinput": study_lsinput,
+    "bands": study_bands,
 }
 
 
