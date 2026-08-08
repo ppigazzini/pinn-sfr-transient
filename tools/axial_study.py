@@ -1047,6 +1047,69 @@ def study_bands(out: Path) -> None:
     _arm_summary(rows)
 
 
+def study_onset(out: Path) -> None:
+    """Put onset in the objective and read it by tangency -- section 7.5.16.
+
+    M4 asks for onset within 0.5 s and one cell, and it has never moved. Two
+    reasons, and only one is the network's.
+
+    **It was never in the objective.** Onset was read off a trained field
+    afterwards; every knob this tool sweeps was ranked on a mean (relative `L2`)
+    and later on an extremum (the margin). Neither is a *position*.
+
+    **The readout was square-root conditioned.** Onset happens at the maximum of
+    `T_c`, so near it `T_c ~ T_boil - kappa (zeta - zeta*)^2 / 2` and a field error
+    `eps` displaces a threshold crossing by `sqrt(2 eps / kappa)`. Against this
+    model's reference, `kappa = 1066 K` per unit `zeta` squared and `eps = 3.4 K`
+    at the best published accuracy.
+
+    The head replaces both with the tangency conditions -- `T_c = T_boil` and
+    `dT_c/dzeta = 0` at one point -- whose position sensitivity is
+    `delta(slope)/kappa`: linear, and divided by a *large* number.
+
+    Isolated, and the isolation matters more here than usual: this is the FOURTH
+    distinct use of the level set in this model, after the sampling measure
+    (7.5.6), the front network's interface, and `level_set_input` (7.5.13).
+    Overlapping mechanisms are how one collects another's credit.
+
+    Both readouts are scored on every arm, so the control arm alone answers
+    whether the *readout* helps, independently of whether the *head* does.
+    """
+    traj = ruler()
+    rows = run_all(
+        traj,
+        [
+            (
+                f"onset_head={on} [{backend}]",
+                {"backend": backend, "seed": seed, "onset_head": on},
+            )
+            for seed in SEEDS
+            for backend in BACKENDS
+            for on in (False, True)
+        ],
+        out,
+    )
+    mean_table(rows)
+    print("\nM4 is onset within 0.5 s AND one cell (0.00625). Threshold vs tangency readout:")
+    for label in dict.fromkeys(r["arm"] for r in rows):
+        v = [r for r in rows if r["arm"] == label]
+        thr = [
+            r["onset_zeta_err"] / 0.00625 for r in v if r["onset_zeta_err"] == r["onset_zeta_err"]
+        ]
+        tan = [
+            r["onset_zeta_err_tan"] / 0.00625
+            for r in v
+            if r.get("onset_zeta_err_tan") == r.get("onset_zeta_err_tan")
+        ]
+        t_err = [r["onset_t_err_s"] for r in v if r["onset_t_err_s"] == r["onset_t_err_s"]]
+        print(
+            f"  {label:28s} n={len(v)}  "
+            f"t_err {(sum(t_err) / len(t_err) if t_err else float('nan')):.2f} s   "
+            f"zeta threshold {(sum(thr) / len(thr) if thr else float('nan')):5.1f} cells   "
+            f"zeta tangency {(sum(tan) / len(tan) if tan else float('nan')):5.1f} cells"
+        )
+
+
 STUDIES = {
     "ruler": study_ruler,
     "horizon": study_horizon,
@@ -1067,6 +1130,7 @@ STUDIES = {
     "aniso": study_aniso,
     "lsinput": study_lsinput,
     "bands": study_bands,
+    "onset": study_onset,
 }
 
 

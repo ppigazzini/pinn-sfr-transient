@@ -38,6 +38,40 @@ from pinn_sfr_transient.axial.physics import (
 )
 
 
+def onset_point(model: AxialPinn) -> tuple[jax.Array, jax.Array]:
+    """Return the head's ``(zeta*, t_hat*)``, both in ``(0, 1)`` by construction."""
+    if model.onset_raw is None:
+        msg = "onset_point() requires cfg.onset_head"
+        raise RuntimeError(msg)
+    pt = jax.nn.sigmoid(model.onset_raw)
+    return pt[0:1], pt[1:2]
+
+
+def onset_residual(model: AxialPinn, p: AxialParams, cfg: AxialTrainConfig) -> jax.Array:
+    """Square the two tangency conditions that define onset — the torch twin's rationale.
+
+    ``R1 = (T_c - T_boil)/dT`` says the field reaches saturation; ``R2 =
+    (dT_c/dzeta)/dT`` says it reaches it *tangentially*, which is what makes the
+    point a first touch rather than any later crossing.
+
+    Neither condition consults the reference: the threshold is a sodium property
+    and both are statements about the network's own field. Neither picks the
+    *earliest* tangency either — the initialisation puts the point where onset is,
+    but a later tangency satisfies both residuals too, and whether that matters is
+    what the isolated study measures.
+    """
+    dT = p.P_0 / (p.w_0 * p.c_c)
+    z, t = onset_point(model)
+    _, _, d_dz = state_and_grads(model, p, z.reshape(1, 1), t.reshape(1, 1), cfg)
+    theta = jax.vmap(lambda a, b: normalised_state(model, p, a, b, cfg))(
+        z.reshape(1, 1), t.reshape(1, 1)
+    )
+    T_boil = sodium.saturation_temperature(p.p_system) + p.dT_superheat
+    r_value = (p.T_in + theta[:, 3:4] * dT - T_boil) / dT
+    r_slope = d_dz[:, 3:4]
+    return (jnp.concatenate([r_value, r_slope], axis=1) ** 2).mean(1)
+
+
 def front_residual(
     model: AxialPinn, p: AxialParams, that: jax.Array, cfg: AxialTrainConfig
 ) -> jax.Array:
@@ -101,6 +135,8 @@ def residual_blocks(
     ]
     if uses_front(cfg):
         blocks.append(front_residual(model, p, that, cfg))
+    if cfg.onset_head:
+        blocks.append(onset_residual(model, p, cfg))
     return tuple(blocks)
 
 
@@ -161,6 +197,8 @@ def closed_loop_blocks(  # noqa: PLR0913, PLR0917 - the tensor grid needs all of
     # Precursors carry their own rate per group, `t_end * lambda_i`.
     c_norm = 1.0 / (t_end * jnp.asarray(p.lambda_i)) if cfg.residual_scaling else 1.0
     blocks.append((((dc - t_end * precursor_derivatives(c, power, p)) * c_norm) ** 2).mean(1))
+    if cfg.onset_head:
+        blocks.append(onset_residual(model, p, cfg))
     return tuple(blocks)
 
 

@@ -69,6 +69,8 @@ from pinn_sfr_transient.axial.jaxpinn.residuals import (
     closed_loop_blocks,
     front_residual,
     n_field_blocks,
+    onset_point,
+    onset_residual,
     residual_blocks,
     uses_front,
 )
@@ -104,6 +106,8 @@ __all__ = [
     "horizon",
     "n_field_blocks",
     "normalised_state",
+    "onset_point",
+    "onset_residual",
     "precursors",
     "predict",
     "predict_power",

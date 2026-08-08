@@ -300,6 +300,7 @@ def test_the_two_backends_share_every_default():
         "fourier_scale_zeta",
         "fourier_bands",
         "level_set_input",
+        "onset_head",
     ):
         assert getattr(j, name) == getattr(t, name), name
 
@@ -870,3 +871,94 @@ def test_predict_must_be_given_the_training_config():
 
     with pytest.raises(TypeError):
         pj.predict(model, params, zeta, t)
+
+
+def test_onset_head_adds_a_block_and_two_trainable_scalars_in_both_backends():
+    """`onset_head` must add one block and a `(zeta*, t*)` pair, identically in both.
+
+    Onset is the first instant the field *touches* saturation, so at that instant
+    the peak is the contact point and two conditions hold together — the value
+    condition and the stationarity condition. Assert the block count and the
+    parameter shape rather than a number, because the number is what the isolated
+    study measures.
+    """
+    pytest.importorskip("torch")
+
+    from pinn_sfr_transient.axial import pinn_torch as pt
+    from pinn_sfr_transient.axial.jaxpinn.residuals import onset_point
+
+    p = AxialParams()
+    common = {"width": 8, "depth": 2, "fourier_features": 16}
+    off = pt.AxialPinn(p, pt.AxialTrainConfig(**common))
+    on = pt.AxialPinn(p, pt.AxialTrainConfig(**common, onset_head=True))
+    assert on.n_blocks == off.n_blocks + 1
+    assert off.onset_raw is None
+    assert tuple(on.onset_raw.shape) == (2,)
+
+    j_off = pj.AxialPinn(pj.AxialTrainConfig(**common), jax.random.PRNGKey(0))
+    j_on = pj.AxialPinn(pj.AxialTrainConfig(**common, onset_head=True), jax.random.PRNGKey(0))
+    assert j_off.onset_raw is None
+    assert tuple(j_on.onset_raw.shape) == (2,)
+
+    # Same initialisation in both, so the two backends start the search together.
+    z_t, t_t = (x.detach() for x in on.onset_point())
+    z_j, t_j = onset_point(j_on)
+    assert float(z_t) == pytest.approx(float(np.asarray(z_j)[0]), rel=1e-12)
+    assert float(t_t) == pytest.approx(float(np.asarray(t_j)[0]), rel=1e-12)
+    assert 0.0 < float(z_t) < 1.0, "the sigmoid must keep the point inside the domain"
+
+
+def test_onset_residual_gradient_reaches_the_field_network():
+    """The tangency residual must train the *field*, not only the head.
+
+    If the gradient stopped at `(zeta*, t*)` the head would chase a field it
+    cannot influence, and onset would still be a read-off rather than an
+    objective — which is the whole point of adding it.
+    """
+    pytest.importorskip("torch")
+
+    from pinn_sfr_transient.axial import pinn_torch as pt
+
+    p = AxialParams()
+    m = pt.AxialPinn(p, pt.AxialTrainConfig(width=8, depth=2, fourier_features=16, onset_head=True))
+    m.onset_residual().sum().backward()
+    assert m.onset_raw.grad.abs().sum() > 0, "no gradient on the head"
+    field = [q.grad for q in m.net.parameters() if q.grad is not None]
+    assert field, "the field network received no gradient at all"
+    assert any(g.abs().sum() > 0 for g in field), "no gradient on the field network"
+
+
+def test_tangency_onset_is_exact_on_a_parabola():
+    """The readout must find the vertex, not the nearest grid point.
+
+    A threshold crossing at a maximum is `sqrt` conditioned in the field error;
+    the vertex of the local parabola is the discrete form of `dT_c/dzeta = 0` and
+    is linear in the slope error. Tested on an analytic parabola whose vertex sits
+    deliberately *between* grid points, since landing on one would pass either way.
+    """
+    from pinn_sfr_transient.axial.scoring import onset_by_tangency
+
+    zeta = np.linspace(0.0, 1.0, 161)
+    t = np.linspace(0.0, 2.0, 5)
+    z_star, thr = 0.803125, 1169.0  # deliberately half a cell off the grid
+    # The vertex sits BETWEEN grid points, so the sampled peak is always a little
+    # below the true one; offset by exactly that deficit, so the level set is
+    # touched at t = 1.0 and the test measures the vertex, not the offset.
+    deficit = 500.0 * (0.5 * (zeta[1] - zeta[0])) ** 2
+    T_c = np.stack(
+        [thr + deficit + 1.0 - 500.0 * (zeta - z_star) ** 2 - (2.0 - tt) for tt in t], axis=1
+    )
+    t_on, z_on = onset_by_tangency(T_c, zeta, t, thr)
+    assert z_on == pytest.approx(z_star, abs=1e-6)
+    assert t_on == pytest.approx(1.0, abs=1e-9)
+
+
+def test_tangency_onset_reports_nan_when_saturation_is_never_reached():
+    """No front is a **failure**, and must never be defaulted to zero error."""
+    from pinn_sfr_transient.axial.scoring import onset_by_tangency
+
+    zeta, t = np.linspace(0.0, 1.0, 21), np.linspace(0.0, 1.0, 5)
+    cold = np.full((21, 5), 900.0)
+    t_on, z_on = onset_by_tangency(cold, zeta, t, 1169.0)
+    assert np.isnan(t_on)
+    assert np.isnan(z_on)
