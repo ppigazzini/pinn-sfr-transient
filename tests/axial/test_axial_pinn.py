@@ -562,8 +562,11 @@ def test_front_network_adds_an_interface_block_and_a_level_set_input():
     assert not off.use_front
     assert on.use_front
     assert (off.n_blocks, on.n_blocks) == (4, 5)
-    assert off.net.net[0].in_features == 2
-    assert on.net.net[0].in_features == 3
+    # With `fourier_features = n` the embedding is [sin(2 pi B x), cos(2 pi B x)],
+    # so the input layer is 2n wide rather than the raw 2 (or 3 with the front net).
+    n_f = off.cfg.fourier_features
+    assert off.net.net[0].in_features == (2 * n_f if n_f else 2)
+    assert on.net.net[0].in_features == (2 * n_f if n_f else 3)
 
 
 def test_front_network_keeps_every_hard_constraint():

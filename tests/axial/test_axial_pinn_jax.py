@@ -295,6 +295,7 @@ def test_the_two_backends_share_every_default():
         "optimizer",
         "front_frac",
         "front_level_set",
+        "fourier_features",
     ):
         assert getattr(j, name) == getattr(t, name), name
 
@@ -436,9 +437,14 @@ def test_residual_blocks_are_identical_given_identical_parameters():
 
     width, depth, n = 16, 3, 129
     p = AxialParams()
+    # `fourier_features = 0`: the frozen projection B is drawn from each backend's
+    # own RNG, so with the embedding on the two models are NOT identical and this
+    # test would be comparing different networks. Transplanting B as well is
+    # possible but would hide the point -- the residuals are what is being compared,
+    # and they are cleanest to compare without a random projection in between.
     tcfg, jcfg = (
-        pt.AxialTrainConfig(width=width, depth=depth),
-        pj.AxialTrainConfig(width=width, depth=depth),
+        pt.AxialTrainConfig(width=width, depth=depth, fourier_features=0),
+        pj.AxialTrainConfig(width=width, depth=depth, fourier_features=0),
     )
     torch.manual_seed(0)
     tm = pt.AxialPinn(p, tcfg)
@@ -680,3 +686,29 @@ def test_lbfgs_iters_means_the_same_thing_in_both_backends():
         f"torch L-BFGS stopped at {n_iter} of {want}: the knob is not a shared budget, "
         "and cross-backend comparisons at this setting are not like-for-like"
     )
+
+
+def test_the_default_is_a_configuration_that_forms_a_front():
+    """The shipped default must be one whose front behaviour was measured.
+
+    The previous default — 8000 Adam / 500 L-BFGS with no Fourier features —
+    produced **no boiling front on any seed of either backend**
+    (`docs/axial_nn.md` section 7.2.9), which is the repository failing to
+    reproduce its own headline result. It was never measured because every study
+    passed its budget explicitly.
+
+    Training to check the front here would take ~35 minutes, so this asserts the
+    configuration rather than the outcome: the defaults must be the arm that
+    section 0.6 recommends and section 7.5.8 measured, on both backends.
+    """
+    pytest.importorskip("torch")
+    from pinn_sfr_transient.axial import pinn_torch as pt
+
+    for cfg in (pj.AxialTrainConfig(), pt.AxialTrainConfig()):
+        assert (cfg.adam_iters, cfg.lbfgs_iters) == (300, 3000), (
+            cfg.adam_iters,
+            cfg.lbfgs_iters,
+        )
+        assert cfg.fourier_features == 256, cfg.fourier_features
+        # The horizon is what made the old default form no front at all.
+        assert cfg.t_train_frac == pytest.approx(0.275)
