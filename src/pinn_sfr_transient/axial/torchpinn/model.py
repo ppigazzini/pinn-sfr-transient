@@ -103,6 +103,18 @@ class AxialPinn(nn.Module):
             if self.use_front
             else None
         )
+        # Onset head: `(zeta*, t*)` as two raw scalars pushed through a sigmoid, so
+        # both stay inside the domain by construction rather than by a penalty.
+        # Initialised at logit 2.0 -> ~0.88, i.e. high in the channel and late in
+        # the window, which is where onset is in every regime the reference maps.
+        # A parameter, not a network: onset is TWO NUMBERS for a fixed set of
+        # parameters. A network here would only be needed to make onset a function
+        # of `void_worth_net`/`tau_pump` for the M9 sweep, which is a later step.
+        self.onset_raw = (
+            torch.nn.Parameter(torch.full((2,), 2.0, dtype=torch.float64, device=cfg.device))
+            if cfg.onset_head
+            else None
+        )
         self.geo = line_geometry(p)
         # Fixed axial quadrature for the reactivity integrals (deviation note
         # section 3.5a of the plan): RAR may add arbitrary points to the field
@@ -118,7 +130,7 @@ class AxialPinn(nn.Module):
         # The void block is absent when it is closed algebraically; the interface
         # block replaces it when the front network is on.
         self.n_fields = N_TEMPS if cfg.void_closure else len(FIELDS)
-        self.n_blocks = self.n_fields + (1 if self.use_front else 0)
+        self.n_blocks = self.n_fields + (1 if self.use_front else 0) + (1 if cfg.onset_head else 0)
         self.res_norm: tuple[float, ...] = (
             residual_normalisation(p, self.t_end) if cfg.residual_scaling else (1.0,) * len(FIELDS)
         )
@@ -331,7 +343,40 @@ class AxialPinn(nn.Module):
         # normalised time. Averaged over the six groups, as the 0D model does.
         d_phys = precursor_derivatives(c, power, self.p)
         blocks.append(((dc - self.t_end * d_phys) * self.c_norm).pow(2).mean(1))
+        if self.onset_raw is not None:
+            blocks.append(self.onset_residual())
         return tuple(blocks)
+
+    def onset_point(self) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return the head's ``(zeta*, t_hat*)``, both in ``(0, 1)`` by construction."""
+        if self.onset_raw is None:
+            msg = "onset_point() requires cfg.onset_head"
+            raise RuntimeError(msg)
+        pt = torch.sigmoid(self.onset_raw)
+        return pt[0:1].reshape(1, 1), pt[1:2].reshape(1, 1)
+
+    def onset_residual(self) -> torch.Tensor:
+        """Square the two tangency conditions that define onset.
+
+        ``R1 = (T_c - T_boil)/dT`` says the field reaches saturation; ``R2 =
+        (dT_c/dzeta)/dT`` says it reaches it *tangentially*, which is what makes
+        the point a first touch rather than any later crossing. Both are divided by
+        the temperature scale so the block is O(1) like the others.
+
+        Two things this does NOT do, deliberately. It does not consult the
+        reference — the threshold is a sodium property, and the conditions are
+        statements about the network's own field. And it does not pick the
+        *earliest* solution: the sigmoid keeps the point in the domain and the
+        initialisation puts it where onset is, but a later tangency would also
+        satisfy both residuals. Whether that matters is exactly what the isolated
+        study measures; a barrier could be added if it does.
+        """
+        z, t = self.onset_point()
+        _, _, d_dz = self.state_and_grads(z, t)
+        T_c = self.p.T_in + self.normalised_state(z, t)[:, 3:4] * self.dT
+        r_value = (T_c - self.T_boil) / self.dT
+        r_slope = d_dz[:, 3:4]
+        return torch.cat([r_value, r_slope], dim=1).pow(2).mean(1)
 
     def residual_blocks(self, zeta: torch.Tensor, that: torch.Tensor) -> tuple[torch.Tensor, ...]:
         """Squared residual of each field, shape ``(N,)`` each.
@@ -362,6 +407,8 @@ class AxialPinn(nn.Module):
         ]
         if self.use_front:
             blocks.append(self.front_residual(that))
+        if self.onset_raw is not None:
+            blocks.append(self.onset_residual())
         return tuple(blocks)
 
     @torch.no_grad()

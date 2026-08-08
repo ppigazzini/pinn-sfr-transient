@@ -47,6 +47,67 @@ def onset(alpha: np.ndarray, zeta: np.ndarray, t: np.ndarray) -> tuple[float, fl
     return float(t[i]), float(zeta[int(np.argmax(hit[:, i]))])
 
 
+def onset_by_tangency(
+    T_c: np.ndarray, zeta: np.ndarray, t: np.ndarray, threshold: float
+) -> tuple[float, float]:
+    r"""Onset as the **tangency** of the level set, not as a threshold crossing.
+
+    Boiling starts at the first instant the field touches saturation, which under
+    D-TH-3 is the moment ``max_zeta T_c`` reaches ``T_sat + dT_superheat``. At that
+    instant the peak *is* the contact point, so two conditions hold together:
+
+    .. math::
+
+        T_c(\zeta^*, t^*) = T_{sat} + \Delta T_{sup}, \qquad
+        \partial_\zeta T_c(\zeta^*, t^*) = 0
+
+    **Why this is not a cosmetic change.** Reading the position off a threshold
+    crossing asks a *flat* function where it crosses a value: near the peak
+    ``T_c ~ T_boil - kappa (zeta - zeta*)^2 / 2``, so a field error ``eps`` displaces
+    the crossing by ``sqrt(2 eps / kappa)`` -- a **square root**, which is the worst
+    possible law for small errors. Measured against this model's reference,
+    ``kappa = 1066 K`` per unit ``zeta`` squared and ``eps = 3.4 K`` at the best
+    published accuracy, giving ~13 cells.
+
+    The stationarity condition is conditioned by that same curvature the other way
+    up: solving ``d T_c / d zeta = 0`` gives ``delta zeta ~ delta(slope) / kappa``,
+    **linear** and divided by a *large* number. A slope error of 3.8 K per unit
+    ``zeta`` moves the answer 0.6 cells.
+
+    The two coordinates were never equally hard. ``T_c`` rises at 43 K/s in time
+    and is flat in space, so onset *time* is well posed either way
+    (``eps / 43 = 0.08 s`` against a 0.5 s criterion) and only the height suffers.
+
+    Implementation: bracket the first time ``max_zeta T_c`` crosses the threshold,
+    interpolate ``t*`` linearly in that scalar, and take ``zeta*`` from a parabola
+    through the three samples around the peak -- the vertex of the local quadratic,
+    which is the discrete form of ``d T_c / d zeta = 0``. Returns ``(nan, nan)`` when
+    saturation is never reached, which is a **failure**, not a missing measurement.
+    """
+    peak = T_c.max(axis=0)
+    hit = peak >= threshold
+    if not hit.any():
+        return float("nan"), float("nan")
+    i = int(np.argmax(hit))
+    if i == 0:
+        t_star = float(t[0])
+    else:
+        # Linear in the peak, which moves at ~43 K/s -- the well-conditioned axis.
+        f = (threshold - peak[i - 1]) / (peak[i] - peak[i - 1])
+        t_star = float(t[i - 1] + f * (t[i] - t[i - 1]))
+    k = int(np.argmax(T_c[:, i]))
+    if 0 < k < len(zeta) - 1:
+        y0, y1, y2 = T_c[k - 1, i], T_c[k, i], T_c[k + 1, i]
+        denom = y0 - 2.0 * y1 + y2
+        # `denom` is -kappa*dz^2; it vanishes only if the profile is locally linear,
+        # in which case there is no interior peak to locate and the grid point stands.
+        shift = 0.5 * (y0 - y2) / denom if denom != 0.0 else 0.0
+        # A vertex further than one cell away means the parabola did not fit a peak.
+        shift = float(np.clip(shift, -1.0, 1.0))
+        return t_star, float(zeta[k] + shift * (zeta[1] - zeta[0]))
+    return t_star, float(zeta[k])
+
+
 def front_metrics(fields: tuple, traj: AxialTrajectory, p: AxialParams) -> dict[str, float]:
     """Metrics the front depends on, which a relative ``L2`` cannot see.
 
@@ -86,8 +147,22 @@ def front_metrics(fields: tuple, traj: AxialTrajectory, p: AxialParams) -> dict[
     # actually forms a front. Require a front before reporting where it is.
     if float(fields[4].max()) < MIN_ALPHA_FOR_ONSET:
         t_on = z_on = float("nan")
+    # The tangency readout, reported ALONGSIDE the threshold one rather than
+    # replacing it. Two reasons: every published onset number in this project was
+    # measured the old way, and a metric that changes definition silently makes its
+    # own history unreadable; and the comparison is itself the measurement of
+    # whether the reformulation pays. The reference is scored the same way, so the
+    # error is between two like quantities.
+    tt_on, tz_on = onset_by_tangency(fields[3], traj.zeta, traj.t, threshold)
+    tt_ref, tz_ref = onset_by_tangency(traj.T_c, traj.zeta, traj.t, threshold)
+    if float(fields[4].max()) < MIN_ALPHA_FOR_ONSET:
+        tt_on = tz_on = float("nan")
     return {
         "max_T_c": max_T_c,
+        "onset_t_tan": tt_on,
+        "onset_zeta_tan": tz_on,
+        "onset_t_err_tan_s": abs(tt_on - tt_ref),
+        "onset_zeta_err_tan": abs(tz_on - tz_ref),
         "T_boil": threshold,
         # Negative means the network never reaches saturation anywhere, so `alpha`
         # is identically zero and there is no front at all.

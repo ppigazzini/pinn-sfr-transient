@@ -135,6 +135,7 @@ class AxialPinn(eqx.Module):
     kin: eqx.nn.MLP | None
     front: eqx.nn.MLP | None
     embed: FourierEmbedding | None
+    onset_raw: jax.Array | None
 
     def __init__(self, cfg: AxialTrainConfig, key: jax.Array) -> None:
         k_field, k_kin, k_front, k_emb = jax.random.split(key, 4)
@@ -193,3 +194,9 @@ class AxialPinn(eqx.Module):
             if use_front
             else None
         )
+        # Onset head, the torch twin's rationale verbatim: `(zeta*, t*)` as two raw
+        # scalars through a sigmoid, so both stay in the domain by construction.
+        # An array rather than a network -- onset is two numbers at fixed
+        # parameters. Initialised at logit 2.0 -> ~0.88, high in the channel and
+        # late in the window, where onset is in every regime the reference maps.
+        self.onset_raw = jnp.full((2,), 2.0) if cfg.onset_head else None

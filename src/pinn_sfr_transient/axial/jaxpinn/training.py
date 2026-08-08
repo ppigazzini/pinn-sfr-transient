@@ -45,7 +45,12 @@ def train(
     key, k_model = jax.random.split(key)
     model = AxialPinn(cfg, k_model)
 
-    n_blocks = n_field_blocks(cfg) + (1 if uses_front(cfg) else 0) + (1 if cfg.feedback else 0)
+    n_blocks = (
+        n_field_blocks(cfg)
+        + (1 if uses_front(cfg) else 0)
+        + (1 if cfg.feedback else 0)
+        + (1 if cfg.onset_head else 0)
+    )
     w = jnp.ones(n_blocks)
     sched = optax.cosine_decay_schedule(cfg.lr, decay_steps=max(1, cfg.adam_iters), alpha=0.1)
     optimizer = optax.adam(sched)

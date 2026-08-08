@@ -150,6 +150,22 @@ class AxialTrainConfig:
     # resolution *within* a band for coverage *across* bands.
     fourier_bands: tuple[float, ...] = ()
 
+    # Onset head: two trainable scalars `(zeta*, t*)` and the two tangency
+    # residuals that pin them (`onset_head`). Off by default.
+    #
+    # Onset is the first instant the field TOUCHES saturation, so at that instant
+    # the peak is the contact point and two conditions hold together:
+    #     T_c(zeta*, t*) = T_sat + dT_sup      and      d T_c/d zeta (zeta*, t*) = 0
+    # Reading the height off a threshold crossing instead asks a flat function
+    # where it crosses a value: near the peak the error law is
+    # `sqrt(2 eps / kappa)` -- a SQUARE ROOT. Stationarity is `delta(slope)/kappa`,
+    # linear and divided by a curvature of ~1066 K per unit zeta squared.
+    #
+    # It also puts onset in the OBJECTIVE. Every onset number in this project so
+    # far was read off a trained field afterwards; nothing ever optimised for it,
+    # which is the first reason M4 never moved.
+    onset_head: bool = False
+
     # Two-encoder "modified MLP" [Wang, Teng & Perdikaris 2021]. Measured -16.1%,
     # and likewise not adopted -- see section 7.2.6.
     modified_mlp: bool = False
