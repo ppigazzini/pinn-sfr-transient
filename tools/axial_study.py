@@ -102,11 +102,28 @@ def train_torch(**kw: Any) -> Callable[[Any], tuple]:  # noqa: ANN401
 
 
 def train_jax(**kw: Any) -> Callable[[Any], tuple]:  # noqa: ANN401
-    """Train the JAX backend and return a predictor over the ruler's grid."""
+    """Train the JAX backend and return a predictor over the ruler's grid.
+
+    The **config must be threaded into `predict`**. The torch model carries its
+    own `cfg`, so its evaluator cannot desync from its training; the JAX twin is
+    functional and `predict(..., cfg=None)` silently falls back to
+    `AxialTrainConfig()`. This discarded the cfg with `_`, so a JAX arm was
+    trained under its arm's config and then **scored under the defaults** --
+    `horizon()` reads `t_train_frac` from it, and the input width depends on
+    `level_set_input` and `front_net`.
+
+    It surfaced as a crash rather than as a wrong number only because
+    `level_set_input` changes an array *shape*: the model was built with three
+    inputs and the evaluator fed it two. A knob that changes a *value* -- which
+    `t_train_frac` does -- would have produced a plausible, wrong score in
+    silence. That is D67 exactly: a default reasserting itself where a measured
+    value was intended.
+    """
     from pinn_sfr_transient.axial import pinn_jax as pj  # noqa: PLC0415
 
-    model, p, _ = pj.train(AxialParams(), pj.AxialTrainConfig(log_every=10**9, **kw), verbose=False)
-    return lambda traj: pj.predict(model, p, traj.zeta, traj.t)
+    cfg = pj.AxialTrainConfig(log_every=10**9, **kw)
+    model, p, cfg = pj.train(AxialParams(), cfg, verbose=False)
+    return lambda traj: pj.predict(model, p, traj.zeta, traj.t, cfg)
 
 
 def run_arm(traj: Any, label: str, backend: str, **kw: Any) -> dict:  # noqa: ANN401
