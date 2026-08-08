@@ -56,11 +56,20 @@ therefore formed no front at all**, on any seed of either backend, while the
 documentation said otherwise. Both the horizon and the budget that caused that are
 fixed and pinned by tests.
 
+**What the current round is measuring.** Two things are in flight and neither has
+its third seed yet, so neither has moved a number above. A 54-run sweep of Adam
+against quasi-Newton iterations finds the **quasi-Newton budget is the axis that
+forms the front** — the Adam axis is flat over two decades once it is funded, which
+is awkward, because the Adam count is what the shipped default was tuned on
+([`docs/axial_nn.md`](docs/axial_nn.md) §7.5.11). And three ways of aiming capacity
+at the front are being swept one knob at a time; one of them reproduced the
+reference's peak saturation margin to 0.1 K on a single seed (§7.5.12–§7.5.14).
+
 [`docs/axial_nn.md`](docs/axial_nn.md) **§0 is the status quo** — accuracy, what is
 settled, what is open, and **§0.6 says which configuration to use**. §5–§7 carry
 every measurement, including the negative results, which outnumber the positive
 ones, and including which of that document's own conclusions have been retracted —
-seven of them during the study that produced §0.
+ten so far, seven during the study that produced §0 and three more since.
 
 **Every deviation from the manual is registered** in
 [`docs/axial_physics.md`](docs/axial_physics.md) §3 with its equation number. That
