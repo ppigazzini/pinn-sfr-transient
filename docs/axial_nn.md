@@ -1763,13 +1763,23 @@ and negative once is the `A + fourier` failure of §7.5.4.
 | f128 | 0.0314 | .0285–.0344 | 0.0363 | 1.16× | 0.2424 | +17.5 K |
 | f256 | 0.0282 | .0251–.0301 | 0.0358 | 1.27× | 0.2834 | +24.4 K |
 | **f512** | **0.0216** | **.0148–.0253** | 0.0310 | **1.44×** | **0.3012** | **+34.6 K** |
+| f1024 | 0.0234 | .0205–.0269 | 0.0304 | 1.30× | 0.3027 | +31.6 K |
 | shipped default | 0.0434 | — | 0.0497 | 1.15× | 0.0367 | **−1.1 K** |
 | reference | — | — | — | — | 0.3812 | — |
 
 Three seeds per cell, both backends. Every arm holds a **positive margin on every
-seed**; the shipped default holds a negative one on every seed. `f1024` is running
-and is one seed per backend so far — not comparable to a three-seed mean and not
-tabulated.
+seed**; the shipped default holds a negative one on every seed.
+
+**The ladder ends at f512.** `f1024` is not better: the mean is slightly worse on
+torch (0.0234 against 0.0216), the worst seed is worse (0.0269 against 0.0253), and
+`L_void` and the margin are flat. The ranges overlap heavily, so at three seeds the
+two rungs are indistinguishable and doubling the parameters again buys nothing. It
+cost 2.5 h per run to establish that, which is the price of a measured endpoint
+rather than an assumed one.
+
+So **capacity binds up to ~f512 and not beyond**, and the accelerating trend that
+looked open-ended two rungs earlier did close — one rung later than it appeared it
+might.
 
 **Monotone in `T_s`, in `L_void` and in margin-minimum on both backends, positive
 on every seed of every arm.** Targeting the margin raised it and improved the mean
