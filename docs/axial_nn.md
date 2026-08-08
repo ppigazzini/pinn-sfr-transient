@@ -10,31 +10,35 @@ including the results that came out badly, which are most of them.
 
 ## 0. Status quo
 
-Everything below is measured at **three seeds** against an `n_axial = 160`
-reference, and every table is reproducible by a sub-command of
-[`tools/axial_study.py`](../tools/axial_study.py). All six studies are complete:
-`ruler`, `horizon`, `budget`, `optimizer`, `parity`, `plan-a`, `combo`, `regime`
-and `regime-sign`.
+Every number is three seeds against an `n_axial = 160` reference on **both
+backends**, and every table is reproducible by a sub-command of
+[`tools/axial_study.py`](../tools/axial_study.py). Complete: `ruler`, `horizon`,
+`budget`, `optimizer`, `parity`, `plan-a`, `combo`, `regime`, `regime-sign`,
+`default`, `scaling`, and `margin` through f512. Running: `levelset` and the f1024
+rung.
 
 ### 0.1 Where the accuracy stands
 
-| configuration | `T_f` | `T_s` | `T_c` | `L_void` | `max α` |
+| configuration | `T_f` | `T_s` | `L_void` | worst-seed margin | front |
 |---|---|---|---|---|---|
-| **shipped default** | 0.1373 `[.1348–.1392]` | 0.0739 `[.0677–.0786]` | 0.0742 `[.0684–.0786]` | 0.1505 `[.1212–.1670]` | 1.0000 |
-| quasi-Newton budget (§7.5.3 arm C) | 0.1247 | 0.0434 | 0.0450 | 0.0724 `[.0495–.1068]` | 0.87 `[.63–1.00]` |
-| best known at f32 (§7.5.4) | 0.1143 | 0.0353 | 0.0364 | 0.2270 | 1.0000 |
-| **best known (§7.5.8, f128)** | **0.1024** | **0.0314** | **0.0323** | **0.2424** | **1.0000** |
-| reference | — | — | — | 0.3812 | 1.0000 |
-| **acceptance bar** | 0.01 | 0.01 | 0.01 | — | — |
+| **shipped default** (8k/500) | 0.1243 | 0.0434 | 0.0367 | **−1.1 K** | **on no seed** |
+| published-table budget (3k/300) | 0.1386 | 0.0765 | 0.1529 | +12.5 K | every seed |
+| f128 + quasi-Newton budget | 0.1024 | 0.0314 | 0.2424 | +17.5 K | every seed |
+| **best known — f512** | **0.0710** | **0.0216** | **0.3012** | **+34.6 K** | **every seed** |
+| reference | — | — | 0.3812 | — | — |
+| **acceptance bar** | 0.01 | 0.01 | — | — | — |
 
-**The bar is missed by 3.1× to 10×.** The best known configuration —
-`adam_iters=300, lbfgs_iters=3000, fourier_features=128` — is **28% better than the
-shipped default on `T_s`, 6.6× better on `L_void`, and forms the front on every
-seed where the default forms it on none**. It is not the default: see §0.5.
+**The bar is missed by 2.2×**, down from 4.3× at the shipped default. `L_void` is
+at **79% of the reference**, against the default's 10%. The best single run reaches
+`T_s` **0.0148** — 1.5× off the bar — but the f512 seed range is 1.71×, so the worst
+seed is the number to quote.
+
+**The shipped default forms no boiling front on any seed of either backend**
+(§7.2.9). That is the repository failing to produce its own headline result, and it
+outranks every accuracy figure here.
 
 The ruler is not the limit. At `n = 160` the reference's own error is 1.1–1.6e-3
-(§6.5), so the 1% bar sits 6–9× above it and the PINN's failure is **45–120× the
-ruler**.
+(§6.5), so the 1% bar sits 6–9× above it and the failure is **20–45× the ruler**.
 
 ### 0.2 What is settled
 
@@ -62,10 +66,25 @@ nine remedies scored on the mean while M4 asks for the peak.
 finds **26–28% less negative feedback on every seed**, with a 2.6% spread on that
 quantity (§7.4.1).
 
-**The model is optimisation-limited**, from three independent directions: the
-quasi-Newton stage is what forms the front at all (§7.3.4), moving budget into it
-improves every temperature with disjoint ranges (§7.5.3), and Plan A improves 2.4×
-on a 4× budget increase (§7.4.1).
+**Two constraints bind, and they are independent.**
+
+*The measure.* The loss is a mean over the domain and the front occupies a few
+percent of it, so the front contributes a few percent of the objective however long
+training runs. More optimisation therefore converges more precisely to a minimiser
+whose peak is wrong — measured directly in §7.5.5, where 3k → 8k iterations improve
+`T_s` by **47%** and destroy the front on both backends, and 16k does not recover
+it. This is why nine remedies scored on the mean did nothing for the front.
+
+*Capacity.* Fourier features 32 → 512 improve `T_s` by **39%** on torch and 20% on
+JAX, `L_void` from 0.2270 to 0.3012, and the worst-seed margin from +7.6 K to
++34.6 K — monotonically, on both backends (§7.5.8). The model was
+under-parameterised, and every one of the nine refuted remedies was ablated on a
+network an order of magnitude too small. That does not make those ablations wrong;
+it makes them ablations of a capacity-limited model, which is D59's rule at a scale
+nobody checked.
+
+The two are not alternatives. The measure decides *where the loss puts its weight*;
+capacity decides *how sharp a peak is representable at all*.
 
 ### 0.4 What is open
 
@@ -80,7 +99,7 @@ on a 4× budget increase (§7.4.1).
 
 ### 0.5 Why the best known configuration is not the default
 
-`adam_iters=300, lbfgs_iters=3000, fourier_features=128` beats the default on every
+`adam_iters=300, lbfgs_iters=3000, fourier_features=512` beats the default on every
 metric, on both backends, at three seeds — and forms the boiling front on every seed
 where the **default forms it on none** (§7.2.9, six runs, both backends). It is
 nonetheless **not** shipped as the default, for three reasons:
