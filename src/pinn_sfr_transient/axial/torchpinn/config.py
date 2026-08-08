@@ -16,8 +16,27 @@ class AxialTrainConfig:
     width: int = 64
     depth: int = 5
     n_colloc: int = 4000
-    adam_iters: int = 8000
-    lbfgs_iters: int = 500
+    # **Measured, not chosen.** The default must (a) form the boiling front on every
+    # seed of both backends, (b) beat what it replaces on accuracy, and (c) not cost
+    # more. `300/3000 + f256` is the only configuration measured that does all three:
+    #
+    #   configuration          T_s torch   sec    worst margin   front
+    #   8000/500  f0 (old)     0.0434      2337   -2.3 K         on NO seed
+    #   300/3000  f128         0.0314      1636   +17.5 K        every seed
+    #   300/3000  f256 (this)  0.0282      2209   +24.4 K        every seed
+    #   300/3000  f512         0.0216      3392   +34.6 K        every seed
+    #
+    # f512 is more accurate and is the documented best (`axial_nn.md` 0.6), but costs
+    # 45% MORE than the default it would replace; a default should not impose that
+    # silently. f128 is cheaper still, at a +9.5 K worst-seed margin on JAX -- thinner
+    # than is comfortable for a threshold crossing (7.5.4).
+    #
+    # The old default was dominated on every axis: slower than 300/3000+f512, 40% less
+    # accurate, L_void at a tenth of this, and it produced NO boiling front on any
+    # seed of either backend (7.2.9) -- the repository failing to reproduce its own
+    # headline result.
+    adam_iters: int = 300
+    lbfgs_iters: int = 3000
     lr: float = 1e-3
 
     # Causal temporal weighting [Wang, Sankaran & Perdikaris 2024]. `causal_eps`
@@ -160,7 +179,10 @@ class AxialTrainConfig:
     n_windows: int = 1
     # Random Fourier feature embedding of the inputs, against spectral bias
     # [Tancik et al. 2020; Wang, Wang & Perdikaris 2021]. 0 disables.
-    fourier_features: int = 0
+    # 256: the capacity rung of the shipped default. The ladder's measured
+    # endpoint is 512 (`axial_nn.md` 7.5.8); 256 is the rung that keeps the
+    # default no more expensive than the one it replaced.
+    fourier_features: int = 256
     fourier_scale: float = 2.0
     # Two-encoder "modified MLP" [Wang, Teng & Perdikaris 2021], the architecture
     # jaxpi uses by default; multiplicative interactions carry the inputs to every
