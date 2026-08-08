@@ -2310,6 +2310,34 @@ study keeps a **paired** memory-10/memory-50 comparison at the same arms and see
 That pairing measures at training scale what the isolated bake-off could only
 measure on the loss.
 
+#### 7.5.18 Reserved — the Laplace embedding
+
+**Designed, not implemented, not measured.** `__DEV/REPORT-01-MILESTONES.md` §C.7
+carries the memo; this section number is reserved so the design has somewhere to be
+written up and cannot be quoted from before it is run.
+
+The argument in one line: a Fourier basis is oscillatory and this transient is built
+out of **decay** — coast-down at `1/tau_pump = 0.2` s⁻¹ and six precursor groups
+spanning `0.0124` to `3.01` s⁻¹, a 243× range. Approximating `exp(-0.2t)` over 60 s
+out of sines costs many terms and still misses the tail; `exp(-s_k t)` represents it
+in one. The complementarity is not arbitrary either — **the oscillatory structure is
+in `ζ` and the exponential structure is in `t`**, which is the anisotropy §7.5.12
+measured on the bandwidth, reached from the physics instead of from a sweep.
+
+Three arms: Laplace alone with rates **fixed from the manual** (the known-shape
+case, where the embedding is a fit rather than a basis); **summed** with Fourier
+(concatenated blocks — superposition); and **multiplied** by Fourier (a damped
+sinusoid, `exp(-s_k x) sin(2πBx)` — modulation). The choice rule: fit when the shape
+is known, combine when it is unknown or compound, with the sum covering
+superposition and the product covering coupling.
+
+Two risks are recorded up front. The ansatz is already multiplicative,
+`θ = θ₀ exp(t̂ N)`, so a decaying mode is representable today — the claim is that it
+becomes *easier*, not newly possible, which makes a null result plausible and puts
+the weight on the control arm. And `exp(-s t̂)` underflows at the fastest precursor
+rate, so how the rates are compressed into normalised time changes what the basis
+spans and belongs in the deviation register.
+
 ### 7.6 Pseudo-time stepping
 
 Implemented (`pts_every`, `pts_dtau`, `pts_growth`), and **measured harmful** in
