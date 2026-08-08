@@ -1940,11 +1940,17 @@ rather than left as a dangling reference.
 | 7.5.10 | `capacity-optimiser` | is JAX's slower conversion of capacity into accuracy `optax.lbfgs`? | f512 under each framework's own L-BFGS and under the shared one, both backends — the one arm §7.5.8 says settles it |
 | 7.5.11 | `grid` | how many epochs does it actually need? | Adam ∈ {30, 300, 3000} crossed with quasi-Newton ∈ {30, 300, 3000} at f128, both backends, three seeds — 54 runs |
 
-Partial `grid` surface (torch, **one seed** — reported as partial, not as a result):
-quasi-Newton is monotone across two decades while Adam has an interior optimum at
-300, which is what makes `adam300/qn3000` the best cell and is the evidence behind
-the current default. It is one seed on one backend and §7.5.8's five overturned
-claims are the reason it is not stated more strongly than that.
+Partial `grid` surface (**two seeds torch, one to two JAX** — reported as partial,
+not as a result): quasi-Newton is monotone across two decades on both backends,
+and once `qn3000` is set the Adam axis is nearly flat — 0.0306 / 0.0314 / 0.0309 on
+torch across two decades of Adam. So the surface does **not** show the interior
+Adam optimum at 300 that the current default rests on; it shows the quasi-Newton
+axis doing the work and the Adam axis barely mattering. `qn30` loses the front at
+`adam30` and `adam300`, and `adam3000` buys it back at 100× the iterations for a
+much worse `T_s` (0.0740 against 0.0306) — Adam can substitute for the quasi-Newton
+stage, it is simply a bad trade. Not stated more strongly than this because the
+third seed is still running and §7.5.8 lists five claims overturned for exactly
+that.
 
 #### 7.5.12–7.5.14 Three embeddings, each tested in isolation
 
