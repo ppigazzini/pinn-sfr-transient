@@ -79,6 +79,11 @@ FOURIER_BANDS = ((), (1.0, 4.0), (1.0, 4.0, 16.0), (0.25, 1.0, 4.0, 16.0))
 BACKENDS = ("torch", "jax")
 # Set by --only; filters arms so an extended ladder need not re-run measured points.
 _ONLY: str | None = None
+# Set by --lbfgs-history; overrides the quasi-Newton curvature memory on every arm.
+# It is a flag rather than an edited default because the shipped default is what
+# every torch table was measured at, and a re-run at a different memory has to be
+# distinguishable from the rows it is being compared against.
+_HISTORY: int | None = None
 FIELDS = ("T_f", "T_cl", "T_s", "T_c")
 
 
@@ -192,6 +197,8 @@ def run_all(
         print(f"--only {wanted}: {len(specs)} arm(s)", flush=True)
     rows: list[dict] = []
     for label, kw in specs:
+        if _HISTORY is not None:
+            kw["lbfgs_history"] = _HISTORY
         rows.append(run_arm(traj, label, kw.pop("backend", backend), **kw))
         write(rows, out)
     return rows
@@ -1142,6 +1149,14 @@ def main() -> int:
     ap.add_argument("study", choices=sorted(STUDIES))
     ap.add_argument("--out", type=Path, default=None, help="JSON output path")
     ap.add_argument(
+        "--lbfgs-history",
+        type=int,
+        default=None,
+        help="override the quasi-Newton curvature memory on every arm. optax.lbfgs "
+        "defaults to 10 against torch's 50, and that single argument was the whole "
+        "cross-backend accuracy gap (docs/axial_nn.md section 7.5.17)",
+    )
+    ap.add_argument(
         "--only",
         default=None,
         help="run only arms whose label contains one of these comma-separated "
@@ -1153,6 +1168,8 @@ def main() -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     global _ONLY  # noqa: PLW0603 - one filter for the whole run
     _ONLY = args.only
+    global _HISTORY  # noqa: PLW0603
+    _HISTORY = args.lbfgs_history
     STUDIES[args.study](out)
     return 0
 
