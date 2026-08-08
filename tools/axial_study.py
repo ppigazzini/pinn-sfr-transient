@@ -799,6 +799,51 @@ def study_frontfrac(out: Path) -> None:
         )
 
 
+def study_capacity_optimiser(out: Path) -> None:
+    """Test whether the JAX capacity plateau is `optax.lbfgs` -- section 7.5.10.
+
+    Capacity helps torch and does nothing for JAX. `T_s` at seed 0, torch against
+    jax: 0.0315/0.0343 at f32, 0.0285/0.0379 at f128, 0.0251/0.0368 at f256, and
+    **0.0148/0.0336 at f512** -- a ratio growing 1.09x -> 2.27x. Both backends run
+    identical architectures and residuals, verified to 1e-14, so the equations are
+    not the cause.
+
+    Section 7.3.2 already found the framework L-BFGS to be the *entire* backend gap
+    at the shipped configuration: 1.168 with each framework's own optimiser and
+    0.999 with one shared implementation. The hypothesis follows directly --
+    `optax.lbfgs` cannot exploit the extra capacity and `torch.optim.LBFGS` can.
+
+    One arm decides it. If JAX tracks torch under the shared optimiser, the plateau
+    is the optimiser; if it does not, the gap is in the sampler or the float64
+    kernels and is genuinely unexplained.
+
+    This is a sharper question than another ladder rung, which only measures how far
+    torch goes -- and torch going further is already known.
+    """
+    traj = ruler()
+    big = {"adam_iters": 300, "lbfgs_iters": 3000, "fourier_features": 512}
+    rows = run_all(
+        traj,
+        [
+            (f"f512 {opt} [{backend}]", {"backend": backend, "seed": seed, "optimizer": opt, **big})
+            for seed in SEEDS
+            for backend in BACKENDS
+            for opt in ("lbfgs", "lbfgs-shared")
+        ],
+        out,
+    )
+    mean_table(rows)
+    print("\ndoes a shared optimiser let JAX use the capacity?")
+    for opt in ("lbfgs", "lbfgs-shared"):
+        t = [r["T_s"] for r in rows if r["arm"] == f"f512 {opt} [torch]"]
+        j = [r["T_s"] for r in rows if r["arm"] == f"f512 {opt} [jax]"]
+        if t and j:
+            print(
+                f"  {opt:14s} torch {sum(t) / len(t):.4f}   jax {sum(j) / len(j):.4f}   "
+                f"ratio {sum(j) / len(j) / (sum(t) / len(t)):.2f}x"
+            )
+
+
 STUDIES = {
     "ruler": study_ruler,
     "horizon": study_horizon,
@@ -814,6 +859,7 @@ STUDIES = {
     "scaling": study_scaling,
     "levelset": study_levelset,
     "frontfrac": study_frontfrac,
+    "capacity-optimiser": study_capacity_optimiser,
 }
 
 
