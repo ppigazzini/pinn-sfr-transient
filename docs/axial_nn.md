@@ -24,21 +24,24 @@ answered under a constraint. Committed but unrun: `frontfrac`,
 
 | configuration | `T_f` | `T_s` | `L_void` | worst-seed margin | front |
 |---|---|---|---|---|---|
-| **shipped default** (8k/500) | 0.1243 | 0.0434 | 0.0367 | **−1.1 K** | **on no seed** |
-| published-table budget (3k/300) | 0.1386 | 0.0765 | 0.1529 | +12.5 K | every seed |
-| f128 + quasi-Newton budget | 0.1024 | 0.0314 | 0.2424 | +17.5 K | every seed |
-| **best known — f512** | **0.0710** | **0.0216** | **0.3012** | **+34.6 K** | **every seed** |
+| **shipped default** — `300/3000`, f256 | 0.0941 | **0.0282** | **0.2834** | **+24.4 K** | **every seed** |
+| **documented best** — `300/3000`, f512 | **0.0710** | **0.0216** | **0.3012** | **+34.6 K** | **every seed** |
+| *previous default* (`8000/500`, f0) | 0.1243 | 0.0434 | 0.0367 | **−2.3 K** | **on no seed** |
+| *published-table budget* (`3000/300`, f0) | 0.1386 | 0.0765 | 0.1529 | +12.5 K | every seed |
 | reference | — | — | 0.3812 | — | — |
 | **acceptance bar** | 0.01 | 0.01 | — | — | — |
 
-**The bar is missed by 2.2×**, down from 4.3× at the shipped default. `L_void` is
-at **79% of the reference**, against the default's 10%. The best single run reaches
-`T_s` **0.0148** — 1.5× off the bar — but the f512 seed range is 1.71×, so the worst
-seed is the number to quote.
+torch, three seeds. §0.6 gives the JAX figures and the cost of each.
 
-**The shipped default forms no boiling front on any seed of either backend**
-(§7.2.9). That is the repository failing to produce its own headline result, and it
-outranks every accuracy figure here.
+**The bar is missed by 2.8× at the default and 2.2× at the documented best**,
+against 4.3× before this study. `L_void` is at **74% of the reference** by default
+and 79% at best, against the previous default's 10%. The best single f512 run
+reaches `T_s` **0.0148** — 1.5× off the bar — but the f512 seed range is 1.71×, so
+the worst seed is the number to quote.
+
+**The previous default formed no boiling front on any seed of either backend**
+(§7.2.9) — the repository failing to produce its own headline result. Both causes,
+the training horizon and the iteration budget, are fixed and pinned by tests.
 
 The ruler is not the limit. At `n = 160` the reference's own error is 1.1–1.6e-3
 (§6.5), so the 1% bar sits 6–9× above it and the failure is **20–45× the ruler**.
