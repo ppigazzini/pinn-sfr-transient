@@ -37,18 +37,45 @@ def _bounded_exp(x: jax.Array) -> jax.Array:
 class FourierEmbedding(eqx.Module):
     """Random Fourier features, ``x -> [sin(2 pi B x), cos(2 pi B x)]``.
 
-    ``B`` is frozen: it is drawn once and held under ``stop_gradient``, matching
-    the torch twin's ``register_buffer``.
+    ``B`` is frozen: drawn once and held under ``stop_gradient``, matching the torch
+    twin's ``register_buffer``. ``scale_per_input`` gives each coordinate its own
+    bandwidth — the rationale is in the torch twin.
     """
 
     B: jax.Array
 
-    def __init__(self, n_in: int, n_features: int, scale: float, key: jax.Array) -> None:
-        self.B = jax.random.normal(key, (n_in, n_features)) * scale
+    def __init__(
+        self,
+        n_in: int,
+        n_features: int,
+        scale: float,
+        key: jax.Array,
+        scale_per_input: tuple[float, ...] | None = None,
+    ) -> None:
+        s = jnp.full((n_in, 1), float(scale))
+        if scale_per_input is not None:
+            if len(scale_per_input) != n_in:
+                msg = f"scale_per_input has {len(scale_per_input)} entries, need {n_in}"
+                raise ValueError(msg)
+            s = jnp.asarray(scale_per_input, dtype=jnp.float64).reshape(n_in, 1)
+        self.B = jax.random.normal(key, (n_in, n_features)) * s
 
     def __call__(self, x: jax.Array) -> jax.Array:
         proj = 2.0 * jnp.pi * (x @ jax.lax.stop_gradient(self.B))
         return jnp.concatenate([jnp.sin(proj), jnp.cos(proj)])
+
+
+def fourier_scale_vector(cfg, n_in: int) -> tuple[float, ...] | None:  # noqa: ANN001
+    """Per-input Fourier bandwidths, or ``None`` for an isotropic basis.
+
+    Input order is ``(zeta, t)``, plus the level-set coordinate when it is on. Only
+    ``zeta`` is scaled: the front is sharp in space and smooth in time, so raising
+    the time bandwidth buys nothing and costs conditioning.
+    """
+    if cfg.fourier_scale_zeta is None:
+        return None
+    base = float(cfg.fourier_scale)
+    return (base * float(cfg.fourier_scale_zeta),) + (base,) * (n_in - 1)
 
 
 class ModifiedMLP(eqx.Module):
@@ -101,7 +128,13 @@ class AxialPinn(eqx.Module):
         use_front = bool(cfg.front_net and cfg.void_closure)
         n_in = 3 if use_front else 2
         self.embed = (
-            FourierEmbedding(n_in, cfg.fourier_features, cfg.fourier_scale, k_emb)
+            FourierEmbedding(
+                n_in,
+                cfg.fourier_features,
+                cfg.fourier_scale,
+                k_emb,
+                fourier_scale_vector(cfg, n_in),
+            )
             if cfg.fourier_features
             else None
         )

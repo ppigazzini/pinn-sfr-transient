@@ -70,15 +70,51 @@ class FourierEmbedding(nn.Module):
     prior for a boiling front that moves through the domain. Lifting the inputs
     into a random Fourier basis restores the high frequencies
     [Tancik et al. 2020; Wang, Wang & Perdikaris 2021].
+
+    **The bandwidth can differ per input.** One ``scale`` for every input assumes
+    the solution's frequency content is isotropic, and here it is not: the front is
+    a near-discontinuity in ``zeta`` and smooth in ``t``. ``scale_per_input`` gives
+    each coordinate its own bandwidth, so the basis can be sharp in space without
+    also being sharp in time -- which costs conditioning for nothing, since there
+    is no high-frequency structure in ``t`` to resolve.
+
+    The capacity ladder (`docs/axial_nn.md` 7.5.8) found *how many* features help
+    and stops at 512. A saturating count is the signature that says the next gain is
+    in the **kind** of basis rather than the amount of it.
     """
 
-    def __init__(self, n_in: int, n_features: int, scale: float) -> None:
+    def __init__(
+        self,
+        n_in: int,
+        n_features: int,
+        scale: float,
+        scale_per_input: tuple[float, ...] | None = None,
+    ) -> None:
         super().__init__()
-        self.register_buffer("B", torch.randn(n_in, n_features, dtype=torch.float64) * scale)
+        s = torch.full((n_in, 1), float(scale), dtype=torch.float64)
+        if scale_per_input is not None:
+            if len(scale_per_input) != n_in:
+                msg = f"scale_per_input has {len(scale_per_input)} entries, need {n_in}"
+                raise ValueError(msg)
+            s = torch.tensor(scale_per_input, dtype=torch.float64).reshape(n_in, 1)
+        self.register_buffer("B", torch.randn(n_in, n_features, dtype=torch.float64) * s)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         proj = 2.0 * np.pi * (x @ self.B)
         return torch.cat([torch.sin(proj), torch.cos(proj)], dim=-1)
+
+
+def fourier_scale_vector(cfg, n_in: int) -> tuple[float, ...] | None:  # noqa: ANN001
+    """Per-input Fourier bandwidths, or ``None`` for an isotropic basis.
+
+    Input order is ``(zeta, t)``, plus the level-set coordinate when it is on. Only
+    ``zeta`` is scaled: the front is sharp in space and smooth in time, so raising
+    the time bandwidth buys nothing and costs conditioning.
+    """
+    if cfg.fourier_scale_zeta is None:
+        return None
+    base = float(cfg.fourier_scale)
+    return (base * float(cfg.fourier_scale_zeta),) + (base,) * (n_in - 1)
 
 
 class ModifiedMLP(nn.Module):
