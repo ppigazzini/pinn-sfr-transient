@@ -14,8 +14,11 @@ Every number is three seeds against an `n_axial = 160` reference on **both
 backends**, and every table is reproducible by a sub-command of
 [`tools/axial_study.py`](../tools/axial_study.py). Complete: `ruler`, `horizon`,
 `budget`, `optimizer`, `parity`, `plan-a`, `combo`, `regime`, `regime-sign`,
-`default`, `scaling`, and `margin` through f512. Running: `levelset` and the f1024
-rung.
+`default`, `scaling`, `levelset`, and `margin` through f1024 (the ladder's measured
+endpoint is f512, §7.5.8). Running: `grid`, which crosses Adam against the
+quasi-Newton stage independently at fixed f128 — the question §7.5.3 and §7.5.5 each
+answered under a constraint. Committed but unrun: `frontfrac`,
+`capacity-optimiser`.
 
 ### 0.1 Where the accuracy stands
 
