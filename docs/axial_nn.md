@@ -1934,9 +1934,9 @@ Every study in `tools/axial_study.py` is now running or finished. `frontfrac` an
 `capacity-optimiser` had been committed with their designs fixed and never
 executed, which is the weak form of D67 — a study that exists only as an intention.
 
-**§7.5.11, the grid — complete on torch.** Adam ∈ {30, 300, 3000} × quasi-Newton ∈
-{30, 300, 3000} at f128. Torch has three seeds in all nine cells; JAX in seven.
-Mean `T_s`, worst-seed margin:
+**§7.5.11, the grid — complete.** Adam ∈ {30, 300, 3000} × quasi-Newton ∈ {30, 300,
+3000} at f128, **all 54 runs: nine cells, three seeds, both backends**. Mean `T_s`,
+worst-seed margin:
 
 | | qn30 | qn300 | qn3000 |
 |---|---|---|---|
@@ -1945,7 +1945,7 @@ Mean `T_s`, worst-seed margin:
 | **adam3000** [torch] | 0.0707 · +0.7 K | 0.0455 · +3.6 K | 0.0305 · +14.4 K |
 | **adam30** [jax] | 0.2336 · **no front** | 0.0960 · +3.4 K | **0.0350** · +9.8 K |
 | **adam300** [jax] | 0.1935 · **no front** | 0.0880 · +2.6 K | 0.0363 · +9.5 K |
-| **adam3000** [jax] | 0.0762 · +2.4 K | 0.0562 · +3.7 K | 0.0358 · +5.3 K |
+| **adam3000** [jax] | 0.0762 · +2.4 K | 0.0545 · +3.7 K | 0.0358 · +5.3 K |
 
 At three seeds on both backends:
 
@@ -2187,7 +2187,7 @@ collocation bug. Both are findings a single backend could not have produced.
 | Backend parity, post-closure | **reopened at f512** — §7.5.10. §7.3.2 measured 0.999 with a shared L-BFGS *at its own configuration*; at f512 the shared optimiser closes only part of the gap (JAX 1.27× better) and 1.73× remains. One seed |
 | The 2.4× JAX speed advantage | **unattributed** — §7.3.2. `torch.compile` accounts for 1.06× of it and is not the answer |
 | Optimiser bake-off (SSBroyden / SSBFGS) | **TBD — not started**, and §7.5.11 has now made it the highest-value remaining item: at three seeds on both backends the quasi-Newton axis is the *only* one that moves the front |
-| How many epochs it needs | **answered on torch, 3 seeds, all 9 cells** — §7.5.11. Quasi-Newton monotone over two decades; the Adam axis flat once `qn3000` is set, so the default's Adam budget does no measurable work. JAX at 7 of 9 cells |
+| How many epochs it needs | **answered — 54 runs, nine cells, three seeds, both backends** — §7.5.11. Quasi-Newton monotone over two decades; the Adam axis flat once `qn3000` is set, so the default's Adam budget does no measurable work |
 | Three front-aimed embeddings | **running** — §7.5.12–§7.5.14. `fourier_bands=(0.25,1,4,16)` beats the control on **both** metrics on **both** backends at one seed each; `level_set_input` is inert at 1.95× the cost |
 | How much collocation goes to the front | **running** — §7.5.9. The only free parameter in the measure fix, and 25% was picked rather than measured |
 | M4 acceptance: onset within 0.5 s and one cell | **not met, and now diagnosed** — §7.5.16. The *time* passes (0.25 s on 8 of 9 runs); the *height* is 1–6 cells out. Two causes: onset was never in the objective, and the threshold readout is `√` conditioned at a maximum (13 cells at the best published accuracy). Both addressed; results TBD |
