@@ -302,6 +302,8 @@ def test_the_two_backends_share_every_default():
         "level_set_input",
         "onset_head",
         "lbfgs_history",
+        "laplace_rates",
+        "laplace_mode",
     ):
         assert getattr(j, name) == getattr(t, name), name
 
@@ -997,4 +999,76 @@ def test_quasi_newton_memory_is_the_same_in_both_backends():
     assert "optax.lbfgs(memory_size=" in src, "optax.lbfgs must never be called bare"
     assert inspect.signature(optax.lbfgs).parameters["memory_size"].default != 50, (
         "optax's default changed; the comment explaining this fix needs updating"
+    )
+
+
+def test_laplace_embedding_widths_match_across_backends():
+    """All three combination modes must give the same input width in both backends.
+
+    The widths are the property that can silently fork: `alone` drops Fourier
+    entirely, `sum` concatenates so the width grows by the rate count, and
+    `product` modulates in place so it does not change at all. A backend that got
+    any of those wrong would still train — it would just be a different model.
+    """
+    pytest.importorskip("torch")
+
+    from pinn_sfr_transient.axial import pinn_torch as pt
+
+    rates = (0.0124, 0.0305, 0.111, 0.301, 1.14, 3.01, 0.2)
+    p = AxialParams()
+    for mode, expected in (("alone", 2 + len(rates)), ("sum", 128 + len(rates)), ("product", 128)):
+        kw = {
+            "width": 16,
+            "depth": 2,
+            "fourier_features": 64,
+            "laplace_rates": rates,
+            "laplace_mode": mode,
+        }
+        mt = pt.AxialPinn(p, pt.AxialTrainConfig(**kw))
+        mj = pj.AxialPinn(pj.AxialTrainConfig(**kw), jax.random.PRNGKey(0))
+        assert mt.net.net[0].in_features == expected, (mode, mt.net.net[0].in_features)
+        assert mj.mlp.layers[0].in_features == expected, (mode, mj.mlp.layers[0].in_features)
+
+
+def test_laplace_rates_enter_in_normalised_time():
+    """Rates are stated in 1/s and must be scaled by the TRAINED horizon, not `t_end`.
+
+    `t_train_frac` shortens the window, so a rate scaled by the full `t_end` would
+    decay the basis far too fast — and the failure would be silent, since the model
+    still trains. Asserted against the physics rather than against itself.
+    """
+    pytest.importorskip("torch")
+
+    from pinn_sfr_transient.axial import pinn_torch as pt
+
+    p = AxialParams()
+    cfg = pt.AxialTrainConfig(
+        width=8, depth=2, fourier_features=0, laplace_rates=(0.2,), laplace_mode="alone"
+    )
+    m = pt.AxialPinn(p, cfg)
+    horizon = p.t_end * cfg.t_train_frac
+    assert float(m.embed.rates[0, 0]) == pytest.approx(0.2 * horizon)
+    # At the end of the trained window the slowest mode must not have decayed away,
+    # and the fastest must be small but finite -- the design note warned of underflow
+    # and the measurement says it does not occur in float64.
+    fast = np.exp(-3.01 * horizon)
+    assert fast > 0.0
+    assert fast < 1e-15
+
+
+def test_laplace_off_is_the_shipped_default():
+    """`()` must leave the model bit-identical, since it is every study's control."""
+    torch = pytest.importorskip("torch")
+
+    from pinn_sfr_transient.axial import pinn_torch as pt
+
+    p = AxialParams()
+    common = {"width": 8, "depth": 2, "fourier_features": 32}
+    a = pt.AxialPinn(p, pt.AxialTrainConfig(**common))
+    b = pt.AxialPinn(p, pt.AxialTrainConfig(**common, laplace_rates=()))
+    zeta = torch.rand(7, 1, dtype=torch.float64)
+    that = torch.rand(7, 1, dtype=torch.float64)
+    np.testing.assert_array_equal(
+        a.normalised_state(zeta, that).detach().numpy(),
+        b.normalised_state(zeta, that).detach().numpy(),
     )

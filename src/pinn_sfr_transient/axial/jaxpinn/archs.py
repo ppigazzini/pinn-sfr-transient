@@ -11,6 +11,7 @@ import equinox as eqx
 import jax
 import jax.numpy as jnp
 
+from pinn_sfr_transient.axial.config import AxialParams
 from pinn_sfr_transient.axial.jaxpinn.config import AxialTrainConfig
 from pinn_sfr_transient.axial.physics import N_GROUPS
 
@@ -78,6 +79,56 @@ class FourierEmbedding(eqx.Module):
         return jnp.concatenate([jnp.sin(proj), jnp.cos(proj)])
 
 
+
+class LaplaceMix(eqx.Module):
+    """Exponential-decay basis in ``t_hat``, wrapping a Fourier embedding.
+
+    The torch twin carries the rationale. Rates arrive in physical ``1/s`` and are
+    scaled by the trained horizon here, so a caller states physics and this states
+    normalised time.
+    """
+
+    fourier: FourierEmbedding | None
+    mode: str = eqx.field(static=True)
+    rates: jax.Array
+
+    def __init__(
+        self,
+        fourier: FourierEmbedding | None,
+        rates: tuple[float, ...],
+        mode: str,
+        t_end: float,
+    ) -> None:
+        self.fourier = fourier
+        self.mode = mode
+        self.rates = jnp.asarray([r * t_end for r in rates], dtype=jnp.float64)
+
+    def __call__(self, x: jax.Array) -> jax.Array:
+        lap = jnp.exp(-self.rates * x[1])
+        if self.mode == "alone" or self.fourier is None:
+            return jnp.concatenate([x, lap])
+        f = self.fourier(x)
+        if self.mode == "sum":
+            return jnp.concatenate([f, lap])
+        n, k = f.shape[0], self.rates.shape[0]
+        per = n // k
+        parts = [
+            f[j * per : ((j + 1) * per if j < k - 1 else n)] * lap[j] for j in range(k)
+        ]
+        return jnp.concatenate(parts)
+
+
+def laplace_width(cfg, n_in: int) -> int:  # noqa: ANN001
+    """Input width after the Laplace mix, so the first Linear can be sized."""
+    n_rates = len(cfg.laplace_rates)
+    if not n_rates:
+        return 2 * cfg.fourier_features if cfg.fourier_features else n_in
+    if cfg.laplace_mode == "alone":
+        return n_in + n_rates
+    base = 2 * cfg.fourier_features if cfg.fourier_features else n_in
+    return base + n_rates if cfg.laplace_mode == "sum" else base
+
+
 def fourier_scale_vector(cfg, n_in: int) -> tuple[float, ...] | None:  # noqa: ANN001
     """Per-input Fourier bandwidths, or ``None`` for an isotropic basis.
 
@@ -134,7 +185,7 @@ class AxialPinn(eqx.Module):
     mlp: eqx.nn.MLP | ModifiedMLP
     kin: eqx.nn.MLP | None
     front: eqx.nn.MLP | None
-    embed: FourierEmbedding | None
+    embed: FourierEmbedding | LaplaceMix | None
     onset_raw: jax.Array | None
 
     def __init__(self, cfg: AxialTrainConfig, key: jax.Array) -> None:
@@ -155,6 +206,14 @@ class AxialPinn(eqx.Module):
         )
         if cfg.fourier_features:
             n_in = 2 * cfg.fourier_features
+        if cfg.laplace_rates:
+            raw_in = 3 if (use_front or cfg.level_set_input) else 2
+            # The torch model is handed `p`; this constructor is not, so the
+            # horizon comes from the default parameters. Every study uses those,
+            # and the parity test asserts the two backends agree on the width.
+            t_end = AxialParams().t_end * cfg.t_train_frac
+            self.embed = LaplaceMix(self.embed, cfg.laplace_rates, cfg.laplace_mode, float(t_end))
+            n_in = laplace_width(cfg, raw_in)
         self.mlp = (
             ModifiedMLP(n_in, len(FIELDS), cfg.width, cfg.depth, k_field)
             if cfg.modified_mlp

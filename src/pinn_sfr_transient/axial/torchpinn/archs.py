@@ -118,6 +118,61 @@ class FourierEmbedding(nn.Module):
         return torch.cat([torch.sin(proj), torch.cos(proj)], dim=-1)
 
 
+class LaplaceMix(nn.Module):
+    """Wrap a Fourier embedding with an exponential-decay basis in ``t_hat``.
+
+    Three combinations, and the choice is the point rather than a hyper-parameter:
+    ``alone`` is the known-shape case where the manual gives the functional form and
+    the embedding is a *fit*; ``sum`` concatenates the blocks for a superposition;
+    ``product`` modulates Fourier groups by one rate each, giving damped sinusoids,
+    for the case where oscillation and decay are *coupled*.
+
+    Rates arrive in physical ``1/s`` and are scaled by the trained horizon here, so
+    the caller states physics and this states normalised time. At the trained
+    horizon the fastest precursor group is ``exp(-49.7) = 2.7e-22`` — small but
+    exactly representable in float64, so the underflow this design was warned about
+    does not occur and no clipping is applied.
+    """
+
+    def __init__(
+        self, fourier: FourierEmbedding | None, rates: tuple[float, ...], mode: str, t_end: float
+    ) -> None:
+        super().__init__()
+        self.fourier = fourier
+        self.mode = mode
+        self.register_buffer(
+            "rates", torch.tensor([r * t_end for r in rates], dtype=torch.float64).reshape(1, -1)
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        lap = torch.exp(-self.rates * x[:, 1:2])
+        if self.mode == "alone" or self.fourier is None:
+            return torch.cat([x, lap], dim=1)
+        f = self.fourier(x)
+        if self.mode == "sum":
+            return torch.cat([f, lap], dim=1)
+        # product: split the Fourier block into one group per rate and modulate each,
+        # so the feature total is unchanged and any gain is the coupling, not capacity.
+        n = f.shape[1]
+        k = self.rates.shape[1]
+        per = n // k
+        parts = [
+            f[:, j * per : (j + 1) * per if j < k - 1 else n] * lap[:, j : j + 1] for j in range(k)
+        ]
+        return torch.cat(parts, dim=1)
+
+
+def laplace_width(cfg, n_in: int) -> int:  # noqa: ANN001
+    """Input width after the Laplace mix, so the first Linear can be sized."""
+    n_rates = len(cfg.laplace_rates)
+    if not n_rates:
+        return 2 * cfg.fourier_features if cfg.fourier_features else n_in
+    if cfg.laplace_mode == "alone":
+        return n_in + n_rates
+    base = 2 * cfg.fourier_features if cfg.fourier_features else n_in
+    return base + n_rates if cfg.laplace_mode == "sum" else base
+
+
 def fourier_scale_vector(cfg, n_in: int) -> tuple[float, ...] | None:  # noqa: ANN001
     """Per-input Fourier bandwidths, or ``None`` for an isotropic basis.
 
