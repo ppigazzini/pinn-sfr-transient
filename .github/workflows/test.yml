@@ -1,8 +1,12 @@
 name: tests
 
+# Feature branches are built too. They were not, and this branch reached 118
+# commits without a single CI run: the trigger listed `main` only, so every push
+# to `feat/axial-boiling` was silently unchecked. A gate that does not run on the
+# branch where the work happens is not a gate.
 on:
   push:
-    branches: [main]
+    branches: [main, "feat/**", "fix/**"]
   pull_request:
     branches: [main]
 
@@ -16,55 +20,132 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: test + coverage (CPU torch backend)
+  quality:
+    # Lint, format and type checks, plus the documentation's rendering rules.
+    # These run in pre-commit locally, which means they run only for whoever has
+    # it installed -- so they run here as well.
+    name: lint + types + docs
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 10
     steps:
       - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9  # v9.0.0
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           version: "0.12.2"
           python-version: "3.14"
           enable-cache: true
 
-      # torch-cpu pulls the small CPU-only torch wheel (no multi-GB CUDA stack),
-      # so CI installs fast; the PINN tests still run on CPU.
-      - name: Sync dependencies (core + CPU torch backend + dev tools)
-        run: uv sync --extra torch-cpu --locked
+      - name: Sync dev tools
+        run: uv sync --locked
 
+      - name: Ruff lint
+        run: uv run ruff check
+
+      - name: Ruff format check
+        run: uv run ruff format --check
+
+      - name: Type check
+        run: uv run ty check
+
+      # GitHub's math renderer is strict and this project keeps breaking it;
+      # the rules and the checker are in AGENTS.md and tools/check_markdown.py.
+      - name: Markdown rendering rules
+        run: uv run python tools/check_markdown.py
+
+  test:
+    # BOTH backends, so the coverage number means something. With torch alone the
+    # jaxpinn package -- 717 statements -- is never imported, and coverage reports
+    # unimported files at 0%, which dragged the measured total to about 64% against
+    # an 85% gate. The `omit` list was written when the JAX backend was a single
+    # module and was never updated when it became a package.
+    name: test + coverage (both backends)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.12.2"
+          python-version: "3.14"
+          enable-cache: true
+
+      # The CPU wheels of both frameworks coexist; only the -cpu/-gpu pair within
+      # one framework is mutually exclusive.
+      - name: Sync dependencies (core + both CPU backends + dev tools)
+        run: uv sync --extra torch-cpu --extra jax-cpu --locked
+
+      # Thread count changes float reduction order, so it changes answers and not
+      # only timings. OMP_NUM_THREADS binds torch. It does NOT bind JAX, whose CPU
+      # backend sizes its own pool from the core count -- measured at 291 threads
+      # where 8 were asked for, and `--xla_cpu_multi_thread_eigen=false` only takes
+      # that to 131 rather than pinning it. On a fixed runner class the core count
+      # is fixed, so CI is self-consistent; a wall-clock or a bitwise claim from a
+      # JAX run still needs `axial_study.py --cpu-block`, which sets affinity.
       - name: Run test suite with coverage gate
-        run: uv run pytest --cov-report=xml --cov-fail-under=85
+        env:
+          OMP_NUM_THREADS: "2"
+        run: uv run pytest --cov-report=xml --cov-report=term-missing --cov-fail-under=85
 
       - name: Upload coverage report
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-xml
           path: coverage.xml
           if-no-files-found: error
 
-  jax:
-    # Exercises the JAX backend (Equinox + Optax) on the minimum supported
-    # Python; jaxlib ships cp313 and cp314 wheels, so the old 3.12 pin is gone
-    # with Colab. No coverage gate (pinn_jax is omitted from coverage, like the
-    # other optional backends).
-    name: jax backend
+  torch-only:
+    # Proves the torch backend stands alone -- that nothing in it has grown a
+    # quiet dependency on JAX being importable. The combined job above cannot
+    # show this, which is why it did not replace this one.
+    name: torch backend alone
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9  # v9.0.0
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.12.2"
+          python-version: "3.14"
+          enable-cache: true
+
+      - name: Sync dependencies (core + CPU torch backend + dev tools)
+        run: uv sync --extra torch-cpu --locked
+
+      - name: Run test suite (JAX tests skip)
+        env:
+          OMP_NUM_THREADS: "2"
+        run: uv run pytest --no-cov
+
+  jax:
+    # The JAX backend on the minimum supported Python, without torch, for the
+    # mirror-image reason: the two backends must each stand up on their own.
+    name: jax backend alone, min Python
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           version: "0.12.2"
           python-version: "3.13"
@@ -73,30 +154,29 @@ jobs:
       - name: Sync dependencies (core + JAX backend + dev tools)
         run: uv sync --extra jax-cpu --locked
 
-      - name: Run test suite (JAX tests included; torch tests skip)
+      - name: Run test suite (torch tests skip)
         run: uv run pytest --no-cov
 
   minimal:
-    # Runs on the minimum supported version, so the lower bound of
-    # requires-python is actually exercised rather than asserted.
+    # Runs on the minimum supported version with no extras, so the lower bound of
+    # requires-python is exercised rather than asserted, and the optional-import
+    # guards are shown to degrade gracefully (their tests skip rather than error).
     name: core only, min Python (no optional extras)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9  # v9.0.0
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           version: "0.12.2"
           python-version: "3.13"
           enable-cache: true
 
-      # No extras: proves the numpy/scipy core runs and the torch/deepxde import
-      # guards degrade gracefully (their tests skip rather than error).
       - name: Sync core + dev tools only
         run: uv sync --locked
 
