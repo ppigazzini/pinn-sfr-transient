@@ -87,6 +87,13 @@ four times: D38, D39, the budget sweep's "monotonic" front degradation, and §7.
   seed 1 are unrelated draws. Elementwise ratios of them are noise; compare the
   distributions. Index-paired, the backend gap reads 1.167 / 0.997 / 1.366; as
   distributions it reads 1.158 / 1.166 / 1.177.
+- **Quote a bar with the ruler's uncertainty beside it, and keep the ratio above 4.**
+  Calibration practice (MIL-STD-45662A, ANSI/NCSL Z540) requires a tolerance to sit at
+  least four times above the uncertainty of the instrument measuring it. Two bars here
+  were set without that check: D35's void bar had a ratio of 0.3 and was withdrawn, and
+  the temperature result now sits at 1.06 — the network's error is the same size as the
+  reference's own, so further accuracy is not demonstrable against it. A number below a
+  ratio of one is measuring the ruler.
 - **Every published table must be reproducible by a committed command.**
   `tools/axial_study.py` has one sub-command per study. A number measured by an
   uncommitted script is not reproducible, however carefully it was measured: D67 is

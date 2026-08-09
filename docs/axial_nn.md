@@ -2407,6 +2407,41 @@ rather than `t_end`, since `t_train_frac` shortens the window and a wrongly scal
 rate would decay the basis far too fast while still training happily. That is
 asserted against the physics rather than against itself.
 
+#### 7.5.22 Every bar now carries the ruler's uncertainty beside it
+
+Two acceptance bars in this project have been wrong in the same way — D35's void bar,
+withdrawn because the reference's own error there is `3.2e-2`, and §7.5.16's onset-height
+worry, which turned out to be unfounded only after §7.5.21 measured it. Both were
+resolved case by case. Calibration practice has a rule for this, and adopting it removes
+the judgement call.
+
+**The test uncertainty ratio.** A tolerance is meaningful only if it sits at least **four
+times** above the uncertainty of the instrument measuring it — standard since
+MIL-STD-45662A (1988) and carried into ANSI/NCSL Z540. Applied here:
+
+| quantity | reference's own uncertainty | bar | ratio | verdict |
+|---|---|---|---|---|
+| temperatures, relative `L2` | 1.1–1.6e-3 | 0.01 | ≈ 6.3 | **sound** |
+| onset time | 0.009 s | 0.5 s | ≈ 56 | **sound** |
+| onset height | 0.06 cells | 1 cell | ≈ 17 | **sound** |
+| pointwise `α` | 3.2e-2 | 0.01 | ≈ 0.3 | **withdrawn, correctly** |
+
+So the bars are fine. **The result is what has run out of room.** `T_s = 0.0017` against a
+ruler of 1.1–1.6e-3 is a ratio of about **1.06** — the network's error is now the same
+size as the reference's own. §0's headline is therefore stated as "meets the bar and has
+reached the reference's resolution", not as a factor by which it beats it: below a ratio
+of one, the comparison measures the ruler.
+
+That has a consequence for what to do next. Further accuracy on the temperature fields
+**cannot be demonstrated against this reference**, whatever the network does. Either the
+reference is refined — it converges, so this is available and merely expensive — or the
+claim moves to a quantity where headroom remains, which is onset time at a ratio of 56.
+The second is free and is the direction §8 already points.
+
+`tools/m4_bar.py` measures the reference's own uncertainty for onset. The same treatment
+for every published bar belongs in `axial_study.py`, so that a bar and its ratio are
+emitted together and neither can be quoted alone.
+
 ### 7.6 Pseudo-time stepping
 
 Implemented (`pts_every`, `pts_dtau`, `pts_growth`), and **measured harmful** in

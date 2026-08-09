@@ -9,8 +9,12 @@
   transient of a sodium-cooled fast reactor, resolving one coolant channel axially with
   four material fields and a sodium-void closure taken from the SAS4A/SASSYS-1 manual.
   Against a verified stiff reference solver the network reaches a relative $L_2$ error of
-  $1.7 times 10^(-3)$ on the cladding-to-coolant film temperature, inside a 1% acceptance
-  bar by a factor of 5.9, and reproduces 99.3% of the reference peak voided length. The
+  $1.7 times 10^(-3)$ on the cladding-to-coolant film temperature and reproduces 99.3% of
+  the reference peak voided length. That error is comparable to the reference solver's
+  own discretisation error of 1.1--$1.6 times 10^(-3)$: the 1% acceptance bar is met, but
+  by the 4:1 test-uncertainty-ratio convention the residual accuracy is no longer
+  resolvable against this reference, and we report it as such rather than as a measured
+  accuracy. The
   result is obtained without any change of architecture. In a 54-run factorial sweep over
   Adam and quasi-Newton iteration counts, replicated at three seeds in two independent
   implementations, the Adam axis is flat across two decades once the quasi-Newton stage is
@@ -171,8 +175,16 @@ The axis had never been pushed past 3000. Table @tab:ladder extends it.
 ) <tab:ladder>
 
 Extending the quasi-Newton stage tenfold improves the error fifteenfold, monotonically on
-every seed, and takes the model from missing its 1% bar by a factor of two to meeting it
-by a factor of 5.9. The peak voided length reaches 99.3% of the reference and the
+every seed, and takes the model from missing its 1% bar by a factor of two to meeting it.
+
+How far inside the bar is a question the reference cannot answer. Metrological practice
+requires a tolerance to sit at least four times above the uncertainty of the instrument
+measuring it — the test uncertainty ratio, standard in calibration since MIL-STD-45662A
+and carried into ANSI/NCSL Z540. Against a reference error of 1.1--$1.6 times 10^(-3)$
+the 1% bar has a ratio of about 6, so the bar itself is sound. The measured
+$1.7 times 10^(-3)$ has a ratio of about 1.06. We therefore state that the network has
+reached the reference's own resolution, and decline to quote a factor by which it beats
+the bar: below a ratio of one the comparison is measuring the ruler. The peak voided length reaches 99.3% of the reference and the
 saturation margin $+67.6$ K against the reference's $+69.2$ K, so the front is
 quantitatively right rather than merely present. The seed range contracts from 1.10 to
 1.06, which reverses an assumption held throughout this work: the seed sensitivity that
@@ -261,6 +273,16 @@ comparison was made in precisely the regime the factorial sweep identifies as th
 where the quasi-Newton stage does not matter, and it is being repeated where the stage is
 funded. We report it here as a caution rather than as a result.
 
+Two reporting conventions from the wider computational-science literature would have
+caught our own errors earlier, and we adopt them. Recent verification-and-validation
+guidance for scientific machine learning requires that reference-data fidelity be
+documented and its effect on the surrogate assessed, and that error variability over
+seeds be reported rather than a single run [12]; a survey of machine learning for
+fluid-related PDEs found that 60 of 76 papers claiming to beat a numerical method
+compared against a weak baseline [13]. A stiff Radau reference with a quantified
+discretisation error is a strong baseline, and quantifying it is what told us our own
+headline number had run out of resolution.
+
 The classification in Table @tab:remedies suggests a discipline for proposals. An
 intervention that changes what the network can represent, or how the optimiser explores
 it, is worth testing. An intervention that reweights an objective, or re-expresses inputs
@@ -278,7 +300,9 @@ implied by a criterion on the field it derives from.
 
 A physics-informed neural network for a sodium-cooled fast reactor boiling transient
 meets a 1% accuracy bar, reaching $1.7 times 10^(-3)$ relative $L_2$ and 99.3% of the
-reference peak voided length, through optimisation budget alone. Across a 54-run
+reference peak voided length, through optimisation budget alone — and in doing so reaches
+the resolution limit of the reference it is scored against, at a test uncertainty ratio
+of about one. Across a 54-run
 factorial sweep at three seeds and two implementations, the quasi-Newton iteration count
 is the only training axis that changes the physics of the solution; the Adam count is
 flat across two decades. Of thirteen remedies tested in isolation, those that changed the
@@ -303,4 +327,8 @@ source for the thermophysics and feedback laws used here.
   [Müller J and Zeinhofer M 2023 Achieving high accuracy with PINNs via energy natural gradient descent _Proc. 40th Int. Conf. on Machine Learning_ *202* 25471],
   [Wu C, Zhu M, Tan Q, Kartha Y and Lu L 2023 A comprehensive study of non-adaptive and residual-based adaptive sampling for physics-informed neural networks _Comput. Methods Appl. Mech. Eng._ *403* 115671],
   [Nocedal J and Wright S J 2006 _Numerical Optimization_ 2nd edn (New York: Springer)],
+  [Taylor B N and Kuyatt C E 1994 _Guidelines for Evaluating and Expressing the Uncertainty of NIST Measurement Results_ NIST Technical Note 1297 (Gaithersburg, MD: National Institute of Standards and Technology)],
+  [Jakeman J D, Barba L A, Martins J R R A and O'Leary-Roseberry T 2026 Verification and validation for trustworthy scientific machine learning _Mach. Learn.: Sci. Technol._ *7* 025055],
+  [McGreivy N and Hakim A 2024 Weak baselines and reporting biases lead to overoptimism in machine learning for fluid-related partial differential equations _Nat. Mach. Intell._ *6* 1256],
+  [Eça L and Hoekstra M 2014 A procedure for the estimation of the numerical uncertainty of CFD calculations based on grid refinement studies _J. Comput. Phys._ *262* 104],
 ))
