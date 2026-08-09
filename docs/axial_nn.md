@@ -2503,12 +2503,23 @@ Sorting every isolated arm by what it changed:
 | **the optimiser** — quasi-Newton budget (§7.5.11), curvature memory (§7.5.17) | **decisive**; the only axis that forms the front at all |
 | **the loss measure** — level-set sampling (§7.5.6), front fraction (§7.5.9), block and causal weighting | **failed or inert**; `frontfrac` degrades monotonically |
 | **extra residuals** — onset head (§7.5.16), front network, pseudo-time | **harmful**; a consequence of the PDE carries no information as a constraint |
-| **re-parameterisation** — level-set coordinate (§7.5.13), Laplace embedding (§7.5.18) | **inert**; `φ` is a monotone function of `T_c`, and a decaying mode was already representable through the multiplicative ansatz. Both could only make something *easier*, and neither did |
+| **re-parameterisation of the *output*** — level-set coordinate (§7.5.13), Laplace embedding (§7.5.18) | **inert**; both are functions of things the network already computes, so neither adds information. **Not** the same as a trainable change of *input* coordinate, which is a change of function space and is untested here — see the narrowing below |
 
 **Change the function space or change the optimiser. Do not reweight the loss, and
 do not add residuals the PDE already implies.** That is not a hunch — it is thirteen
 measurements, and it is what the roadmap below is ordered against. The full version,
-with the 2026 literature it draws on, is `__DEV/REPORT-01-MILESTONES.md` Annex D.
+with the 2026 literature it draws on, is `__DEV/REPORT-01-MILESTONES.md` Annex D, and the
+revised plan after a five-topic literature sweep is Annex E.
+
+> **The rule has since been narrowed, and it matters.** §7.5.13 fed the network a
+> coordinate built from its own *output* and measured it inert; that was generalised to
+> "re-parameterisations add no information". The model-order-reduction literature says the
+> object with theory behind it is different: for transport-dominated problems with moving
+> discontinuities every fixed linear basis has slowly decaying Kolmogorov n-width, and the
+> published remedy is a registration map on the **input** coordinate, `x − s(t)` with `s`
+> trainable — not a feature derived from the output. Only one of those was tested. **A
+> function of the network's own output adds nothing; a trainable change of input coordinate
+> is a change of function space**, and belongs in the row above rather than this one.
 
 
 1. **Spend on the quasi-Newton axis, and find out where it ends** — §7.5.11. The
