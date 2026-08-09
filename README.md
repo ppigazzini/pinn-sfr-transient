@@ -12,7 +12,7 @@ The repository holds **two models**, and they are at very different stages:
 | state | 6-group point kinetics + two thermal nodes | four material fields on an axial mesh + sodium void |
 | void | a `tanh` demonstration surrogate at 820 K | saturation + superheat from the SAS4A manual, ~1156 K |
 | reference solver | verified | verified, except the void fraction (`axial_physics.md` §6.5) |
-| PINN | **meets its bar** — a few 1e-3 relative L2 | **0.020 against a 0.01 bar**; the *front* is solved to 99.5% |
+| PINN | **meets its bar** — a few 1e-3 relative L2 | **0.020 against a 0.01 bar**; the *front* is solved to 99.5%, onset time is not |
 | backends | PyTorch, JAX, DeepXDE | **JAX** (default), PyTorch |
 
 This README is a map. The physics, the neural-network methodology, and the usage
@@ -58,20 +58,19 @@ margin. Every other lever in this project trades one against the other; this is 
 first that moves both, and the mechanism is legible enough to say why
 ([`docs/axial_nn.md`](docs/axial_nn.md) §7.5.14).
 
-**And onset location is exact.** Boiling starts at the *maximum* of the coolant
-temperature, where the axial profile is 11.6× flatter than at its steepest and one
-mesh cell is 0.4 K — so reading a *position* off a *value* threshold there scales as
-a square root of the field error, which is the worst possible law. Solving the
-tangency conditions instead (the field touches saturation, and touches it
-tangentially) puts onset within **0.00 cells on every seed of every arm**, against
-2.7–4.0 cells for thresholding.
+**Onset turns out to be a question about *time*, not place.** The coolant heats
+monotonically up the channel, so the hottest point — and therefore where boiling
+starts — is always the outlet. A height criterion measures the mesh, not the
+network; an earlier revision of the documentation claimed that quantity had been
+solved exactly, and it had merely been restated as a tautology (§7.5.16).
 
-That fixed the wrong half of the problem, which is the interesting part: onset
-*time* was passing only because the scoring grid is 0.25 s and quantised it
-favourably. Measured without quantisation it is 0.62–0.84 s against a 0.5 s
-criterion — so M4's binding constraint has flipped from *where* to *when* (§7.5.16).
-The same arithmetic questions the criterion itself: one cell is only 1.6–2.3× above
-the *reference solver's own* error.
+What is real is that onset *time* was passing only because the scoring grid is
+0.25 s and quantised it favourably. Measured without quantisation it is 0.62–0.84 s
+against a 0.5 s criterion. And the criterion itself has now been checked against the
+ruler: refining the reference against itself leaves its own onset uncertain by
+**0.06 cells and 0.009 s** at the scoring mesh, an order of magnitude inside the
+bar — so the target is attainable and the failure is genuinely the network's
+(§7.5.21).
 
 **How many epochs it needs was never asked until now.** A 54-run sweep of Adam
 against quasi-Newton iterations, three seeds on both backends, finds that **the
@@ -111,7 +110,7 @@ agreeing is the strongest check here, and it is what caught the defect.
 settled, what is open, and **§0.6 says which configuration to use**. §5–§7 carry
 every measurement, including the negative results, which outnumber the positive
 ones, and including which of that document's own conclusions have been retracted —
-eleven so far, and one of them was a whole column of that document's JAX results.
+twelve so far, including a whole column of that document's JAX results and, most recently, a headline of its own that turned out to be a tautology.
 
 **Every deviation from the manual is registered** in
 [`docs/axial_physics.md`](docs/axial_physics.md) §3 with its equation number. That
