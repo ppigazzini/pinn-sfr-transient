@@ -1940,12 +1940,50 @@ configuration-bound conclusion in this document, after D67 and §5.3.
 
 #### 7.5.9–7.5.11 The epoch surface, and the two sweeps that were never run
 
-Every study in `tools/axial_study.py` is now running or finished. `frontfrac` and
-`capacity-optimiser` had been committed with their designs fixed and never
-executed, which is the weak form of D67 — a study that exists only as an intention.
+`frontfrac` and `capacity-optimiser` had been committed with their designs fixed
+and never executed — the weak form of D67, a study that exists only as an intention.
+Both are now measured.
 
-> **The 27 JAX runs of this surface are superseded — §7.5.17** (`memory_size=10`).
-> The torch half stands, and the three conclusions below hold on torch alone.
+**§7.5.9, `frontfrac` — diverting collocation to the front does not help.** Five
+splits, three seeds, at the 8k/500 budget §7.5.6 used, with today's f256 default:
+
+| `front_frac` | 0.0 | 0.05 | 0.10 | 0.25 | 0.50 |
+|---|---|---|---|---|---|
+| `T_s` [jax] | **0.0400** | 0.0407 | 0.0448 | 0.0497 | 0.0518 |
+| worst margin | +3.6 K | +4.4 K | +2.9 K | +3.2 K | +2.0 K |
+
+`T_s` degrades **monotonically** with front sampling and the margin is flat inside
+its noise. 25% — the value §7.5.6 used, chosen as plausible rather than measured —
+is 1.24× worse on the mean than not doing it at all.
+
+This sharpens Annex C rather than refuting it. The measure is a real constraint, but
+**re-weighting the measure is not the remedy**: moving points onto the front does not
+make the front easier, it starves the bulk, and at f256 the front forms anyway.
+§7.5.14 is the same diagnosis treated correctly — supply the basis the front needs
+instead of re-weighting the points it is scored on.
+
+> **Not comparable to §7.5.6's arms.** Those ran with `fourier_features = 0` — the
+> third arm adds f128 explicitly, and their `L_void` of 0.046 is the no-Fourier
+> signature. This study inherits today's f256 default. An earlier reading of the
+> control as "the front now forms where §7.5.6 lost it, so the memory fix rescued
+> it" was wrong: the difference is capacity, not memory.
+
+**§7.5.10, `capacity-optimiser` — answered, and the answer is §7.5.17.** f512,
+three seeds:
+
+| | `T_s` | `L_void` | worst margin |
+|---|---|---|---|
+| jax, own `optax.lbfgs` | 0.0233 | 0.2978 | +35.7 K |
+| jax, shared implementation | 0.0226 | 0.2982 | +35.6 K |
+
+**3% apart.** At `memory_size = 10` the same two arms read 0.0336 and 0.0265. So
+this section's premise — that JAX converts capacity into accuracy worse because of
+`optax.lbfgs` — was measuring one unset argument. Once the memory matches, the two
+implementations agree, and **JAX f512 against torch f512 is 1.08×** rather than the
+1.44× this document published.
+
+> **The 27 JAX runs of the grid below are superseded — §7.5.17** (`memory_size=10`).
+> The torch half stands, and the three conclusions hold on torch alone.
 
 **§7.5.11, the grid — complete.** Adam ∈ {30, 300, 3000} × quasi-Newton ∈ {30, 300,
 3000} at f128, **all 54 runs: nine cells, three seeds, both backends**. Mean `T_s`,
@@ -1999,67 +2037,68 @@ statement about the configuration it was measured at, which that section already
 warned of, and this is the measurement that confirms it. One seed; the remaining
 two decide it.
 
-#### 7.5.12–7.5.14 Three embeddings, each tested in isolation
+#### 7.5.12–7.5.14 Three embeddings, at three seeds on both backends
 
-The front is a near-discontinuity in `ζ` that *moves* in `t`. §7.2.8 says the loss
-cannot see it, because the loss is a mean; §7.5.8 says the one lever that moves the
-mean and the extremum together is **capacity aimed at the front**. These three aim
-it differently, each a change to the network's *input coordinates* rather than to
-the loss, each moving exactly one knob from the shipped default with a control arm
-that reproduces it. §7.2.6's compound arm is the precedent: it failed and could not
-say which half failed.
+All three moved exactly one knob from the shipped default with a control arm that
+reproduces it. The **four control arms of §7.5.12–§7.5.14 and §7.5.16 agree to every
+digit** on JAX — `T_s` 0.0292 [0.0286–0.0297], `L_void` 0.2440, margin +25.8 K, from
+four separately launched processes — so the runs are deterministic at a fixed thread
+budget and every new knob is inert when off, end to end rather than only in a unit
+test.
 
-> **Everything below is one or two seeds per arm.** The seed spread on this model
-> has reached 12.5× (§7.1) and ten claims in this document have been overturned by a
-> later seed. None of this is a result yet.
+JAX arms are three seeds at `lbfgs_history = 50` (§7.5.17); torch arms are two seeds
+and were never affected by that defect.
 
-**All three control arms reproduced the default to every digit** on their first
-seed, from separately launched processes — so the runs are deterministic at a fixed
-thread count and the new knobs are inert when off, end to end and not only in the
-unit tests.
+##### 7.5.14 Multi-scale Fourier bands — the front, essentially solved
 
-**§7.5.12, anisotropic bandwidth** (`fourier_scale_zeta`, one to two seeds):
-
-| `zeta_scale` | `T_s` torch | margin torch | `T_s` jax | margin jax |
-|---|---|---|---|---|
-| 1.0 (control) | 0.0278 (n=2) | +24.4 K | 0.0368 | +16.4 K |
-| 2.0 | 0.0290 (n=2) | +22.5 K | 0.0343 | +16.4 K |
-| 4.0 | 0.0239 | +19.3 K | 0.0339 | +15.9 K |
-| 8.0 | **0.0178** | **+40.4 K** | 0.0404 | **+36.7 K** |
-
-Both backends put the margin jump at 8.0 and disagree on the mean there — torch
-1.56× better, JAX 1.10× worse. 8.0 was chosen as a ladder endpoint, not found as an
-optimum, and the trend runs through it.
-
-**§7.5.13, the level-set coordinate** (`level_set_input`, one seed, torch): inert —
-`T_s` 0.0257 against the control's 0.0255, margin +29.6 against +30.8 — at **1.95×
-the cost**, because the bootstrap pass doubles the network evaluations and the
-gradient flows through it.
-
-**§7.5.14, multi-scale bands** (`fourier_bands`, one seed per arm, **both
-backends**):
-
-| bands | `T_s` torch | `L_void` torch | margin torch | `T_s` jax | `L_void` jax | margin jax |
+| bands | `T_s` torch | `T_s` jax | `L_void` torch | `L_void` jax | margin torch | margin jax |
 |---|---|---|---|---|---|---|
-| single (control) | 0.0278 (n=2) | 0.2834 | +24.4 K | 0.0368 | 0.2287 | +16.4 K |
-| (1, 4) | **0.0171** | 0.2756 | +15.3 K | 0.0348 | 0.2551 | +37.7 K |
-| (1, 4, 16) | 0.0247 | **0.3632** | **+69.1 K** | 0.0454 | **0.3364** | +54.4 K |
-| (0.25, 1, 4, 16) | 0.0218 | 0.3189 | +44.3 K | **0.0316** | 0.3154 | +42.7 K |
+| single (control) | 0.0278 | 0.0292 | 0.2834 | 0.2440 | +24.4 K | +25.8 K |
+| (1, 4) | **0.0206** | 0.0225 | 0.2705 | 0.2536 | **+15.3 K** | **+16.6 K** |
+| (1, 4, 16) | 0.0270 | 0.0233 | 0.3334 | **0.3793** | **+51.3 K** | +28.1 K |
+| (0.25, 1, 4, 16) | 0.0226 | **0.0203** | **0.3521** | 0.2932 | +41.4 K | +24.4 K |
 
-Two things, and the second is why this is the most interesting arm in the document.
+**`L_void = 0.3793` against the reference's 0.3812 is 99.5%** — the voided length is
+essentially exact, at three seeds, at the shipped feature count and wall-clock,
+while `T_s` and the margin also beat the control. The published best before this was
+79% of the reference (§7.5.8), and the shipped default is 64%.
 
-**The three-band arm reproduces the front and loses the mean, on both backends.**
-`L_void` reaches 95% of the reference on torch and 88% on JAX, against 78% and 60%
-for the controls, and torch's peak saturation margin lands within **0.1 K** of the
-reference's +69.2 K. Both give up `T_s` to get it. That is §7.2.8's mean-versus-
-extremum split inside a single study, on two independent implementations.
+**The mechanism is legible, and both backends agree on it.** Two bands win the
+*mean* and lose the *front* — (1,4) has the lowest margin in the set on both
+backends. Adding the 16× band reverses that: `L_void` and the margin jump, `T_s`
+gives some back. The high band resolves the near-discontinuity, the low bands keep
+the bulk smooth, and at a fixed feature total the split between them is a choice.
 
-**The four-band arm beats the control on *both* metrics, on *both* backends.**
-Torch: `T_s` 0.0278 → 0.0218 and margin +24.4 → +44.3 K. JAX: 0.0368 → 0.0316 and
-+16.4 → +42.7 K. Every other lever in this document trades one against the other;
-§7.5.8's capacity ladder is the only prior exception. One seed each — but *two
-backends agreeing at one seed each* is a different kind of evidence from one backend
-at one seed, and it is the reason this is written up rather than waited on.
+That is what makes this different from every other lever in this document. §7.2.8
+and Annex C say the loss is a **mean** and the front is an **extremum**, and that the
+two move independently; every previous remedy hit one or the other by accident.
+**This is the first controllable dial between them.**
+
+##### 7.5.12 Anisotropic bandwidth — the same idea, cruder
+
+| `zeta_scale` | `T_s` torch | `T_s` jax | margin torch | margin jax |
+|---|---|---|---|---|
+| 1.0 (control) | 0.0278 | 0.0292 | +24.4 K | +25.8 K |
+| 2.0 | 0.0290 | 0.0294 | +22.5 K | +21.6 K |
+| 4.0 | 0.0269 | 0.0271 | +18.4 K | +14.7 K |
+| 8.0 | **0.0194** | **0.0244** | +23.9 K | +26.5 K |
+
+Real and consistent — 1.43× on torch, 1.20× on JAX at `zeta_scale = 8`, with the
+front neutral. But it **shifts** the whole spatial band rather than **adding** one,
+so it buys front resolution by giving up bulk resolution. §7.5.14 dominates it: same
+physics, better instrument. The earlier reading of the first three torch arms as
+"monotone degradation, likely a negative result" was three points and is retracted.
+
+##### 7.5.13 The level-set coordinate — inert, and now explicable
+
+`T_s` 0.0292 → 0.0284 on JAX (three seeds), 0.0278 → 0.0257 on torch, at **1.95×
+the cost**. It cannot help, and the reason is structural rather than empirical:
+`φ = (T_c − T_sat − ΔT_sup)/ΔT` is a monotone function of `T_c`, which the network
+already computes. Feeding it back is a **re-parameterisation, not information**. The
+front sits at `φ = 0` by construction — but placing it still requires getting `T_c`
+right, which is the original problem.
+
+**Tenth remedy argued soundly and refuted by measurement**, and the most expensive.
 
 #### 7.5.15 A defect the level-set arm exposed: JAX arms were scored under the defaults
 
@@ -2149,42 +2188,51 @@ read-off), that the readout finds a parabola vertex placed deliberately between 
 points, and that a field never reaching saturation returns `nan` rather than zero
 error.
 
-**First measurement, one seed, `f128`/300/600 — the two halves split.**
+**Measured: three seeds, JAX at the shipped default, both readouts on every arm.**
 
-| | `T_s` | margin | onset height, threshold | onset height, **tangency** |
-|---|---|---|---|---|
-| head off | 0.0431 | +10.3 K | 0.0 cells | 0.0 cells |
-| head on | 0.0581 | +6.8 K | 12.0 cells | **3.2 cells** |
+| arm | `T_s` | `L_void` | worst margin | height err **threshold** | height err **tangency** |
+|---|---|---|---|---|---|
+| head off | 0.0292 | 0.2440 | +25.8 K | 2.67 cells | **0.00 cells** |
+| head on | 0.0346 | 0.2283 | +13.2 K | 2.67 cells | **0.00 cells** |
 
-**The readout works.** On the same field, tangency gives 3.2 cells against
-thresholding's 12.0 — 3.75× better, on a trained network rather than a synthetic
-perturbation. (The control scores 0.0 on both, so at *that* configuration the
-threshold readout is not broken and there is nothing to fix; the 1–6 cell errors
-were measured at f256/f512, and whether the conditioning argument binds at the
-shipped default is what the sweep is for.)
+**The readout solves the onset height outright.** `0.00 cells` on every seed of
+every arm, against 2.67–4.00 for thresholding — not "better", exact. And the reason
+is now clear: the network gets the *shape* of `T_c` near the channel top right,
+because that shape is the cosine power profile, and gets its *magnitude* wrong.
+Asking "where is the maximum" reads the shape; asking "where does `α` first cross
+0.01" reads the magnitude. The conditioning argument predicted this and the
+measurement is stronger than the prediction.
 
-**The head, as formulated, is wrong — and the numbers say how.** It learnt
-`ζ* = 0.8814` from an initialisation of `0.8808`: it moved by 0.0006 and never left
-where it started, while `t*` landed at 14.99 s against the reference's 10.70 s. The
-field got *worse* on both metrics at the same time.
+**It also shows the onset *time* was never as good as this document reported.**
+Per seed:
 
-That is the degeneracy the residual's own docstring flags. **The two conditions do
-not pin the point to the field; they pin the field to the point.** Bending `T_c`
-until it is tangent to `T_boil` at the wrong place is cheaper than moving
-`(ζ*, t*)` to the right one. And the conditions carry no new information — they are
-a *consequence* of the PDE, not additional physics — so as residuals they can only
-distort. Two ways out:
+| arm | `t_err` threshold | `t_err` **tangency** |
+|---|---|---|
+| head off | 0.50 / 0.25 / 0.50 s | **0.84 / 0.68 / 0.62 s** |
+| head on | 0.75 s × 3 | 1.99 / 1.81 / 1.64 s |
 
-- **Detach the field in the head's update** and the head in the field's, so the
-  point chases the field and cannot deform it.
-- **Solve the tangency system exactly on the current field** each step, with no
-  trainable head — which makes onset a *readout* again, just a well-conditioned one.
-  That is the half already measured to work.
+The threshold time was flattered by **grid quantisation** — the scoring grid is
+0.25 s, so that metric can only report multiples of 0.25 and it landed favourably.
+The tangency time is interpolated and unquantised, and it says 0.62–0.84 s against
+a 0.5 s criterion.
 
-The second is the stronger reading of the evidence, and it is deliberately **not**
-acted on yet: this is one seed, and ten claims in this document died at a later one.
-The study runs the shipped default at three seeds on both backends, and its control
-arm measures the readout independently of the head. **Results TBD.**
+**So M4's binding constraint has flipped.** It used to fail on *location* (1–6
+cells) and pass on *time*. Location is now exact and **time fails**. Still not met —
+but the remaining gap is ~1.5× on one quantity instead of 4× on another, and it is a
+different quantity than the one this document has been chasing.
+
+**The head is confirmed harmful at three seeds, and fails where predicted.** `T_s`
++18%, worst margin −49%, and tangency `t_err` **2.4× worse** (0.71 s → 1.81 s mean).
+That last number is the diagnosis confirming itself: `t*` is the coordinate the head
+parks in the wrong place, and the time error is exactly what degrades.
+
+The degeneracy is structural, not a tuning failure. **The two conditions do not pin
+the point to the field; they pin the field to the point** — bending `T_c` until it is
+tangent to `T_boil` at the wrong place is cheaper than moving `(ζ*, t*)` to the right
+one. And they carry no new information, being a consequence of the PDE rather than
+additional physics, so as residuals they can only distort. `onset_head` stays off and
+no further work is planned on it; `onset_by_tangency` is the half that survives, and
+it survives completely.
 
 Isolated, and here that matters more than usual: this is the **fourth** distinct use
 of the level set in this model, after §7.5.6's sampling measure, the front network's
@@ -2374,17 +2422,17 @@ collocation bug. Both are findings a single backend could not have produced.
 |---|---|
 | Fourier + modified MLP combined | **measured, and it fails** — §7.2.6 |
 | Plan A, multiple seeds | **TBD** — one seed measured (§7.4) |
-| Backend parity, post-closure | **reopened at f512** — §7.5.10. §7.3.2 measured 0.999 with a shared L-BFGS *at its own configuration*; at f512 the shared optimiser closes only part of the gap (JAX 1.27× better) and 1.73× remains. One seed |
+| Backend parity, post-closure | **closed, for a third time and for the right reason** — §7.5.17. The gap was `optax.lbfgs`'s default `memory_size=10` against torch's 50. At matched memory the two implementations agree to 2–3% on an identical objective, and JAX f512 is 1.08× torch rather than 1.44× |
 | The 2.4× JAX speed advantage | **unattributed** — §7.3.2. `torch.compile` accounts for 1.06× of it and is not the answer |
-| Optimiser bake-off (SSBroyden / SSBFGS) | **TBD — not started**, and §7.5.11 has now made it the highest-value remaining item: at three seeds on both backends the quasi-Newton axis is the *only* one that moves the front |
+| Optimiser bake-off (SSBroyden / SSBFGS) | **TBD — not started**, and §7.5.11 makes it the highest-value remaining item: at three seeds on both backends the quasi-Newton axis is the *only* one that moves the front |
 | How many epochs it needs | **answered — 54 runs, nine cells, three seeds, both backends** — §7.5.11. Quasi-Newton monotone over two decades; the Adam axis flat once `qn3000` is set, so the default's Adam budget does no measurable work |
-| Three front-aimed embeddings | **running** — §7.5.12–§7.5.14. `fourier_bands=(0.25,1,4,16)` beats the control on **both** metrics on **both** backends at one seed each; `level_set_input` is inert at 1.95× the cost |
-| How much collocation goes to the front | **running** — §7.5.9. The only free parameter in the measure fix, and 25% was picked rather than measured |
-| M4 acceptance: onset within 0.5 s and one cell | **not met, and now diagnosed** — §7.5.16. The *time* passes (0.25 s on 8 of 9 runs); the *height* is 1–6 cells out. Two causes: onset was never in the objective, and the threshold readout is `√` conditioned at a maximum (13 cells at the best published accuracy). Both addressed; results TBD |
+| Three front-aimed embeddings | **measured, three seeds** — §7.5.12–§7.5.14. `fourier_bands=(1,4,16)` reaches **99.5% of the reference voided length** while also beating the control on `T_s` and margin; `zeta_scale=8` is real but cruder; `level_set_input` is inert at 1.95× the cost |
+| How much collocation goes to the front | **measured, and it fails** — §7.5.9. `T_s` degrades monotonically from 0% to 50%; re-weighting the measure is not the remedy |
+| M4 acceptance: onset within 0.5 s and one cell | **not met — and the binding constraint has flipped to *time*** — §7.5.16. The tangency readout puts onset height at **0.00 cells** on every seed; the unquantised time error is 0.62–0.84 s against 0.5 s. The old "time passes" reading was grid quantisation |
 | Is M4's one-cell criterion sound? | **doubtful, and unchecked** — §7.5.16. One cell is 0.405 K of `T_c`, i.e. relative `L2` of 0.0026 — 4× tighter than the 1% bar and only 1.6–2.3× above the *reference's own* error. This is D35's failure mode and the criterion has never been checked against the ruler |
 | Is Adam needed at all? | **never tested** — §7.5.11's floor is `adam30`, not `adam0`. "30 is as good as 3000" is measured; "Adam is unnecessary" is not |
 | Where the quasi-Newton axis ends | **not measured** — §7.5.11 is monotone over two decades with no interior optimum, and by §7.5.8's own rule an unterminated monotone trend is an extrapolation. Kiyani et al. run 30000 quasi-Newton iterations against this model's 3000 |
-| Where the memory optimum sits at the real budget | **not measured** — §7.5.17a. The iso-time optimum is 100 at 200 s, but the recipe spends ~550 s and the crossover moves with the budget |
+| Where the memory optimum sits at the real budget | **not measured** — §7.5.17a. The iso-time optimum is 100 at a 200 s budget; the recipe spends ~550 s and the crossover moves with the budget |
 | The 1% bar on temperatures | **not met** — see §7.2.5 for the current figures |
 
 ## 8. What to do next
