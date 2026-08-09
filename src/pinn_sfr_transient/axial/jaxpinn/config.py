@@ -177,6 +177,25 @@ class AxialTrainConfig:
     # JAX onto the published torch behaviour rather than moving both somewhere new.
     lbfgs_history: int = 50
 
+    # Laplace embedding (REPORT-01 section C.7, docs/axial_nn.md section 7.5.18).
+    # Physical decay rates in 1/s; the embedding uses `exp(-s_k * t_end * t_hat)`.
+    # `()` is off and is the control.
+    #
+    # A Fourier basis is oscillatory and this transient is built out of DECAY:
+    # coast-down at 1/tau_pump and six precursor groups spanning 0.0124 to 3.01
+    # per second. Approximating exp(-0.2 t) over the window out of sines costs many
+    # terms and still misses the tail; one exponential does it exactly. The split
+    # is not arbitrary either -- the oscillatory structure is in `zeta` and the
+    # exponential structure is in `t`, which is the anisotropy section 7.5.12
+    # measured on the bandwidth, reached from the physics instead of a sweep.
+    laplace_rates: tuple[float, ...] = ()
+    # How the two bases combine. "alone" drops Fourier entirely (the known-shape
+    # case: a fit, not a basis). "sum" concatenates the blocks, which is right when
+    # the solution is a superposition. "product" modulates each Fourier group by one
+    # rate, giving damped sinusoids -- right when the two are coupled, which is what
+    # a transient excursion is rather than a sum of one of each.
+    laplace_mode: str = "sum"
+
     # Two-encoder "modified MLP" [Wang, Teng & Perdikaris 2021]. Measured -16.1%,
     # and likewise not adopted -- see section 7.2.6.
     modified_mlp: bool = False

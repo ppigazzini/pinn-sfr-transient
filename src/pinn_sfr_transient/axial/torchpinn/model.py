@@ -54,9 +54,11 @@ from pinn_sfr_transient.axial.torchpinn.archs import (
     MLP,
     N_TEMPS,
     FourierEmbedding,
+    LaplaceMix,
     ModifiedMLP,
     _bounded_exp,
     fourier_scale_vector,
+    laplace_width,
 )
 from pinn_sfr_transient.axial.torchpinn.config import AxialTrainConfig
 
@@ -84,6 +86,22 @@ class AxialPinn(nn.Module):
                 .double()
             )
             n_in = 2 * cfg.fourier_features
+        if cfg.laplace_rates:
+            # Wraps whatever embedding exists (or none, for `alone`), so the two
+            # bases compose rather than one replacing the other.
+            self.embed = (
+                LaplaceMix(
+                    self.embed,
+                    cfg.laplace_rates,
+                    cfg.laplace_mode,
+                    float(p.t_end) * cfg.t_train_frac,
+                )
+                .to(cfg.device)
+                .double()
+            )
+            n_in = laplace_width(
+                cfg, 3 if (cfg.front_net and cfg.void_closure) or cfg.level_set_input else 2
+            )
         core = (
             ModifiedMLP(n_in, len(FIELDS), cfg.width, cfg.depth)
             if cfg.modified_mlp

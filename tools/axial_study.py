@@ -72,6 +72,10 @@ ANISO_SCALES = (None, 2.0, 4.0, 8.0)
 # is in every arm, so a gain is coverage of the extra scales and not a different
 # one.
 FOURIER_BANDS = ((), (1.0, 4.0), (1.0, 4.0, 16.0), (0.25, 1.0, 4.0, 16.0))
+# Laplace rates straight from the manual, in 1/s: the six delayed-precursor decay
+# constants and the pump coast-down. Not tuned and not swept -- this is the
+# known-shape case, so the embedding is a fit and the rates are the physics.
+LAPLACE_RATES = (0.0124, 0.0305, 0.111, 0.301, 1.14, 3.01, 0.2)
 # Every study sweeps both backends. Two independent implementations agreeing is
 # the strongest check this project has, and it is the reason the JAX twin exists
 # (`docs/axial_nn.md` section 4) -- a result measured on one backend is a result
@@ -1121,6 +1125,60 @@ def study_onset(out: Path) -> None:
         )
 
 
+def study_laplace(out: Path) -> None:
+    """Laplace embedding -- alone, summed with Fourier, multiplied by it -- section 7.5.18.
+
+    A Fourier basis is oscillatory; this transient is built out of DECAY. The pump
+    coasts down at `1/tau_pump` and six precursor groups span 0.0124 to 3.01 per
+    second, a 243x range. Approximating `exp(-0.2 t)` over the window out of sines
+    costs many terms and still misses the tail; one exponential does it exactly.
+
+    The complementarity is not arbitrary: the oscillatory structure is in `zeta` and
+    the exponential structure is in `t`, which is the anisotropy section 7.5.12
+    measured on the bandwidth -- reached here from the physics instead of a sweep.
+
+    Three arms, and the choice between them is the hypothesis:
+
+    * `alone` -- rates fixed from the manual, no Fourier. The known-shape case, where
+      the embedding is a **fit** rather than a basis, and should need few features.
+    * `sum` -- concatenated blocks, right when the solution is a **superposition** of
+      an oscillatory part and a decaying one.
+    * `product` -- each Fourier group modulated by one rate, a damped sinusoid. Right
+      when the two are **coupled**, which is what a transient excursion is rather
+      than a sum of one of each. The feature total is unchanged, so any gain is the
+      coupling and not capacity.
+
+    `laplace_rates=()` is the control and reproduces the shipped default exactly.
+
+    The honest prior is that this may be inert: the ansatz is already multiplicative,
+    `theta = theta_0 exp(t_hat N)`, so a decaying mode is representable today. The
+    claim is that it becomes *easier*, not newly possible -- which is why the control
+    arm carries the weight and why 7.5.13, the last re-parameterisation tried, was
+    measured inert.
+    """
+    traj = ruler()
+    arms = [
+        ("off", {}),
+        *[
+            (m, {"laplace_rates": LAPLACE_RATES, "laplace_mode": m})
+            for m in ("alone", "sum", "product")
+        ],
+    ]
+    rows = run_all(
+        traj,
+        [
+            (f"laplace={label} [{backend}]", {"backend": backend, "seed": seed, **kw})
+            for seed in SEEDS
+            for backend in BACKENDS
+            for label, kw in arms
+        ],
+        out,
+    )
+    mean_table(rows)
+    print("\ndoes an exponential basis help a transient built out of decay?")
+    _arm_summary(rows)
+
+
 STUDIES = {
     "ruler": study_ruler,
     "horizon": study_horizon,
@@ -1142,6 +1200,7 @@ STUDIES = {
     "lsinput": study_lsinput,
     "bands": study_bands,
     "onset": study_onset,
+    "laplace": study_laplace,
 }
 
 
