@@ -75,6 +75,13 @@ FRONT_FRACS = (0.0, 0.05, 0.10, 0.25, 0.50)
 # Adam x quasi-Newton grid, decades apart, so each stage's own saturation point
 # is visible rather than inferred from a fixed-total split.
 GRID_ITERS = (30, 300, 3000)
+# Task 1: does the quasi-Newton axis end? Section 7.5.11 is monotone over two
+# decades with no interior optimum, and by this project's own rule an unterminated
+# monotone trend is an extrapolation. Kiyani et al. run 30000 against this model's
+# 3000. Adam is 0 or 30 because the same surface showed the Adam axis flat once the
+# quasi-Newton stage is funded -- and 0 has never been run at all.
+QN_LADDER = (3000, 10000, 30000)
+ADAM_LADDER = (0, 30)
 # Spatial-band multipliers for the anisotropic embedding. None is the control:
 # isotropic, i.e. exactly the shipped default.
 ANISO_SCALES = (None, 2.0, 4.0, 8.0)
@@ -1210,6 +1217,50 @@ def study_laplace(out: Path) -> None:
     _arm_summary(rows)
 
 
+def study_qnladder(out: Path) -> None:
+    """Push the quasi-Newton axis until it ends, or show that it does not -- section 7.5.20.
+
+    The most consequential open question in this project. Section 7.5.11 measured the
+    quasi-Newton axis monotone across two decades on both backends, with no interior
+    optimum, and section 7.5.8's own rule says an unterminated monotone trend is an
+    untested extrapolation. Kiyani et al. run Adam[1000] + SSBroyden[**30000**]
+    against this model's 300 + 3000.
+
+    **If the axis keeps paying, `T_s = 0.02` is a budget limit and not the model's**,
+    and every "the formulation cannot do better" reading in this document is
+    premature. If it flattens, the formulation really is the ceiling and the next
+    move is the optimiser rather than the budget.
+
+    Adam is 0 or 30 because that surface also showed the Adam axis flat once the
+    quasi-Newton stage is funded -- so this asks the sharper question, whether Adam
+    is needed **at all**. `adam_iters = 0` had never been run before this study, and
+    it crashed the JAX backend when it was: the collocation set was drawn inside the
+    Adam loop, so with no loop the polish had no points.
+
+    Cost is the reason this is JAX-only to begin with: at 4.4x torch (section 7.5.19)
+    the 30000-iteration arms are hours rather than most of a day. Torch confirms
+    whatever this finds.
+    """
+    traj = ruler()
+    rows = run_all(
+        traj,
+        [
+            (
+                f"adam{a}/qn{q} [{backend}]",
+                {"backend": backend, "seed": seed, "adam_iters": a, "lbfgs_iters": q},
+            )
+            for seed in SEEDS
+            for backend in BACKENDS
+            for a in ADAM_LADDER
+            for q in QN_LADDER
+        ],
+        out,
+    )
+    mean_table(rows)
+    print("\ndoes more quasi-Newton keep paying, and is Adam needed at all?")
+    _arm_summary(rows)
+
+
 STUDIES = {
     "ruler": study_ruler,
     "horizon": study_horizon,
@@ -1232,6 +1283,7 @@ STUDIES = {
     "bands": study_bands,
     "onset": study_onset,
     "laplace": study_laplace,
+    "qnladder": study_qnladder,
 }
 
 
@@ -1242,6 +1294,13 @@ def main() -> int:
     )
     ap.add_argument("study", choices=sorted(STUDIES))
     ap.add_argument("--out", type=Path, default=None, help="JSON output path")
+    ap.add_argument(
+        "--seeds",
+        type=str,
+        default=None,
+        help="comma-separated seeds to run instead of all three, so one ladder can be "
+        "split across cpu blocks and finish in a third of the wall-clock",
+    )
     ap.add_argument(
         "--cpu-block",
         type=int,
@@ -1273,6 +1332,10 @@ def main() -> int:
         n = int(os.environ.get("OMP_NUM_THREADS", "8"))
         cores = pin_cpu_block(args.cpu_block, n)
         print(f"pinned to {len(cores)} cores {cores[0]}-{cores[-1]}", flush=True)
+    if args.seeds:
+        global SEEDS  # noqa: PLW0603
+        SEEDS = tuple(int(x) for x in args.seeds.split(","))
+        print(f"seeds: {SEEDS}", flush=True)
     _ONLY = args.only
     global _HISTORY  # noqa: PLW0603
     _HISTORY = args.lbfgs_history

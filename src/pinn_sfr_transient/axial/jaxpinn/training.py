@@ -70,6 +70,12 @@ def train(
     rar: tuple | None = None
     anchor: tuple | None = None
     dtau = cfg.pts_dtau
+    # Drawn before the loop, not inside it: with `adam_iters = 0` the loop never
+    # runs and the quasi-Newton polish below would have no points to train on --
+    # a NameError, and the reason "is Adam needed at all?" had never been tested.
+    # The torch twin draws its own set inside `_lbfgs`, so it was never exposed.
+    key, ck0 = jax.random.split(key)
+    pts = _merge(_collocation(p, cfg, ck0, 1.0, model), rar, feedback=cfg.feedback)
     for it in range(cfg.adam_iters):
         # Time-window curriculum: the horizon opens from 1/n_windows to 1 over
         # training, matching the torch twin. With n_windows = 1 this is a no-op.
