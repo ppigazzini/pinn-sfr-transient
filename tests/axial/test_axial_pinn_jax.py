@@ -713,7 +713,7 @@ def test_the_default_is_a_configuration_that_forms_a_front():
     from pinn_sfr_transient.axial import pinn_torch as pt
 
     for cfg in (pj.AxialTrainConfig(), pt.AxialTrainConfig()):
-        assert (cfg.adam_iters, cfg.lbfgs_iters) == (300, 3000), (
+        assert (cfg.adam_iters, cfg.lbfgs_iters) == (30, 30000), (
             cfg.adam_iters,
             cfg.lbfgs_iters,
         )

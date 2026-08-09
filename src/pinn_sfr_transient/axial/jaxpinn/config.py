@@ -39,8 +39,28 @@ class AxialTrainConfig:
     # accurate, L_void at a tenth of this, and it produced NO boiling front on any
     # seed of either backend (7.2.9) -- the repository failing to reproduce its own
     # headline result.
-    adam_iters: int = 300
-    lbfgs_iters: int = 3000
+    # 30 Adam / 30000 quasi-Newton (7.5.20). Chosen because at that budget the model
+    # MEETS ITS 1% BAR -- T_s 0.0017 at three seeds, 5.9x inside it -- after being
+    # stuck at 2x outside it for the project's whole life. The whole of that came
+    # from the quasi-Newton count: 3000 -> 30000 improves T_s 15x monotonically on
+    # every seed, L_void reaches 99.3% of the reference, and the saturation margin
+    # +67.6 K against the reference's +69.2 K.
+    #
+    # It costs 10x the wall-clock, 9060 s against 905 s, and that breaks the rule the
+    # previous default was chosen by -- form the front, beat what it replaces, cost no
+    # more. The rule is overridden deliberately: a default that MEETS the acceptance
+    # criterion in 2.5 hours is worth more than one that misses it in fifteen minutes,
+    # and 7.5.4b's cheaper configurations remain one field away for anyone iterating.
+    #
+    # Adam stays at 30 rather than 0 because 30 is measurably better (0.0044 against
+    # 0.0084 at qn10000) and costs nothing, and rather than 300 because 7.5.11 showed
+    # that axis flat -- the shipped 300 was never doing measurable work.
+    #
+    # Measured on JAX at three seeds. Torch is unmeasured at this budget and running;
+    # both backends have the same monotone quasi-Newton axis in 7.5.11, which is why
+    # this ships before that confirms rather than after.
+    adam_iters: int = 30
+    lbfgs_iters: int = 30000
     lr: float = 1e-3
 
     # Dimensionless: the prefix sum is normalised by the total. See the torch twin.

@@ -1261,6 +1261,47 @@ def study_qnladder(out: Path) -> None:
     _arm_summary(rows)
 
 
+def study_bakeoff(out: Path) -> None:
+    """Re-run the optimiser bake-off with the quasi-Newton stage FUNDED -- section 7.5.22.
+
+    `optimizer` runs at 3000 Adam / 300 quasi-Newton, the old diagonal budget, and
+    that is the wrong place to compare quasi-Newton methods. Section 7.5.11 measured
+    the quasi-Newton axis as the only one that moves the front and the Adam axis as
+    flat once it is funded -- so a bake-off at `qn = 300` compares four methods in
+    the regime where none of them is given enough iterations to matter. Every arm
+    there lands at `T_s ~ 0.05` with a +2 K margin, against the shipped default's
+    0.029 and +26 K, which is the symptom.
+
+    This runs the same four at the shipped 300 / 3000. It is a separate sub-command
+    rather than an edit to `optimizer`, so the earlier table stays reproducible by
+    the command that produced it.
+
+    The prior from the starved run is that plain L-BFGS wins, self-scaling costs 33%
+    and the Broyden class costs 44% at 4.3x the wall-clock. If that survives a funded
+    quasi-Newton stage it is a real negative result and roadmap item D.4 -- natural
+    gradient -- becomes the next thing to try rather than another quasi-Newton
+    variant. If it reverses, the earlier bake-off was measured in the wrong regime and
+    should be withdrawn.
+    """
+    traj = ruler()
+    rows = run_all(
+        traj,
+        [
+            (
+                f"{opt} [{backend}]",
+                {"backend": backend, "seed": seed, "optimizer": opt},
+            )
+            for seed in SEEDS
+            for backend in BACKENDS
+            for opt in ("lbfgs", "lbfgs-shared", "ssbfgs", "ssbroyden")
+        ],
+        out,
+    )
+    mean_table(rows)
+    print("\ndoes any quasi-Newton variant beat plain L-BFGS once the stage is funded?")
+    _arm_summary(rows)
+
+
 STUDIES = {
     "ruler": study_ruler,
     "horizon": study_horizon,
@@ -1284,6 +1325,7 @@ STUDIES = {
     "onset": study_onset,
     "laplace": study_laplace,
     "qnladder": study_qnladder,
+    "bakeoff": study_bakeoff,
 }
 
 
