@@ -2496,9 +2496,22 @@ collocation bug. Both are findings a single backend could not have produced.
 
 ## 8. What to do next
 
-In order, and none of it is "add another method". Nine remedies have now been
-argued soundly and refuted by measurement (§5.4, §7.2.1, §7.2.5, §7.2.6); the tenth
-would not be different.
+**The twelve remedies now make a pattern, and it is sharper than any of them.**
+Sorting every isolated arm by what it changed:
+
+| what it changed | outcome |
+|---|---|
+| **the function space** — Fourier capacity (§7.5.8), multi-scale bands (§7.5.14), anisotropic bandwidth (§7.5.12) | **all three worked**; bands moved the mean *and* the extremum together |
+| **the optimiser** — quasi-Newton budget (§7.5.11), curvature memory (§7.5.17) | **decisive**; the only axis that forms the front at all |
+| **the loss measure** — level-set sampling (§7.5.6), front fraction (§7.5.9), block and causal weighting | **failed or inert**; `frontfrac` degrades monotonically |
+| **extra residuals** — onset head (§7.5.16), front network, pseudo-time | **harmful**; a consequence of the PDE carries no information as a constraint |
+| **re-parameterisation** — level-set coordinate (§7.5.13) | **inert**; `φ` is a monotone function of `T_c`, which the network already computes |
+
+**Change the function space or change the optimiser. Do not reweight the loss, and
+do not add residuals the PDE already implies.** That is not a hunch — it is twelve
+measurements, and it is what the roadmap below is ordered against. The full version,
+with the 2026 literature it draws on, is `__DEV/REPORT-01-MILESTONES.md` Annex D.
+
 
 1. **Spend on the quasi-Newton axis, and find out where it ends** — §7.5.11. The
    completed 54-run surface says the Adam budget does no measurable work and the
@@ -2544,6 +2557,34 @@ would not be different.
 5. **Plan A at more than one seed** — §7.4. Given §7.1's 12.5× seed spread, the
    single Plan A measurement is an observation and is labelled as one.
 
-Everything above is measurable with the code as it stands; none of it needs new
-development, only compute and a converged void reference. No accuracy number from
+6. **The weak form** — `__DEV/…` Annex D.3, and the highest-value item beyond the
+   budget questions. It is the only candidate that addresses Annex C's measure bug
+   *without* reweighting: integrating the residual against locally supported test
+   functions makes each test function a **separate equation**, so the front stops
+   competing for a share of one average and gets its own rows. Integration by parts
+   also lowers the derivative order, which attacks the ill-conditioning from the
+   other end. `hp`-VPINN and Petrov–Galerkin VPINN are the current forms, and a
+   boiling front in a 590 K field is a singular perturbation, which is the regime
+   they are written for.
+7. **Gauss-Newton / energy natural gradient, preconditioned** — Annex D.4. The
+   principled version of what L-BFGS approximates, now affordable via randomized
+   Nyström preconditioning of the Gramian. Follows the bake-off rather than
+   replacing it: SSBroyden sets the bar it has to clear.
+8. **Least squares on frozen random features** — Annex D.5. The limit of "Adam
+   contributes nothing and the linear algebra contributes everything": freeze the
+   hidden layer and the residual is linear in the output weights. This model already
+   uses random Fourier features, so it is closer than it sounds — the obstacle is
+   that our residual is *not* linear in the output (log Doppler, cubed `tanh`
+   closure), so it needs an outer linearisation, which is Gauss-Newton again.
+9. **Shock fitting and partition-of-unity decomposition, borrowed from CFD** —
+   Annex D.6. Shock fitting makes the front an **unknown of the formulation** rather
+   than a residual bolted onto a fixed parameterisation, which is exactly where
+   §7.5.16's onset head went wrong. FBPINN's reported mechanism — localisation turns
+   global high frequencies into local low ones — is §7.5.14's band result stated in
+   space rather than in frequency, which argues both that it will work and that the
+   two may be redundant.
+
+Items 1–5 are measurable with the code as it stands and need only compute. Items
+6–9 need real development, and are ordered so that the cheap answers arrive first —
+if the quasi-Newton budget alone closes the gap, most of the rest is unnecessary. No accuracy number from
 this model should be quoted outside this document, and none is.
