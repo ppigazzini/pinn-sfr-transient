@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import equinox as eqx
@@ -70,9 +71,14 @@ def make_problem(cfg, seed: int, n_colloc: int):  # noqa: ANN001, ANN201
     return p, static, unravel, flat0, residuals, loss
 
 
-def gauss_newton(  # noqa: PLR0913, PLR0917
-    flat0, residuals, loss, budget: float, rank: int, cg_iters: int
-):
+def gauss_newton(  # noqa: PLR0913, PLR0917 - a solver's knobs are clearer flat
+    flat0: jax.Array,
+    residuals: Callable[[jax.Array], jax.Array],
+    loss: Callable[[jax.Array], jax.Array],
+    budget: float,
+    rank: int,
+    cg_iters: int,
+) -> tuple:
     """Matrix-free Levenberg-Marquardt with a randomized Nyström preconditioner."""
 
     @eqx.filter_jit
