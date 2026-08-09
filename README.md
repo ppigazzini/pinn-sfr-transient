@@ -13,7 +13,7 @@ The repository holds **two models**, and they are at very different stages:
 | void | a `tanh` demonstration surrogate at 820 K | saturation + superheat from the SAS4A manual, ~1156 K |
 | reference solver | verified | verified, except the void fraction (`axial_physics.md` §6.5) |
 | PINN | **meets its bar** — a few 1e-3 relative L2 | **does not meet its bar** — see below |
-| backends | PyTorch, JAX, DeepXDE | PyTorch, JAX |
+| backends | PyTorch, JAX, DeepXDE | **JAX** (default), PyTorch |
 
 This README is a map. The physics, the neural-network methodology, and the usage
 details live in [`docs/`](docs/) — see [Documentation](#documentation).
@@ -84,7 +84,7 @@ the fit worse, which is recorded rather than quietly dropped (§7.5.16). The sam
 arithmetic raises a question about the acceptance criterion itself: one cell is only
 1.6–2.3× above the *reference solver's* own error.
 
-**The two backends were never actually different.** PyTorch had been beating JAX in
+**JAX is now the default backend, and the reason is a two-part correction.** PyTorch had been beating JAX in
 every experiment, by a margin that grew with model size — on identical residuals,
 which for deterministic mathematics should not happen. It was one unset argument:
 `optax.lbfgs()` defaults to keeping **10** curvature pairs and the PyTorch side was
@@ -92,7 +92,17 @@ passing **50**. Copy one backend's weights into the other, verify the objective
 matches to the last bit, and vary only the optimiser: PyTorch at 10 reproduces
 JAX's curve, and JAX at 50 reproduces PyTorch's. Fixed, with the memory now an
 explicit shared setting — and **every JAX accuracy number in the documentation is
-superseded and being re-measured** (§7.5.17). The PyTorch numbers are unaffected.
+superseded and re-measured** (§7.5.17); the PyTorch numbers were unaffected. With
+that fixed the two agree to 1.08% at the largest capacity measured.
+
+The second half is speed. Every timing comparison had PyTorch pinned to 8 threads
+while JAX quietly used every core, because JAX's CPU backend ignores the variable
+PyTorch obeys. Given the machine equally and run one at a time, **JAX is 4.4×
+faster** — and 4.8× on the quasi-Newton stage, which is the stage that does all the
+work (§7.5.19). So a backend that looked slower *and* weaker was neither; both
+readings were artefacts of unequal settings. PyTorch stays a first-class arm, since
+two independent implementations agreeing is the strongest check here — and it is
+what caught the defect.
 
 [`docs/axial_nn.md`](docs/axial_nn.md) **§0 is the status quo** — accuracy, what is
 settled, what is open, and **§0.6 says which configuration to use**. §5–§7 carry
