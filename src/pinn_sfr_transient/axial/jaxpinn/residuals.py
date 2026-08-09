@@ -108,10 +108,22 @@ def _norm(p: AxialParams, cfg: AxialTrainConfig) -> tuple[float, ...]:
     return residual_normalisation(p, horizon(p, cfg))
 
 
-def residual_blocks(
+def residual_vector(
     model: AxialPinn, p: AxialParams, zeta: jax.Array, that: jax.Array, cfg: AxialTrainConfig
 ) -> tuple[jax.Array, ...]:
-    """Plan B blocks: prescribed power, scattered ``(zeta, t)`` collocation."""
+    """Return the **signed** field residuals, one array per block, before squaring.
+
+    :func:`residual_blocks` squares these and is what training minimises. The signed
+    form exists because a Gauss-Newton or natural-gradient method needs the Jacobian
+    of ``r``, not of ``r**2`` — and taking a square root back would lose the sign,
+    which is the one thing those methods need.
+
+    Factored out rather than transcribed: two copies of a residual is the defect
+    class this project has hit most often, so `residual_blocks` calls this and
+    squares the result. The front and onset blocks are **not** included, because
+    both are already-squared quantities with their own masks and neither is part of
+    the least-squares system a Gauss-Newton step forms.
+    """
     dT = p.P_0 / (p.w_0 * p.c_c)
     t_end = horizon(p, cfg)
     theta, d_dt, d_dz = state_and_grads(model, p, zeta, that, cfg)
@@ -129,10 +141,17 @@ def residual_blocks(
     )
     scales = [t_end / dT] * N_TEMPS + [t_end]
     nrm = _norm(p, cfg)
-    blocks = [
-        (((d_dt[:, k : k + 1] - scales[k] * rhs[k]) * nrm[k]) ** 2).squeeze(1)
+    return tuple(
+        ((d_dt[:, k : k + 1] - scales[k] * rhs[k]) * nrm[k]).squeeze(1)
         for k in range(n_field_blocks(cfg))
-    ]
+    )
+
+
+def residual_blocks(
+    model: AxialPinn, p: AxialParams, zeta: jax.Array, that: jax.Array, cfg: AxialTrainConfig
+) -> tuple[jax.Array, ...]:
+    """Plan B blocks: prescribed power, scattered ``(zeta, t)`` collocation."""
+    blocks = [r**2 for r in residual_vector(model, p, zeta, that, cfg)]
     if uses_front(cfg):
         blocks.append(front_residual(model, p, that, cfg))
     if cfg.onset_head:

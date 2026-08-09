@@ -72,6 +72,7 @@ from pinn_sfr_transient.axial.jaxpinn.residuals import (
     onset_point,
     onset_residual,
     residual_blocks,
+    residual_vector,
     uses_front,
 )
 from pinn_sfr_transient.axial.jaxpinn.samplers import _collocation, _merge, _rar_points
@@ -115,6 +116,7 @@ __all__ = [
     "pts_penalty",
     "relative_l2",
     "residual_blocks",
+    "residual_vector",
     "state_and_grads",
     "theta0",
     "train",

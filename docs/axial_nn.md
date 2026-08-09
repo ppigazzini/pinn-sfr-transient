@@ -157,9 +157,12 @@ first configuration to reach the reference's voided length, and §7.5.14 explain
 why: the high band resolves the front, the low bands keep the bulk smooth, and at
 a fixed feature total the split between them is a choice rather than an accident.
 
-**Read onset with `onset_by_tangency`, not the threshold.** It puts the onset
-height at **0.00 cells** on every seed against 2.67–4.00 for thresholding
-(§7.5.16). `onset_head` is measured harmful and stays off.
+**Onset is a question about *time*, not height.** `T_c` is monotone in `ζ`, so its
+maximum — and therefore onset — is always at the outlet, and any height metric is
+reporting the mesh rather than the network (§7.5.16, retracted there).
+`onset_by_tangency` is still the better *time* readout, because the threshold time
+is quantised by the 0.25 s scoring grid; it says 0.62–0.84 s against a 0.5 s
+criterion. `onset_head` is measured harmful and stays off.
 
 ### 0.7 Method notes that changed the answers
 
@@ -2187,51 +2190,54 @@ read-off), that the readout finds a parabola vertex placed deliberately between 
 points, and that a field never reaching saturation returns `nan` rather than zero
 error.
 
-**Measured: three seeds, JAX at the shipped default, both readouts on every arm.**
+> ## RETRACTED — the tangency readout does not locate anything
+>
+> **`T_c` is monotone increasing in `ζ`.** Coolant heats as it rises, so the maximum
+> of `T_c` is *always the last node*, and the tangency condition `∂T_c/∂ζ = 0` has
+> **no interior solution**. The derivation above assumed onset sits at an interior
+> maximum where the profile turns over. It does not.
+>
+> So `onset_by_tangency` returns the outlet **by construction**. The `m4_bar` ladder
+> makes it unmissable: its onset height is *exactly* the last cell centre at every
+> mesh — 0.98750 = 1 − 1/80, 0.99687 = 1 − 1/320, 0.99961 = 1 − 1/2560 — converging
+> to `ζ = 1` rather than to a physical location.
+>
+> **Therefore "0.00 cells on every seed of every arm" measured nothing.** Both the
+> network and the reference put the peak at the last cell because both fields are
+> monotone. Zero error there is a tautology, and it was written up as the headline
+> result of this section across §0.6, §7.9 and the README. Twelfth retraction, and
+> the most confidently stated.
 
-| arm | `T_s` | `L_void` | worst margin | height err **threshold** | height err **tangency** |
-|---|---|---|---|---|---|
-| head off | 0.0292 | 0.2440 | +25.8 K | 2.67 cells | **0.00 cells** |
-| head on | 0.0346 | 0.2283 | +13.2 K | 2.67 cells | **0.00 cells** |
+**What survives.** The three-seed arms themselves stand; it is the *interpretation*
+of the height column that does not.
 
-**The readout solves the onset height outright.** `0.00 cells` on every seed of
-every arm, against 2.67–4.00 for thresholding — not "better", exact. And the reason
-is now clear: the network gets the *shape* of `T_c` near the channel top right,
-because that shape is the cosine power profile, and gets its *magnitude* wrong.
-Asking "where is the maximum" reads the shape; asking "where does `α` first cross
-0.01" reads the magnitude. The conditioning argument predicted this and the
-measurement is stronger than the prediction.
+| arm | `T_s` | `L_void` | worst margin | height err, threshold |
+|---|---|---|---|---|
+| head off | 0.0292 | 0.2440 | +25.8 K | 2.67 cells |
+| head on | 0.0346 | 0.2283 | +13.2 K | 2.67 cells |
 
-**It also shows the onset *time* was never as good as this document reported.**
-Per seed:
+**Onset *time* is the quantity that carries information**, and it is worse than this
+document reported. Per seed, head off: threshold 0.50 / 0.25 / 0.50 s against
+tangency **0.84 / 0.68 / 0.62 s**. The threshold number was flattered by **grid
+quantisation** — the scoring grid is 0.25 s, so that metric can only report multiples
+of 0.25. The tangency *time* is still meaningful even though the tangency *height*
+is not: it interpolates when the peak reaches saturation, which is a real crossing,
+and it says 0.62–0.84 s against a 0.5 s criterion.
 
-| arm | `t_err` threshold | `t_err` **tangency** |
-|---|---|---|
-| head off | 0.50 / 0.25 / 0.50 s | **0.84 / 0.68 / 0.62 s** |
-| head on | 0.75 s × 3 | 1.99 / 1.81 / 1.64 s |
+Since the height answer is "the top of the channel" whatever the network does, **M4
+turns entirely on the time**, and the time fails.
 
-The threshold time was flattered by **grid quantisation** — the scoring grid is
-0.25 s, so that metric can only report multiples of 0.25 and it landed favourably.
-The tangency time is interpolated and unquantised, and it says 0.62–0.84 s against
-a 0.5 s criterion.
+**The head is confirmed harmful at three seeds** — `T_s` +18%, worst margin −49%, and
+tangency `t_err` **2.4× worse** (0.71 s → 1.81 s mean). That last number is the
+diagnosis confirming itself: `t*` is the coordinate the head parks in the wrong
+place, and the time error is exactly what degrades.
 
-**So M4's binding constraint has flipped.** It used to fail on *location* (1–6
-cells) and pass on *time*. Location is now exact and **time fails**. Still not met —
-but the remaining gap is ~1.5× on one quantity instead of 4× on another, and it is a
-different quantity than the one this document has been chasing.
-
-**The head is confirmed harmful at three seeds, and fails where predicted.** `T_s`
-+18%, worst margin −49%, and tangency `t_err` **2.4× worse** (0.71 s → 1.81 s mean).
-That last number is the diagnosis confirming itself: `t*` is the coordinate the head
-parks in the wrong place, and the time error is exactly what degrades.
-
-The degeneracy is structural, not a tuning failure. **The two conditions do not pin
-the point to the field; they pin the field to the point** — bending `T_c` until it is
-tangent to `T_boil` at the wrong place is cheaper than moving `(ζ*, t*)` to the right
-one. And they carry no new information, being a consequence of the PDE rather than
-additional physics, so as residuals they can only distort. `onset_head` stays off and
-no further work is planned on it; `onset_by_tangency` is the half that survives, and
-it survives completely.
+The degeneracy is structural. **The two conditions do not pin the point to the
+field; they pin the field to the point** — bending `T_c` until it is tangent to
+`T_boil` at the wrong place is cheaper than moving `(ζ*, t*)` to the right one. And
+they carry no new information, being a consequence of the PDE rather than additional
+physics, so as residuals they can only distort. `onset_head` stays off and no further
+work is planned on it.
 
 Isolated, and here that matters more than usual: this is the **fourth** distinct use
 of the level set in this model, after §7.5.6's sampling measure, the front network's
@@ -2445,6 +2451,42 @@ life, and both readings were artefacts of unequal settings — one an unset
 `memory_size`, the other an unset thread budget. `§0.6` now recommends it and
 `axial_study.py` leads with it.
 
+#### 7.5.21 Is M4's criterion attainable? — the ruler check
+
+§7.5.16 argued that one cell is 0.405 K of `T_c`, a relative `L2` of 0.0026, only
+1.6–2.3× above the reference's own error — D35's failure mode, an acceptance bar
+sitting at the ruler's precision. **That worry is now measured, and it is wrong.**
+
+`tools/m4_bar.py` refines the reference against itself. No network is involved:
+solve at `n_axial` 40 → 1280 and watch how far the reference's *own* onset moves.
+
+| `n_axial` | `Δt` threshold | `Δζ` threshold | `Δt` tangency | `Δζ` tangency |
+|---|---|---|---|---|
+| 40 | 0.000 s | 0.44 cells | 0.050 s | 1.94 cells |
+| 80 | 0.000 s | 0.56 cells | 0.019 s | 0.94 cells |
+| **160** (scoring) | **0.000 s** | **0.06 cells** | **0.009 s** | **0.44 cells** |
+| 320 | 0.000 s | 0.19 cells | 0.004 s | 0.19 cells |
+| 640 | 0.000 s | 0.06 cells | 0.001 s | 0.06 cells |
+
+**At the scoring mesh the reference's own onset is uncertain by 0.06 cells and
+0.009 s.** A one-cell, half-second criterion therefore sits an order of magnitude
+*above* the ruler, not inside it. **M4's criterion is sound and the target is
+attainable** — which means the failure is genuinely the network's, and chasing it is
+worthwhile rather than chasing discretisation error.
+
+The earlier worry confused two quantities: the *temperature* error (1.1–1.6e-3
+relative `L2`) is not the *onset* error, and onset is far better converged than a
+pointwise temperature because it is a threshold crossing of a monotone field.
+
+Two things the ladder also settles:
+
+**The threshold onset time is quantised, not converged.** It reads `0.000 s` at every
+mesh because the 0.25 s output grid puts every answer in the same bin. That is the
+same artefact §7.5.16 found in the network's scores, appearing in the reference.
+
+**The tangency height converges to `ζ = 1`**, exactly the last cell centre at every
+mesh, which is what proves it is reporting the outlet rather than locating a front.
+
 ### 7.6 Pseudo-time stepping
 
 Implemented (`pts_every`, `pts_dtau`, `pts_growth`), and **measured harmful** in
@@ -2487,8 +2529,8 @@ collocation bug. Both are findings a single backend could not have produced.
 | How many epochs it needs | **answered — 54 runs, nine cells, three seeds, both backends** — §7.5.11. Quasi-Newton monotone over two decades; the Adam axis flat once `qn3000` is set, so the default's Adam budget does no measurable work |
 | Three front-aimed embeddings | **measured, three seeds** — §7.5.12–§7.5.14. `fourier_bands=(1,4,16)` reaches **99.5% of the reference voided length** while also beating the control on `T_s` and margin; `zeta_scale=8` is real but cruder; `level_set_input` is inert at 1.95× the cost |
 | How much collocation goes to the front | **measured, and it fails** — §7.5.9. `T_s` degrades monotonically from 0% to 50%; re-weighting the measure is not the remedy |
-| M4 acceptance: onset within 0.5 s and one cell | **not met — and the binding constraint has flipped to *time*** — §7.5.16. The tangency readout puts onset height at **0.00 cells** on every seed; the unquantised time error is 0.62–0.84 s against 0.5 s. The old "time passes" reading was grid quantisation |
-| Is M4's one-cell criterion sound? | **doubtful, and unchecked** — §7.5.16. One cell is 0.405 K of `T_c`, i.e. relative `L2` of 0.0026 — 4× tighter than the 1% bar and only 1.6–2.3× above the *reference's own* error. This is D35's failure mode and the criterion has never been checked against the ruler |
+| M4 acceptance: onset within 0.5 s and one cell | **not met, and it turns entirely on the *time*** — §7.5.16. The height answer is "the outlet" whatever the network does, because `T_c` is monotone in `ζ`; the unquantised time error is 0.62–0.84 s against 0.5 s |
+| Is M4's criterion sound? | **yes — measured, §7.5.21.** At the scoring mesh the reference's own onset is uncertain by 0.06 cells and 0.009 s, so the criterion sits an order of magnitude above the ruler. The failure is the network's and the target is worth chasing |
 | Is Adam needed at all? | **never tested** — §7.5.11's floor is `adam30`, not `adam0`. "30 is as good as 3000" is measured; "Adam is unnecessary" is not |
 | Where the quasi-Newton axis ends | **not measured** — §7.5.11 is monotone over two decades with no interior optimum, and by §7.5.8's own rule an unterminated monotone trend is an extrapolation. Kiyani et al. run 30000 quasi-Newton iterations against this model's 3000 |
 | Where the memory optimum sits at the real budget | **not measured** — §7.5.17a. The iso-time optimum is 100 at a 200 s budget; the recipe spends ~550 s and the crossover moves with the budget |
