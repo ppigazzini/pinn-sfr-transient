@@ -17,11 +17,22 @@ form the documentation carries it.
     uv run python tools/axial_study.py parity       # section 7.3.2 — torch against JAX
     uv run python tools/axial_study.py plan-a       # section 7.4   — closed-loop power
 
-**Pin `OMP_NUM_THREADS`.** It defaults to every core, so a second job silently
-halves the throughput of the first, and thread count changes float reduction
-order. A wall-clock without a stated thread budget is not a measurement.
+**Pin the thread budget on BOTH backends.** `OMP_NUM_THREADS` binds torch and is
+ignored by JAX: XLA's CPU backend sizes its own Eigen pool from
+`hardware_concurrency()`, so a JAX arm nominally at 8 threads was measured creating
+**291**. Thread count changes float reduction order, so this changes answers and not
+only timings -- measured, at ~3 ulp:
 
-    OMP_NUM_THREADS=8 uv run python tools/axial_study.py budget
+    48 cores  -> T_c_sum = 31802.507612040135
+    8 cores   -> T_c_sum = 31802.507612040157
+
+`--cpu-block` fixes it by pinning CPU affinity, which JAX does obey. The core
+*count* is what matters, not which cores: two different blocks of 8 give bitwise
+identical results, and repeating a block reproduces exactly. So concurrent studies
+take different blocks and stay comparable.
+
+    OMP_NUM_THREADS=8 uv run python tools/axial_study.py budget --cpu-block 0
+    OMP_NUM_THREADS=8 uv run python tools/axial_study.py margin --cpu-block 1
 
 Every study writes JSON alongside its table so a result can be re-tabulated
 without re-running it. Training studies take tens of minutes per arm on CPU.
@@ -139,6 +150,23 @@ def train_jax(**kw: Any) -> Callable[[Any], tuple]:  # noqa: ANN401
     return lambda traj: pj.predict(model, p, traj.zeta, traj.t, cfg)
 
 
+def pin_cpu_block(block: int, n: int) -> tuple[int, ...]:
+    """Pin this process to ``n`` cores starting at ``block * n``, and return them.
+
+    Must run before JAX is imported. `OMP_NUM_THREADS` does not bind XLA's CPU
+    backend -- it sizes its own pool from `hardware_concurrency()` -- and affinity
+    is what it does obey. Measured: 291 threads unpinned, 56 pinned to 8 cores.
+
+    This is a correctness knob, not a performance one. Thread count changes float
+    reduction order, so an unpinned JAX arm is not bitwise reproducible; pinned, it
+    is, and two *different* blocks of the same size agree bitwise as well.
+    """
+    total = os.cpu_count() or 1
+    cores = tuple((block * n + i) % total for i in range(n))
+    os.sched_setaffinity(0, set(cores))
+    return cores
+
+
 def run_arm(traj: Any, label: str, backend: str, **kw: Any) -> dict:  # noqa: ANN401
     """One trained arm, timed and scored."""
     t0 = time.perf_counter()
@@ -154,6 +182,9 @@ def run_arm(traj: Any, label: str, backend: str, **kw: Any) -> dict:  # noqa: AN
         "sec": dt,
         "load1": os.getloadavg()[0],
         "omp": os.environ.get("OMP_NUM_THREADS", "unset"),
+        # The affinity size is the budget that actually binds both backends; `omp`
+        # binds only torch. A row without this cannot be compared on wall-clock.
+        "cpus": len(os.sched_getaffinity(0)),
         **kw,
     }
     print(
@@ -1212,6 +1243,14 @@ def main() -> int:
     ap.add_argument("study", choices=sorted(STUDIES))
     ap.add_argument("--out", type=Path, default=None, help="JSON output path")
     ap.add_argument(
+        "--cpu-block",
+        type=int,
+        default=None,
+        help="pin to OMP_NUM_THREADS cores starting at this block index, so JAX has a "
+        "real thread budget and results are bitwise reproducible. Concurrent studies "
+        "should take different blocks; the core count is what matters, not which cores",
+    )
+    ap.add_argument(
         "--lbfgs-history",
         type=int,
         default=None,
@@ -1230,6 +1269,10 @@ def main() -> int:
     out = args.out or Path(f"results/axial_study_{args.study}.json")
     out.parent.mkdir(parents=True, exist_ok=True)
     global _ONLY  # noqa: PLW0603 - one filter for the whole run
+    if args.cpu_block is not None:
+        n = int(os.environ.get("OMP_NUM_THREADS", "8"))
+        cores = pin_cpu_block(args.cpu_block, n)
+        print(f"pinned to {len(cores)} cores {cores[0]}-{cores[-1]}", flush=True)
     _ONLY = args.only
     global _HISTORY  # noqa: PLW0603
     _HISTORY = args.lbfgs_history

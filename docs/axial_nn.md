@@ -2414,6 +2414,25 @@ two backends scale almost identically with thread count (torch 2.3×, JAX 2.5× 
 8 to 48 threads), so the ratio is robust. What was wrong was the absolute numbers
 and the claim of a pinned budget, not the comparison.
 
+**And JAX's answers depend on the thread count**, which no timing caveat covers.
+`OMP_NUM_THREADS` binds torch and is ignored by XLA's CPU backend, so a JAX arm
+nominally at 8 threads was measured creating **291**. Thread count changes float
+reduction order, so this is a *correctness* issue and not only a timing one:
+
+| affinity | threads | `sum T_c` |
+|---|---|---|
+| 48 cores | 291 | 31802.5076120401**35** |
+| 8 cores | 56 | 31802.5076120401**57** |
+
+About 3 ulp — numerically harmless, and fatal to §4's "reproduces run to run to four
+digits", which was only ever true of torch.
+
+**Affinity is what JAX obeys, and the core *count* is what matters.** Pinning to 8
+cores reproduces bitwise on repeat, and a *different* block of 8 gives the identical
+answer — so concurrent studies can take different blocks and stay comparable.
+`axial_study.py --cpu-block K` does this, every row now records the affinity
+alongside `OMP_NUM_THREADS`, and a row without it cannot be compared on wall-clock.
+
 **Both scale badly, which is a planning fact.** Six times the threads buys 2.3–2.5×.
 These networks are small and the step is `jvp`-bound, so past roughly 8 threads most
 of the machine idles — running six studies at 8 threads each is closer to optimal
