@@ -2363,129 +2363,49 @@ study keeps a **paired** memory-10/memory-50 comparison at the same arms and see
 That pairing measures at training scale what the isolated bake-off could only
 measure on the loss.
 
-#### 7.5.18 Reserved — the Laplace embedding
+#### 7.5.18 The Laplace embedding — measured, and it fails
 
-**Designed, not implemented, not measured.** `__DEV/REPORT-01-MILESTONES.md` §C.7
-carries the memo; this section number is reserved so the design has somewhere to be
-written up and cannot be quoted from before it is run.
+A Fourier basis is oscillatory and this transient is built out of **decay**:
+coast-down at `1/τ_pump = 0.2` s⁻¹ and six precursor groups spanning 0.0124 to
+3.01 s⁻¹, a 243× range. Approximating `exp(-0.2t)` over a 60 s window out of sines
+costs many terms and still misses the tail; `exp(-s_k t)` does it in one. The split
+is not arbitrary either — the oscillatory structure is in `ζ` and the exponential
+structure is in `t`, which is §7.5.12's anisotropy reached from the physics rather
+than from a sweep.
 
-The argument in one line: a Fourier basis is oscillatory and this transient is built
-out of **decay** — coast-down at `1/tau_pump = 0.2` s⁻¹ and six precursor groups
-spanning `0.0124` to `3.01` s⁻¹, a 243× range. Approximating `exp(-0.2t)` over 60 s
-out of sines costs many terms and still misses the tail; `exp(-s_k t)` represents it
-in one. The complementarity is not arbitrary either — **the oscillatory structure is
-in `ζ` and the exponential structure is in `t`**, which is the anisotropy §7.5.12
-measured on the bandwidth, reached from the physics instead of from a sweep.
+Rates taken straight from the manual, three combination modes, three seeds, both
+backends:
 
-Three arms: Laplace alone with rates **fixed from the manual** (the known-shape
-case, where the embedding is a fit rather than a basis); **summed** with Fourier
-(concatenated blocks — superposition); and **multiplied** by Fourier (a damped
-sinusoid, `exp(-s_k x) sin(2πBx)` — modulation). The choice rule: fit when the shape
-is known, combine when it is unknown or compound, with the sum covering
-superposition and the product covering coupling.
+| mode | `T_s` jax | `T_s` torch | `L_void` jax | margin jax | margin torch |
+|---|---|---|---|---|---|
+| **off** (control) | **0.0292** | **0.0283** | **0.2440** | **+25.8 K** | **+24.4 K** |
+| `sum` — concatenated blocks | 0.0303 | 0.0290 | 0.2381 | +23.7 K | +21.6 K |
+| `product` — damped sinusoids | 0.0357 | 0.0353 | 0.2111 | +9.6 K | +9.9 K |
+| `alone` — rates only, no Fourier | 0.0652 | 0.0683 | 0.1438 | +3.2 K | +4.7 K |
 
-Two risks are recorded up front. The ansatz is already multiplicative,
-`θ = θ₀ exp(t̂ N)`, so a decaying mode is representable today — the claim is that it
-becomes *easier*, not newly possible, which makes a null result plausible and puts
-the weight on the control arm. And `exp(-s t̂)` underflows at the fastest precursor
-rate, so how the rates are compressed into normalised time changes what the basis
-spans and belongs in the deviation register.
+**Nothing beats the control, on either backend.** `sum` is inside the seed noise at
+2–4% worse; `product` costs 22% on the mean and more than halves the margin;
+`alone` is 2.3× worse, which is what dropping the spatial resolution the front needs
+should cost. Two independent implementations agreeing at three seeds each is as
+decisive as this document gets.
 
-#### 7.5.19 The speed comparison, made properly for the first time
+**The study predicted its own result, and that is the part worth keeping.** Its
+docstring recorded the prior before the arms ran: the ansatz is already
+multiplicative, `θ = θ₀ exp(t̂ N)`, so a decaying mode was *always* representable and
+the embedding could only make it **easier**, not newly possible. It does not.
 
-Every torch-vs-JAX wall-clock before this one ran torch at `OMP_NUM_THREADS=8`
-against JAX using **~230 threads** — XLA's CPU backend sizes its own Eigen pool
-from `hardware_concurrency()` and ignores the OpenMP variable torch obeys. That is
-a thread-count comparison wearing a backend comparison's clothes, and `AGENTS.md`'s
-"a wall-clock needs a stated thread budget" was being satisfied on paper while being
-violated in fact.
+That places it exactly in §8's dead category — a re-parameterisation that adds no
+information — alongside §7.5.13's level-set coordinate, which failed for the same
+reason and was also a monotone function of something the network already computes.
+**Thirteenth remedy argued soundly and refuted by measurement.**
 
-Both backends given all 48 cores, run **sequentially** on an idle machine, identical
-weights, identical points, objective verified identical (`2.3148662743e-01`, 1.2e-16
-apart), f512 with 6000 points:
-
-| | Adam | quasi-Newton | total |
-|---|---|---|---|
-| torch | 146.20 s (731.0 ms/it) | 99.03 s (990.3 ms/it) | 245.23 s |
-| **jax** | 34.64 s (173.2 ms/it) | 20.80 s (208.0 ms/it) | **55.44 s** |
-| jax/torch | **0.24×** | **0.21×** | **0.23×** |
-
-**JAX is 4.4× faster, and the published 2.4× understates it** — on the quasi-Newton
-phase alone, the phase §7.5.11 shows does all the work, it is **4.8×**.
-
-**But the thread asymmetry did not invalidate the old ratios**, and an earlier
-revision of this document claimed it did. At 8 threads the same benchmark gives
-2270 vs 530 ms/it — ratio **0.23**. At 48 threads, 990 vs 208 — ratio **0.21**. The
-two backends scale almost identically with thread count (torch 2.3×, JAX 2.5× from
-8 to 48 threads), so the ratio is robust. What was wrong was the absolute numbers
-and the claim of a pinned budget, not the comparison.
-
-**And JAX's answers depend on the thread count**, which no timing caveat covers.
-`OMP_NUM_THREADS` binds torch and is ignored by XLA's CPU backend, so a JAX arm
-nominally at 8 threads was measured creating **291**. Thread count changes float
-reduction order, so this is a *correctness* issue and not only a timing one:
-
-| affinity | threads | `sum T_c` |
-|---|---|---|
-| 48 cores | 291 | 31802.5076120401**35** |
-| 8 cores | 56 | 31802.5076120401**57** |
-
-About 3 ulp — numerically harmless, and fatal to §4's "reproduces run to run to four
-digits", which was only ever true of torch.
-
-**Affinity is what JAX obeys, and the core *count* is what matters.** Pinning to 8
-cores reproduces bitwise on repeat, and a *different* block of 8 gives the identical
-answer — so concurrent studies can take different blocks and stay comparable.
-`axial_study.py --cpu-block K` does this, every row now records the affinity
-alongside `OMP_NUM_THREADS`, and a row without it cannot be compared on wall-clock.
-
-**Both scale badly, which is a planning fact.** Six times the threads buys 2.3–2.5×.
-These networks are small and the step is `jvp`-bound, so past roughly 8 threads most
-of the machine idles — running six studies at 8 threads each is closer to optimal
-than one at 48.
-
-**Taken with §7.5.10 and §7.5.17, this reverses the backend recommendation.** JAX is
-now equally accurate (1.08× at f512, 2–3% on an identical objective at matched
-memory) and 4.4× faster. It looked slower *and* weaker for most of this project's
-life, and both readings were artefacts of unequal settings — one an unset
-`memory_size`, the other an unset thread budget. `§0.6` now recommends it and
-`axial_study.py` leads with it.
-
-#### 7.5.21 Is M4's criterion attainable? — the ruler check
-
-§7.5.16 argued that one cell is 0.405 K of `T_c`, a relative `L2` of 0.0026, only
-1.6–2.3× above the reference's own error — D35's failure mode, an acceptance bar
-sitting at the ruler's precision. **That worry is now measured, and it is wrong.**
-
-`tools/m4_bar.py` refines the reference against itself. No network is involved:
-solve at `n_axial` 40 → 1280 and watch how far the reference's *own* onset moves.
-
-| `n_axial` | `Δt` threshold | `Δζ` threshold | `Δt` tangency | `Δζ` tangency |
-|---|---|---|---|---|
-| 40 | 0.000 s | 0.44 cells | 0.050 s | 1.94 cells |
-| 80 | 0.000 s | 0.56 cells | 0.019 s | 0.94 cells |
-| **160** (scoring) | **0.000 s** | **0.06 cells** | **0.009 s** | **0.44 cells** |
-| 320 | 0.000 s | 0.19 cells | 0.004 s | 0.19 cells |
-| 640 | 0.000 s | 0.06 cells | 0.001 s | 0.06 cells |
-
-**At the scoring mesh the reference's own onset is uncertain by 0.06 cells and
-0.009 s.** A one-cell, half-second criterion therefore sits an order of magnitude
-*above* the ruler, not inside it. **M4's criterion is sound and the target is
-attainable** — which means the failure is genuinely the network's, and chasing it is
-worthwhile rather than chasing discretisation error.
-
-The earlier worry confused two quantities: the *temperature* error (1.1–1.6e-3
-relative `L2`) is not the *onset* error, and onset is far better converged than a
-pointwise temperature because it is a threshold crossing of a monotone field.
-
-Two things the ladder also settles:
-
-**The threshold onset time is quantised, not converged.** It reads `0.000 s` at every
-mesh because the 0.25 s output grid puts every answer in the same bin. That is the
-same artefact §7.5.16 found in the network's scores, appearing in the reference.
-
-**The tangency height converges to `ζ = 1`**, exactly the last cell centre at every
-mesh, which is what proves it is reporting the outlet rather than locating a front.
+One design risk is retired rather than mitigated: `exp(-s t̂)` was expected to
+underflow at the fastest precursor rate. It reaches `2.7e-22` at the end of the
+trained window — small, and exactly representable in float64 — so no clipping is
+needed. What did matter is that the rates enter scaled by the **trained** horizon
+rather than `t_end`, since `t_train_frac` shortens the window and a wrongly scaled
+rate would decay the basis far too fast while still training happily. That is
+asserted against the physics rather than against itself.
 
 ### 7.6 Pseudo-time stepping
 
@@ -2527,7 +2447,8 @@ collocation bug. Both are findings a single backend could not have produced.
 | The JAX speed advantage | **re-measured at matched threads: 4.4× overall, 4.8× on the quasi-Newton phase** — §7.5.19. Still unattributed as to *why*; `torch.compile` accounts for 1.06× and is not the answer |
 | Optimiser bake-off (SSBroyden / SSBFGS) | **TBD — not started**, and §7.5.11 makes it the highest-value remaining item: at three seeds on both backends the quasi-Newton axis is the *only* one that moves the front |
 | How many epochs it needs | **answered — 54 runs, nine cells, three seeds, both backends** — §7.5.11. Quasi-Newton monotone over two decades; the Adam axis flat once `qn3000` is set, so the default's Adam budget does no measurable work |
-| Three front-aimed embeddings | **measured, three seeds** — §7.5.12–§7.5.14. `fourier_bands=(1,4,16)` reaches **99.5% of the reference voided length** while also beating the control on `T_s` and margin; `zeta_scale=8` is real but cruder; `level_set_input` is inert at 1.95× the cost |
+| Three front-aimed embeddings | **measured, three seeds** — §7.5.12–§7.5.14. `fourier_bands=(1,4,16)` reaches 99.5% of the reference voided length; `zeta_scale=8` is real but cruder; `level_set_input` is inert at 1.95× the cost |
+| The Laplace embedding | **measured, and it fails** — §7.5.18. No mode beats the control on either backend at three seeds; the ansatz is already multiplicative, so it could only make a decaying mode easier and does not |
 | How much collocation goes to the front | **measured, and it fails** — §7.5.9. `T_s` degrades monotonically from 0% to 50%; re-weighting the measure is not the remedy |
 | M4 acceptance: onset within 0.5 s and one cell | **not met, and it turns entirely on the *time*** — §7.5.16. The height answer is "the outlet" whatever the network does, because `T_c` is monotone in `ζ`; the unquantised time error is 0.62–0.84 s against 0.5 s |
 | Is M4's criterion sound? | **yes — measured, §7.5.21.** At the scoring mesh the reference's own onset is uncertain by 0.06 cells and 0.009 s, so the criterion sits an order of magnitude above the ruler. The failure is the network's and the target is worth chasing |
@@ -2538,7 +2459,7 @@ collocation bug. Both are findings a single backend could not have produced.
 
 ## 8. What to do next
 
-**The twelve remedies now make a pattern, and it is sharper than any of them.**
+**The thirteen remedies now make a pattern, and it is sharper than any of them.**
 Sorting every isolated arm by what it changed:
 
 | what it changed | outcome |
@@ -2547,10 +2468,10 @@ Sorting every isolated arm by what it changed:
 | **the optimiser** — quasi-Newton budget (§7.5.11), curvature memory (§7.5.17) | **decisive**; the only axis that forms the front at all |
 | **the loss measure** — level-set sampling (§7.5.6), front fraction (§7.5.9), block and causal weighting | **failed or inert**; `frontfrac` degrades monotonically |
 | **extra residuals** — onset head (§7.5.16), front network, pseudo-time | **harmful**; a consequence of the PDE carries no information as a constraint |
-| **re-parameterisation** — level-set coordinate (§7.5.13) | **inert**; `φ` is a monotone function of `T_c`, which the network already computes |
+| **re-parameterisation** — level-set coordinate (§7.5.13), Laplace embedding (§7.5.18) | **inert**; `φ` is a monotone function of `T_c`, and a decaying mode was already representable through the multiplicative ansatz. Both could only make something *easier*, and neither did |
 
 **Change the function space or change the optimiser. Do not reweight the loss, and
-do not add residuals the PDE already implies.** That is not a hunch — it is twelve
+do not add residuals the PDE already implies.** That is not a hunch — it is thirteen
 measurements, and it is what the roadmap below is ordered against. The full version,
 with the 2026 literature it draws on, is `__DEV/REPORT-01-MILESTONES.md` Annex D.
 
