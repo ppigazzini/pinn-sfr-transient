@@ -1072,3 +1072,88 @@ def test_laplace_off_is_the_shipped_default():
         a.normalised_state(zeta, that).detach().numpy(),
         b.normalised_state(zeta, that).detach().numpy(),
     )
+
+
+@pytest.mark.parametrize("phi", [0.0, 0.5, 1.0])
+def test_broyden_class_minimises_known_minima_in_both_backends(phi):
+    """Validate the optimiser on functions whose minima are known, before a PINN.
+
+    This protocol exists because it has already paid: an inverted self-scaling
+    (`H/tau` for `tau H`) once passed every PINN smoke test while converging badly,
+    and was only caught by checking against a reference on a known problem.
+    """
+    torch = pytest.importorskip("torch")
+
+    from pinn_sfr_transient.axial.jaxpinn.optimizers import minimize
+    from pinn_sfr_transient.axial.torchpinn.optimizers import SelfScaledLBFGS
+
+    def rosen_t(z):
+        return (100 * (z[1:] - z[:-1] ** 2) ** 2 + (1 - z[:-1]) ** 2).sum()
+
+    x = torch.full((10,), -1.2, dtype=torch.float64, requires_grad=True)
+    opt = SelfScaledLBFGS(
+        [x],
+        max_iter=300,
+        history_size=20,
+        broyden_phi=phi,
+        tolerance_grad=1e-14,
+        tolerance_change=1e-16,
+    )
+
+    def closure():
+        x.grad = None
+        loss = rosen_t(x)
+        loss.backward()
+        return loss
+
+    opt.step(closure)
+    assert float(rosen_t(x)) < 1e-12
+
+    def quad_j(z):
+        return jnp.sum(jnp.arange(1, 21, dtype=jnp.float64) * (z - 3.0) ** 2)
+
+    _, f = minimize(
+        jax.value_and_grad(quad_j), jnp.zeros(20), max_iter=200, history_size=20, broyden_phi=phi
+    )
+    assert f < 1e-12
+
+
+def test_broyden_at_phi_zero_is_the_bfgs_two_loop():
+    """`phi = 0` must reproduce the proven two-loop, in both backends.
+
+    The Broyden path is a *different implementation* of the same operator at
+    `phi = 0` — sequential rather than two-loop — so this is the one check that can
+    catch an algebra error in it. It already has: the first version contracted `s`
+    and `w` against the accumulator instead of the original vector, which passed
+    every smoke test and failed this identity by 10%.
+    """
+    torch = pytest.importorskip("torch")
+
+    from pinn_sfr_transient.axial.jaxpinn.optimizers import _apply_broyden, _apply_H
+    from pinn_sfr_transient.axial.torchpinn.optimizers import SelfScaledLBFGS
+
+    rng = np.random.default_rng(0)
+    n, gamma = 40, 1.7
+    raw = []
+    for _ in range(6):
+        s_v = rng.normal(size=n)
+        y_v = rng.normal(size=n) + 3.0 * s_v
+        raw.append((s_v, y_v, 1.0 / float(np.dot(s_v, y_v)), 0.8))
+    v = rng.normal(size=n)
+
+    opt = SelfScaledLBFGS([torch.zeros(1, requires_grad=True)])
+    tp = [(torch.tensor(a), torch.tensor(b), c, d) for a, b, c, d in raw]
+    tv = torch.tensor(v)
+    opt.broyden_phi = 0.0
+    two_loop = opt._apply_H(tv, tp, gamma)
+    opt.broyden_phi = 1e-300  # forces the sequential path without changing the maths
+    seq = opt._apply_broyden(tv, tp, gamma)
+    np.testing.assert_allclose(seq.numpy(), two_loop.numpy(), rtol=1e-11)
+
+    jp = [(jnp.asarray(a), jnp.asarray(b), c, d) for a, b, c, d in raw]
+    jv = jnp.asarray(v)
+    np.testing.assert_allclose(
+        np.asarray(_apply_broyden(jv, jp, gamma, 1e-300)),
+        np.asarray(_apply_H(jv, jp, gamma)),
+        rtol=1e-11,
+    )

@@ -79,7 +79,6 @@ class FourierEmbedding(eqx.Module):
         return jnp.concatenate([jnp.sin(proj), jnp.cos(proj)])
 
 
-
 class LaplaceMix(eqx.Module):
     """Exponential-decay basis in ``t_hat``, wrapping a Fourier embedding.
 
@@ -112,9 +111,7 @@ class LaplaceMix(eqx.Module):
             return jnp.concatenate([f, lap])
         n, k = f.shape[0], self.rates.shape[0]
         per = n // k
-        parts = [
-            f[j * per : ((j + 1) * per if j < k - 1 else n)] * lap[j] for j in range(k)
-        ]
+        parts = [f[j * per : ((j + 1) * per if j < k - 1 else n)] * lap[j] for j in range(k)]
         return jnp.concatenate(parts)
 
 

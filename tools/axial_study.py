@@ -356,7 +356,7 @@ def study_optimizer(out: Path) -> None:
             )
             for seed in SEEDS
             for backend in BACKENDS
-            for opt in ("lbfgs", "lbfgs-shared", "ssbfgs")
+            for opt in ("lbfgs", "lbfgs-shared", "ssbfgs", "ssbroyden")
         ],
         out,
     )

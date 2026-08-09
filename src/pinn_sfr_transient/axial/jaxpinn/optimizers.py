@@ -75,6 +75,47 @@ _MIN_CURVATURE = 1e-12
 Pair = tuple[jax.Array, jax.Array, float, float]
 
 
+def _one_update(v: jax.Array, hv: jax.Array, pair: Pair, w: jax.Array, phi: float) -> jax.Array:
+    """One Broyden-class update applied to ``v``, given ``hv = H_prev v``.
+
+    The torch twin carries the derivation. Both vectors are needed: the update
+    contracts ``s`` and ``w`` against the *original* ``v`` while the ``H_prev v``
+    term is the accumulator, and conflating them fails the ``phi = 0`` identity by
+    about 10% while passing every smoke test — which is how it was caught.
+    """
+    s, y, rho, tau = pair
+    if tau != 1.0:
+        hv, w = hv * tau, w * tau
+    sv = float(jnp.vdot(s, v))
+    wv = float(jnp.vdot(w, v))
+    yw = float(jnp.vdot(y, w))
+    out = hv - rho * (w * sv + s * wv) + rho * sv * (1.0 + rho * yw) * s
+    if phi != 0.0 and yw > 0.0:
+        vec = s * rho - w / yw
+        out = out + phi * yw * vec * float(jnp.vdot(vec, v))
+    return out
+
+
+def _apply_broyden(v: jax.Array, pairs: list[Pair], gamma: float, phi: float) -> jax.Array:
+    """``H v`` for the self-scaled Broyden class; ``phi = 0`` is BFGS, ``1`` is DFP.
+
+    Sequential rather than two-loop, because the two-loop recursion is specific to
+    BFGS. ``O(m^2 n)`` per application against the two-loop's ``O(mn)`` — a few
+    milliseconds against a loss-and-gradient evaluation of a few hundred, so it is
+    bought rather than optimised, and a cached ``H_prev y`` would go stale as soon
+    as the limited-memory window drops a pair.
+    """
+    r = gamma * v
+    applied: list[jax.Array] = []
+    for i, pair_i in enumerate(pairs):
+        w = gamma * pair_i[1]
+        for j, pair_j in enumerate(pairs[:i]):
+            w = _one_update(pair_i[1], w, pair_j, applied[j], phi)
+        applied.append(w)
+        r = _one_update(v, r, pair_i, w, phi)
+    return r
+
+
 def _apply_H(v: jax.Array, pairs: list[Pair], gamma: float) -> jax.Array:
     """Two-loop recursion: ``H v`` from ``pairs`` with ``H_0 = gamma I``."""
     q = v
@@ -164,6 +205,7 @@ def minimize(  # noqa: PLR0913, C901 - these are the optimiser's knobs, flat is 
     history_size: int = 50,
     self_scale: bool = True,
     cap_tau: bool = True,
+    broyden_phi: float = 0.0,
     h0_scaling: bool = True,
     tolerance_grad: float = 1e-12,
     tolerance_change: float = 1e-14,
@@ -179,7 +221,14 @@ def minimize(  # noqa: PLR0913, C901 - these are the optimiser's knobs, flat is 
     for _ in range(max_iter):
         if float(jnp.abs(g).max()) <= tolerance_grad:
             break
-        d = -_apply_H(g, pairs, gamma) if pairs else -g / max(float(jnp.linalg.norm(g)), 1.0)
+        if pairs:
+            d = -(
+                _apply_broyden(g, pairs, gamma, broyden_phi)
+                if broyden_phi
+                else _apply_H(g, pairs, gamma)
+            )
+        else:
+            d = -g / max(float(jnp.linalg.norm(g)), 1.0)
         step, f_new, g_new = _line_search(value_and_grad, x, d, f, g, counter)
         if step == 0.0:
             if not pairs:
@@ -194,7 +243,12 @@ def minimize(  # noqa: PLR0913, C901 - these are the optimiser's knobs, flat is 
         if sy > _MIN_CURVATURE * float(jnp.linalg.norm(s)) * float(jnp.linalg.norm(y)):
             tau = 1.0
             if self_scale and pairs:
-                b = float(jnp.vdot(y, _apply_H(y, pairs, gamma))) / sy
+                hy = (
+                    _apply_broyden(y, pairs, gamma, broyden_phi)
+                    if broyden_phi
+                    else _apply_H(y, pairs, gamma)
+                )
+                b = float(jnp.vdot(y, hy)) / sy
                 if b > 0:
                     tau = min(1.0, 1.0 / b) if cap_tau else 1.0 / b
             pairs.append((s, y, 1.0 / sy, tau))
