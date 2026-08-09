@@ -133,34 +133,33 @@ the documentation is a defect regardless of what the alternative scores.
 
 ### 0.6 Which configuration to use
 
-Every configuration below forms the boiling front on every seed. The shipped
-default does not, and is listed only as the thing to avoid. Wall-clocks are
-**contended** — 2–5 jobs at `OMP_NUM_THREADS=8` — so treat them as ratios, not
-benchmarks; accuracy is unaffected (§7.2.8).
+**Use JAX.** At matched thread count and matched curvature memory it is **4.4×
+faster** than PyTorch (§7.5.19) and within **1.08×** on accuracy at f512
+(§7.5.10) — for most of this project's life it looked slower *and* weaker on one
+axis, and both readings were artefacts (§7.5.17, §7.5.19). PyTorch remains a
+first-class arm: two independent implementations agreeing is the strongest check
+here, and it is what caught the defect.
 
-| purpose | configuration | `T_s` | `L_void` | worst margin | sec |
-|---|---|---|---|---|---|
-| **best accuracy** | `300/3000`, f512, **torch** | **0.0216** | **0.3012** | **+34.6 K** | 3392 |
-| **best value** | `300/3000`, f512, **jax** | 0.0310 | 0.2481 | +19.2 K | **780** |
-| **cheapest trustworthy** | `300/3000`, f128, **jax** | 0.0363 | 0.2178 | +9.5 K | **314** |
-| *avoid* | shipped default (`8000/500`, f0) | 0.0434 | 0.0367 | **−2.3 K** | 2337 |
+All figures below are three seeds. Wall-clocks are **contended** — several jobs at
+`OMP_NUM_THREADS=8` — so treat them as ratios, not benchmarks; accuracy is
+unaffected (§7.2.8).
 
-**Best accuracy** is `f512`. `f1024` costs 2.2× more and is not better — the
-ladder's endpoint is measured, not assumed (§7.5.8).
+| purpose | configuration | `T_s` | `L_void` (% of ref) | worst margin |
+|---|---|---|---|---|
+| **best front fidelity** | `300/3000`, f256, `fourier_bands=(1,4,16)`, **jax** | 0.0233 | **0.3793 (99.5%)** | +28.1 K |
+| **best mean accuracy** | `300/3000`, f256, `fourier_bands=(0.25,1,4,16)`, **jax** | **0.0203** | 0.2932 (77%) | +24.4 K |
+| **best without new knobs** | `300/3000`, f512, **torch** | 0.0216 | 0.3012 (79%) | +34.6 K |
+| shipped default | `300/3000`, f256, **jax** | 0.0292 | 0.2440 (64%) | +25.8 K |
 
-**Best value** is the same configuration on JAX: within 43% of the best accuracy at
-**23% of the cost**. `f256` on JAX is poor value by comparison — 63% more cost than
-`f128` for 1% better `T_s`.
+`fourier_bands` is **off by default** and stays off until it has been measured
+under the same discipline as everything else it would displace — but it is the
+first configuration to reach the reference's voided length, and §7.5.14 explains
+why: the high band resolves the front, the low bands keep the bulk smooth, and at
+a fixed feature total the split between them is a choice rather than an accident.
 
-**Cheapest trustworthy** is `f128` on JAX, not `f32`. `f32/jax` runs in 206 s at
-`T_s` 0.0386, but its worst-seed margin is **+3.5 K** — near enough the threshold
-that a seed can lose the front, which is the `A + fourier` failure of §7.5.4.
-**Margin, not mean, is what makes a configuration safe to recommend.**
-
-**The shipped default is dominated on every axis**: slower than `f512/jax`, 40% less
-accurate, `L_void` at a tenth, and no front on any seed of either backend (§7.2.9).
-
-None of these meets the 1% bar. The best is 2.2× away.
+**Read onset with `onset_by_tangency`, not the threshold.** It puts the onset
+height at **0.00 cells** on every seed against 2.67–4.00 for thresholding
+(§7.5.16). `onset_head` is measured harmful and stays off.
 
 ### 0.7 Method notes that changed the answers
 
@@ -2386,6 +2385,47 @@ the weight on the control arm. And `exp(-s t̂)` underflows at the fastest precu
 rate, so how the rates are compressed into normalised time changes what the basis
 spans and belongs in the deviation register.
 
+#### 7.5.19 The speed comparison, made properly for the first time
+
+Every torch-vs-JAX wall-clock before this one ran torch at `OMP_NUM_THREADS=8`
+against JAX using **~230 threads** — XLA's CPU backend sizes its own Eigen pool
+from `hardware_concurrency()` and ignores the OpenMP variable torch obeys. That is
+a thread-count comparison wearing a backend comparison's clothes, and `AGENTS.md`'s
+"a wall-clock needs a stated thread budget" was being satisfied on paper while being
+violated in fact.
+
+Both backends given all 48 cores, run **sequentially** on an idle machine, identical
+weights, identical points, objective verified identical (`2.3148662743e-01`, 1.2e-16
+apart), f512 with 6000 points:
+
+| | Adam | quasi-Newton | total |
+|---|---|---|---|
+| torch | 146.20 s (731.0 ms/it) | 99.03 s (990.3 ms/it) | 245.23 s |
+| **jax** | 34.64 s (173.2 ms/it) | 20.80 s (208.0 ms/it) | **55.44 s** |
+| jax/torch | **0.24×** | **0.21×** | **0.23×** |
+
+**JAX is 4.4× faster, and the published 2.4× understates it** — on the quasi-Newton
+phase alone, the phase §7.5.11 shows does all the work, it is **4.8×**.
+
+**But the thread asymmetry did not invalidate the old ratios**, and an earlier
+revision of this document claimed it did. At 8 threads the same benchmark gives
+2270 vs 530 ms/it — ratio **0.23**. At 48 threads, 990 vs 208 — ratio **0.21**. The
+two backends scale almost identically with thread count (torch 2.3×, JAX 2.5× from
+8 to 48 threads), so the ratio is robust. What was wrong was the absolute numbers
+and the claim of a pinned budget, not the comparison.
+
+**Both scale badly, which is a planning fact.** Six times the threads buys 2.3–2.5×.
+These networks are small and the step is `jvp`-bound, so past roughly 8 threads most
+of the machine idles — running six studies at 8 threads each is closer to optimal
+than one at 48.
+
+**Taken with §7.5.10 and §7.5.17, this reverses the backend recommendation.** JAX is
+now equally accurate (1.08× at f512, 2–3% on an identical objective at matched
+memory) and 4.4× faster. It looked slower *and* weaker for most of this project's
+life, and both readings were artefacts of unequal settings — one an unset
+`memory_size`, the other an unset thread budget. `§0.6` now recommends it and
+`axial_study.py` leads with it.
+
 ### 7.6 Pseudo-time stepping
 
 Implemented (`pts_every`, `pts_dtau`, `pts_growth`), and **measured harmful** in
@@ -2423,7 +2463,7 @@ collocation bug. Both are findings a single backend could not have produced.
 | Fourier + modified MLP combined | **measured, and it fails** — §7.2.6 |
 | Plan A, multiple seeds | **TBD** — one seed measured (§7.4) |
 | Backend parity, post-closure | **closed, for a third time and for the right reason** — §7.5.17. The gap was `optax.lbfgs`'s default `memory_size=10` against torch's 50. At matched memory the two implementations agree to 2–3% on an identical objective, and JAX f512 is 1.08× torch rather than 1.44× |
-| The 2.4× JAX speed advantage | **unattributed** — §7.3.2. `torch.compile` accounts for 1.06× of it and is not the answer |
+| The JAX speed advantage | **re-measured at matched threads: 4.4× overall, 4.8× on the quasi-Newton phase** — §7.5.19. Still unattributed as to *why*; `torch.compile` accounts for 1.06× and is not the answer |
 | Optimiser bake-off (SSBroyden / SSBFGS) | **TBD — not started**, and §7.5.11 makes it the highest-value remaining item: at three seeds on both backends the quasi-Newton axis is the *only* one that moves the front |
 | How many epochs it needs | **answered — 54 runs, nine cells, three seeds, both backends** — §7.5.11. Quasi-Newton monotone over two decades; the Adam axis flat once `qn3000` is set, so the default's Adam budget does no measurable work |
 | Three front-aimed embeddings | **measured, three seeds** — §7.5.12–§7.5.14. `fourier_bands=(1,4,16)` reaches **99.5% of the reference voided length** while also beating the control on `T_s` and margin; `zeta_scale=8` is real but cruder; `level_set_input` is inert at 1.95× the cost |

@@ -76,7 +76,11 @@ FOURIER_BANDS = ((), (1.0, 4.0), (1.0, 4.0, 16.0), (0.25, 1.0, 4.0, 16.0))
 # the strongest check this project has, and it is the reason the JAX twin exists
 # (`docs/axial_nn.md` section 4) -- a result measured on one backend is a result
 # about that backend.
-BACKENDS = ("torch", "jax")
+# JAX first: at matched thread count and matched curvature memory it is 4.4x
+# faster (§7.5.19) and within 1.08x on accuracy at f512, so it is the backend a
+# sweep should lead with. Torch remains a full first-class arm -- two independent
+# implementations agreeing is the strongest check this project has.
+BACKENDS = ("jax", "torch")
 # Set by --only; filters arms so an extended ladder need not re-run measured points.
 _ONLY: str | None = None
 # Set by --lbfgs-history; overrides the quasi-Newton curvature memory on every arm.
@@ -182,7 +186,7 @@ def run_all(
     traj: Any,  # noqa: ANN401
     specs: list[tuple[str, dict]],
     out: Path,
-    backend: str = "torch",
+    backend: str = "jax",  # see BACKENDS: faster at equal threads, equal at equal memory
 ) -> list[dict]:
     """Run every spec, writing after each so a killed study keeps what it measured.
 
