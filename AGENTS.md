@@ -94,6 +94,13 @@ four times: D38, D39, the budget sweep's "monotonic" front degradation, and §7.
   milestones.
 - **Include a control arm that reproduces something already published**, and check
   it before reading the new arms. That is what caught D67.
+- **`OMP_NUM_THREADS` does not bind JAX.** XLA's CPU backend sizes its own pool from
+  `hardware_concurrency()`: an arm nominally at 8 threads was measured creating 291.
+  Since thread count changes float reduction order, that is a correctness problem,
+  not a timing one — the same run gives `...040135` on 48 cores and `...040157` on 8.
+  Pin with `axial_study.py --cpu-block K`, which sets CPU affinity. The core *count*
+  binds the answer; *which* cores does not, so concurrent studies take different
+  blocks and stay comparable.
 - **A wall-clock needs a stated thread budget and contention level.**
   `OMP_NUM_THREADS` defaults to every core, and thread count changes float
   reduction order — so it changes answers, not just timings. Concurrency at a
