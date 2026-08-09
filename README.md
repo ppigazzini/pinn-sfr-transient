@@ -110,7 +110,7 @@ agreeing is the strongest check here, and it is what caught the defect.
 settled, what is open, and **§0.6 says which configuration to use**. §5–§7 carry
 every measurement, including the negative results, which outnumber the positive
 ones, and including which of that document's own conclusions have been retracted —
-twelve so far, including a whole column of that document's JAX results and, most recently, a headline of its own that turned out to be a tautology.
+twelve so far, including a whole column of that document's JAX results and a headline of its own that turned out to be a tautology. Thirteen remedies have been argued soundly and refuted by measurement; the negative results outnumber the positive ones by four to one.
 
 **Every deviation from the manual is registered** in
 [`docs/axial_physics.md`](docs/axial_physics.md) §3 with its equation number. That
