@@ -12,7 +12,7 @@ The repository holds **two models**, and they are at very different stages:
 | state | 6-group point kinetics + two thermal nodes | four material fields on an axial mesh + sodium void |
 | void | a `tanh` demonstration surrogate at 820 K | saturation + superheat from the SAS4A manual, ~1156 K |
 | reference solver | verified | verified, except the void fraction (`axial_physics.md` §6.5) |
-| PINN | **meets its bar** — a few 1e-3 relative L2 | **does not meet its bar** — see below |
+| PINN | **meets its bar** — a few 1e-3 relative L2 | **0.020 against a 0.01 bar**; the *front* is solved to 99.5% |
 | backends | PyTorch, JAX, DeepXDE | **JAX** (default), PyTorch |
 
 This README is a map. The physics, the neural-network methodology, and the usage
@@ -45,70 +45,73 @@ sign rather than by its magnitude ([`docs/axial_physics.md`](docs/axial_physics.
 §10).
 
 The PINN trains, satisfies every hard constraint exactly, and **does not meet its
-1% accuracy bar** — 0.028 relative L2 on `T_s` at the shipped defaults, 0.022 at the
-documented best. The reference's own error is 1.1–1.6e-3, so the bar sits 6–9× above
-the ruler and the failure is the network's.
+1% accuracy bar** — 0.029 relative L2 on `T_s` at the shipped defaults, **0.020** at
+the best measured configuration. The reference's own error is 1.1–1.6e-3, so the
+bar sits 6–9× above the ruler and the failure is the network's, not the ruler's.
 
-The boiling front forms on every seed of both backends, and it forms by clearing
-saturation by 24 K out of a 590 K range — a margin, not a mechanism, which is why
-it was fragile for so long. **The previous default cleared it by −2.3 K and
-therefore formed no front at all**, on any seed of either backend, while the
-documentation said otherwise. Both the horizon and the budget that caused that are
-fixed and pinned by tests.
+**The boiling front, though, is essentially solved.** Giving the Fourier embedding
+several frequency bands at once — a low band for the smooth bulk, a high one for the
+near-discontinuous front, at the same total feature count and the same wall-clock —
+reaches **99.5% of the reference's voided length** at three seeds, against 64% for
+the shipped default, while *also* improving the mean error and the saturation
+margin. Every other lever in this project trades one against the other; this is the
+first that moves both, and the mechanism is legible enough to say why
+([`docs/axial_nn.md`](docs/axial_nn.md) §7.5.14).
 
-**What the current round is measuring.** A 54-run sweep of Adam against
-quasi-Newton iterations — now complete, three seeds on both backends — finds that
-**the quasi-Newton budget is the axis that forms the front**: the Adam axis is flat over
-two decades once it is funded, which is awkward, because the Adam count is what the
-shipped default was tuned on ([`docs/axial_nn.md`](docs/axial_nn.md) §7.5.11). Adam
-alone never produces a boiling front at all. That is what the loss landscape
-predicts — the residual differentiates the network, so its curvature is badly
-conditioned and strongly off-diagonal, which a first-order method with a diagonal
-preconditioner cannot address — and it means **the axis that has never been pushed
-is the one that matters**: the quasi-Newton budget is monotone with no measured end
-at 3000 iterations, while the literature this recipe comes from runs 30000.
+**And onset location is exact.** Boiling starts at the *maximum* of the coolant
+temperature, where the axial profile is 11.6× flatter than at its steepest and one
+mesh cell is 0.4 K — so reading a *position* off a *value* threshold there scales as
+a square root of the field error, which is the worst possible law. Solving the
+tangency conditions instead (the field touches saturation, and touches it
+tangentially) puts onset within **0.00 cells on every seed of every arm**, against
+2.7–4.0 cells for thresholding.
 
-Five more sweeps are in flight at one or two seeds, so none of them has moved a
-number above — the most promising covers the solution's smooth bulk and its sharp
-front with several Fourier bands at once, and beats the control on both accuracy
-*and* front size on both backends (§7.5.12–§7.5.14).
+That fixed the wrong half of the problem, which is the interesting part: onset
+*time* was passing only because the scoring grid is 0.25 s and quantised it
+favourably. Measured without quantisation it is 0.62–0.84 s against a 0.5 s
+criterion — so M4's binding constraint has flipped from *where* to *when* (§7.5.16).
+The same arithmetic questions the criterion itself: one cell is only 1.6–2.3× above
+the *reference solver's own* error.
 
-**Why boiling onset never improved, after everything else did.** Onset was never in
-the objective — every knob was ranked on an average or a peak, and neither is a
-*position*. And it was read off by thresholding a field at its own maximum, where
-the profile is 11.6× flatter than at its steepest and one mesh cell is 0.4 K of
-coolant temperature; recovering a position from a value error there scales as a
-square root. Reading it by tangency instead measures 3.75× better on a trained
-network; training against the same conditions is degenerate as formulated and made
-the fit worse, which is recorded rather than quietly dropped (§7.5.16). The same
-arithmetic raises a question about the acceptance criterion itself: one cell is only
-1.6–2.3× above the *reference solver's* own error.
+**How many epochs it needs was never asked until now.** A 54-run sweep of Adam
+against quasi-Newton iterations, three seeds on both backends, finds that **the
+quasi-Newton budget is the axis that forms the front** — the Adam axis is flat over
+two decades once it is funded, and Adam alone never produces a front at all. That is
+awkward, because the Adam count is what the shipped default was tuned on. It is also
+what the loss landscape predicts: the residual differentiates the network, so its
+curvature is badly conditioned and strongly off-diagonal, which a first-order method
+with a diagonal preconditioner cannot address (§7.5.11).
 
-**JAX is now the default backend, and the reason is a two-part correction.** PyTorch had been beating JAX in
-every experiment, by a margin that grew with model size — on identical residuals,
-which for deterministic mathematics should not happen. It was one unset argument:
-`optax.lbfgs()` defaults to keeping **10** curvature pairs and the PyTorch side was
-passing **50**. Copy one backend's weights into the other, verify the objective
-matches to the last bit, and vary only the optimiser: PyTorch at 10 reproduces
-JAX's curve, and JAX at 50 reproduces PyTorch's. Fixed, with the memory now an
-explicit shared setting — and **every JAX accuracy number in the documentation is
-superseded and re-measured** (§7.5.17); the PyTorch numbers were unaffected. With
-that fixed the two agree to 1.08% at the largest capacity measured.
+Which means **the axis that has never been pushed is the one that matters**. It is
+monotone with no measured end at 3000 iterations, while the literature this recipe
+comes from runs 30000 — so `T_s = 0.02` may be a *budget* limit rather than the
+model's. That experiment is running.
+
+**JAX is now the default backend, and the reason is a two-part correction.** PyTorch
+had been beating JAX in every experiment, by a margin that grew with model size — on
+identical residuals, which for deterministic mathematics should not happen. It was
+one unset argument: `optax.lbfgs()` defaults to keeping **10** curvature pairs and
+the PyTorch side was passing **50**. Copy one backend's weights into the other,
+verify the objective matches to the last bit, and vary only the optimiser: PyTorch
+at 10 reproduces JAX's curve, and JAX at 50 reproduces PyTorch's. Fixed, with the
+memory now an explicit shared setting — and **every JAX accuracy number was
+superseded and re-measured** (§7.5.17). With that fixed the two agree to 1.08× at
+the largest capacity measured.
 
 The second half is speed. Every timing comparison had PyTorch pinned to 8 threads
 while JAX quietly used every core, because JAX's CPU backend ignores the variable
-PyTorch obeys. Given the machine equally and run one at a time, **JAX is 4.4×
-faster** — and 4.8× on the quasi-Newton stage, which is the stage that does all the
-work (§7.5.19). So a backend that looked slower *and* weaker was neither; both
-readings were artefacts of unequal settings. PyTorch stays a first-class arm, since
-two independent implementations agreeing is the strongest check here — and it is
-what caught the defect.
+PyTorch obeys and sizes its own pool — 291 threads where 8 were asked for. Given the
+machine equally and run one at a time, **JAX is 4.4× faster**, and 4.8× on the
+quasi-Newton stage, which is the stage that does all the work (§7.5.19). So a
+backend that looked slower *and* weaker was neither; both readings were artefacts of
+unequal settings. PyTorch stays a first-class arm — two independent implementations
+agreeing is the strongest check here, and it is what caught the defect.
 
 [`docs/axial_nn.md`](docs/axial_nn.md) **§0 is the status quo** — accuracy, what is
 settled, what is open, and **§0.6 says which configuration to use**. §5–§7 carry
 every measurement, including the negative results, which outnumber the positive
 ones, and including which of that document's own conclusions have been retracted —
-eleven so far, and one of them is a whole column of this document's JAX results.
+eleven so far, and one of them was a whole column of that document's JAX results.
 
 **Every deviation from the manual is registered** in
 [`docs/axial_physics.md`](docs/axial_physics.md) §3 with its equation number. That
@@ -140,9 +143,16 @@ uv sync --extra deepxde --extra torch-cpu && uv run python -m pinn_sfr_transient
 roughly 1/32–1/64 of FP32 on consumer NVIDIA hardware, which is most of the reason a
 GPU does not pay for itself here. CUDA builds exist (swap any `-cpu` extra for
 `-gpu`) but are neither required nor benchmarked on the axial model. Google Colab is
-**not** a target: the axial PINN needs tens of minutes of CPU per run. Pin
-`OMP_NUM_THREADS` before quoting any timing or any reproducibility claim — thread
-count changes float reduction order.
+**not** a target: the axial PINN needs tens of minutes of CPU per run.
+
+**Pin the thread budget before quoting any timing — or any reproducibility claim.**
+Thread count changes float reduction order, so it changes answers and not only
+speed. `OMP_NUM_THREADS` binds PyTorch and is **ignored by JAX**, whose CPU backend
+sizes its own pool from the core count; use `tools/axial_study.py --cpu-block K`,
+which sets CPU affinity. Measured: the same run gives `…040135` on 48 cores and
+`…040157` on 8, and pinning makes it bitwise reproducible. The core *count* binds
+the answer, *which* cores does not — so concurrent jobs can take different blocks
+and stay comparable.
 
 ## Documentation
 
@@ -162,8 +172,10 @@ count changes float reduction order.
   so an equation citation can be checked without a network round-trip. Fetched by
   [`tools/fetch_sas_manual.py`](tools/fetch_sas_manual.py).
 - [`tools/axial_study.py`](tools/axial_study.py) — one sub-command per published
-  axial study (`ruler`, `horizon`, `budget`, `optimizer`, `parity`, `plan-a`,
-  `combo`, `regime`, `regime-sign`). Every table in `axial_nn.md` and
+  axial study: `ruler`, `horizon`, `budget`, `grid`, `qnladder`, `optimizer`,
+  `parity`, `plan-a`, `combo`, `margin`, `scaling`, `levelset`, `frontfrac`,
+  `capacity-optimiser`, `default`, `aniso`, `bands`, `lsinput`, `onset`, `laplace`,
+  `regime`, `regime-sign`. Every table in `axial_nn.md` and
   `axial_physics.md` §10 is reproducible by one of them. This exists because it
   once did not: a published configuration differed from the shipped default and
   nobody could tell, since the measurement lived in an uncommitted scratch file.
@@ -194,6 +206,7 @@ pinn-sfr-transient/
 │       ├── config.py    # AxialParams (mesh, geometry, feedback switches)
 │       ├── sodium.py    # the §12.13 sodium property correlations
 │       ├── physics.py   # the residuals — ONE definition, shared by all three
+│       ├── scoring.py   # ONE scorer, numpy-only, never imported by a loss
 │       ├── reference.py # stiff axial solver -> AxialTrajectory
 │       ├── figures.py   # regenerates the axial docs/img/ figures
 │       ├── torchpinn/   # PyTorch backend, split config/archs/ansatz/model/
@@ -201,7 +214,10 @@ pinn-sfr-transient/
 │       ├── jaxpinn/     # JAX backend, the same split plus residuals/samplers
 │       ├── pinn_torch.py# facade re-exporting torchpinn's public surface
 │       └── pinn_jax.py  # facade re-exporting jaxpinn's public surface
-├── tests/               # pytest: consistency, physics, CLI, both PINNs, parity
+├── tests/               # pytest: consistency, physics, CLI, both PINNs, parity,
+│                        #   and test_hostile_audit.py — the algebra checked against
+│                        #   dense matrices, scipy and sympy rather than against
+│                        #   this project's own other half
 ├── docs/                # theory, usage, references; img/ holds ALL figures;
 │                        #   sas4a/ mirrors the manual
 ├── tools/               # axial_study.py       — every published axial table, one
