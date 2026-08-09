@@ -266,12 +266,26 @@ magnitude in final error. A comparison of two PINN architectures at 3000 quasi-N
 iterations would have ranked them on which reaches an under-converged state faster, which
 is a different question from which is more accurate.
 
-This has a direct bearing on reported results. An earlier optimiser comparison in this
-same work was run at 3000 Adam and 300 quasi-Newton iterations, and found plain L-BFGS
-superior to self-scaled BFGS by 33% and to a self-scaled Broyden method by 44%. That
-comparison was made in precisely the regime the factorial sweep identifies as the one
-where the quasi-Newton stage does not matter, and it is being repeated where the stage is
-funded. We report it here as a caution rather than as a result.
+This has a direct bearing on reported results. Self-scaled quasi-Newton methods have been
+reported to improve PINN accuracy by one to three orders of magnitude over BFGS [7,14].
+We measure the opposite: at a funded quasi-Newton stage, plain L-BFGS and a shared
+reimplementation both reach 0.0296 while self-scaled BFGS reaches 0.0401, 35% worse, and
+a self-scaled Broyden method is worse again at several times the wall-clock.
+
+The disagreement is explicable and is not a contradiction. Limited-memory BFGS already
+rescales its initial inverse-Hessian approximation by the Oren--Luenberger factor
+$gamma_k = s_k^T y_k \/ y_k^T y_k$ at every iteration, and this is the default in both
+frameworks used here [10]. Self-scaling is therefore largely redundant against an L-BFGS
+baseline, while against the unscaled full-memory BFGS with $H_0 = I$ used in the studies
+above it supplies a scaling that is otherwise absent. Those studies also use networks of
+$10^3$ parameters, roughly twenty times smaller than ours, and report single runs without
+seed statistics; a third study finds self-scaled Broyden losing to plain BFGS on two of
+four equations [15]. We therefore report our result as a regime-dependent negative
+rather than as a refutation.
+
+The general point stands independently of who is right: an optimiser comparison is only
+interpretable alongside its baseline's configuration, its network size, and its seed
+count.
 
 Two reporting conventions from the wider computational-science literature would have
 caught our own errors earlier, and we adopt them. Recent verification-and-validation
@@ -331,4 +345,6 @@ source for the thermophysics and feedback laws used here.
   [Jakeman J D, Barba L A, Martins J R R A and O'Leary-Roseberry T 2026 Verification and validation for trustworthy scientific machine learning _Mach. Learn.: Sci. Technol._ *7* 025055],
   [McGreivy N and Hakim A 2024 Weak baselines and reporting biases lead to overoptimism in machine learning for fluid-related partial differential equations _Nat. Mach. Intell._ *6* 1256],
   [Eça L and Hoekstra M 2014 A procedure for the estimation of the numerical uncertainty of CFD calculations based on grid refinement studies _J. Comput. Phys._ *262* 104],
+  [Urbán J F, Stefanou P and Pons J A 2025 Unveiling the optimization process of physics-informed neural networks _J. Comput. Phys._ *523* 113656],
+  [Si K, An H, Ma Z and Yan X 2026 From non-convex self-concordant regularization to scalable quasi-Newton training of PINNs Preprint arXiv:2608.04206],
 ))
