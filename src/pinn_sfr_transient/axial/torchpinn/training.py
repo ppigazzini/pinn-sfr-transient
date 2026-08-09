@@ -294,12 +294,16 @@ class Trainer:
         zeta, that = self.collocation()
         before = self.causal_loss(zeta, that).item()
         snapshot = [q.detach().clone() for q in self.model.parameters()]
-        if self.cfg.optimizer in ("ssbfgs", "lbfgs-shared"):
+        if self.cfg.optimizer in ("ssbfgs", "lbfgs-shared", "ssbroyden"):
             opt = SelfScaledLBFGS(
                 self.model.parameters(),
                 max_iter=self.cfg.lbfgs_iters,
                 history_size=self.cfg.lbfgs_history,
-                self_scale=self.cfg.optimizer == "ssbfgs",
+                self_scale=self.cfg.optimizer in ("ssbfgs", "ssbroyden"),
+                # SSBroyden is the self-scaled Broyden class at the midpoint of the
+                # family. `phi = 0` would be SSBFGS exactly, so 0.5 is what makes it
+                # a distinct arm rather than a rename.
+                broyden_phi=0.5 if self.cfg.optimizer == "ssbroyden" else 0.0,
                 tolerance_grad=1e-12,
                 tolerance_change=1e-14,
             )

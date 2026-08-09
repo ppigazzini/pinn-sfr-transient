@@ -132,7 +132,7 @@ def _lbfgs_polish(  # noqa: PLR0913 - polish needs the model, params, points and
         return causal_loss(eqx.combine(params, static), p, cfg, pts, w)  # no proximal term
 
     before = float(loss_fn(params))
-    if cfg.optimizer in ("ssbfgs", "lbfgs-shared"):
+    if cfg.optimizer in ("ssbfgs", "lbfgs-shared", "ssbroyden"):
         flat0, unravel = ravel_pytree(params)
         vg = eqx.filter_jit(jax.value_and_grad(lambda z: loss_fn(unravel(z))))
         flat, after = ssbfgs_minimize(
@@ -140,7 +140,8 @@ def _lbfgs_polish(  # noqa: PLR0913 - polish needs the model, params, points and
             flat0,
             max_iter=cfg.lbfgs_iters,
             history_size=cfg.lbfgs_history,
-            self_scale=cfg.optimizer == "ssbfgs",
+            self_scale=cfg.optimizer in ("ssbfgs", "ssbroyden"),
+            broyden_phi=0.5 if cfg.optimizer == "ssbroyden" else 0.0,
         )
         params = unravel(flat)
         if not np.isfinite(after) or after > before:

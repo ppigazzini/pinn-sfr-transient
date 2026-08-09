@@ -135,6 +135,7 @@ class SelfScaledLBFGS:
         history_size: int = 50,
         self_scale: bool = True,
         cap_tau: bool = True,
+        broyden_phi: float = 0.0,
         h0_scaling: bool = True,
         tolerance_grad: float = 1e-12,
         tolerance_change: float = 1e-14,
@@ -149,6 +150,10 @@ class SelfScaledLBFGS:
         # address the same defect, and applying both compounds the damping: over
         # a 50-pair history the cumulative factor is the product of every tau.
         self.cap_tau = cap_tau
+        # Broyden-family parameter. 0 is BFGS and reproduces the two-loop exactly;
+        # 1 is DFP. Kiyani et al. (arXiv:2501.16371) report the self-scaled Broyden
+        # class beating L-BFGS on PINN losses, and this is the knob that spans it.
+        self.broyden_phi = float(broyden_phi)
         self.h0_scaling = h0_scaling
         self.tolerance_grad = tolerance_grad
         self.tolerance_change = tolerance_change
@@ -173,6 +178,81 @@ class SelfScaledLBFGS:
         )
 
     # -- the two-loop recursion --------------------------------------------
+    def _apply_broyden(
+        self,
+        v: torch.Tensor,
+        pairs: list[tuple[torch.Tensor, torch.Tensor, float, float]],
+        gamma: float,
+    ) -> torch.Tensor:
+        r"""Return ``H v`` for the self-scaled **Broyden-class** operator.
+
+        The two-loop recursion is specific to BFGS, so the Broyden family needs the
+        sequential form. Applying each stored update in order,
+
+        .. math::
+
+            H_{i} u = H_{i-1} u
+              - \frac{w_i (s_i^T u) + s_i (w_i^T u)}{s_i^T y_i}
+              + \\Bigl(1 + \frac{y_i^T w_i}{s_i^T y_i}\\Bigr)
+                \frac{s_i (s_i^T u)}{s_i^T y_i}
+              + \\phi\\,(y_i^T w_i)\\, v_i (v_i^T u)
+
+        with ``w_i = H_{i-1} y_i`` and
+        ``v_i = s_i/(s_i^T y_i) - w_i/(y_i^T w_i)``. ``phi = 0`` is BFGS and ``phi =
+        1`` is DFP.
+
+        ``w_i`` is recomputed here rather than cached, which costs ``O(m^2 n)`` per
+        application against the two-loop's ``O(mn)``. At ``m = 50`` and this model's
+        parameter count that is a few milliseconds against a loss-and-gradient
+        evaluation of a few hundred, so it is bought rather than optimised — and a
+        cached ``w_i`` would go stale the moment the limited-memory window drops a
+        pair, which is a silent error of exactly the kind this file has produced
+        before.
+
+        Correctness is asserted rather than argued: at ``phi = 0`` this must agree
+        with :meth:`_apply_H` to floating-point tolerance, which the tests check.
+        """
+        r = gamma * v
+        applied: list[torch.Tensor] = []
+        for i, (s_i, y_i, rho_i, tau_i) in enumerate(pairs):
+            # w_i = H_{i-1} y_i, built by replaying the earlier pairs on y_i.
+            w = gamma * y_i
+            for j, (s_j, y_j, rho_j, tau_j) in enumerate(pairs[:i]):
+                w = self._one_update(y_i, w, (s_j, y_j, rho_j, tau_j), applied[j])
+            applied.append(w)
+            r = self._one_update(v, r, (s_i, y_i, rho_i, tau_i), w)
+        return r
+
+    def _one_update(
+        self,
+        v: torch.Tensor,
+        hv: torch.Tensor,
+        pair: tuple[torch.Tensor, torch.Tensor, float, float],
+        w: torch.Tensor,
+    ) -> torch.Tensor:
+        """One Broyden-class update applied to ``v``, given ``hv = H_prev v``.
+
+        **Both** vectors are needed, and conflating them is the bug this method was
+        first written with: the update contracts ``s`` and ``w`` against the
+        *original* ``v`` while the ``H_prev v`` term is the accumulator. Using the
+        accumulator for all three passed every smoke test and failed the ``phi = 0``
+        identity by 10%, which is why that identity is asserted rather than assumed.
+
+        ``w^T v = y^T H_prev v`` by symmetry of ``H_prev``, so the second contraction
+        needs no extra operator application.
+        """
+        s, y, rho, tau = pair
+        if tau != 1.0:
+            hv, w = hv * tau, w * tau
+        sv = float(torch.dot(s, v))
+        wv = float(torch.dot(w, v))
+        yw = float(torch.dot(y, w))
+        out = hv - rho * (w * sv + s * wv) + rho * sv * (1.0 + rho * yw) * s
+        if self.broyden_phi != 0.0 and yw > 0.0:
+            vec = s * rho - w / yw
+            out = out + self.broyden_phi * yw * vec * float(torch.dot(vec, v))
+        return out
+
     def _apply_H(
         self,
         v: torch.Tensor,
@@ -180,6 +260,8 @@ class SelfScaledLBFGS:
         gamma: float,
     ) -> torch.Tensor:
         """Return ``H v`` for the operator built from ``pairs`` with ``H_0 = gamma I``."""
+        if self.broyden_phi != 0.0:
+            return self._apply_broyden(v, pairs, gamma)
         q = v.clone()
         alphas: list[float] = []
         for s, y, rho, _tau in reversed(pairs):
