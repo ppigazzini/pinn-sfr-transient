@@ -63,7 +63,10 @@ contents; the CLI recreates the directory on demand.
   the model silently and makes every cross-backend number a comparison of two
   different things; that happened once and cost a published table.
   `tests/axial/test_axial_pinn_jax.py` asserts equal block counts, equal input
-  widths and field-by-field equal defaults.
+  widths and field-by-field equal defaults. This rule is **unchanged** by the
+  measure-on-JAX-only rule below: parity of the *implementations* is what makes a
+  short cross-backend check able to catch anything, so dropping torch from the long
+  runs makes keeping it in step more important, not less.
 - **Deviations from the manual are a contract, not a comment.** Anything the
   axial model does differently from SAS4A belongs in the `docs/axial_physics.md`
   register with its equation number. An unregistered deviation is a bug. New
@@ -76,6 +79,29 @@ and single-seed conclusions in this project have been overturned by the next see
 four times: D38, D39, the budget sweep's "monotonic" front degradation, and §7.3.2's
 "consistent 21%" backend gap.
 
+- **Two backends for correctness, one backend for measurement.** Every new algorithm,
+  optimiser or residual is exercised **short** on *both* torch and JAX first, and the
+  command is `uv run python tools/backend_smoke.py` (add `--optimizer`/`--history` for
+  the variant you changed). It checks three things in about a minute: config parity
+  against a declared-divergence list, both optimisers on an ill-conditioned quadratic
+  and Rosenbrock from the same start with one shared knob dict, and that a non-default
+  config actually reaches the model. That short pass is where this project's real defects have
+  always surfaced: an `optax.lbfgs` default of 10 against torch's 50, a Broyden
+  update contracted against the wrong vector, JAX arms silently scored under the
+  shipped config. None of them needed a long run to find; all of them survived one
+  because only one backend was looked at.
+
+  **The long runs are then JAX-only.** JAX is 4.4x faster at matched threads
+  (§7.5.19) and, once curvature memory matches, the two agree to 3% — so a full torch
+  replication buys a third-digit confirmation for 4.4x the machine time, and that
+  time is better spent on seeds or on a second arm.
+
+  What this costs, stated rather than hidden: **a comparative headline is now a
+  statement about the JAX implementation**, not about the formulation in general. Say
+  so in the sentence. If a result would change a published default or a paper claim,
+  the torch confirmation is worth buying deliberately — but as a decision, not a
+  reflex. This supersedes the older requirement that every comparative claim hold in
+  both implementations, and `paper/` §4 was written under that older rule.
 - **Never write a comparative headline from one seed.** Three seeds with per-seed
   ranges, or say "seed N, one sample" in the sentence that states the result — not
   in a caveat further down. A hedge below a confident headline does not work.
@@ -125,6 +151,30 @@ four times: D38, D39, the budget sweep's "monotonic" front degradation, and §7.
   diff the *arguments* before theorising about the libraries.
 - **An ablation is a statement about the formulation it was run on.** Change the
   formulation and every negative result on the shelf is provisional again (D59).
+- **The paper is not exempt from "reproducible by a committed command".** Every number in
+  `paper/` must be locatable in a `__DEV/studies/*.json` row, and the check is to grep for
+  it. A draft claimed a *funded* optimiser bake-off reaching "0.0296 against 0.0401" when
+  the funded bake-off had never been run and neither number existed in any study file —
+  `0.0296` was the control arm of six unrelated studies. The rule was being enforced on
+  studies, and the paper is not a study, so nothing caught it. Grep the number.
+- **Check the budget a row was actually run at, not the one the sub-command implies.**
+  `optbakeoff.json` looks like output of the `bakeoff` sub-command and is not: every row
+  carries `adam_iters = 3000, lbfgs_iters = 300`, the starved diagonal that `bakeoff`
+  exists to replace. Rows record their configuration — read it before citing them.
+- **Reverse-mode memory scales with how many outputs you differentiate together, not
+  with the size of the Jacobian.** `jax.jacrev` holds one copy of the forward tape per
+  cotangent in flight. `tools/gauss_newton_experiment.py` asked it for 3000 residual
+  rows over 6000 collocation points; XLA's own buffer assignment says that is **113 GB**
+  (measured: 0.38 / 0.66 / 1.22 / 2.49 GB at 8 / 16 / 32 / 64 rows, exactly linear), and
+  it took the 64 GB host down mid-study. Build such a Jacobian in row blocks. The
+  assembled matrix is the same to ~1 ulp; only the peak changes.
+- **Any routine whose memory scales with a tunable must state its peak and refuse to
+  exceed it.** Ask the compiler rather than estimating: `jax.jit(f).lower(...).compile()
+  .memory_analysis()` gives real bytes before a single buffer is allocated. Note it must
+  be `jax.jit` — `eqx.filter_jit`'s `Compiled` object does not forward `memory_analysis`,
+  and the first version of that guard caught the `AttributeError` and disabled itself
+  with a warning. **A guard that fails open is not a guard**; make the unmeasurable case
+  an error and require an explicit opt-out to run without one.
 
 ## Docs & Markdown math (GitHub renders these)
 
@@ -170,6 +220,25 @@ Broken inline LaTeX is a recurring problem — GitHub's renderer is strict. Rule
   a separate CI job exercises the JAX backend.
 - Keep new PINN tests tiny (small width/depth, a few iterations) so the suite
   stays sub-second on CPU.
+- **A green local run says nothing about the two backend-alone lanes**, because a
+  working environment here has both extras installed and a missing-extra path is
+  therefore never taken. That is how a test importing `torchpinn.config` with no
+  `importorskip` sat in `test_axial_reference.py` breaking the `minimal` and `jax`
+  lanes — it passes for everyone locally, forever. Reproduce a lane before claiming
+  it is green, in a throwaway environment so the working one is untouched:
+
+```bash
+E=/tmp/venv-min; UV_PROJECT_ENVIRONMENT=$E uv sync --locked --python 3.13
+UV_PROJECT_ENVIRONMENT=$E uv run --python 3.13 --no-sync pytest --no-cov   # minimal lane
+```
+
+- **`uv sync` without the extras uninstalls them from the environment it targets.**
+  Run it against `UV_PROJECT_ENVIRONMENT`, never the working venv, and never while a
+  study is running — the project venv is shared with every background run.
+- **The type checker needs the optional extras installed**, or `torch` and
+  `jax.numpy` in `axial/_backend.py`'s guarded branches become `unresolved-import`
+  errors. The `quality` lane syncs both CPU backends for exactly this reason; it
+  synced core only and failed for three days while pre-commit passed locally.
 
 ## CI / commits
 
