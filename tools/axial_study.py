@@ -82,15 +82,19 @@ GRID_ITERS = (30, 300, 3000)
 # quasi-Newton stage is funded -- and 0 has never been run at all.
 QN_LADDER = (3000, 10000, 30000)
 ADAM_LADDER = (0, 30)
-# Adam with the quasi-Newton stage switched OFF entirely, on **the same rungs as
-# `QN_LADDER`** so the two optimisers are compared step for step rather than through a
-# cost model. That also fixes the budget: an Adam step is not cheaper than a quasi-Newton
-# step here -- 0.139 s against 0.112 s at f128 on the grid, because the quasi-Newton stage
-# is a jitted `fori_loop` while Adam steps through Python -- so 30000 Adam iterations cost
-# about what the shipped default costs, and the top rung lands on the control's own
-# wall-clock instead of ten times past it. A first version of this ladder went to 300000
-# and would have been ~25 h per seed for that arm alone.
-ADAM_ONLY_LADDER = QN_LADDER
+# Adam with the quasi-Newton stage switched OFF entirely. ONE rung, and it is chosen to
+# sit directly beside an arm that already exists: `scaling` measured `adam16000/qn1000` at
+# T_s = 0.0432 in 1236 s. Running the same 16000 Adam iterations with `lbfgs_iters = 0`
+# removes exactly one thing, so whatever moves is what those 1000 quasi-Newton iterations
+# were worth. About 1100 s per seed; three seeds in parallel is ~20 minutes.
+#
+# Anything larger would be pricing a foregone conclusion. Across every study on disk the
+# Adam axis SATURATES near 0.04-0.05 however much is spent -- adam3000/qn30 0.0762,
+# adam8000/qn500 0.0485, adam16000/qn1000 0.0432 -- while at the same ~1200 s the
+# Newton-heavy adam30/qn3000 reaches 0.0302 and the Newton axis goes on to 0.0018 at
+# qn30000. Scaling Adam 500x (30 -> 16000) moves the answer the WRONG WAY. A first
+# version of this ladder went to 300000 iterations, ~25 h per seed for one arm.
+ADAM_ONLY_LADDER = (16000,)
 # Spatial-band multipliers for the anisotropic embedding. None is the control:
 # isotropic, i.e. exactly the shipped default.
 ANISO_SCALES = (None, 2.0, 4.0, 8.0)
@@ -1404,27 +1408,30 @@ def study_adamonly(out: Path) -> None:
     backends first -- `tools/backend_smoke.py` plus a tiny arm of this study -- before
     any long run, per the two-backends-for-correctness rule.
 
-    **The ladder is `QN_LADDER` itself** -- 3000, 10000, 30000 -- so this is the same
-    ladder section 7.5.20 climbed with the quasi-Newton stage, climbed with Adam instead.
-    That makes the comparison direct at equal iterations, and section 7.5.17a's warning is
-    handled by the `sec` each row records: the top rung costs about what the control
-    costs, because an Adam step here is not cheaper than a quasi-Newton one, so equal
-    iterations and equal wall-clock nearly coincide and `_per_second` prints both.
+    **Two rungs, and they are the cheap ones.** The costly half of this question is
+    already answered: `qnladder` measured `adam0` against `adam30` at three seeds, and at
+    the shipped budget they are indistinguishable -- 0.0018 [0.0017-0.0022] against
+    0.0017 [0.0016-0.0017], ranges overlapping, worst margins +66.2 K against +67.6 K,
+    and `adam0` is the *slower* of the two at 9961 s against 9060 s. Adam adds nothing at
+    the budget this project ships, so a large Adam-only budget is not worth buying up
+    front.
 
-    Cost is why the rungs stop at 30000. A first version went to 300000, which is roughly
-    **25 h for that arm alone, per seed** -- a study nobody would run, and a budget far
-    past the question, which is only whether Adam reaches the control at the control's
-    price.
+    3000 and 10000 sit on `QN_LADDER`'s bottom two rungs, each of which already has a
+    Newton arm at the same wall-clock to be read against -- 905 s -> 0.0258 and
+    3089 s -> 0.0044. So this study needs no control arm of its own and costs about
+    **1.1 h per seed**, three seeds in parallel.
 
-    **The control is the shipped default**, `adam30/qn30000`, which must reproduce
-    section 7.5.20's `T_s = 0.0017`. Read it before the Adam arms: a study whose control
-    has moved is measuring the harness.
+    **Escalate only on evidence.** If the 10000 rung lands within ~2x of its Newton twin,
+    the 30000 rung is worth its 2.5 h per seed and should be added. If it is an order of
+    magnitude away and flat between the two rungs, the hypothesis is dead and the top rung
+    would only be pricing a foregone conclusion.
 
-    The control is also the most expensive arm here -- 9060 s of the ~25000 s per seed --
-    and `qnladder_s{0,1,2}.json` already carries it at three seeds on this backend and
-    configuration. When machine time is tight, `--only qn0` runs the Adam arms alone and
-    the control is cited from those rows instead. That is a *stated* economy, not a
-    silent one: the control is skipped, not assumed to have passed.
+    **The control is cited, not re-run, and that is a deliberate exception.** Every other
+    study here carries a control arm reproducing a published number, because that is what
+    caught D67. This one reads its controls out of `qnladder_s{0,1,2}.json` -- the same
+    backend, the same configuration, the same three seeds, the same rungs -- because
+    re-running them would triple the cost to establish numbers already measured on this
+    tree. If those rows are ever regenerated, this study's comparison moves with them.
 
     Two outcomes and both are worth having. If an Adam-only arm reaches the control at
     comparable wall-clock, the quasi-Newton stage is redundant and the default should
@@ -1442,13 +1449,6 @@ def study_adamonly(out: Path) -> None:
             )
             for seed in SEEDS
             for a in ADAM_ONLY_LADDER
-        ]
-        + [
-            (
-                "control adam30/qn30000 [jax]",
-                {"backend": "jax", "seed": seed, "adam_iters": 30, "lbfgs_iters": 30000},
-            )
-            for seed in SEEDS
         ],
         out,
     )
