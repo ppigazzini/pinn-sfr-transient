@@ -82,19 +82,14 @@ GRID_ITERS = (30, 300, 3000)
 # quasi-Newton stage is funded -- and 0 has never been run at all.
 QN_LADDER = (3000, 10000, 30000)
 ADAM_LADDER = (0, 30)
-# Adam with the quasi-Newton stage switched OFF entirely. ONE rung, and it is chosen to
-# sit directly beside an arm that already exists: `scaling` measured `adam16000/qn1000` at
-# T_s = 0.0432 in 1236 s. Running the same 16000 Adam iterations with `lbfgs_iters = 0`
-# removes exactly one thing, so whatever moves is what those 1000 quasi-Newton iterations
-# were worth. About 1100 s per seed; three seeds in parallel is ~20 minutes.
-#
-# Anything larger would be pricing a foregone conclusion. Across every study on disk the
-# Adam axis SATURATES near 0.04-0.05 however much is spent -- adam3000/qn30 0.0762,
-# adam8000/qn500 0.0485, adam16000/qn1000 0.0432 -- while at the same ~1200 s the
-# Newton-heavy adam30/qn3000 reaches 0.0302 and the Newton axis goes on to 0.0018 at
-# qn30000. Scaling Adam 500x (30 -> 16000) moves the answer the WRONG WAY. A first
-# version of this ladder went to 300000 iterations, ~25 h per seed for one arm.
-ADAM_ONLY_LADDER = (16000,)
+# Adam with the quasi-Newton stage switched OFF entirely, at OUR budget and OUR learning
+# rate (1e-3, which is also the paper's base LR) so the arms sit beside everything else
+# this project has measured. 30000 Adam iterations is the shipped default's quasi-Newton
+# count, so `adam30000/qn0` is the shipped budget spent entirely on Adam.
+ADAM_ONLY_ITERS = 30000
+# The paper's 1D configuration (its Allen-Cahn row): 9 dyadic levels from 2 to 512, 14
+# features each. About 14300 grid parameters, the same order as our f256 embedding.
+BEIGNET_1D = {"beignet_levels": 9, "beignet_features": 14, "beignet_base": 2}
 # Spatial-band multipliers for the anisotropic embedding. None is the control:
 # isotropic, i.e. exactly the shipped default.
 ANISO_SCALES = (None, 2.0, 4.0, 8.0)
@@ -1392,63 +1387,67 @@ def study_bandsbudget(out: Path) -> None:
 
 
 def study_adamonly(out: Path) -> None:
-    """Can Adam replace the quasi-Newton stage OUTRIGHT? -- section 7.5.27.
+    """Test whether the ARCHITECTURE lets Adam replace quasi-Newton -- section 7.5.27.
 
-    A 2026 result reports a multi-scale basis reaching near machine precision *using
-    Adam*, in "an accuracy regime previously attained only by using computationally
-    expensive higher-order optimizers". If that transfers, the most expensive component
-    of this recipe is unnecessary, and section 7.5.11's central finding -- that the
-    quasi-Newton axis is the only one that moves the front -- is a statement about a
-    starved Adam rather than about Adam.
+    arXiv:2605.24278 ("beignet") reports a trainable multi-resolution Fourier feature
+    pyramid reaching "an accuracy regime previously attained only by using computationally
+    expensive higher-order optimizers", **using Adam**. The claim is about the embedding,
+    not the optimiser, and that is what makes it testable here.
 
-    **`lbfgs_iters = 0` has never been run in this project.** Every measurement here has
-    had a quasi-Newton stage, including the `qn30` column that section 7.5.11 calls
-    "starved". The code path exists and is guarded, which is precisely the D67 shape: a
-    configuration that exists only as an intention. It is exercised short on both
-    backends first -- `tools/backend_smoke.py` plus a tiny arm of this study -- before
-    any long run, per the two-backends-for-correctness rule.
+    **Running our own Adam longer would test a strawman.** Section 7.5.11 measured our
+    Adam axis flat across two decades once the quasi-Newton stage is funded, and across
+    every study on disk it saturates near 0.04-0.05 whatever is spent -- adam3000/qn30
+    0.0762, adam8000/qn500 0.0485, adam16000/qn1000 0.0432 -- while at the same ~1200 s
+    the Newton-heavy adam30/qn3000 reaches 0.0302. Scaling Adam 500x moves the answer the
+    wrong way. So the question is not "more Adam", it is "a different function space".
 
-    **Two rungs, and they are the cheap ones.** The costly half of this question is
-    already answered: `qnladder` measured `adam0` against `adam30` at three seeds, and at
-    the shipped budget they are indistinguishable -- 0.0018 [0.0017-0.0022] against
-    0.0017 [0.0016-0.0017], ranges overlapping, worst margins +66.2 K against +67.6 K,
-    and `adam0` is the *slower* of the two at 9961 s against 9060 s. Adam adds nothing at
-    the budget this project ships, so a large Adam-only budget is not worth buying up
-    front.
+    **Two arms, one knob.** Both run `adam_iters = 30000, lbfgs_iters = 0` at our own
+    `lr = 1e-3` -- which is also the paper's base LR -- and differ only in the embedding:
 
-    3000 and 10000 sit on `QN_LADDER`'s bottom two rungs, each of which already has a
-    Newton arm at the same wall-clock to be read against -- 905 s -> 0.0258 and
-    3089 s -> 0.0044. So this study needs no control arm of its own and costs about
-    **1.1 h per seed**, three seeds in parallel.
+    * `fourier` -- the shipped random Fourier features, `B` FROZEN. The Adam-only
+      baseline, and the arm that attributes any gain to the architecture rather than to
+      spending the budget on Adam.
+    * `beignet` -- the paper's trainable pyramid at its own 1D configuration.
 
-    **Escalate only on evidence.** If the 10000 rung lands within ~2x of its Newton twin,
-    the 30000 rung is worth its 2.5 h per seed and should be added. If it is an order of
-    magnitude away and flat between the two rungs, the hypothesis is dead and the top rung
-    would only be pricing a foregone conclusion.
+    30000 is the shipped default's *quasi-Newton* count, so this is the shipped budget
+    spent entirely on Adam and is directly comparable to everything else measured here.
 
-    **The control is cited, not re-run, and that is a deliberate exception.** Every other
-    study here carries a control arm reproducing a published number, because that is what
-    caught D67. This one reads its controls out of `qnladder_s{0,1,2}.json` -- the same
-    backend, the same configuration, the same three seeds, the same rungs -- because
-    re-running them would triple the cost to establish numbers already measured on this
-    tree. If those rows are ever regenerated, this study's comparison moves with them.
+    **The control is cited, not re-run.** `qnladder_s{0,1,2}.json` already carries
+    `adam30/qn30000` at three seeds on this backend and configuration -- `T_s = 0.0017`
+    in 9060 s -- and re-running it would double this study's cost to reproduce a number
+    measured on this tree. That is a stated exception to the control-arm rule, not an
+    assumption that it would have passed.
 
-    Two outcomes and both are worth having. If an Adam-only arm reaches the control at
-    comparable wall-clock, the quasi-Newton stage is redundant and the default should
-    change. If it plateaus -- which is what section 7.5.11's flat Adam axis predicts --
-    then that flatness was not an artefact of a small Adam budget, and the negative is
-    much stronger than the grid alone could make it.
+    **What each outcome means.** If `beignet` approaches 0.0017 while `fourier` sits at
+    its usual 0.04-0.05, the paper transfers and the quasi-Newton stage is replaceable
+    here. If both saturate together, the pyramid buys nothing on this problem and
+    section 7.5.11 stands against a much stronger test than the grid alone could give.
+    Note the paper's own Table 2 has MLP+BFGS at 7.11e-20 against beignet+Adam's
+    6.63e-19, so even its own evidence is that Adam *reaches* the regime rather than
+    winning it.
+
+    **The risk to watch first is periodicity.** Fourier interpolation is periodic and
+    every benchmark in the paper is a periodic problem; this channel is not. `beignet_pad`
+    maps `zeta` into the interior of one period, and if that is insufficient the failure
+    will show as error concentrated at the inlet and outlet rather than as a uniformly
+    worse field.
     """
     traj = ruler()
     rows = run_all(
         traj,
         [
             (
-                f"adam{a}/qn0 [jax]",
-                {"backend": "jax", "seed": seed, "adam_iters": a, "lbfgs_iters": 0},
+                f"{name} adam{ADAM_ONLY_ITERS}/qn0 [jax]",
+                {
+                    "backend": "jax",
+                    "seed": seed,
+                    "adam_iters": ADAM_ONLY_ITERS,
+                    "lbfgs_iters": 0,
+                    **extra,
+                },
             )
             for seed in SEEDS
-            for a in ADAM_ONLY_LADDER
+            for name, extra in (("fourier", {}), ("beignet", BEIGNET_1D))
         ],
         out,
     )
