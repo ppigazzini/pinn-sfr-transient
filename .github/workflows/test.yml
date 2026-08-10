@@ -40,8 +40,14 @@ jobs:
           python-version: "3.14"
           enable-cache: true
 
-      - name: Sync dev tools
-        run: uv sync --locked
+      # Both CPU backends, because `ty` needs them. `_backend.py` imports torch and
+      # jax.numpy inside guarded branches, and a type checker that cannot resolve a
+      # module reports it -- four `unresolved-import` errors, which is what broke this
+      # lane. It passed in pre-commit throughout, because a developer's environment has
+      # the extras installed; the lane synced core only. A gate whose result depends on
+      # which extras happen to be present is not checking the same thing twice.
+      - name: Sync dev tools + both CPU backends (ty must resolve the optional imports)
+        run: uv sync --extra torch-cpu --extra jax-cpu --locked
 
       - name: Ruff lint
         run: uv run ruff check
