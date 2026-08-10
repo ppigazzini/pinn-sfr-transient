@@ -12,7 +12,7 @@ The repository holds **two models**, and they are at very different stages:
 | state | 6-group point kinetics + two thermal nodes | four material fields on an axial mesh + sodium void |
 | void | a `tanh` demonstration surrogate at 820 K | saturation + superheat from the SAS4A manual, ~1156 K |
 | reference solver | verified | verified, except the void fraction (`axial_physics.md` §6.5) |
-| PINN | **meets its bar** — a few 1e-3 relative L2 | **0.020 against a 0.01 bar**; the *front* is solved to 99.5%, onset time is not |
+| PINN | **meets its bar** — a few 1e-3 relative L2 | **meets its bar** — 0.0017 against 0.01, and 99.3% of the reference voided length; at the reference's own resolution |
 | backends | PyTorch, JAX, DeepXDE | **JAX** (default), PyTorch |
 
 This README is a map. The physics, the neural-network methodology, and the usage
@@ -44,10 +44,20 @@ excursion, to 5.3× nominal, governed by the height at which the void worth chan
 sign rather than by its magnitude ([`docs/axial_physics.md`](docs/axial_physics.md)
 §10).
 
-The PINN trains, satisfies every hard constraint exactly, and **does not meet its
-1% accuracy bar** — 0.029 relative L2 on `T_s` at the shipped defaults, **0.020** at
-the best measured configuration. The reference's own error is 1.1–1.6e-3, so the
-bar sits 6–9× above the ruler and the failure is the network's, not the ruler's.
+The PINN trains, satisfies every hard constraint exactly, and **meets its 1%
+accuracy bar** — `T_s = 0.0017` relative `L2` at three seeds, with 99.3% of the
+reference's peak voided length and a saturation margin of +67.6 K against the
+reference's +69.2 K. It got there **by optimisation budget alone**: extending the
+quasi-Newton stage from 3000 to 30 000 iterations improved the error fifteenfold,
+monotonically, on every seed, with no change of architecture.
+
+**And it has run out of room to be measured in.** The reference's own error is
+1.1–1.6e-3, so 0.0017 sits at a test uncertainty ratio of about **1.06** — the
+network's error is now the same size as the ruler's. Calibration practice wants a
+tolerance four times above its instrument, so the bar itself is sound at a ratio of
+6, but *how far inside* the bar we are is no longer a question this reference can
+answer. Further accuracy on the temperature fields cannot be demonstrated against it
+([`docs/axial_nn.md`](docs/axial_nn.md) §7.5.22).
 
 **The boiling front, though, is essentially solved.** Giving the Fourier embedding
 several frequency bands at once — a low band for the smooth bulk, a high one for the
@@ -64,13 +74,21 @@ starts — is always the outlet. A height criterion measures the mesh, not the
 network; an earlier revision of the documentation claimed that quantity had been
 solved exactly, and it had merely been restated as a tautology (§7.5.16).
 
-What is real is that onset *time* was passing only because the scoring grid is
-0.25 s and quantised it favourably. Measured without quantisation it is 0.62–0.84 s
-against a 0.5 s criterion. And the criterion itself has now been checked against the
-ruler: refining the reference against itself leaves its own onset uncertain by
-**0.06 cells and 0.009 s** at the scoring mesh, an order of magnitude inside the
-bar — so the target is attainable and the failure is genuinely the network's
-(§7.5.21).
+Onset *time* is the quantity that carries information, and **it is now met** —
+0.0006, 0.0064 and 0.0181 s against a 0.5 s criterion, three seeds. The earlier
+0.62–0.84 s was measured at the old quasi-Newton budget; the same axis that took
+`T_s` to 0.0017 took onset with it, with no residual, sampling or architectural
+change ever aimed at onset. Two corrections came with it: the *reference's* own
+onset is 10.9784 s rather than 10.75 s once the crossing is root-found instead of
+read off the 0.25 s grid, so a quarter of a second of every onset error this project
+published was the ruler's quantisation; and onset turns out to convert field accuracy
+at *better* than the first-order rate, not worse (§7.5.16a).
+
+Here too the room has gone: the reference's own onset is uncertain by 0.009 s, so the
+worst seed sits at a ratio of 2.0 and the best below 1. Met is what the measurement
+carries; a factor is not. Since the height half cannot be failed on a monotone field
+and the time half is now passed, **M4 no longer discriminates between formulations**
+and is being replaced (§7.5.25).
 
 **How many epochs it needs was never asked until now.** A 54-run sweep of Adam
 against quasi-Newton iterations, three seeds on both backends, finds that **the
