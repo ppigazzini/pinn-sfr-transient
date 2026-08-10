@@ -105,10 +105,15 @@ representable; the budget makes it accurate.
 at the same iteration count and comparable wall-clock, is 19× worse than spending that
 budget on the quasi-Newton stage, and AdEMAMix is worse still. Per *iteration*, measured
 at matched configuration, L-BFGS is the **cheapest** of the three (99.3 ms against Adam's
-107.8 and AdEMAMix's 115.5). The literature's usual reason for the Adam→L-BFGS split is
-that higher-order methods are computationally expensive; in this implementation the
-higher-order stage is faster per iteration *and* an order of magnitude more accurate, and
-dropping Adam altogether costs nothing measurable
+107.8 and AdEMAMix's 115.5) — so in this implementation the higher-order stage is faster
+per iteration *and* an order of magnitude more accurate, and dropping Adam altogether
+costs nothing measurable.
+
+That cost comparison is **hardware-scoped and we say so**: eight CPU cores, float64,
+50 309 parameters. On a datacenter GPU an Adam step over a large batch is nearly free
+while a strong-Wolfe line search is sequential, so the literature's "computationally
+expensive higher-order optimizers" may be true of that regime and false of ours. The
+*accuracy* results do not depend on the hardware
 ([`docs/axial_nn.md`](docs/axial_nn.md) §7.5.29).
 
 **How many epochs it needs was never asked until now.** A 54-run sweep of Adam
