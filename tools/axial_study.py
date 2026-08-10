@@ -244,6 +244,29 @@ def mean_table(rows: list[dict], key: str = "arm") -> None:
         )
 
 
+def _selected(label: str, wanted: list[str]) -> bool:
+    """Return whether ``label`` is picked by any ``--only`` token, matched at a boundary.
+
+    The first version was ``any(w in label for w in wanted)`` — an unanchored substring
+    test — and it silently selected an extra arm whenever one arm's name contained
+    another's. `nofourier adam30000` matched `ademamix-nofourier adam30000` too, so a run
+    that was meant to be one arm quietly became two, and the fix attempted at the time was
+    to rename the arms rather than to fix the test. Renaming makes the collision go away
+    for exactly as long as nobody adds a third arm.
+
+    A token now matches only if it is the whole label, the whole label without its
+    ``[backend]`` suffix, or a prefix of that ending at a separator — so `nofourier`
+    matches `nofourier adam30000/qn0` but never `ademamix-nofourier ...`.
+    """
+    bare = label.split(" [", maxsplit=1)[0]
+    for w in wanted:
+        if w in (label, bare):
+            return True
+        if bare.startswith(w) and (len(bare) == len(w) or bare[len(w)] in " /"):
+            return True
+    return False
+
+
 def run_all(
     traj: Any,  # noqa: ANN401
     specs: list[tuple[str, dict]],
@@ -259,8 +282,15 @@ def run_all(
     """
     if _ONLY is not None:
         wanted = [w.strip() for w in _ONLY.split(",") if w.strip()]
-        specs = [(label, kw) for label, kw in specs if any(w in label for w in wanted)]
+        specs = [(label, kw) for label, kw in specs if _selected(label, wanted)]
+        # Print WHICH arms, not just how many. A bare count is why an unanchored
+        # substring filter silently ran a second arm for ten minutes before anyone
+        # noticed: "1 arm(s)" and "2 arm(s)" look equally plausible in a log.
         print(f"--only {wanted}: {len(specs)} arm(s)", flush=True)
+        for label, _ in specs:
+            print(f"    selected: {label}", flush=True)
+        if not specs:
+            print("    (nothing matched -- check the arm names above the filter)", flush=True)
     rows: list[dict] = []
     for label, kw in specs:
         if _HISTORY is not None:
@@ -1447,7 +1477,39 @@ def study_adamonly(out: Path) -> None:
                 },
             )
             for seed in SEEDS
-            for name, extra in (("fourier", {}), ("beignet", BEIGNET_1D))
+            for name, extra in (
+                ("fourier", {}),
+                ("beignet", BEIGNET_1D),
+                # No embedding at all: the coordinate-MLP baseline the beignet paper
+                # compares against, and the arm that says how much the frozen Fourier
+                # features are worth on their own under Adam.
+                ("nofourier", {"fourier_features": 0}),
+                # Same, with the slow-EMA first-order method. JAX only: torch has no
+                # AdEMAMix and one is deliberately not written for it. Named WITHOUT
+                # "nofourier": `--only` is an OR over substrings, so an arm name that
+                # contains another arm's name makes the two impossible to select apart.
+                ("ademamix", {"fourier_features": 0, "first_order": "ademamix"}),
+            )
+        ]
+        + [
+            # THE decisive arm for "is the embedding just a preconditioner?".
+            # 7.5.24 showed the multi-band embedding is subsumed by the budget. If the
+            # Fourier embedding is ALSO only a preconditioner, then no embedding at all
+            # plus a funded quasi-Newton stage should reach the same 0.0017 -- and the
+            # entire embedding axis, capacity ladder included, is redundant work.
+            # If it does NOT, the embedding buys representation that budget cannot.
+            (
+                f"nofourier adam30/qn{q} [jax]",
+                {
+                    "backend": "jax",
+                    "seed": seed,
+                    "adam_iters": 30,
+                    "lbfgs_iters": q,
+                    "fourier_features": 0,
+                },
+            )
+            for seed in SEEDS
+            for q in (30000,)
         ],
         out,
     )
