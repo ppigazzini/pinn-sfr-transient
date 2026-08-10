@@ -1,7 +1,16 @@
 # The paper
 
-`paper.typ` — the results paper, laid out to `__DEV/paper_template.docx`
-(IOP *Journal of Physics: Conference Series*).
+Two copies of the same paper, and they are not redundant:
+
+- **`paper.md`** — the working draft. Reviewable in a pull request, checked by
+  `tools/check_markdown.py` like every other document here, and readable without a
+  toolchain. Edit this one while the content is still moving.
+- **`paper.typ`** — the typeset version, laid out to `__DEV/paper_template.docx`
+  (IOP *Journal of Physics: Conference Series*). This is what produces the PDF.
+
+They are kept in sync by hand, so they can drift. When they disagree, neither wins:
+`docs/axial_nn.md` holds the measurement record and both are wrong until reconciled
+against it.
 
 ## Why Typst and not the template's own format
 
@@ -43,6 +52,17 @@ the negative results and the retractions, which the paper only summarises.
 
 ## Status
 
-**Draft.** The optimiser bake-off at the funded budget and the PyTorch confirmation of
-the 30 000-iteration ladder were still running when this was written; §5.1 states the
-JAX result and says so. Nothing in the paper should be submitted before those land.
+**Draft.** Two gaps, and the first was found by auditing the raw rows after a machine
+crash rather than by noticing it in the text:
+
+- **The funded optimiser bake-off has never been run.** Every row in
+  `__DEV/studies/optbakeoff.json` and `ssbroyden.json` carries
+  `adam_iters = 3000, lbfgs_iters = 300` — the starved diagonal, which §7.5.11 shows is
+  the regime where the quasi-Newton stage does not matter. An earlier revision of §6
+  quoted "0.0296 against 0.0401, 35% worse" at a *funded* stage; those numbers appear in
+  no study file, and the claim has been withdrawn and replaced by a statement of the gap.
+  `tools/axial_study.py bakeoff` is the command that would close it.
+- **The PyTorch confirmation of the 30 000-iteration ladder is absent.** `qnladder_s{0,1,2}`
+  are complete and reproduce Table 2 exactly, but all eighteen rows are JAX.
+
+Nothing here should be submitted before those land.
