@@ -1496,6 +1496,105 @@ def study_fourierbudget(out: Path) -> None:
     _per_second(rows)
 
 
+def study_freezeenc(out: Path) -> None:
+    """Freeze the encoder for the polish, with an Adam budget that actually trains it.
+
+    §7.5.30 showed the first Linear -- the projection from the 512 Fourier features into
+    the trunk -- is 66% of the model, and §7.5.31a that letting the quasi-Newton stage
+    move it is what leaves that stage 2.1x UNDERdetermined: 24 000 residual entries
+    against 49 797 weights. Hold it and the polish optimises 16 965, a ratio of 1.41 --
+    overdetermined, which is the side of the line the literature prescribes.
+
+    **`adam_iters = 10000`, and that is the point of the arm rather than a detail.** The
+    encoder is an *encoder*: it decides which embedded frequencies the trunk sees, which
+    is a representation choice, and freezing it only means something once Adam has
+    actually learned one. At the shipped `adam30` the loop does nothing (§7.5.30 --
+    RAR, adaptive weights and the curriculum are all unreachable there), so the frozen
+    layer would be its random initialisation and the arm would measure a random-feature
+    method rather than this model.
+
+    The control is `fourierbudget`'s `f256 adam10000/qn30000`, which is byte-identical
+    to this arm except for the flag, so it is cited rather than re-run.
+    """
+    traj = ruler()
+    rows = run_all(
+        traj,
+        [
+            (
+                f"freeze={fz} adam10000/qn30000 [jax]",
+                {
+                    "backend": "jax",
+                    "seed": seed,
+                    "adam_iters": 10000,
+                    "lbfgs_iters": 30000,
+                    "freeze_encoder": fz,
+                },
+            )
+            for seed in SEEDS
+            for fz in (False, True)
+        ],
+        out,
+    )
+    mean_table(rows)
+    print("\ndoes an overdetermined polish beat an underdetermined one?")
+    _arm_summary(rows)
+    _per_second(rows)
+
+
+def study_dlstyle(out: Path) -> None:
+    """Deep-learning-style schedule: many small-batch Adam steps, then a blocked polish.
+
+    Everything this project has measured about Adam was measured at **full batch** -- the
+    Adam stage evaluating the same 6000 points the quasi-Newton stage uses (§7.5.31a).
+    That is not how a first-order method is run anywhere: JAX-PI takes 200 000 steps of
+    4096 points, and the cost advantage that makes Adam attractive comes entirely from
+    the small batch. So "Adam buys nothing here" has only ever been tested against an
+    algorithm nobody uses.
+
+    This arm runs the protocol properly, and changes three things at once **on purpose**
+    -- it is a schedule, not an ablation, and the parts are known to interact:
+
+    * **Adam: 60 000 steps at 1000 points.** `adam_colloc = 667` because the sampler adds
+      an early-time cluster of half the count, so 667 + 333 = 1000 drawn.
+    * **Then the encoder is frozen.** §7.5.32 measured freezing it after 10 000 full-batch
+      Adam steps as 7.2x worse -- but that is a statement about an encoder 10 000 steps
+      had barely moved. Sixty thousand small-batch steps is the regime where an encoder
+      is actually learned, which is the only regime where freezing it is a fair test.
+    * **Quasi-Newton: 30 000 iterations at 6000 points, redrawn every 1000.**
+      `polish_colloc = 4000` gives the 6000 points every other table here uses, and
+      `polish_refresh = 1000` matches the blocked BFGS of arXiv:2605.24278. Curvature
+      stays consistent within a block; the stage as a whole can no longer overfit one
+      draw.
+
+    Read against `fourierbudget`'s `f256 adam10000/qn30000` (0.0019) and the shipped
+    `adam30/qn30000` (0.0017), both at full batch throughout.
+    """
+    traj = ruler()
+    rows = run_all(
+        traj,
+        [
+            (
+                "dlstyle adam60000@1k/qn30000@6k-refresh1k [jax]",
+                {
+                    "backend": "jax",
+                    "seed": seed,
+                    "adam_iters": 60000,
+                    "adam_colloc": 667,
+                    "freeze_encoder": True,
+                    "lbfgs_iters": 30000,
+                    "polish_colloc": 4000,
+                    "polish_refresh": 1000,
+                },
+            )
+            for seed in SEEDS
+        ],
+        out,
+    )
+    mean_table(rows)
+    _arm_summary(rows)
+    _per_second(rows)
+
+
 def study_adamonly(out: Path) -> None:
     """Test whether the ARCHITECTURE lets Adam replace quasi-Newton -- section 7.5.27.
 
@@ -1697,6 +1796,8 @@ STUDIES = {
     "bandsbudget": study_bandsbudget,
     "adamonly": study_adamonly,
     "fourierbudget": study_fourierbudget,
+    "freezeenc": study_freezeenc,
+    "dlstyle": study_dlstyle,
 }
 
 

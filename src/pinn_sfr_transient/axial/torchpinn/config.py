@@ -204,6 +204,24 @@ class AxialTrainConfig:
     # JAX only: torch has no AdEMAMix and one is deliberately not written.
     first_order: str = "adam"
 
+    # Collocation counts per stage, and how often the polish redraws.
+    #
+    # `n_colloc` alone drove BOTH stages, which meant Adam ran full batch -- every step
+    # evaluating the same count the quasi-Newton stage uses. That is not how Adam is run
+    # anywhere: the literature uses small batches and many steps (JAX-PI: 4096 points,
+    # 200000 steps), and a full-batch first-order method is a different algorithm.
+    #
+    # `polish_refresh` redraws the quasi-Newton set every N iterations, restarting the
+    # optimiser so its curvature history stays consistent WITHIN a block. arXiv:2605.24278
+    # runs "20000 BFGS iterations in blocks of 1000" for exactly this reason: a fixed set
+    # is what makes curvature meaningful and also what the polish can overfit. 0 keeps the
+    # single fixed set, which is every published number here.
+    #
+    # None means "use n_colloc", so the defaults are unchanged.
+    adam_colloc: int | None = None
+    polish_colloc: int | None = None
+    polish_refresh: int = 0
+
     # Hold the Fourier->trunk projection FIXED during the quasi-Newton stage.
     # That layer is an encoder -- it selects which embedded frequencies are used, a
     # representation choice Adam's fresh-sample stream suits -- and it is 66% of the
