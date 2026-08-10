@@ -2853,11 +2853,41 @@ the higher-order stage is **faster per iteration and 19× more accurate**, and t
 first-order stage is very nearly free to delete — §7.5.20 measured `adam0/qn30000` at
 0.0018 against `adam30`'s 0.0017, with overlapping seed ranges.
 
-> **Read this as a statement about this implementation and this problem size.** 50 309
-> parameters, full batch, float64, on CPU. Every condition that makes a first-order
-> method necessary elsewhere — minibatch noise, parameter counts where storing 50
-> curvature pairs is impossible — is absent. The measurement is not that Adam is a bad
+> **The cost result is hardware-scoped; the accuracy results are not.** Two different
+> kinds of claim sit in this section and they do not travel together.
+>
+> *The clock is ours.* 50 309 parameters, full batch, float64, eight CPU cores. On a
+> datacenter GPU an Adam step over a large collocation batch is embarrassingly parallel
+> and close to free, while a strong-Wolfe line search is **sequential** — several
+> function evaluations that cannot overlap. FP64 runs at 9.7–34 TFLOPS on A100/H100
+> against roughly 1/32 to 1/64 of FP32 on consumer parts (§7.7), so the papers reporting
+> higher-order methods as "computationally expensive" may be stating something literally
+> true of their regime and false of ours. **Our 99.3 ms against 107.8 ms could invert on
+> their hardware**, and nothing here contradicts them on cost.
+>
+> *The accuracy is not ours alone.* `adam0/qn30000` at 0.0018 against `adam30`'s 0.0017,
+> Adam saturating at 0.04–0.05 across a 500× budget range, and the front failing to form
+> without the embedding are properties of the optimisation trajectory in float64. Faster
+> hardware reaches the same numbers sooner. The measurement is not that Adam is a bad
 > optimiser; it is that nothing here needs what Adam provides.
+
+> **The two stages do not minimise the same objective, and the comparison should say so.**
+> The Adam stage draws a **fresh collocation set every step** — about 1.2e8 distinct
+> points over 30 000 iterations — so it minimises the *expected* residual over the
+> domain. The quasi-Newton stage runs on **one fixed set of `n_colloc` points** for its
+> whole run, because curvature pairs are meaningless if the objective moves underneath
+> them. So "Adam 30000 against qn30000" pits a noisy population objective against an
+> exact finite-sample one, and part of Adam's deficit is that it is solving the harder
+> problem.
+>
+> That does not rescue it, for a reason that is checked rather than argued: with
+> `n_colloc = 4000` the quasi-Newton stage has roughly 16 000 residual constraints
+> against 50 309 parameters — **underdetermined by 3×** — so it could drive its fixed set
+> to zero and be arbitrarily wrong between the points. It is not. `T_s` is scored against
+> the Radau reference on a *different* grid, and 0.0017 with `L_void` at 99.3% is a
+> generalisation result, not a training-set one. `REPORT-01` §5.1 raised exactly this
+> worry — "it can overfit that set; always report trajectory error, not just loss" — and
+> the trajectory error is what this document reports.
 
 ### 7.6 Pseudo-time stepping
 
