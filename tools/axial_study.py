@@ -110,6 +110,18 @@ _ONLY: str | None = None
 # every torch table was measured at, and a re-run at a different memory has to be
 # distinguishable from the rows it is being compared against.
 _HISTORY: int | None = None
+# Set by --adam-iters / --lbfgs-iters; overrides the training budget on arms that do not
+# set one themselves. A ladder like `qnladder` sets its own budget per arm and must NOT be
+# overridden — that is the whole ladder — so these apply only where the key is absent.
+#
+# They exist because a sub-command's budget is whatever the config default happens to be
+# on the day it runs, and that default has moved: `bakeoff`'s docstring says "the shipped
+# 300 / 3000" and the shipped value is now 30 / 30000, which is a hundredfold more
+# quasi-Newton and roughly three hundred core-days for its 24 arms. A study whose cost
+# silently changed by 100x when an unrelated default moved is not reproducible; naming the
+# budget on the command line makes it so, and the rows record it either way.
+_ADAM: int | None = None
+_QN: int | None = None
 FIELDS = ("T_f", "T_cl", "T_s", "T_c")
 
 
@@ -245,6 +257,11 @@ def run_all(
     for label, kw in specs:
         if _HISTORY is not None:
             kw["lbfgs_history"] = _HISTORY
+        # setdefault, not assignment: an arm that names its own budget is the study.
+        if _ADAM is not None:
+            kw.setdefault("adam_iters", _ADAM)
+        if _QN is not None:
+            kw.setdefault("lbfgs_iters", _QN)
         rows.append(run_arm(traj, label, kw.pop("backend", backend), **kw))
         write(rows, out)
     return rows
@@ -1302,6 +1319,112 @@ def study_bakeoff(out: Path) -> None:
     _arm_summary(rows)
 
 
+def study_bandsbudget(out: Path) -> None:
+    """Are multi-scale bands and a funded quasi-Newton stage the SAME gain -- section 7.5.24.
+
+    Two results sit on the shelf that this project has never run together.
+
+    * Section 7.5.14 measured `fourier_bands = (1, 4, 16)` reaching 99.5% of the reference
+      voided length at the old `qn = 3000` budget -- the best embedding number here.
+    * Section 7.5.20 measured `qn = 30000` at a single band reaching `T_s = 0.0017`,
+      15x better than `qn3000` and monotone on every seed.
+
+    Both were read as independent wins and neither was measured against the other. The
+    reason to doubt that reading is mechanistic rather than statistical: a feature
+    pyramid **is** a preconditioner. Spreading a fixed feature budget across bands
+    equalises the curvature the optimiser sees across scales, which is the same
+    ill-conditioning a longer quasi-Newton run works around by accumulating curvature
+    pairs. If that is what both are doing, they are one gain bought twice and the 2x2
+    interaction cell is flat -- and this project should stop spending on the embedding
+    axis. If the cell is not flat they compose, and the combination is the new default.
+
+    A 2x2 is the smallest design that can tell those apart; two one-factor ladders
+    cannot, however many seeds each has, because neither ever varies the other factor.
+
+    **The control arm is `single/qn30000`**, which is the shipped default and must
+    reproduce section 7.5.20's 0.0017. Read it before reading anything else: that arm is
+    the reason D67 was caught, and a study whose control has moved is measuring the
+    harness rather than the arms.
+
+    JAX-only, for the same reason as `qnladder` -- at 4.4x torch (section 7.5.19) the
+    30000-iteration arms are hours rather than most of a day, and the backend gap is now
+    understood (section 7.5.21) rather than being one of the unknowns. That is written
+    into the arm list rather than left to the caller: the first version said "JAX-only"
+    here and iterated `BACKENDS` below, which is a 24-arm study wearing a 12-arm
+    docstring, and its six torch `qn30000` arms alone are most of a week.
+    """
+    traj = ruler()
+    rows = run_all(
+        traj,
+        [
+            (
+                f"{'bands(1,4,16)' if b else 'single'}/qn{q} [jax]",
+                {
+                    "backend": "jax",
+                    "seed": seed,
+                    "fourier_bands": b,
+                    "lbfgs_iters": q,
+                },
+            )
+            for seed in SEEDS
+            for b in ((), (1.0, 4.0, 16.0))
+            for q in (3000, 30000)
+        ],
+        out,
+    )
+    mean_table(rows)
+    print("\ndo bands and quasi-Newton iterations compose, or are they one gain twice?")
+    _arm_summary(rows)
+    _interaction(rows)
+
+
+def _interaction(rows: list[dict]) -> None:
+    """Report the 2x2 interaction on `T_s`, which is the number the study exists for.
+
+    Stated as a ratio of ratios: how much bands buy at `qn3000` against how much they buy
+    at `qn30000`. A value near 1 means the two axes are independent and additive in the
+    log; well below 1 means the second one bought nothing once the first was paid for.
+
+    Per-seed ranges accompany it because a 2x2 read from means alone is exactly the kind
+    of single-number comparative headline this project has had to retract four times.
+    """
+    import statistics  # noqa: PLC0415
+
+    embeddings = ("single", "bands(1,4,16)")
+    budgets = (3000, 30000)
+
+    def cell(emb: str, q: int) -> list[float]:
+        # Exact match on the arm name, not a prefix: "single/qn3000" is a prefix of
+        # "single/qn30000", so `startswith` silently merges two cells of the 2x2 into one.
+        tag = f"{emb}/qn{q}"
+        return [
+            r["T_s"] for r in rows if r["arm"].split(" [")[0] == tag and r.get("T_s") is not None
+        ]
+
+    cells = {(e, q): cell(e, q) for e in embeddings for q in budgets}
+    if not all(cells.values()):
+        print("\ninteraction: incomplete, some cell has no finished run")
+        return
+    print("\n                    qn3000                  qn30000")
+    for e in embeddings:
+        cols = "  ".join(
+            f"{statistics.mean(cells[e, q]):.4f} [{min(cells[e, q]):.4f}-{max(cells[e, q]):.4f}]"
+            for q in budgets
+        )
+        print(f"  {e:15s} {cols}")
+    gain_lo = statistics.mean(cells["single", 3000]) / statistics.mean(cells[embeddings[1], 3000])
+    gain_hi = statistics.mean(cells["single", 30000]) / statistics.mean(cells[embeddings[1], 30000])
+    print(
+        f"\n  bands buy {gain_lo:.2f}x at qn3000 and {gain_hi:.2f}x at qn30000; "
+        f"interaction {gain_hi / gain_lo:.2f}"
+    )
+    print(
+        "  (near 1: the axes compose and the combination is the new default. "
+        "well below 1: the\n   funded quasi-Newton stage already bought what the "
+        "bands were buying -- one gain, twice.)"
+    )
+
+
 STUDIES = {
     "ruler": study_ruler,
     "horizon": study_horizon,
@@ -1326,6 +1449,7 @@ STUDIES = {
     "laplace": study_laplace,
     "qnladder": study_qnladder,
     "bakeoff": study_bakeoff,
+    "bandsbudget": study_bandsbudget,
 }
 
 
@@ -1360,6 +1484,20 @@ def main() -> int:
         "cross-backend accuracy gap (docs/axial_nn.md section 7.5.17)",
     )
     ap.add_argument(
+        "--adam-iters",
+        type=int,
+        default=None,
+        help="override Adam iterations on arms that do not set their own. Name it "
+        "explicitly for any study whose cost matters: the config default has moved "
+        "before and took a sub-command's cost with it",
+    )
+    ap.add_argument(
+        "--lbfgs-iters",
+        type=int,
+        default=None,
+        help="override quasi-Newton iterations on arms that do not set their own",
+    )
+    ap.add_argument(
         "--only",
         default=None,
         help="run only arms whose label contains one of these comma-separated "
@@ -1381,6 +1519,10 @@ def main() -> int:
     _ONLY = args.only
     global _HISTORY  # noqa: PLW0603
     _HISTORY = args.lbfgs_history
+    global _ADAM, _QN
+    _ADAM, _QN = args.adam_iters, args.lbfgs_iters
+    if _ADAM is not None or _QN is not None:
+        print(f"budget override: adam={_ADAM} qn={_QN} (arms naming their own keep it)")
     STUDIES[args.study](out)
     return 0
 
