@@ -1404,21 +1404,10 @@ def study_adamonly(out: Path) -> None:
     **Two arms, one knob.** Both run `adam_iters = 30000, lbfgs_iters = 0` at our own
     `lr = 1e-3` -- which is also the paper's base LR -- and differ only in the embedding:
 
-    * `adam+fourier` -- the shipped random Fourier features, `B` FROZEN. The Adam-only
+    * `fourier` -- the shipped random Fourier features, `B` FROZEN. The Adam-only
       baseline, and the arm that attributes any gain to the architecture rather than to
       spending the budget on Adam.
-    * `adam+beignet` -- the paper's trainable pyramid at its own 1D configuration.
-
-    Both names carry the `adam+` prefix because **neither arm has a quasi-Newton stage**,
-    and every other table in this document does. A label that named only the embedding
-    would read as a variant of the shipped recipe rather than as what it is: the budget
-    spent entirely on a first-order method.
-
-    They are **not matched on parameter count** -- 50309 against 39465, so the pyramid
-    runs 22% smaller. That is the paper's own configuration and it claims better accuracy
-    with fewer parameters, so a beignet win is unambiguous. A beignet *loss* would be
-    partly confounded with capacity (section 7.5.12 shows capacity still moves the number
-    at this scale) and the follow-up is a pyramid sized to match, not a conclusion.
+    * `beignet` -- the paper's trainable pyramid at its own 1D configuration.
 
     30000 is the shipped default's *quasi-Newton* count, so this is the shipped budget
     spent entirely on Adam and is directly comparable to everything else measured here.
@@ -1448,7 +1437,7 @@ def study_adamonly(out: Path) -> None:
         traj,
         [
             (
-                f"adam+{name} {ADAM_ONLY_ITERS}/qn0 [jax]",
+                f"{name} adam{ADAM_ONLY_ITERS}/qn0 [jax]",
                 {
                     "backend": "jax",
                     "seed": seed,
