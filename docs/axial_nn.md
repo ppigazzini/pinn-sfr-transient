@@ -2889,6 +2889,69 @@ first-order stage is very nearly free to delete — §7.5.20 measured `adam0/qn3
 > worry — "it can overfit that set; always report trajectory error, not just loss" — and
 > the trajectory error is what this document reports.
 
+#### 7.5.30 What the quasi-Newton stage is actually handed — and how little the Adam loop does
+
+Two facts about the recipe that no table in this document records, both found by reading
+the training loop rather than by measuring anything.
+
+**The quasi-Newton stage trains on one arbitrary sample, and the two backends choose it
+differently.** In JAX the polish receives `pts` as it stands when the Adam loop exits —
+that is, **the last Adam iteration's random draw**, merged with whatever RAR points have
+accumulated. Nobody chose that set; it is an artefact of loop structure. In torch,
+`_lbfgs` calls `self.collocation()` and draws its **own** fresh set. Both are single
+uniform draws of `n_colloc` points, so they are statistically equivalent and no published
+comparison is invalidated — but they are not the same construction, and the difference
+was undocumented.
+
+At `n_colloc = 4000` that set carries roughly **16 000 residual constraints against
+50 309 parameters**, underdetermined by 3.1×. The stage that does all the work in this
+recipe is fitting an underdetermined system on 4000 arbitrary points and still reaching
+`T_s = 0.0017` against a reference on a *different* grid. That is the ansatz and the
+embedding constraining the function space, not the point count.
+
+`n_colloc` and `lr` appeared in **no study row on disk** and have never been swept. Rows
+now record both, plus `first_order` — a row that cannot state its own configuration is
+the defect AGENTS.md already names for budgets, and it applied here the whole time.
+
+**At the shipped default the Adam loop does almost nothing.** With `adam_iters = 30`,
+every mechanism the loop exists to run is unreachable:
+
+| feature | fires at `adam30`? | why |
+|---|---|---|
+| RAR refinement | **no** | first trigger at `it = 2000` |
+| adaptive block weights | **no** | `weight_max_ratio = 1.0`, guard is `> 1.0` |
+| time-window curriculum | **no** | `n_windows = 1`, so `t_max = 1.0` throughout |
+| pseudo-time anchors | **no** | `pts_every = 0` |
+
+So 30 iterations buys 30 Adam steps and 30 redraws of the collocation set, and nothing
+else. That is the mechanical reason §7.5.20's `adam0` and `adam30` are indistinguishable
+— 0.0018 [.0017–.0022] against 0.0017 [.0016–.0017], overlapping — since the two
+configurations differ only in a PRNG key and thirty warm-up steps. It is not that Adam's
+contribution is small; **at this budget Adam is barely in the recipe.**
+
+It also means RAR, adaptive weighting and the curriculum are live only at budgets nothing
+currently ships at. `rar_every = 2000` needs `adam_iters > 2000`, which only the old
+`adam3000` studies ever had — so those three features are, in effect, untested at the
+configuration every recent number was measured at.
+
+#### 7.5.31 Is a cheaper embedding competitive at a funded budget? — running
+
+§7.5.29 established the embedding is *necessary*. It did not establish how much of it is.
+`uv run python tools/axial_study.py fourierbudget` sweeps `fourier_features ∈ {32, 64,
+128, 256}` at `adam10000 / qn30000`. The embedding is the widest layer in the network, so
+each rung is a cheaper step than the last, and the question is whether the extra
+iterations a cheap embedding buys within a wall-clock make up for the capacity it gives
+away.
+
+§7.5.12's capacity ladder found f32 → f512 monotone — **measured at `qn3000`**. That puts
+every capacity conclusion here in exactly the position §7.5.14's bands were in before
+§7.5.24 refuted them: a statement about a starved optimiser. If the ladder flattens at a
+funded budget, the shipped f256 is over-specified.
+
+`adam_iters = 10000` is above `rar_every`, so **RAR is active in these arms** and it is
+not in any recent table. That is a live difference in the recipe, not only a budget
+change, and it is stated here rather than discovered when the rows disagree.
+
 ### 7.6 Pseudo-time stepping
 
 Implemented (`pts_every`, `pts_dtau`, `pts_growth`), and **measured harmful** in
