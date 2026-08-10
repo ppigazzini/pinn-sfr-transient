@@ -25,6 +25,8 @@ linear, and the criterion should be stated against whichever one is actually use
 
 from __future__ import annotations
 
+import numpy as np
+
 from pinn_sfr_transient.axial import sodium
 from pinn_sfr_transient.axial.config import AxialParams
 from pinn_sfr_transient.axial.reference import solve_reference
@@ -33,6 +35,28 @@ from pinn_sfr_transient.axial.scoring import onset_by_tangency
 # The scoring mesh every published number uses, and the ladder around it.
 SCORING_N = 160
 MESHES = (40, 80, 160, 320, 640, 1280)
+
+# A tolerance must sit at least this far above the uncertainty of the instrument
+# measuring it -- MIL-STD-45662A, carried into ANSI/NCSL Z540. Below 4 the bar is
+# partly measuring the ruler; below 1 it is measuring nothing else.
+MIN_TUR = 4.0
+
+
+def void_split(traj, p: AxialParams) -> tuple[float, float, float, float]:  # noqa: ANN001
+    """Return ``(J+, J-, J, t)`` for the closed-loop void functional at its peak.
+
+    Reported split because the two halves nearly cancel: `docs/axial_nn.md` §7.5.23
+    measures a cancellation ratio of 0.4663, so a relative error on each half becomes
+    2.1x that on the sum, and a single number cannot say which half moved.
+    """
+    zeta = np.asarray(traj.zeta)
+    w = np.asarray(p.void_worth(zeta))
+    dz = float(zeta[1] - zeta[0])
+    contrib = w[:, None] * np.asarray(traj.alpha) * dz
+    jp = contrib[w > 0].sum(axis=0)
+    jn = contrib[w < 0].sum(axis=0)
+    k = int(np.argmax(np.abs(jp + jn)))
+    return float(jp[k]), float(jn[k]), float(jp[k] + jn[k]), float(traj.t[k])
 
 
 def main() -> int:
@@ -46,11 +70,15 @@ def main() -> int:
     print(f"{'n_axial':>8}{'t_thr':>10}{'z_thr':>10}{'t_tan':>10}{'z_tan':>10}")
 
     rows = []
+    voids = {}
+    lvoid = {}
     for n in MESHES:
         traj = solve_reference(AxialParams(n_axial=n), n_out=241)
         t_thr, z_thr = traj.onset()
         t_tan, z_tan = onset_by_tangency(traj.T_c, traj.zeta, traj.t, thr)
         rows.append((n, t_thr, z_thr, t_tan, z_tan))
+        voids[n] = void_split(traj, p0)
+        lvoid[n] = float(np.max(traj.voided_length))
         print(f"{n:>8}{t_thr:>10.3f}{z_thr:>10.5f}{t_tan:>10.3f}{z_tan:>10.5f}", flush=True)
 
     fine = rows[-1]
@@ -81,6 +109,56 @@ def main() -> int:
     print(
         "\nA criterion inside the reference's own uncertainty cannot be met or\n"
         "failed by a network; it can only be met or failed by the mesh."
+    )
+
+    # --- which quantity should M4 be replaced with? -------------------------
+    # M4 is now un-failable on height (T_c is monotone, so the peak is the last node
+    # whatever the network does) and passed on time (§7.5.16a). A replacement has to
+    # clear two hurdles at once: its bar must sit >= MIN_TUR above the reference's own
+    # error, AND the network's current error must be far enough above that error to
+    # leave something to measure. A quantity we already match to within the ruler is
+    # useless as a criterion however important it is physically.
+    fin = MESHES[-1]
+    print(f"\n=== candidate criteria, ruler at n_axial = {SCORING_N} vs {fin} ===")
+    print(f"{'quantity':<22}{'ruler':>12}{'network now':>14}{'TUR of result':>15}")
+
+    jp_s, jn_s, j_s, t_peak = voids[SCORING_N]
+    jp_f, jn_f, j_f, _ = voids[fin]
+    ruler = {
+        "void J+": abs(jp_s - jp_f) / abs(jp_f) * 100.0,
+        "void J-": abs(jn_s - jn_f) / abs(jn_f) * 100.0,
+        "void J (sum)": abs(j_s - j_f) / abs(j_f) * 100.0,
+        "peak voided length": abs(lvoid[SCORING_N] - lvoid[fin]) / lvoid[fin] * 100.0,
+    }
+    # Where the network stands today, from docs/axial_nn.md: §7.4 for the void integral
+    # and §7.5.20 for the voided length. `None` means NOT MEASURED -- §7.4's 84-92% is a
+    # miss on the SUM, and nobody has ever split the network's error into its two halves.
+    # Writing 84% on each row would be inventing two numbers from one, which is the error
+    # the split exists to prevent.
+    current: dict[str, float | None] = {
+        "void J+": None,
+        "void J-": None,
+        "void J (sum)": 84.0,
+        "peak voided length": 0.7,
+    }
+    for k, r in ruler.items():
+        cur = current[k]
+        if cur is None:
+            print(f"  {k:<20}{r:>11.3f}%{'not measured':>14}{'--':>15}")
+        else:
+            print(f"  {k:<20}{r:>11.3f}%{cur:>13.1f}%{cur / r:>15.1f}")
+
+    print(
+        f"\nThe void functional peaks at t = {t_peak:.2f} s, the END of the valid window,\n"
+        "which is where the ansatz exp(t_hat N) has its largest excursion and the\n"
+        "network is least constrained -- so it is a hard target as well as a live one."
+    )
+    print(
+        "\nRECOMMENDATION. Score the closed-loop void reactivity, SPLIT into J+ and J-,\n"
+        f"and set each bar at >= {MIN_TUR:.0f}x its ruler above. It is the only quantity\n"
+        "measured here that the network is still far from: the temperatures, the onset\n"
+        "time and the voided length are all now within a factor of ~2 of the reference's\n"
+        "own error, so none of them can rank two formulations any more."
     )
     return 0
 
