@@ -2056,6 +2056,24 @@ essentially exact, at three seeds, at the shipped feature count and wall-clock,
 while `T_s` and the margin also beat the control. The published best before this was
 79% of the reference (§7.5.8), and the shipped default is 64%.
 
+> ### This is a statement about `qn3000`, and it does not survive the funded budget
+>
+> Every arm in this section ran at the old `qn3000`. §7.5.24's 2×2 measured the same
+> embedding at `qn30000` and it **reverses on every column**: `T_s` 5.6× worse, voided
+> length 92.4% against a single band's 99.3%, margin +31.3 K against +67.6 K, three
+> seeds, non-overlapping.
+>
+> So the mechanism described below is real but it is *compensating for an
+> under-converged optimiser*. A multi-band basis is an implicit preconditioner
+> (SAFE-NET, arXiv:2502.07209); once the quasi-Newton stage is funded it accumulates
+> that curvature itself, the preconditioning is redundant, and splitting 256 features
+> across three bands is left as pure capacity loss. **The budget alone reaches 99.3%**,
+> which is the result this section claimed for the bands.
+>
+> `fourier_bands` is off permanently. The paragraph below about "the first controllable
+> dial between the mean and the extremum" stands only at a starved budget, where the
+> dial exists because the optimiser has not done its job yet.
+
 **The mechanism is legible, and both backends agree on it.** Two bands win the
 *mean* and lose the *front* — (1,4) has the lowest margin in the set on both
 backends. Adding the 16× band reverses that: `L_void` and the margin jump, `T_s`
@@ -2724,24 +2742,56 @@ Adam iterations and the same `lr = 1e-3`, one knob apart. Not yet measured.
 > The paper's own Table 2 puts MLP + BFGS at 7.11e-20 against beignet + Adam's 6.63e-19.
 > Even there, Adam *reaches* the higher-order regime rather than winning it.
 
-#### 7.5.24 Are bands and budget the same gain bought twice? — designed, not yet run
+#### 7.5.24 Bands and budget are not two gains — the budget subsumes the embedding
 
-Two results on the shelf have never been measured against each other. §7.5.14 found
-`fourier_bands = (1, 4, 16)` reaching 99.5% of the reference voided length at the old
-`qn = 3000`; §7.5.20 found `qn = 30000` at a single band reaching `T_s = 0.0017`. Both
-were read as independent wins.
+The 2×2 nobody had published. `uv run python tools/axial_study.py bandsbudget`, JAX,
+three seeds per cell, `fourier_bands ∈ {single, (1,4,16)}` × `lbfgs_iters ∈ {3000, 30000}`.
 
-The reason to doubt that is mechanistic. A feature pyramid **is** a preconditioner:
-spreading a fixed feature budget across bands equalises the curvature the optimiser sees
-across scales, which is the same ill-conditioning a longer quasi-Newton run works around
-by accumulating curvature pairs. If that is what both are doing, they are one gain bought
-twice, the interaction cell is flat, and this project should stop spending on the
-embedding axis.
+| cell | `T_s` | seed range | worst margin | `L_void` | % of reference |
+|---|---|---|---|---|---|
+| `single/qn3000` | 0.0258 | .0246–.0271 | +30.0 K | 0.2973 | 78.0% |
+| `bands/qn3000` | 0.0309 | .0257–.0358 | +34.3 K | 0.3638 | 95.4% |
+| **`single/qn30000`** | **0.0017** | .0016–.0017 | **+67.6 K** | **0.3784** | **99.3%** |
+| `bands/qn30000` | 0.0096 | .0073–.0139 | +31.3 K | 0.3523 | 92.4% |
 
-`uv run python tools/axial_study.py bandsbudget` is the 2×2 — the smallest design that
-can separate those, since two one-factor ladders never vary the other factor however many
-seeds each has. The control arm is `single/qn30000`, which must reproduce §7.5.20's
-0.0017 before any other cell is read.
+**The control passed first.** `single/qn30000` reproduces §7.5.20 exactly — 0.0017, range
+1.06, margin +67.6 K — so the harness had not moved and the other three cells are
+readable.
+
+**At `qn3000` bands do what §7.5.14 credited them with.** They trade the mean for the
+front: 1.20× worse on `T_s`, but voided length 95.4% against 78.0% and a better
+worst-seed margin. The mechanism is as advertised — the high band resolves the
+near-discontinuity at the cost of splitting a fixed feature total three ways.
+
+**At `qn30000` it reverses on every column.** `T_s` is **5.6× worse**, voided length
+falls to 92.4%, and the margin more than halves. Per seed the bands cell is
+0.0139 / 0.0077 / 0.0073 against 0.0016 / 0.0016 / 0.0017 — the two distributions do not
+come close to overlapping, so this is not a seed artefact.
+
+**Interaction 0.21.** Bands buy 0.83× at `qn3000` and 0.17× at `qn30000`; if the two
+axes were independent that ratio would be near 1.
+
+**The mechanism is the one Annex E predicted, and it is stronger than "redundant".**
+SAFE-NET (arXiv:2502.07209) frames Fourier features as an *implicit preconditioner*.
+While the optimiser is under-converged that preconditioning is worth having. Once L-BFGS
+has accumulated enough curvature pairs to precondition itself it is redundant — and what
+remains is the **capacity loss**: each of three bands gets a third of the 256 features and
+is therefore coarser than one 256-feature band. So the embedding is not merely subsumed,
+it is a net cost past the point where the budget does the same job.
+
+**And the budget alone delivers the front result the bands were credited with** — 99.3%
+of the reference voided length against the bands' best 95.4%.
+
+Two consequences, both acted on:
+
+- **`fourier_bands` stays off permanently**, not "pending the 2×2". The Annex D roadmap
+  item proposing it as a default is closed against.
+- **§7.5.14's headline is a statement about a starved budget** and is corrected there.
+  That is now the **third** published conclusion in this document that was an artefact of
+  measuring at `qn3000` — after §7.5.11's Adam axis and §7.5.27's optimiser bake-off. The
+  pattern is general enough to state as a rule: *an architectural comparison run at an
+  under-converged budget measures which architecture reaches the under-converged state
+  faster, which is a different question from which is more accurate.*
 
 ### 7.6 Pseudo-time stepping
 
@@ -2800,7 +2850,7 @@ Sorting every isolated arm by what it changed:
 
 | what it changed | outcome |
 |---|---|
-| **the function space** — Fourier capacity (§7.5.8), multi-scale bands (§7.5.14), anisotropic bandwidth (§7.5.12) | **all three worked**; bands moved the mean *and* the extremum together |
+| **the function space** — Fourier capacity (§7.5.8), multi-scale bands (§7.5.14), anisotropic bandwidth (§7.5.12) | **capacity worked.** Bands and anisotropic bandwidth worked *only at a starved quasi-Newton budget*: at `qn30000` bands are 5.6× worse on the mean and lose half the margin (§7.5.24), because a multi-band basis is an implicit preconditioner the funded optimiser no longer needs |
 | **the optimiser** — quasi-Newton budget (§7.5.11), curvature memory (§7.5.17) | **decisive**; the only axis that forms the front at all |
 | **the loss measure** — level-set sampling (§7.5.6), front fraction (§7.5.9), block and causal weighting | **failed or inert**; `frontfrac` degrades monotonically |
 | **extra residuals** — onset head (§7.5.16), front network, pseudo-time | **harmful**; a consequence of the PDE carries no information as a constraint |

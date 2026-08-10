@@ -59,14 +59,18 @@ tolerance four times above its instrument, so the bar itself is sound at a ratio
 answer. Further accuracy on the temperature fields cannot be demonstrated against it
 ([`docs/axial_nn.md`](docs/axial_nn.md) §7.5.22).
 
-**The boiling front, though, is essentially solved.** Giving the Fourier embedding
-several frequency bands at once — a low band for the smooth bulk, a high one for the
-near-discontinuous front, at the same total feature count and the same wall-clock —
-reaches **99.5% of the reference's voided length** at three seeds, against 64% for
-the shipped default, while *also* improving the mean error and the saturation
-margin. Every other lever in this project trades one against the other; this is the
-first that moves both, and the mechanism is legible enough to say why
-([`docs/axial_nn.md`](docs/axial_nn.md) §7.5.14).
+**The boiling front is essentially solved too — by the same budget.** The shipped
+default reaches **99.3% of the reference's peak voided length** at three seeds, against
+64% for the old budget.
+
+An earlier revision of this file credited that to the *embedding*: giving the Fourier
+basis several frequency bands at once reached 99.5% at the old `qn3000` budget. A 2×2
+has since measured the two together, and they are **not** two gains. At the funded
+budget the multi-band embedding is 5.6× worse on the mean and loses half the saturation
+margin. A multi-band basis is an implicit preconditioner; once the quasi-Newton stage is
+funded it accumulates that curvature itself, and splitting a fixed feature budget across
+bands is left as pure capacity loss. The bands are off
+([`docs/axial_nn.md`](docs/axial_nn.md) §7.5.24).
 
 **Onset turns out to be a question about *time*, not place.** The coolant heats
 monotonically up the channel, so the hottest point — and therefore where boiling
