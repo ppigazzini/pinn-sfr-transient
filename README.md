@@ -109,13 +109,21 @@ at matched configuration, L-BFGS is the **cheapest** of the three (99.3 ms again
 per iteration *and* an order of magnitude more accurate, and dropping Adam altogether
 costs nothing measurable.
 
-Both claims are also **collocation-scoped**. The quasi-Newton stage runs full-batch on
-4000 points — 0.32 residuals per parameter, a 3.1× *underdetermined* system, against a
-literature that prescribes overdetermining. A quasi-Newton iteration costs linearly in
-that count while an Adam step parallelises, so being able to afford 30 000 quasi-Newton
-iterations is partly a consequence of our small set: at an overdetermined 16 000 points
-the same stage would cost ~10 h instead of 2.5 h, and `adam 10⁵ / qn 10³` may be the
-rational split at that ratio rather than a mistake
+Both claims come with a scope that matters more than either. **Adam here is run
+full batch** — every step evaluates all 6000 collocation points, the same set the
+quasi-Newton stage uses — so it is a first-order method with momentum, not the stochastic
+minibatch Adam the literature runs. That alone explains the cost tie: both optimisers pay
+for 6000 residual evaluations per step, which is essentially the whole cost, while Adam's
+real advantage comes from batches of 128–256 and 20–45× more steps per second. So "Adam
+is 19× worse" is properly *"full-batch Adam is 19× worse than L-BFGS on the same full
+batch"* — the comparison a second-order method is supposed to win.
+
+The collocation count compounds it: 24 000 residuals against 49 797 trainable parameters
+is 0.48, a 2.07× *underdetermined* system, against a literature that prescribes
+overdetermining. A quasi-Newton iteration costs linearly in the point count while a
+minibatch Adam step does not, so affording 30 000 quasi-Newton iterations is partly a
+consequence of our small set — and `adam 10⁵ / qn 10³` may be the rational split at an
+overdetermined ratio rather than a mistake
 ([`docs/axial_nn.md`](docs/axial_nn.md) §7.5.31a).
 
 That cost comparison is **hardware-scoped and we say so**: eight CPU cores, float64,
