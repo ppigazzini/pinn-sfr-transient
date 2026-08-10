@@ -289,8 +289,24 @@ class Trainer:
             self._lbfgs(verbose=verbose)
         return self.model
 
+    def _freeze_encoder(self) -> list:
+        """Hold the Fourier-to-trunk projection fixed; return the parameters frozen.
+
+        The JAX twin does this by partitioning that layer out of the optimised pytree.
+        Here it is ``requires_grad_(False)``, and ``_lbfgs`` restores it afterwards so
+        the model is left exactly as found whatever the divergence guard decides.
+        """
+        if not (self.cfg.freeze_encoder and self.model.embed is not None):
+            return []
+        first = next(m for m in self.model.net.modules() if isinstance(m, torch.nn.Linear))
+        frozen = [q for q in first.parameters() if q.requires_grad]
+        for q in frozen:
+            q.requires_grad_(False)
+        return frozen
+
     def _lbfgs(self, *, verbose: bool) -> None:
         """Quasi-Newton polish on a fixed collocation set, with a divergence guard."""
+        frozen = self._freeze_encoder()
         zeta, that = self.collocation()
         before = self.causal_loss(zeta, that).item()
         snapshot = [q.detach().clone() for q in self.model.parameters()]
@@ -325,6 +341,8 @@ class Trainer:
             return loss
 
         opt.step(closure)
+        for q in frozen:  # leave the model as it was found, whatever the guard decides
+            q.requires_grad_(True)
         after = self.causal_loss(zeta, that).item()
         if not np.isfinite(after) or after > before:
             with torch.no_grad():
