@@ -94,6 +94,23 @@ carries; a factor is not. Since the height half cannot be failed on a monotone f
 and the time half is now passed, **M4 no longer discriminates between formulations**
 and is being replaced (§7.5.25).
 
+**The Fourier embedding and the optimisation budget do different jobs, and neither
+substitutes for the other.** Strip the embedding entirely and give the quasi-Newton stage
+its full funded budget: the error goes from 0.0017 to 0.0397 and the boiling front
+disappears — +0.8 K of saturation margin against the reference's +69.2 K. Without the
+embedding *nothing* forms a front, on any optimiser tried. The features make the front
+representable; the budget makes it accurate.
+
+**And the first-order stage buys nearly nothing here — nor is it cheaper.** Adam alone,
+at the same iteration count and comparable wall-clock, is 19× worse than spending that
+budget on the quasi-Newton stage, and AdEMAMix is worse still. Per *iteration*, measured
+at matched configuration, L-BFGS is the **cheapest** of the three (99.3 ms against Adam's
+107.8 and AdEMAMix's 115.5). The literature's usual reason for the Adam→L-BFGS split is
+that higher-order methods are computationally expensive; in this implementation the
+higher-order stage is faster per iteration *and* an order of magnitude more accurate, and
+dropping Adam altogether costs nothing measurable
+([`docs/axial_nn.md`](docs/axial_nn.md) §7.5.29).
+
 **How many epochs it needs was never asked until now.** A 54-run sweep of Adam
 against quasi-Newton iterations, three seeds on both backends, finds that **the
 quasi-Newton budget is the axis that forms the front** — the Adam axis is flat over
