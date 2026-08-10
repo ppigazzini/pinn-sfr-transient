@@ -82,6 +82,15 @@ GRID_ITERS = (30, 300, 3000)
 # quasi-Newton stage is funded -- and 0 has never been run at all.
 QN_LADDER = (3000, 10000, 30000)
 ADAM_LADDER = (0, 30)
+# Adam with the quasi-Newton stage switched OFF entirely, on **the same rungs as
+# `QN_LADDER`** so the two optimisers are compared step for step rather than through a
+# cost model. That also fixes the budget: an Adam step is not cheaper than a quasi-Newton
+# step here -- 0.139 s against 0.112 s at f128 on the grid, because the quasi-Newton stage
+# is a jitted `fori_loop` while Adam steps through Python -- so 30000 Adam iterations cost
+# about what the shipped default costs, and the top rung lands on the control's own
+# wall-clock instead of ten times past it. A first version of this ladder went to 300000
+# and would have been ~25 h per seed for that arm alone.
+ADAM_ONLY_LADDER = QN_LADDER
 # Spatial-band multipliers for the anisotropic embedding. None is the control:
 # isotropic, i.e. exactly the shipped default.
 ANISO_SCALES = (None, 2.0, 4.0, 8.0)
@@ -1378,6 +1387,101 @@ def study_bandsbudget(out: Path) -> None:
     _interaction(rows)
 
 
+def study_adamonly(out: Path) -> None:
+    """Can Adam replace the quasi-Newton stage OUTRIGHT? -- section 7.5.27.
+
+    A 2026 result reports a multi-scale basis reaching near machine precision *using
+    Adam*, in "an accuracy regime previously attained only by using computationally
+    expensive higher-order optimizers". If that transfers, the most expensive component
+    of this recipe is unnecessary, and section 7.5.11's central finding -- that the
+    quasi-Newton axis is the only one that moves the front -- is a statement about a
+    starved Adam rather than about Adam.
+
+    **`lbfgs_iters = 0` has never been run in this project.** Every measurement here has
+    had a quasi-Newton stage, including the `qn30` column that section 7.5.11 calls
+    "starved". The code path exists and is guarded, which is precisely the D67 shape: a
+    configuration that exists only as an intention. It is exercised short on both
+    backends first -- `tools/backend_smoke.py` plus a tiny arm of this study -- before
+    any long run, per the two-backends-for-correctness rule.
+
+    **The ladder is `QN_LADDER` itself** -- 3000, 10000, 30000 -- so this is the same
+    ladder section 7.5.20 climbed with the quasi-Newton stage, climbed with Adam instead.
+    That makes the comparison direct at equal iterations, and section 7.5.17a's warning is
+    handled by the `sec` each row records: the top rung costs about what the control
+    costs, because an Adam step here is not cheaper than a quasi-Newton one, so equal
+    iterations and equal wall-clock nearly coincide and `_per_second` prints both.
+
+    Cost is why the rungs stop at 30000. A first version went to 300000, which is roughly
+    **25 h for that arm alone, per seed** -- a study nobody would run, and a budget far
+    past the question, which is only whether Adam reaches the control at the control's
+    price.
+
+    **The control is the shipped default**, `adam30/qn30000`, which must reproduce
+    section 7.5.20's `T_s = 0.0017`. Read it before the Adam arms: a study whose control
+    has moved is measuring the harness.
+
+    The control is also the most expensive arm here -- 9060 s of the ~25000 s per seed --
+    and `qnladder_s{0,1,2}.json` already carries it at three seeds on this backend and
+    configuration. When machine time is tight, `--only qn0` runs the Adam arms alone and
+    the control is cited from those rows instead. That is a *stated* economy, not a
+    silent one: the control is skipped, not assumed to have passed.
+
+    Two outcomes and both are worth having. If an Adam-only arm reaches the control at
+    comparable wall-clock, the quasi-Newton stage is redundant and the default should
+    change. If it plateaus -- which is what section 7.5.11's flat Adam axis predicts --
+    then that flatness was not an artefact of a small Adam budget, and the negative is
+    much stronger than the grid alone could make it.
+    """
+    traj = ruler()
+    rows = run_all(
+        traj,
+        [
+            (
+                f"adam{a}/qn0 [jax]",
+                {"backend": "jax", "seed": seed, "adam_iters": a, "lbfgs_iters": 0},
+            )
+            for seed in SEEDS
+            for a in ADAM_ONLY_LADDER
+        ]
+        + [
+            (
+                "control adam30/qn30000 [jax]",
+                {"backend": "jax", "seed": seed, "adam_iters": 30, "lbfgs_iters": 30000},
+            )
+            for seed in SEEDS
+        ],
+        out,
+    )
+    mean_table(rows)
+    print("\ndoes Adam alone reach the quasi-Newton stage, at comparable wall-clock?")
+    _arm_summary(rows)
+    _per_second(rows)
+
+
+def _per_second(rows: list[dict]) -> None:
+    """Report each arm against its own wall-clock, which is the axis the decision is on.
+
+    Equal iterations is the wrong comparison between two optimisers with different
+    per-step costs, and this project has already had a ladder invert when it was moved
+    from iterations to a clock (section 7.5.17a). The control's seconds are the budget
+    every Adam arm has to be read against.
+    """
+    import statistics  # noqa: PLC0415
+
+    print(f"\n{'arm':32s}{'mean sec':>10}{'mean T_s':>10}{'worst margin':>14}")
+    for label in dict.fromkeys(r["arm"] for r in rows):
+        v = [r for r in rows if r["arm"] == label]
+        print(
+            f"  {label:30s}{statistics.mean(r['sec'] for r in v):>10.0f}"
+            f"{statistics.mean(r['T_s'] for r in v):>10.4f}"
+            f"{min(r['margin_K'] for r in v):>13.1f} K"
+        )
+    print(
+        "  (compare each Adam arm against the CONTROL's seconds, not against the other\n"
+        "   Adam arms: the question is whether the quasi-Newton stage buys its cost.)"
+    )
+
+
 def _interaction(rows: list[dict]) -> None:
     """Report the 2x2 interaction on `T_s`, which is the number the study exists for.
 
@@ -1450,6 +1554,7 @@ STUDIES = {
     "qnladder": study_qnladder,
     "bakeoff": study_bakeoff,
     "bandsbudget": study_bandsbudget,
+    "adamonly": study_adamonly,
 }
 
 
