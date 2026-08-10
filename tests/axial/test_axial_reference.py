@@ -16,6 +16,8 @@ none of which relies on the solver being right:
 
 from __future__ import annotations
 
+import importlib
+
 import numpy as np
 import pytest
 
@@ -735,28 +737,52 @@ def test_axial_expansion_adds_negative_reactivity_as_the_fuel_heats():
     assert d_on < d_off
 
 
-def test_the_training_horizon_matches_the_models_validity_range():
-    """`t_train_frac` must track where the model actually stops being valid.
+def _measured_validity_frac() -> float:
+    """Return the fraction of `t_end` over which the model is actually valid.
 
-    The reference terminates when any temperature reaches the top of the section
-    12.13 sodium property fits (D-SCOPE-1). Training past that asks the network to
-    satisfy residuals where the model does not apply, and because the ansatz is one
-    smooth function of `t_hat` that state propagates back to `t = 0`.
-
-    This was a defect, not a hypothetical: the default was 1.0, which trains over
-    72% of an invalid horizon and forms no boiling front at all, while every
-    published table was measured at 0.275 with the value recorded nowhere. Tie the
-    default to the measurement so a change in the physics cannot silently
-    invalidate it.
+    The reference terminates when any temperature reaches the top of the section 12.13
+    sodium property fits (D-SCOPE-1), so where it stops *is* the validity horizon.
     """
-    from pinn_sfr_transient.axial.torchpinn.config import AxialTrainConfig as TorchCfg
-
     p = AxialParams(n_axial=40)
     traj = solve_reference(p, n_out=241)
     assert traj.t[-1] < p.t_end, "the run must stop early, or there is no validity limit to track"
+    return float(traj.t[-1] / p.t_end)
 
-    validity_frac = traj.t[-1] / p.t_end
-    assert TorchCfg().t_train_frac == pytest.approx(validity_frac, abs=0.02), (
-        f"default t_train_frac {TorchCfg().t_train_frac} does not match the measured "
-        f"validity horizon {validity_frac:.4f} (stop time {traj.t[-1]:.2f} s)"
+
+def test_the_reference_stops_before_its_property_fits_run_out():
+    """There must be a validity limit to track, on every install.
+
+    Split out from the backend check below so it runs in the core-only lane too: it is
+    a statement about the physics and needs no network.
+    """
+    assert 0.0 < _measured_validity_frac() < 1.0
+
+
+@pytest.mark.parametrize("backend", ["torch", "jax"])
+def test_the_training_horizon_matches_the_models_validity_range(backend):
+    """`t_train_frac` must track where the model actually stops being valid.
+
+    Training past that asks the network to satisfy residuals where the model does not
+    apply, and because the ansatz is one smooth function of `t_hat` that state
+    propagates back to `t = 0`.
+
+    This was a defect, not a hypothetical: the default was 1.0, which trains over 72% of
+    an invalid horizon and forms no boiling front at all, while every published table was
+    measured at 0.275 with the value recorded nowhere. Tie the default to the measurement
+    so a change in the physics cannot silently invalidate it.
+
+    **Both backends, and via `importorskip`.** The earlier version imported the torch
+    config unconditionally and checked that backend alone. So it errored rather than
+    skipped wherever torch is absent — which broke the two CI lanes that exist precisely
+    to prove each backend stands up without the other — and it never checked that the JAX
+    default agrees, which is the divergence the two-backend rule exists to catch.
+    """
+    pytest.importorskip(backend)
+    mod = f"pinn_sfr_transient.axial.{backend}pinn.config"
+    cfg = importlib.import_module(mod).AxialTrainConfig()
+
+    validity_frac = _measured_validity_frac()
+    assert cfg.t_train_frac == pytest.approx(validity_frac, abs=0.02), (
+        f"{backend} default t_train_frac {cfg.t_train_frac} does not match the measured "
+        f"validity horizon {validity_frac:.4f}"
     )
