@@ -204,6 +204,14 @@ class AxialTrainConfig:
     # JAX only: torch has no AdEMAMix and one is deliberately not written.
     first_order: str = "adam"
 
+    # Hold the Fourier->trunk projection FIXED during the quasi-Newton stage.
+    # That layer is an encoder -- it selects which embedded frequencies are used, a
+    # representation choice Adam's fresh-sample stream suits -- and it is 66% of the
+    # model. Freezing it makes the polish OVERdetermined (24000 residuals against 16965
+    # weights, 1.41) instead of 2.1x under, and removes two thirds of the parameters
+    # from every curvature pair. Off by default.
+    freeze_encoder: bool = False
+
     # Trainable multi-resolution Fourier feature pyramid, arXiv:2605.24278 ("beignet").
     # OFF by default (`levels = 0`), so no published number moves when it lands.
     #

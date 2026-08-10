@@ -118,6 +118,34 @@ def train(
     return model, p, cfg
 
 
+def _polish_spec(cfg: AxialTrainConfig, model: AxialPinn):  # noqa: ANN202
+    """Which parameters the quasi-Newton stage is allowed to move.
+
+    Everything, unless ``freeze_encoder`` is set, in which case the **first Linear** --
+    the projection from the Fourier features into the trunk -- is held fixed and the
+    polish optimises the trunk alone.
+
+    The argument is a counting one. That layer is an encoder: it decides which of the
+    512 embedded frequencies the network uses, which is a *representation* choice, and
+    Adam with its fresh-sample-per-step stream is the tool suited to it. It is also 66%
+    of the model -- 32 832 of 49 797 parameters. Holding it fixed turns the polish from a
+    2.1x **under**determined problem into a 1.4x **over**determined one (24 000 residual
+    entries against 16 965 trainable weights), which is the side of the line the
+    literature prescribes, and it drops two-thirds of the parameters from every
+    curvature pair as well.
+
+    Off by default, so no published number moves when it lands.
+    """
+    spec = jax.tree_util.tree_map(eqx.is_inexact_array, model)
+    if not cfg.freeze_encoder:
+        return spec
+    return eqx.tree_at(
+        lambda m: (m.mlp.layers[0].weight, m.mlp.layers[0].bias),
+        spec,
+        replace=(False, False),
+    )
+
+
 def _lbfgs_polish(  # noqa: PLR0913 - polish needs the model, params, points and weights
     model: AxialPinn,
     p: AxialParams,
@@ -128,7 +156,7 @@ def _lbfgs_polish(  # noqa: PLR0913 - polish needs the model, params, points and
     verbose: bool,
 ) -> AxialPinn:
     """Quasi-Newton polish on a fixed collocation set via ``optax.lbfgs``."""
-    params, static = eqx.partition(model, eqx.is_inexact_array)
+    params, static = eqx.partition(model, _polish_spec(cfg, model))
 
     def loss_fn(params: AxialPinn) -> jax.Array:
         return causal_loss(eqx.combine(params, static), p, cfg, pts, w)  # no proximal term
