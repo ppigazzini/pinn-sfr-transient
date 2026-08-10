@@ -15,6 +15,8 @@ import jax.numpy as jnp
 if TYPE_CHECKING:
     from pinn_sfr_transient.axial.config import AxialParams
 
+from dataclasses import replace
+
 import equinox as eqx
 import numpy as np
 import optax
@@ -76,8 +78,10 @@ def train(
     # runs and the quasi-Newton polish below would have no points to train on --
     # a NameError, and the reason "is Adam needed at all?" had never been tested.
     # The torch twin draws its own set inside `_lbfgs`, so it was never exposed.
+    # Adam gets its own collocation count: `adam_colloc` if set, else `n_colloc`.
+    a_cfg = replace(cfg, n_colloc=cfg.adam_colloc) if cfg.adam_colloc else cfg
     key, ck0 = jax.random.split(key)
-    pts = _merge(_collocation(p, cfg, ck0, 1.0, model), rar, feedback=cfg.feedback)
+    pts = _merge(_collocation(p, a_cfg, ck0, 1.0, model), rar, feedback=cfg.feedback)
     for it in range(cfg.adam_iters):
         # Time-window curriculum: the horizon opens from 1/n_windows to 1 over
         # training, matching the torch twin. With n_windows = 1 this is a no-op.
@@ -93,7 +97,7 @@ def train(
         # what made this backend stall at ~0.24 relative L2 while the torch twin
         # — which resamples every step — reached ~0.06 on the identical budget.
         key, ck = jax.random.split(key)
-        pts = _merge(_collocation(p, cfg, ck, t_max, model), rar, feedback=cfg.feedback)
+        pts = _merge(_collocation(p, a_cfg, ck, t_max, model), rar, feedback=cfg.feedback)
         if cfg.pts_every and it % cfg.pts_every == 0:
             # Re-anchor and relax. The anchor points are RESAMPLED every step:
             # the paper is explicit that pseudo-time stepping and resampling work
@@ -114,7 +118,8 @@ def train(
             print(f"[adam {it:6d}] loss={float(loss):.3e}")
 
     if cfg.lbfgs_iters > 0:
-        model = _lbfgs_polish(model, p, cfg, pts, w, verbose=verbose)
+        key, pk = jax.random.split(key)
+        model = _run_polish(model, p, cfg, rar, w, pk, verbose=verbose)
     return model, p, cfg
 
 
@@ -144,6 +149,43 @@ def _polish_spec(cfg: AxialTrainConfig, model: AxialPinn):  # noqa: ANN202
         spec,
         replace=(False, False),
     )
+
+
+def _run_polish(  # noqa: PLR0913, PLR0917 - the polish needs all of this state
+    model: AxialPinn,
+    p: AxialParams,
+    cfg: AxialTrainConfig,
+    rar: tuple | None,
+    w: jax.Array,
+    key: jax.Array,
+    *,
+    verbose: bool,
+) -> AxialPinn:
+    """Run the quasi-Newton stage, in one block or in several with a fresh set each.
+
+    ``polish_refresh = 0`` keeps the single fixed set every published number here used.
+    Above zero the set is redrawn every that many iterations and the optimiser restarted,
+    so its curvature history is consistent WITHIN a block and never spans two objectives
+    -- which is the point of a fixed set -- while the stage as a whole stops being able
+    to overfit one draw. arXiv:2605.24278 runs its BFGS baseline in blocks of 1000.
+    """
+    q_cfg = replace(cfg, n_colloc=cfg.polish_colloc) if cfg.polish_colloc else cfg
+
+    def draw(k: jax.Array) -> tuple:
+        return _merge(_collocation(p, q_cfg, k, 1.0, model), rar, feedback=cfg.feedback)
+
+    if cfg.polish_refresh <= 0:
+        return _lbfgs_polish(model, p, cfg, draw(key), w, verbose=verbose)
+
+    done, blk = 0, cfg.polish_refresh
+    while done < cfg.lbfgs_iters:
+        n = min(blk, cfg.lbfgs_iters - done)
+        key, bk = jax.random.split(key)
+        model = _lbfgs_polish(model, p, replace(cfg, lbfgs_iters=n), draw(bk), w, verbose=False)
+        done += n
+    if verbose:
+        print(f"[lbfgs] {cfg.lbfgs_iters} iterations in blocks of {blk}, set redrawn each")
+    return model
 
 
 def _lbfgs_polish(  # noqa: PLR0913 - polish needs the model, params, points and weights
