@@ -81,7 +81,9 @@ backward pass.
 
 The reference is a stiff Radau integration on an axial mesh. It reproduces the analytic
 steady state to $3.4 times 10^(-11)$ K/s, conserves energy at second order in the step,
-and places boiling onset at 10.75 s independently of mesh over $n_"axial" = 40$ to 640.
+and places boiling onset independently of mesh over $n_"axial" = 40$ to 640, at 10.9784 s
+when the crossing is root-found (10.75 s if read off the 0.25 s output grid, which is how
+it was reported before we located events properly).
 
 Because acceptance bars are stated against this solver, its own uncertainty bounds what
 any bar can mean. Refining the reference against itself, the onset time and height at the
@@ -268,24 +270,33 @@ is a different question from which is more accurate.
 
 This has a direct bearing on reported results. Self-scaled quasi-Newton methods have been
 reported to improve PINN accuracy by one to three orders of magnitude over BFGS [7,14].
-We measure the opposite: at a funded quasi-Newton stage, plain L-BFGS and a shared
-reimplementation both reach 0.0296 while self-scaled BFGS reaches 0.0401, 35% worse, and
-a self-scaled Broyden method is worse again at several times the wall-clock.
+*We are not in a position to confirm or contradict that, and say so rather than quoting
+the comparison we have.* Our optimiser comparison exists only at 3000 Adam / 300
+quasi-Newton — the starved diagonal that Table @tab:grid shows is precisely the regime
+where the quasi-Newton stage does not yet matter — and at that budget the four methods do
+not order consistently across our two implementations. They also cannot: those runs
+predate the curvature-memory defect of section 5.3, so the two sides were compared at
+different memory. The comparison at a funded quasi-Newton stage is designed and has not
+been run.
 
-The disagreement is explicable and is not a contradiction. Limited-memory BFGS already
+We report that as a gap rather than as a result, because an optimiser comparison made in
+an under-converged regime is the precise error this paper is about, and we are not exempt
+from it.
+
+What can be said is why little should be expected. Limited-memory BFGS already
 rescales its initial inverse-Hessian approximation by the Oren--Luenberger factor
 $gamma_k = s_k^T y_k \/ y_k^T y_k$ at every iteration, and this is the default in both
-frameworks used here [10]. Self-scaling is therefore largely redundant against an L-BFGS
-baseline, while against the unscaled full-memory BFGS with $H_0 = I$ used in the studies
-above it supplies a scaling that is otherwise absent. Those studies also use networks of
-$10^3$ parameters, roughly twenty times smaller than ours, and report single runs without
-seed statistics; a third study finds self-scaled Broyden losing to plain BFGS on two of
-four equations [15]. We therefore report our result as a regime-dependent negative
-rather than as a refutation.
+frameworks used here [10]. Self-scaling should therefore be largely redundant against an
+L-BFGS baseline, while against the unscaled full-memory BFGS with $H_0 = I$ used in the
+studies above it supplies a scaling that is otherwise absent. Those studies also use
+networks of $10^3$ parameters, roughly twenty times smaller than ours, and report single
+runs without seed statistics; a third study finds self-scaled Broyden losing to plain BFGS
+on two of four equations [15]. That is a prediction we intend to test, not a finding.
 
-The general point stands independently of who is right: an optimiser comparison is only
-interpretable alongside its baseline's configuration, its network size, and its seed
-count.
+The general point stands independently of who is right, and it is the one we can support:
+an optimiser comparison is only interpretable alongside its baseline's configuration, its
+curvature memory, its network size, and its seed count. Three of those four have already
+inverted a conclusion in this work.
 
 Two reporting conventions from the wider computational-science literature would have
 caught our own errors earlier, and we adopt them. Recent verification-and-validation
@@ -303,12 +314,28 @@ it, is worth testing. An intervention that reweights an objective, or re-express
 the network already computes, has no mechanism by which to add information, and in this
 study none of the five such interventions did.
 
-What remains unresolved is timing. The boiling front's location is not a discriminating
-quantity here — the coolant temperature is monotone in height, so onset is always at the
-outlet — but its time is, and the model is 0.62–0.84 s from a reference onset at 10.75 s
-against a 0.5 s criterion. The temperature fields meet their bar comfortably while the
-event they imply does not, which suggests that a criterion on a derived scalar is not
-implied by a criterion on the field it derives from.
+Timing behaves the same way, and this is the sharpest form of the paper's claim. Boiling
+onset was thought to be the model's outstanding failure at 0.62–0.84 s against a 0.5 s
+criterion. That figure was measured at 3000 quasi-Newton iterations. At 30 000 the error
+is *0.0006, 0.0064 and 0.0181 s* on three seeds — the criterion is met, by the
+optimisation budget alone, with no residual, sampling or architectural change aimed at
+onset at any point. A second correction is metrological rather than numerical: locating
+the crossing by root-finding rather than by scanning the 0.25 s output grid moves the
+_reference's_ own onset from 10.75 s to 10.9784 s, so a quarter of a second of the
+original miss was the ruler's quantisation.
+
+We report it as met and decline to say by how much. The reference's own onset is
+uncertain by 0.009 s at the scoring mesh, so the worst seed sits at a test uncertainty
+ratio of 2.0 and the best seed below 1 — the same exhaustion of resolution as the
+temperature bar. The seed spread, 32×, is the widest of any quantity we measure; the
+criterion holds on every seed, but no comparison between formulations should be built on
+this scalar at fewer than three.
+
+One negative worth stating: we had expected onset time to _amplify_ field error, since a
+threshold crossing converts a temperature error into a time error at the reciprocal of
+the heating rate. Measured, that first-order bound over-predicts the error by between 3.4
+and 100 times. Onset converts field accuracy at better than the first-order rate, so the
+derived scalar is easier than the field it derives from, not harder.
 
 = Conclusions
 
