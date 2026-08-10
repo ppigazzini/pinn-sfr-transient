@@ -118,6 +118,62 @@ class FourierEmbedding(nn.Module):
         return torch.cat([torch.sin(proj), torch.cos(proj)], dim=-1)
 
 
+class BeignetPyramid(nn.Module):
+    """Trainable multi-resolution Fourier feature pyramid -- arXiv:2605.24278.
+
+    The paper's claim is that this architecture, and not a change of optimiser, lets
+    **Adam** reach "an accuracy regime previously attained only by using computationally
+    expensive higher-order optimizers". So it is implemented as an embedding: everything
+    else in this model -- ansatz, residuals, weighting, optimiser -- is untouched, and
+    the comparison is against the same recipe with `FourierEmbedding`.
+
+    Each level stores a learnable periodic grid ``theta`` of shape ``(N_l, d_h)`` with
+    ``N_l`` dyadic, and is queried at a continuous coordinate by evaluating the
+    bandlimited interpolant of that grid (the paper's Eq. 6),
+
+        g(u) = Re sum_k  DFT(theta)[k] exp(2 pi i k u) / N,
+
+    which reproduces the grid exactly at its nodes and interpolates spectrally between
+    them. It is written here in real arithmetic -- ``C @ Re(theta_hat) - S @ Im(theta_hat)``
+    -- because that keeps the whole path real for both autodiff engines and is the same
+    number.
+
+    Levels are concatenated and, as in the paper, **only the spatial coordinate enters
+    the pyramid**; ``t_hat`` is passed through to the decoder unchanged.
+
+    **One deviation from the paper, and it is forced.** Fourier interpolation is periodic,
+    and every benchmark in arXiv:2605.24278 is a periodic problem. This channel is not:
+    coolant temperature rises monotonically from inlet to outlet, so a periodic basis
+    would have to wrap a large jump across the boundary and would ring across the whole
+    domain. `pad` maps the physical `zeta` in [0, 1] into the interior [pad, 1-pad] of the
+    period, leaving the remainder as free space for the basis to transition through. The
+    deviation is registered here rather than discovered later.
+    """
+
+    def __init__(self, levels: int, features: int, base: int, noise: float, pad: float) -> None:
+        super().__init__()
+        self.pad = float(pad)
+        self.grids = nn.ParameterList(
+            [
+                nn.Parameter(torch.randn(base * 2**k, features, dtype=torch.float64) * noise)
+                for k in range(levels)
+            ]
+        )
+        self.n_out = levels * features + 1  # + t_hat, passed through to the decoder
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # zeta -> the interior of one period; t_hat is not embedded (paper section 3).
+        u = self.pad + x[:, :1] * (1.0 - 2.0 * self.pad)
+        feats = [x[:, 1:2]]
+        for theta in self.grids:
+            n = theta.shape[0]
+            k = torch.fft.fftfreq(n, d=1.0 / n).to(theta.dtype)
+            hat = torch.fft.fft(theta, dim=0)
+            phase = 2.0 * np.pi * u * k  # (batch, n)
+            feats.append((torch.cos(phase) @ hat.real - torch.sin(phase) @ hat.imag) / n)
+        return torch.cat(feats, dim=-1)
+
+
 class LaplaceMix(nn.Module):
     """Wrap a Fourier embedding with an exponential-decay basis in ``t_hat``.
 

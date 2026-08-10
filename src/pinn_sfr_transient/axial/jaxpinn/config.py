@@ -225,6 +225,25 @@ class AxialTrainConfig:
     pts_dtau: float = 1.0
     pts_growth: float = 1.5
 
+    # Trainable multi-resolution Fourier feature pyramid, arXiv:2605.24278 ("beignet").
+    # OFF by default (`levels = 0`), so no published number moves when it lands.
+    #
+    # The paper's claim is that this ARCHITECTURE, not a change of optimiser, lets Adam
+    # reach accuracy previously needing higher-order methods. It is therefore the only
+    # honest way to test "Adam replaces the quasi-Newton stage" here: section 7.5.11
+    # measured our unmodified Adam flat over two decades, so running it longer tests a
+    # strawman. Note the paper's own Table 2 has MLP+BFGS at 7.11e-20 against
+    # beignet+Adam's 6.63e-19, so the claim is that Adam REACHES the regime, not that it
+    # wins it.
+    #
+    # `beignet_pad` is a registered deviation: Fourier interpolation is periodic and this
+    # channel is not, so `zeta` is mapped into the interior of one period.
+    beignet_levels: int = 0
+    beignet_features: int = 14
+    beignet_base: int = 2
+    beignet_noise: float = 0.1
+    beignet_pad: float = 0.25
+
     # RAR keeps a FIXED count so `jit` never recompiles (the torch twin grows an
     # unbounded reservoir instead — same idea, framework-appropriate form).
     rar_every: int = 2000
