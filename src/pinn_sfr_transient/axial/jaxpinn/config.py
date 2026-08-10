@@ -225,6 +225,12 @@ class AxialTrainConfig:
     pts_dtau: float = 1.0
     pts_growth: float = 1.5
 
+    # The first-order stage's algorithm. "adam" is every published number here.
+    # "ademamix" adds a slow gradient EMA (arXiv:2409.03137); REPORT-01 records it ~2x
+    # better than Adam beyond 8000 iterations and ~260x WORSE at 3000, because the slow
+    # EMA has not warmed up -- so it is gated on budget, never swapped in blind.
+    first_order: str = "adam"
+
     # Trainable multi-resolution Fourier feature pyramid, arXiv:2605.24278 ("beignet").
     # OFF by default (`levels = 0`), so no published number moves when it lands.
     #

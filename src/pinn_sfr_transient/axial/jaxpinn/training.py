@@ -53,7 +53,9 @@ def train(
     )
     w = jnp.ones(n_blocks)
     sched = optax.cosine_decay_schedule(cfg.lr, decay_steps=max(1, cfg.adam_iters), alpha=0.1)
-    optimizer = optax.adam(sched)
+    optimizer = (
+        optax.contrib.ademamix(sched) if cfg.first_order == "ademamix" else optax.adam(sched)
+    )
     opt_state = optimizer.init(eqx.filter(model, eqx.is_inexact_array))
 
     @eqx.filter_jit
