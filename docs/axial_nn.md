@@ -2896,12 +2896,22 @@ the training loop rather than by measuring anything.
 
 **The quasi-Newton stage trains on one arbitrary sample, and the two backends choose it
 differently.** In JAX the polish receives `pts` as it stands when the Adam loop exits —
-that is, **the last Adam iteration's random draw**, merged with whatever RAR points have
-accumulated. Nobody chose that set; it is an artefact of loop structure. In torch,
-`_lbfgs` calls `self.collocation()` and draws its **own** fresh set. Both are single
-uniform draws of `n_colloc` points, so they are statistically equivalent and no published
-comparison is invalidated — but they are not the same construction, and the difference
-was undocumented.
+**the last Adam iteration's draw**, merged with whatever RAR points have accumulated.
+Nobody chose that set; it is an artefact of loop structure. In torch, `_lbfgs` calls
+`self.collocation()` and draws its **own** fresh set.
+
+**The samplers themselves are identical**, and that was checked rather than assumed:
+both produce `n_colloc` uniform points, plus an early-time cluster of `n_colloc // 2`
+over the first 40% of the window, plus the RAR reservoir when it is non-empty, plus front
+points when `front_frac` is active. So the difference is the *provenance of the draw* and
+nothing else — two independent samples from one sampler. No published comparison is
+affected.
+
+> An earlier revision of this paragraph said only "both are single uniform draws", which
+> reads as though torch might not carry the RAR reservoir into its polish. It does
+> (`parts = [pts, early, *([self.rar] if self.rar.numel() else [])]`). Recorded because
+> the sentence implied a cross-backend divergence that does not exist, which is the kind
+> of claim this document is supposed to check before making.
 
 At `n_colloc = 4000` that set carries roughly **16 000 residual constraints against
 50 309 parameters**, underdetermined by 3.1×. The stage that does all the work in this
