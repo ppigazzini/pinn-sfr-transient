@@ -2000,6 +2000,13 @@ worst-seed margin:
 | **adam300** [jax] | 0.1935 · **no front** | 0.0880 · +2.6 K | 0.0363 · +9.5 K |
 | **adam3000** [jax] | 0.0762 · +2.4 K | 0.0545 · +3.7 K | 0.0358 · +5.3 K |
 
+> **Read with §7.5.31a.** This surface is measured at `n_colloc = 4000`, which is 0.32
+> residuals per parameter — a 3.1× *underdetermined* system, against a literature that
+> prescribes overdetermination. A quasi-Newton iteration is full-batch and therefore
+> linear in the point count, so the affordability of a 3000- or 30000-iteration
+> quasi-Newton stage is itself a consequence of that count. The conclusion below holds at
+> this ratio; it is not a general claim about first- against second-order methods.
+
 At three seeds on both backends:
 
 - **The quasi-Newton axis is monotone across two decades**, in `T_s` and in margin,
@@ -2943,6 +2950,51 @@ It also means RAR, adaptive weighting and the curriculum are live only at budget
 currently ships at. `rar_every = 2000` needs `adam_iters > 2000`, which only the old
 `adam3000` studies ever had — so those three features are, in effect, untested at the
 configuration every recent number was measured at.
+
+#### 7.5.31a The budget split is a consequence of our collocation count, not only of the optimisers
+
+A caveat on §7.5.11 and §7.5.20, argued rather than measured, and recorded now because it
+is the kind of thing this project otherwise rediscovers as a retraction.
+
+**The literature prescribes an overdetermined collocation set and we run a 3.1×
+underdetermined one.** arXiv:2605.30910 — *PINNs Failure Modes are Overfitting* — argues
+that PINN failures are overfitting rather than architectural or optimiser deficiencies,
+and prescribes overdetermining the system: collocation points substantially exceeding
+parameters. Other work sets point counts per sub-problem specifically to hold the
+residuals-to-parameters ratio fixed.
+
+This model's numbers are on the wrong side of that line. Four residual blocks per
+collocation point and 50 309 parameters give:
+
+| `n_colloc` | residuals | residuals / parameters | `qn30000` cost |
+|---|---|---|---|
+| **4000 (shipped)** | 16 000 | **0.32** | 2.5 h |
+| 12 578 | 50 312 | 1.00 (break-even) | 7.9 h |
+| 16 000 | 64 000 | 1.27 | 10.1 h |
+
+**And our own training loop already cites that paper — for the other half of its
+argument.** The JAX Adam loop resamples every step and the comment says a frozen set is
+"the collocation-overfitting mode of arXiv:2605.30910". We took the resampling lesson and
+not the counting one. The resampling fix applies only to the *Adam* stage; the
+quasi-Newton stage is fixed-set **and** underdetermined, which is squarely the regime that
+paper describes.
+
+**The consequence for the headline.** §7.5.11 and §7.5.20 conclude that the quasi-Newton
+axis does all the work and the Adam axis none. That is measured and stands *at this
+collocation count* — but the count is what makes the measurement affordable. A
+quasi-Newton iteration is full-batch, so its cost is linear in the point count; an Adam
+step over the same points parallelises. At an overdetermined set the same 30 000
+quasi-Newton iterations cost ~10 h rather than 2.5 h, and the split a paper can buy shifts
+hard toward Adam. **`adam 10^5 / qn 10^3` may be the rational choice at their ratio and
+`adam 30 / qn 30000` the rational choice at ours**, with no disagreement about the
+optimisers at all.
+
+So the finding should be read as *"at 0.32 residuals per parameter, the quasi-Newton axis
+dominates"*, not as a general claim about first- against second-order methods. Whether
+0.0017 is a ceiling imposed by the underdetermined set, or achieved despite it, is
+unmeasured — and §7.5.30 notes the ansatz and embedding are evidently doing the
+constraining, since the fixed 4000-point solution generalises to a reference on a
+different grid.
 
 #### 7.5.31 Is a cheaper embedding competitive at a funded budget? — running
 

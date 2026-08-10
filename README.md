@@ -109,6 +109,15 @@ at matched configuration, L-BFGS is the **cheapest** of the three (99.3 ms again
 per iteration *and* an order of magnitude more accurate, and dropping Adam altogether
 costs nothing measurable.
 
+Both claims are also **collocation-scoped**. The quasi-Newton stage runs full-batch on
+4000 points — 0.32 residuals per parameter, a 3.1× *underdetermined* system, against a
+literature that prescribes overdetermining. A quasi-Newton iteration costs linearly in
+that count while an Adam step parallelises, so being able to afford 30 000 quasi-Newton
+iterations is partly a consequence of our small set: at an overdetermined 16 000 points
+the same stage would cost ~10 h instead of 2.5 h, and `adam 10⁵ / qn 10³` may be the
+rational split at that ratio rather than a mistake
+([`docs/axial_nn.md`](docs/axial_nn.md) §7.5.31a).
+
 That cost comparison is **hardware-scoped and we say so**: eight CPU cores, float64,
 50 309 parameters. On a datacenter GPU an Adam step over a large batch is nearly free
 while a strong-Wolfe line search is sequential, so the literature's "computationally
