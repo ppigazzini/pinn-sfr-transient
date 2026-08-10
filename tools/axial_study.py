@@ -288,7 +288,14 @@ def _effective(backend: str) -> dict:
         ).AxialTrainConfig()
     except SystemExit:  # backend extra absent; nothing to record
         return {}
-    return {"lr": float(cfg.lr), "first_order": getattr(cfg, "first_order", "adam")}
+    return {
+        "lr": float(cfg.lr),
+        "first_order": getattr(cfg, "first_order", "adam"),
+        # The quasi-Newton stage trains on ONE fixed set of this size, and at 4000 points
+        # that is ~16000 residual constraints against 50309 parameters -- underdetermined
+        # by 3x. It appeared in no row on disk and has never been swept.
+        "n_colloc": int(cfg.n_colloc),
+    }
 
 
 def run_all(
