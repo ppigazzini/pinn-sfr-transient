@@ -79,6 +79,41 @@ class FourierEmbedding(eqx.Module):
         return jnp.concatenate([jnp.sin(proj), jnp.cos(proj)])
 
 
+class BeignetPyramid(eqx.Module):
+    """Trainable multi-resolution Fourier feature pyramid -- arXiv:2605.24278.
+
+    The torch twin carries the rationale and the registered deviation. The grids are
+    ordinary inexact arrays, so Equinox treats them as trainable -- deliberately, and in
+    contrast to `FourierEmbedding.B`, which is held under `stop_gradient`. That
+    difference IS the paper's mechanism.
+    """
+
+    grids: list[jax.Array]
+    pad: float = eqx.field(static=True)
+    n_out: int = eqx.field(static=True)
+
+    def __init__(  # noqa: PLR0913, PLR0917 - mirrors the torch twin's signature exactly
+        self, levels: int, features: int, base: int, noise: float, pad: float, key: jax.Array
+    ) -> None:
+        keys = jax.random.split(key, max(levels, 1))
+        self.grids = [
+            jax.random.normal(keys[k], (base * 2**k, features)) * noise for k in range(levels)
+        ]
+        self.pad = float(pad)
+        self.n_out = levels * features + 1
+
+    def __call__(self, x: jax.Array) -> jax.Array:
+        u = self.pad + x[:1] * (1.0 - 2.0 * self.pad)
+        feats = [x[1:2]]
+        for theta in self.grids:
+            n = theta.shape[0]
+            k = jnp.fft.fftfreq(n, d=1.0 / n)
+            hat = jnp.fft.fft(theta, axis=0)
+            phase = 2.0 * jnp.pi * u * k
+            feats.append((jnp.cos(phase) @ hat.real - jnp.sin(phase) @ hat.imag) / n)
+        return jnp.concatenate(feats)
+
+
 class LaplaceMix(eqx.Module):
     """Exponential-decay basis in ``t_hat``, wrapping a Fourier embedding.
 
@@ -182,27 +217,40 @@ class AxialPinn(eqx.Module):
     mlp: eqx.nn.MLP | ModifiedMLP
     kin: eqx.nn.MLP | None
     front: eqx.nn.MLP | None
-    embed: FourierEmbedding | LaplaceMix | None
+    embed: FourierEmbedding | LaplaceMix | BeignetPyramid | None
     onset_raw: jax.Array | None
 
     def __init__(self, cfg: AxialTrainConfig, key: jax.Array) -> None:
         k_field, k_kin, k_front, k_emb = jax.random.split(key, 4)
         use_front = bool(cfg.front_net and cfg.void_closure)
         n_in = 3 if (use_front or cfg.level_set_input) else 2
-        self.embed = (
-            FourierEmbedding(
-                n_in,
-                cfg.fourier_features,
-                cfg.fourier_scale,
+        if cfg.beignet_levels:
+            # Replaces the random Fourier embedding rather than wrapping it; see the
+            # torch twin for why composing them would make any gain unattributable.
+            self.embed = BeignetPyramid(
+                cfg.beignet_levels,
+                cfg.beignet_features,
+                cfg.beignet_base,
+                cfg.beignet_noise,
+                cfg.beignet_pad,
                 k_emb,
-                fourier_scale_vector(cfg, n_in),
-                bands=cfg.fourier_bands,
             )
-            if cfg.fourier_features
-            else None
-        )
-        if cfg.fourier_features:
-            n_in = 2 * cfg.fourier_features
+            n_in = self.embed.n_out
+        else:
+            self.embed = (
+                FourierEmbedding(
+                    n_in,
+                    cfg.fourier_features,
+                    cfg.fourier_scale,
+                    k_emb,
+                    fourier_scale_vector(cfg, n_in),
+                    bands=cfg.fourier_bands,
+                )
+                if cfg.fourier_features
+                else None
+            )
+            if cfg.fourier_features:
+                n_in = 2 * cfg.fourier_features
         if cfg.laplace_rates:
             raw_in = 3 if (use_front or cfg.level_set_input) else 2
             # The torch model is handed `p`; this constructor is not, so the

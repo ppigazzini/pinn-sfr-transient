@@ -53,6 +53,7 @@ from pinn_sfr_transient.axial.torchpinn.archs import (
     FIELDS,
     MLP,
     N_TEMPS,
+    BeignetPyramid,
     FourierEmbedding,
     LaplaceMix,
     ModifiedMLP,
@@ -73,7 +74,23 @@ class AxialPinn(nn.Module):
         torch.manual_seed(cfg.seed)  # before init: nn.init draws from the global RNG
         n_in = 3 if (cfg.front_net and cfg.void_closure) or cfg.level_set_input else 2
         self.embed: nn.Module | None = None
-        if cfg.fourier_features:
+        if cfg.beignet_levels:
+            # Replaces the random Fourier embedding rather than wrapping it: the paper
+            # substitutes one for the other, and composing them would make any gain
+            # unattributable (the compound-arm mistake of section 7.5.4).
+            self.embed = (
+                BeignetPyramid(
+                    cfg.beignet_levels,
+                    cfg.beignet_features,
+                    cfg.beignet_base,
+                    cfg.beignet_noise,
+                    cfg.beignet_pad,
+                )
+                .to(cfg.device)
+                .double()
+            )
+            n_in = self.embed.n_out
+        elif cfg.fourier_features:
             self.embed = (
                 FourierEmbedding(
                     n_in,
