@@ -1447,6 +1447,55 @@ def study_bandsbudget(out: Path) -> None:
     _interaction(rows)
 
 
+def study_fourierbudget(out: Path) -> None:
+    """Can a funded budget buy back a CHEAPER embedding? -- section 7.5.30.
+
+    Section 7.5.29 established that the Fourier embedding is representation and not
+    preconditioning: strip it entirely and a fully funded quasi-Newton stage cannot
+    recover the answer, and no optimiser forms a boiling front without it. That says the
+    embedding is necessary. It does not say how much of it is necessary.
+
+    This sweeps the feature count at a funded budget. Each arm costs less per iteration
+    than the last -- the embedding is the widest layer in the network, so f32 is a much
+    cheaper step than f256 -- and the question is whether the extra iterations a cheap
+    embedding buys within the same wall-clock make up for the capacity it gives away.
+
+    Section 7.5.12's capacity ladder found f32 -> f512 monotone, but it was measured at
+    `qn3000`. Every capacity conclusion in this document is therefore in the same
+    position 7.5.14's bands were in before 7.5.24: a statement about a starved optimiser.
+    If the ladder flattens at a funded budget, the shipped f256 is over-specified and the
+    default should come down.
+
+    `adam_iters = 10000` is above `rar_every`, so **RAR is active in these arms** -- the
+    first trigger is at iteration 2000 and the shipped default's 30 Adam iterations never
+    reach it. That is a real difference from every recent table, not only a budget
+    change, and it is recorded rather than discovered later.
+    """
+    traj = ruler()
+    rows = run_all(
+        traj,
+        [
+            (
+                f"f{n} adam10000/qn30000 [jax]",
+                {
+                    "backend": "jax",
+                    "seed": seed,
+                    "adam_iters": 10000,
+                    "lbfgs_iters": 30000,
+                    "fourier_features": n,
+                },
+            )
+            for seed in SEEDS
+            for n in (32, 64, 128, 256)
+        ],
+        out,
+    )
+    mean_table(rows)
+    print("\ndoes a funded budget make a cheaper embedding competitive?")
+    _arm_summary(rows)
+    _per_second(rows)
+
+
 def study_adamonly(out: Path) -> None:
     """Test whether the ARCHITECTURE lets Adam replace quasi-Newton -- section 7.5.27.
 
@@ -1647,6 +1696,7 @@ STUDIES = {
     "bakeoff": study_bakeoff,
     "bandsbudget": study_bandsbudget,
     "adamonly": study_adamonly,
+    "fourierbudget": study_fourierbudget,
 }
 
 
