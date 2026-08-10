@@ -2000,8 +2000,9 @@ worst-seed margin:
 | **adam300** [jax] | 0.1935 · **no front** | 0.0880 · +2.6 K | 0.0363 · +9.5 K |
 | **adam3000** [jax] | 0.0762 · +2.4 K | 0.0545 · +3.7 K | 0.0358 · +5.3 K |
 
-> **Read with §7.5.31a.** This surface is measured at `n_colloc = 4000`, which is 0.32
-> residuals per parameter — a 3.1× *underdetermined* system, against a literature that
+> **Read with §7.5.31a.** This surface is measured at `n_colloc = 4000` — 6000 points once
+> the early-time cluster is counted — which is 0.48
+> residuals per parameter — a 2.07× *underdetermined* system, against a literature that
 > prescribes overdetermination. A quasi-Newton iteration is full-batch and therefore
 > linear in the point count, so the affordability of a 3000- or 30000-iteration
 > quasi-Newton stage is itself a consequence of that count. The conclusion below holds at
@@ -2963,14 +2964,21 @@ and prescribes overdetermining the system: collocation points substantially exce
 parameters. Other work sets point counts per sub-problem specifically to hold the
 residuals-to-parameters ratio fixed.
 
-This model's numbers are on the wrong side of that line. Four residual blocks per
-collocation point and 50 309 parameters give:
+This model's numbers are on the wrong side of that line. The sampler draws
+`n_colloc` uniform points **plus `n_colloc // 2`** in an early-time cluster, so the
+shipped `n_colloc = 4000` is **6000 points** per step; at four residual blocks each and
+49 797 *trainable* parameters (50 309 includes the 512 frozen `B` entries):
 
-| `n_colloc` | residuals | residuals / parameters | `qn30000` cost |
-|---|---|---|---|
-| **4000 (shipped)** | 16 000 | **0.32** | 2.5 h |
-| 12 578 | 50 312 | 1.00 (break-even) | 7.9 h |
-| 16 000 | 64 000 | 1.27 | 10.1 h |
+| `n_colloc` | points drawn | residuals | residuals / parameters | `qn30000` cost |
+|---|---|---|---|---|
+| **4000 (shipped)** | 6000 | 24 000 | **0.482** | 2.5 h |
+| 8300 | 12 450 | 49 800 | 1.00 (break-even) | 5.2 h |
+| 10 540 | 15 810 | 63 240 | 1.27 | 6.6 h |
+
+> An earlier revision of this table said 4000 points, 16 000 residuals and a ratio of
+> 0.32 — it forgot the early-time cluster, which is half as many points again. The system
+> is underdetermined by 2.07×, not 3.1×. The argument is unaffected; the arithmetic was
+> wrong by 1.5× and is corrected here rather than quietly.
 
 **And our own training loop already cites that paper — for the other half of its
 argument.** The JAX Adam loop resamples every step and the comment says a frozen set is
@@ -2989,8 +2997,27 @@ hard toward Adam. **`adam 10^5 / qn 10^3` may be the rational choice at their ra
 `adam 30 / qn 30000` the rational choice at ours**, with no disagreement about the
 optimisers at all.
 
-So the finding should be read as *"at 0.32 residuals per parameter, the quasi-Newton axis
-dominates"*, not as a general claim about first- against second-order methods. Whether
+##### And Adam is run FULL BATCH, which is the larger confound
+
+Every Adam step in this project evaluates **all 6000 points**. That is a full-batch
+gradient with momentum and per-coordinate scaling — it is not stochastic minibatch Adam,
+and there is no separate knob for an Adam batch size: one sampler feeds both stages.
+
+That explains §7.5.29's cost measurement entirely. Adam at 107.8 ms per iteration against
+L-BFGS at 99.3 ms looks like a tie because **both evaluate 6000 residuals per step**, and
+that evaluation is essentially the whole cost. Adam's advantage in the literature comes
+from *not* doing that — 128 or 256 points per step is 20–45× cheaper, so 20–45× more
+steps fit in the same wall-clock.
+
+So "Adam is 19× worse at comparable wall-clock" is properly read as **"full-batch Adam is
+19× worse than L-BFGS on the same full batch"**. That is a far narrower claim, and an
+unsurprising one: a full-batch first-order method against a full-batch second-order method
+on an ill-conditioned problem is the comparison quasi-Newton is supposed to win. **The
+property that makes Adam worth using was never given to it here.**
+
+So the finding should be read as *"at 0.48 residuals per parameter, with Adam run full
+batch, the quasi-Newton axis dominates"*, not as a general claim about first- against
+second-order methods. Whether
 0.0017 is a ceiling imposed by the underdetermined set, or achieved despite it, is
 unmeasured — and §7.5.30 notes the ansatz and embedding are evidently doing the
 constraining, since the fixed 4000-point solution generalises to a reference on a
