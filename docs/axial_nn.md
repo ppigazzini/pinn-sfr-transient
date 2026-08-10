@@ -2793,6 +2793,72 @@ Two consequences, both acted on:
   under-converged budget measures which architecture reaches the under-converged state
   faster, which is a different question from which is more accurate.*
 
+#### 7.5.29 The embedding is representation, not preconditioning — and Newton is the cheap one
+
+Two questions answered together, JAX, seed 0, at the shipped configuration except where
+the row says otherwise.
+
+**Is the Fourier embedding just a preconditioner?** §7.5.24 showed the *multi-band*
+embedding is subsumed by a funded budget. If the embedding *itself* were also only
+preconditioning, then removing it and funding the quasi-Newton stage fully should recover
+the same answer. It does not:
+
+| arm | embedding | budget | `T_s` | margin | sec |
+|---|---|---|---|---|---|
+| **shipped default** | f256 | adam30 / qn30000 | **0.0017** | **+67.6 K** | 9060 |
+| **no embedding, funded** | none | adam30 / qn30000 | **0.0397** | **+0.8 K** | 2980 |
+| no embedding, Adam only | none | adam30000 / qn0 | 0.0443 | **−1.6 K** | 3233 |
+| no embedding, AdEMAMix | none | adam30000 / qn0 | 0.0460 | +0.9 K | 3465 |
+| f256, Adam only | f256 | adam30000 / qn0 | 0.0329 | +21.6 K | 10149 |
+
+**23× worse with the front gone.** +0.8 K of margin against the reference's +69.2 K, out
+of a 590 K range. So the two embedding results are opposite and both stand: *splitting* a
+fixed feature budget across bands is preconditioning, which the funded optimiser
+duplicates; *having* the embedding at all is **representation** — high-frequency capacity
+a raw-coordinate MLP cannot synthesise, and no amount of curvature buys it.
+
+The sharpest line in the table is that **without the embedding nothing forms a front** —
+−1.6 K, +0.8 K, +0.9 K, all at or below the noise floor whatever the optimiser. The
+Fourier features are what make the front *representable*; the quasi-Newton budget is what
+makes it *accurate*. Neither substitutes for the other.
+
+##### The first-order methods buy nearly nothing, and they are not cheaper
+
+Adam-only at 30000 iterations reaches 0.0329 with the embedding against the funded
+stage's 0.0017 at comparable wall-clock — **19× worse** — and lands in the 0.04–0.05 band
+every Adam arm on disk saturates in. AdEMAMix, at `optax.contrib` defaults, is *worse*
+than Adam here (0.0460 against 0.0443), which does not reproduce `REPORT-01`'s 0D note of
+~2× better beyond 8000 iterations. One seed, at unswept `b3`/`alpha`, so it is stated as
+a sample and not as a refutation of that note.
+
+**And the cost argument for preferring them is backwards in this repository.** Wall-clock
+per nominal iteration, measured at matched configuration and matched iteration count:
+
+| configuration | L-BFGS | Adam | AdEMAMix |
+|---|---|---|---|
+| no embedding | **99.3 ms** | 107.8 ms | 115.5 ms |
+| f256 | **302.0 ms** | 338.3 ms | — |
+
+**The quasi-Newton stage is the cheapest of the three, in both configurations** — 1.09×
+to 1.16× cheaper per iteration than the first-order methods it is supposed to be an
+expensive alternative to. The mechanism is implementation, not theory: the quasi-Newton
+stage is a jitted `fori_loop` while the Adam stage steps through Python, and at this
+problem size the per-step cost is dominated by the residual gradient, which both pay
+identically. Adam and AdEMAMix are also indistinguishable from each other at the step
+level — measured back to back at identical configuration, `ademamix/adam = 0.994`.
+
+That removes the usual justification for the Adam→L-BFGS split. The literature calls
+higher-order methods "computationally expensive" (arXiv:2605.24278's own phrasing); here
+the higher-order stage is **faster per iteration and 19× more accurate**, and the
+first-order stage is very nearly free to delete — §7.5.20 measured `adam0/qn30000` at
+0.0018 against `adam30`'s 0.0017, with overlapping seed ranges.
+
+> **Read this as a statement about this implementation and this problem size.** 50 309
+> parameters, full batch, float64, on CPU. Every condition that makes a first-order
+> method necessary elsewhere — minibatch noise, parameter counts where storing 50
+> curvature pairs is impossible — is absent. The measurement is not that Adam is a bad
+> optimiser; it is that nothing here needs what Adam provides.
+
 ### 7.6 Pseudo-time stepping
 
 Implemented (`pts_every`, `pts_dtau`, `pts_growth`), and **measured harmful** in
@@ -2852,6 +2918,7 @@ Sorting every isolated arm by what it changed:
 |---|---|
 | **the function space** — Fourier capacity (§7.5.8), multi-scale bands (§7.5.14), anisotropic bandwidth (§7.5.12) | **capacity worked.** Bands and anisotropic bandwidth worked *only at a starved quasi-Newton budget*: at `qn30000` bands are 5.6× worse on the mean and lose half the margin (§7.5.24), because a multi-band basis is an implicit preconditioner the funded optimiser no longer needs |
 | **the optimiser** — quasi-Newton budget (§7.5.11), curvature memory (§7.5.17) | **decisive**; the only axis that forms the front at all |
+| **the first-order stage** — Adam, AdEMAMix (§7.5.29) | **buys nearly nothing, and is not cheaper.** `adam0` matches `adam30` at the funded budget; Adam-only is 19x worse; and per iteration L-BFGS is the *cheapest* of the three (99.3 ms against 107.8 and 115.5) |
 | **the loss measure** — level-set sampling (§7.5.6), front fraction (§7.5.9), block and causal weighting | **failed or inert**; `frontfrac` degrades monotonically |
 | **extra residuals** — onset head (§7.5.16), front network, pseudo-time | **harmful**; a consequence of the PDE carries no information as a constraint |
 | **re-parameterisation of the *output*** — level-set coordinate (§7.5.13), Laplace embedding (§7.5.18) | **inert**; both are functions of things the network already computes, so neither adds information. **Not** the same as a trainable change of *input* coordinate, which is a change of function space and is untested here — see the narrowing below |
