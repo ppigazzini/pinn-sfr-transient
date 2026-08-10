@@ -151,6 +151,16 @@ four times: D38, D39, the budget sweep's "monotonic" front degradation, and §7.
   diff the *arguments* before theorising about the libraries.
 - **An ablation is a statement about the formulation it was run on.** Change the
   formulation and every negative result on the shelf is provisional again (D59).
+- **The paper is a nuclear engineering paper, not a machine-learning one.** `docs/` and
+  `__DEV/` collect everything — every ML measurement, every retraction, every physics
+  derivation. `paper/` does not. It describes the **default ML system briefly** — ansatz,
+  embedding, optimiser schedule, precision, in about a page — and spends its length on
+  the **physics**: the governing equations as used, where each closure comes from in the
+  SAS4A manual, the registered deviations and their justification, the reference solution
+  and its uncertainty, what the surrogate reproduces correctly, and **what it does not yet
+  solve**. A reader should be able to judge the reactor physics without knowing what
+  L-BFGS is. Optimiser comparisons, seed statistics and backend parity belong in `docs/`
+  and are cited from the paper, not reproduced in it.
 - **The paper is not exempt from "reproducible by a committed command".** Every number in
   `paper/` must be locatable in a `__DEV/studies/*.json` row, and the check is to grep for
   it. A draft claimed a *funded* optimiser bake-off reaching "0.0296 against 0.0401" when
