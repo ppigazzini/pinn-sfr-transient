@@ -1,5 +1,15 @@
 # The paper
 
+**It is a nuclear engineering paper, not a machine-learning one.** `docs/` and `__DEV/`
+collect everything — every ML measurement, every optimiser comparison, every retraction.
+This directory does not. The paper describes the default ML system in about a page and
+spends its length on the physics: the governing equations as used, where each closure
+comes from in the SAS4A manual, the registered deviations and their justification, the
+reference solution and the resolution it actually has, what the surrogate reproduces, and
+what it does not yet solve. A reader should be able to judge the reactor physics without
+knowing what L-BFGS is.
+
+
 Two copies of the same paper, and they are not redundant:
 
 - **`paper.md`** — the working draft. Reviewable in a pull request, checked by
