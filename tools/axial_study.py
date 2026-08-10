@@ -212,6 +212,13 @@ def run_arm(traj: Any, label: str, backend: str, **kw: Any) -> dict:  # noqa: AN
         # The affinity size is the budget that actually binds both backends; `omp`
         # binds only torch. A row without this cannot be compared on wall-clock.
         "cpus": len(os.sched_getaffinity(0)),
+        # Knobs that are almost never passed explicitly and were therefore invisible in
+        # every row ever written: `lr` appears in no study file at all, so "what learning
+        # rate was that measured at" could only be answered by reading the code at the
+        # commit it ran on. `**kw` records what an arm OVERRODE; these record what it
+        # actually used. A row that cannot state its own configuration is the defect
+        # AGENTS.md already names for budgets, and it applied here too.
+        **_effective(backend),
         **kw,
     }
     print(
@@ -265,6 +272,23 @@ def _selected(label: str, wanted: list[str]) -> bool:
         if bare.startswith(w) and (len(bare) == len(w) or bare[len(w)] in " /"):
             return True
     return False
+
+
+def _effective(backend: str) -> dict:
+    """Return config knobs that matter and are rarely overridden, as actually defaulted.
+
+    Read from the backend's own dataclass rather than from the caller's kwargs, so the
+    row states the value that was used and not merely the ones someone thought to change.
+    """
+    import importlib  # noqa: PLC0415
+
+    try:
+        cfg = importlib.import_module(
+            f"pinn_sfr_transient.axial.{backend}pinn.config"
+        ).AxialTrainConfig()
+    except SystemExit:  # backend extra absent; nothing to record
+        return {}
+    return {"lr": float(cfg.lr), "first_order": getattr(cfg, "first_order", "adam")}
 
 
 def run_all(
