@@ -96,7 +96,7 @@ capacity decides *how sharp a peak is representable at all*.
 
 | | |
 |---|---|
-| **M4 acceptance** | onset within 0.5 s and one cell — **not met**; both criteria are now known to be measurable (§6.5) |
+| **M4 acceptance** | onset within 0.5 s and one cell — **time met at three seeds** (worst 0.0181 s, §7.5.16a); the height half is a tautology on a monotone `T_c` and cannot be failed, so M4 no longer discriminates |
 | **The 1% bar** | **not met**, by 3.5× at best |
 | **`L_void`** | best 0.2270 against the reference's 0.3812 — 40% short |
 | **M6 acceptance** | **failed**, 11.1% on `L2(P)` against a 1% bar |
@@ -2020,24 +2020,15 @@ front. **The default's Adam budget is not doing measurable work**; the quasi-New
 budget is, which raises the priority of the optimiser bake-off (§8, item 1) rather
 than answering it.
 
-**§7.5.10, `capacity-optimiser` — first arms, one seed each.** The question from
-§7.5.8: does JAX convert capacity into accuracy worse because of `optax.lbfgs`?
-
-| f512, seed 0 | `T_s` | `L_void` | margin |
-|---|---|---|---|
-| torch, own L-BFGS | 0.0153 | 0.3269 | +49.4 K |
-| torch, shared | 0.0157 | 0.3260 | +48.2 K |
-| jax, own L-BFGS | 0.0336 | 0.2363 | +19.2 K |
-| jax, shared | **0.0265** | 0.2601 | **+35.6 K** |
-
-**Partly, and not wholly.** The shared implementation leaves torch unchanged
-(1.03×) and improves JAX by **1.27×** on `T_s` and 1.9× on the margin — so
-`optax.lbfgs` is a real part of the gap. But JAX-with-shared still sits 1.73× from
-torch at f512, where §7.3.2 measured the two as *equal* (0.999) once the optimiser
-was shared. **§7.3.2's conclusion does not survive the move to f512** — it was a
-statement about the configuration it was measured at, which that section already
-warned of, and this is the measurement that confirms it. One seed; the remaining
-two decide it.
+> **Superseded, and left here only as a marker.** A one-seed version of §7.5.10 stood
+> at this point, reporting `jax` f512 at 0.0336 against torch's 0.0153 and concluding
+> that JAX-with-shared "still sits 1.73× from torch at f512", so §7.3.2's parity result
+> "does not survive the move to f512". Its closing line was "one seed; the remaining two
+> decide it". They did, above: at three seeds and matched curvature memory the two arms
+> are **3% apart** and the backend ratio at f512 is **1.08×**. The 1.73× was
+> `memory_size = 10` (§7.5.17) read as a framework difference, and §7.3.2 needs no
+> rescuing. Deleting the block outright would erase a claim this document made; keeping
+> it live would leave two contradictory §7.5.10s in one section.
 
 #### 7.5.12–7.5.14 Three embeddings, at three seeds on both backends
 
@@ -2225,7 +2216,70 @@ is not: it interpolates when the peak reaches saturation, which is a real crossi
 and it says 0.62–0.84 s against a 0.5 s criterion.
 
 Since the height answer is "the top of the channel" whatever the network does, **M4
-turns entirely on the time**, and the time fails.
+turns entirely on the time**, and at *this* budget the time fails.
+
+> ### SUPERSEDED — at the funded budget the time criterion is met
+>
+> The 0.62–0.84 s above was measured at `qn3000`, where `T_s ≈ 0.029`. At the shipped
+> default (§7.5.20, `adam30/qn30000`, `T_s = 0.0017`) it is **0.0006–0.0181 s**. The
+> paragraph stands as a statement about the arm it was run on; it is not a statement
+> about the model. See §7.5.16a.
+
+#### 7.5.16a Onset time at the funded budget — three seeds, and the criterion is met
+
+`tools/onset_conditioning.py`, JAX, three seeds, at the shipped default
+(`adam_iters = 30`, `lbfgs_iters = 30000`, `t_train_frac = 0.275`, f256 — recorded in
+each row rather than inferred from the config). Onset is located by **root-finding on
+the network's own dense output**, bracketing the crossing and refining with `brentq`,
+which is how `scipy.integrate.solve_ivp` locates events. That removes the grid
+quantisation the paragraph above complains about, from both sides of the comparison.
+
+**The reference onset is 10.9784 s, not 10.75 s.** 10.75 is a point on the 0.25 s
+output grid; the crossing is 0.23 s later. Every onset error quoted before this
+section was measured against a grid point, and roughly a quarter of a second of the
+"miss" was the ruler's own quantisation.
+
+| seed | `t*` network | `\|Δt\|` | outlet `L∞`, ±2 s window | `L2` on `T_c` |
+|---|---|---|---|---|
+| 0 | 10.9848 s | 0.0064 s | 1.511 K | 0.001648 |
+| 1 | 10.9789 s | 0.0006 s | 1.502 K | 0.001692 |
+| 2 | 10.9965 s | 0.0181 s | 1.591 K | 0.001777 |
+
+**Worst seed 0.0181 s against a 0.5 s criterion, on three seeds.** M4's *time* half is
+met, and it is met by the budget alone — no onset residual, no tangency head, no
+sampling change. The same axis that took `T_s` from 0.0258 to 0.0017 took the onset
+error with it.
+
+**Two things are stated here rather than in a caveat below.**
+
+The **seed spread is 32×**, 0.0006 to 0.0181 s. The criterion holds on every seed, so
+the verdict is safe — but this is the widest spread of any quantity in this document,
+and no ranking of any arm may be built on it at fewer than three seeds.
+
+And **the result sits at a test uncertainty ratio of 2.0 against the ruler**
+(§7.5.22). The reference's own onset is uncertain by 0.009 s at the scoring mesh
+(§7.5.21), so the worst seed is twice that and the best seed is *below* it. The bar
+itself is sound at a ratio of 56. But "28× inside the criterion" is not a statement
+this reference can support, and it is not made: **met** is what the measurement
+carries, and how far inside is now the ruler's question, exactly as for the
+temperature bar at 1.06.
+
+**The conditioning hypothesis this tool was built to test is refuted, in the useful
+direction.** Annex E.6 asked whether onset time is an *amplifier* of field error,
+`δt ≈ ‖δT‖∞ / |Ṫ_out(t*)|`. Measured: `Ṫ_out = +25.57` K/s at the crossing, an
+amplification of 0.0391 s/K, so the outlet `L∞` of ~1.5 K predicts `δt ≈ 0.059` s.
+The measured errors are **0.11 / 0.01 / 0.29 of that**. The bound is loose by roughly
+an order of magnitude, not violated: `L∞` over a ±2 s window bounds the error
+*somewhere* in the window, and the error *at the crossing* is much smaller. So onset
+is not amplifying field accuracy — it is converting it at better than the first-order
+rate, and buying timing through field accuracy is efficient rather than wasteful.
+
+**What this leaves of M4.** The time half is met. The height half remains what the
+retraction above says it is: `T_c` is monotone in `ζ`, so both the network and the
+reference put the peak at the last node and any height error is a tautology. M4 as
+written cannot be failed on height and is now passed on time, which means **M4 no
+longer discriminates between formulations** and should be replaced rather than
+chased. §8 is written on the assumption that onset is the open problem; it is not.
 
 **The head is confirmed harmful at three seeds** — `T_s` +18%, worst margin −49%, and
 tangency `t_err` **2.4× worse** (0.71 s → 1.81 s mean). That last number is the
@@ -2442,6 +2496,137 @@ The second is free and is the direction §8 already points.
 for every published bar belongs in `axial_study.py`, so that a bar and its ratio are
 emitted together and neither can be quoted alone.
 
+#### 7.5.23 Plan A's 84–92% miss is not a sampling problem
+
+§7.4 measured the closed reactivity loop missing 84–92% of the **void** integral while
+the Doppler integral — same fields, same network, non-cancelling weight — is right to
+1.017. Every remedy proposed for it since has been a *sampling* remedy: put more
+collocation points on the boiling front, where the void is.
+
+Dual-weighted-residual theory answers that without training anything. The error in a
+functional is `<R(u_theta), z*>` to leading order (Becker & Rannacher, *Acta Numerica*
+10), where `z*` solves the adjoint problem with the functional's derivative as source.
+The coolant equation is advective, so its adjoint runs **backwards** in $\zeta$ and `z*`
+accumulates the void worth from the outlet downwards. `tools/plan_a_adjoint.py` computes
+it in closed form at the time the functional peaks.
+
+| quantity | value |
+|---|---|
+| `J+` (positive worth) | +4.656e-04 |
+| `J-` (negative worth) | −1.695e-04 |
+| cancellation ratio | 0.4663 |
+| `\|z*\|` at the inlet | 6.09e-06 |
+| `\|z*\|` at the outlet | 0.0 |
+| support | 72% of the channel, up to $\zeta = 0.7156$ |
+
+**The adjoint is a step function**, and more sharply than the hypothesis predicted: the
+void slope underflows to *exactly* zero wherever the coolant is subcooled, so the adjoint
+source lives only on the boiling band, and accumulating from the top makes `z*` zero above
+the band and constant below it.
+
+Two consequences. Every point in the lower channel carries **equal** sensitivity and every
+point above the front carries **none** — so residual-magnitude sampling, which
+concentrates at the front, aims at the region the functional is insensitive to and would
+be expected to hurt. And a uniform sampler is already near-optimal here, which means the
+miss is not about where the points go at all: it is the field's accuracy in the lower
+channel, weighted by a constant.
+
+The cancellation ratio is the other half of the answer. At 0.4663 a relative error of
+$\epsilon$ on each half becomes 2.1 $\epsilon$ on the sum, so **`J+` and `J-` are reported
+separately from here on**. A single near-cancelling number can be right by accident, and
+when it is wrong it does not say which half failed.
+
+#### 7.5.25 M4 is retired, and what has to replace it
+
+M4 asks for onset within 0.5 s **and** one cell. Both halves are now dead, for opposite
+reasons, and neither death is the network's fault.
+
+- **The height half cannot be failed.** `T_c` is monotone in `ζ`, so the peak is the last
+  node for the network and for the reference alike (§7.5.16's retraction). Any height
+  error is a tautology.
+- **The time half is passed**, at three seeds, by the budget alone (§7.5.16a).
+
+So M4 no longer separates two formulations, and an acceptance criterion that cannot
+separate two formulations is not a criterion. Chasing it further would be measuring
+nothing.
+
+**What a replacement has to clear.** Two hurdles, not one, and this project has only
+ever checked the first:
+
+1. its **bar** must sit at least 4× above the reference's own error on that quantity —
+   the test uncertainty ratio of §7.5.22, whose absence retracted D35; and
+2. the **network's current error** must itself sit well above that same reference error,
+   or there is no headroom left to rank anything in.
+
+Hurdle 2 is new here and it is what kills most of the obvious candidates. Refining the
+reference against itself at the scoring mesh (`tools/m4_bar.py`, `n_axial` 160 against
+640):
+
+| quantity | reference's own error | network now | TUR of the result |
+|---|---|---|---|
+| temperatures, relative `L2` | 1.1–1.6e-3 | 1.7e-3 | 1.06 |
+| onset time | 0.009 s | 0.0181 s | 2.0 |
+| peak voided length | 0.569% | 0.7% | 1.2 |
+| pointwise `α` | 3.15e-2 | — | 0.3 (withdrawn) |
+| **void `J+`** | **1.742%** | not split yet | — |
+| **void `J-`** | **0.053%** | not split yet | — |
+| **void `J` (sum)** | **2.735%** | **84–92%** | **≈31** |
+
+**Everything this project currently scores on has run out of room.** The temperatures,
+the onset time and the voided length are all within a factor of 2 of the reference's own
+error. That is not a complaint about the reference — it converges, and refining it is
+available and merely expensive — it is a statement that these three quantities can no
+longer rank two formulations against *this* ruler.
+
+**The closed-loop void reactivity is the exception, by a factor of thirty.** The
+reference knows its own void functional to 2.7% at the scoring mesh, and Plan A misses it
+by 84–92% (§7.4). A bar at, say, 20% would sit 7× above the ruler — hurdle 1 cleared —
+while leaving a gap the network is nowhere near — hurdle 2 cleared. It is also the
+quantity the model exists for: void feedback is what drives the ULOF excursion, and
+§7.5.23 has already shown the miss is a field-accuracy problem in the lower channel
+rather than a sampling one, so it is attackable.
+
+**Proposed M4′ — score `J+` and `J-` separately, each to 20%, three seeds, both
+backends.** Split rather than summed for the reason §7.5.23 gives: the halves nearly
+cancel, so a relative error on each becomes 2.1× that on the sum, and a single number can
+be right by accident and cannot say which half failed. The rulers differ by a factor of
+33 between them — `J+` at 1.742%, `J-` at 0.053% — which is itself informative: the
+negative-worth region is where `α` is smooth and the reference is essentially exact
+there, so `J-` is the more demanding and better-instrumented target of the two.
+
+Two things to settle before adopting it, and neither needs a network:
+
+- **Split the network's error.** §7.4's 84–92% is a miss on the *sum*. Nobody has
+  measured how it divides, and writing 84% against both halves would be inventing two
+  numbers from one. `tools/plan_a_adjoint.py` already reports the split for the
+  reference; the same split on a trained network is the first measurement M4′ requires.
+- **Consider moving the scoring mesh to `n_axial = 320` for this functional.** The ruler
+  falls from 2.735% to 0.922%, which would let the bar tighten to 5% at the same TUR. The
+  temperature fields do not need it; this functional might.
+
+**The functional peaks at t = 16.50 s** — the end of the valid window, where
+`exp(t̂ N)` has its largest excursion and the network is least constrained. So M4′ is a
+hard target as well as a live one, which is what M4 stopped being.
+
+#### 7.5.24 Are bands and budget the same gain bought twice? — designed, not yet run
+
+Two results on the shelf have never been measured against each other. §7.5.14 found
+`fourier_bands = (1, 4, 16)` reaching 99.5% of the reference voided length at the old
+`qn = 3000`; §7.5.20 found `qn = 30000` at a single band reaching `T_s = 0.0017`. Both
+were read as independent wins.
+
+The reason to doubt that is mechanistic. A feature pyramid **is** a preconditioner:
+spreading a fixed feature budget across bands equalises the curvature the optimiser sees
+across scales, which is the same ill-conditioning a longer quasi-Newton run works around
+by accumulating curvature pairs. If that is what both are doing, they are one gain bought
+twice, the interaction cell is flat, and this project should stop spending on the
+embedding axis.
+
+`uv run python tools/axial_study.py bandsbudget` is the 2×2 — the smallest design that
+can separate those, since two one-factor ladders never vary the other factor however many
+seeds each has. The control arm is `single/qn30000`, which must reproduce §7.5.20's
+0.0017 before any other cell is read.
+
 ### 7.6 Pseudo-time stepping
 
 Implemented (`pts_every`, `pts_dtau`, `pts_growth`), and **measured harmful** in
@@ -2485,7 +2670,7 @@ collocation bug. Both are findings a single backend could not have produced.
 | Three front-aimed embeddings | **measured, three seeds** — §7.5.12–§7.5.14. `fourier_bands=(1,4,16)` reaches 99.5% of the reference voided length; `zeta_scale=8` is real but cruder; `level_set_input` is inert at 1.95× the cost |
 | The Laplace embedding | **measured, and it fails** — §7.5.18. No mode beats the control on either backend at three seeds; the ansatz is already multiplicative, so it could only make a decaying mode easier and does not |
 | How much collocation goes to the front | **measured, and it fails** — §7.5.9. `T_s` degrades monotonically from 0% to 50%; re-weighting the measure is not the remedy |
-| M4 acceptance: onset within 0.5 s and one cell | **not met, and it turns entirely on the *time*** — §7.5.16. The height answer is "the outlet" whatever the network does, because `T_c` is monotone in `ζ`; the unquantised time error is 0.62–0.84 s against 0.5 s |
+| M4 acceptance: onset within 0.5 s and one cell | **the time half is met at three seeds** — §7.5.16a: 0.0006 / 0.0064 / 0.0181 s against 0.5 s at the funded default, root-found rather than read off the 0.25 s grid. The 0.62–0.84 s figure was measured at `qn3000` and is superseded. The height answer is "the outlet" whatever the network does, because `T_c` is monotone in `ζ`, so **M4 as written no longer discriminates between formulations** |
 | Is M4's criterion sound? | **yes — measured, §7.5.21.** At the scoring mesh the reference's own onset is uncertain by 0.06 cells and 0.009 s, so the criterion sits an order of magnitude above the ruler. The failure is the network's and the target is worth chasing |
 | Is Adam needed at all? | **never tested** — §7.5.11's floor is `adam30`, not `adam0`. "30 is as good as 3000" is measured; "Adam is unnecessary" is not |
 | Where the quasi-Newton axis ends | **not measured** — §7.5.11 is monotone over two decades with no interior optimum, and by §7.5.8's own rule an unterminated monotone trend is an extrapolation. Kiyani et al. run 30000 quasi-Newton iterations against this model's 3000 |
