@@ -2586,27 +2586,143 @@ quantity the model exists for: void feedback is what drives the ULOF excursion, 
 §7.5.23 has already shown the miss is a field-accuracy problem in the lower channel
 rather than a sampling one, so it is attackable.
 
-**Proposed M4′ — score `J+` and `J-` separately, each to 20%, three seeds, both
-backends.** Split rather than summed for the reason §7.5.23 gives: the halves nearly
-cancel, so a relative error on each becomes 2.1× that on the sum, and a single number can
-be right by accident and cannot say which half failed. The rulers differ by a factor of
-33 between them — `J+` at 1.742%, `J-` at 0.053% — which is itself informative: the
-negative-worth region is where `α` is smooth and the reference is essentially exact
-there, so `J-` is the more demanding and better-instrumented target of the two.
+**A proposed M4′ scoring `J+` and `J-` separately, each to 20%, has been measured and
+half of it is dead.** `tools/plan_a_adjoint.py --network` trains at the shipped default
+and splits the network's own functional. Three seeds, JAX:
 
-Two things to settle before adopting it, and neither needs a network:
+| seed | `J+` error | `J-` error |
+|---|---|---|
+| 0 | 1.66% | **0.0000%** |
+| 1 | 2.10% | **0.0000%** |
+| 2 | 2.66% | **0.0000%** |
 
-- **Split the network's error.** §7.4's 84–92% is a miss on the *sum*. Nobody has
-  measured how it divides, and writing 84% against both halves would be inventing two
-  numbers from one. `tools/plan_a_adjoint.py` already reports the split for the
-  reference; the same split on a trained network is the first measurement M4′ requires.
-- **Consider moving the scoring mesh to `n_axial = 320` for this functional.** The ruler
-  falls from 2.735% to 0.922%, which would let the bar tighten to 5% at the same TUR. The
-  temperature fields do not need it; this functional might.
+**`J-` is bit-identical to the reference on every seed** — `-1.694643e-04` on both
+sides. That is not accuracy. At the time the functional peaks the negative-worth region
+is *fully voided*, `α = 1`, in the network and in the reference alike, so
+`J- = Σ w·1·dζ` is fixed by the geometry and cannot be got wrong by any network that
+boils the top of the channel at all. It is the height half of M4 again: a criterion that
+cannot be failed. **`J-` is withdrawn as a criterion**, one section after being proposed.
+
+And `J+` has no room either. 1.66–2.66% against a ruler of 1.742% is a test uncertainty
+ratio of about **1.2** — inside the ruler, exactly like the temperatures, the onset time
+and the voided length.
+
+**So the open-loop split is exhausted too, and that locates the remaining headroom
+precisely.** §7.4's 84–92% is a miss on the *closed* loop, where `ρ_void` feeds back
+into the kinetics and the error compounds; the open-loop functional evaluated on the
+network's own `α` is right to within the ruler. The two are different measurements and
+conflating them would have set a bar on the wrong one. **M4′ must be a closed-loop
+criterion** — Plan A's reactivity, not the functional evaluated on a field — and that is
+the measurement to design next.
+
+One thing survives from the analysis above and is worth keeping: if a closed-loop bar is
+set, the scoring mesh should probably move to `n_axial = 320` for it, where the
+reference's own error on `J` falls from 2.735% to 0.922% and a 5% bar would clear the 4:1
+ratio. The temperature fields do not need that; this functional would.
 
 **The functional peaks at t = 16.50 s** — the end of the valid window, where
 `exp(t̂ N)` has its largest excursion and the network is least constrained. So M4′ is a
 hard target as well as a live one, which is what M4 stopped being.
+
+#### 7.5.26 Gauss-Newton, at equal wall-clock, loses by 33x
+
+Roadmap D.4, measured. `tools/gauss_newton_experiment.py --solver dual`, the shipped
+default configuration, 9000 s against the default budget's measured 9060 s — equal
+wall-clock, not equal iterations, for the reason §7.5.17a gives.
+
+The step is solved in **residual space**: with `m = 24000` residuals against
+`n = 50309` parameters the dual system is the smaller one, so a subsample of 3000 rows
+is formed densely and Cholesky-solved, which removes the sketch rank, the CG tolerance
+and the preconditioner from the surface in one move (arXiv:2505.21404).
+
+| | dual Gauss-Newton | shipped default |
+|---|---|---|
+| wall-clock | 9271 s | 9060 s |
+| steps | 37 | — |
+| training loss | 6.22e-2 → 1.12e-4 | — |
+| `T_s` | **0.0569** | **0.0017** |
+| `L_void` | 58% of reference | 99.3% |
+| worst margin | +9.6 K | +67.6 K |
+
+**33× worse than L-BFGS at the same price**, and it *stalled*: the last four steps moved
+the loss by nothing while the damping climbed to `λ = 2.1e7`, which is Levenberg-Marquardt
+collapsing the step towards gradient descent. Seed 0, one sample — stated, though at 33×
+the seed is not the question.
+
+Note the loss fell 560× while `T_s` stayed poor. That is the measure bug of Annex C in a
+new place: the training loss is a mean over collocation points and the score is a field
+norm against the reference, and a method can drive one a long way without the other.
+
+**D.4 is refuted on its own terms.** The premise was that ill-conditioning — measured at
+8.1e7 in the probe — makes a curvature-aware step worth its cost. It is not: L-BFGS is
+already a curvature-aware method, it accumulates that curvature for free across
+iterations, and 37 exact Gauss-Newton steps buy less than 30000 quasi-Newton ones.
+
+#### 7.5.27 The optimiser bake-off, funded at last — and plain L-BFGS wins
+
+`optimizer` ran at 3000 Adam / 300 quasi-Newton, the starved diagonal §7.5.11 shows is
+the regime where the quasi-Newton stage does not matter, and §7.5.22's audit found the
+*funded* bake-off had never been run at all. It has now, at 30 Adam / 3000 quasi-Newton,
+three seeds, JAX:
+
+| optimiser | `T_s` | worst margin | sec |
+|---|---|---|---|
+| **`lbfgs`** | **0.0258 [.0246–.0271]** | **+30.0 K** | 1033 |
+| `lbfgs-shared` | 0.0265 [.0258–.0269] | +31.4 K | 1449 |
+| `ssbfgs` | 0.0421 [.0392–.0453] | +6.5 K | 1701 |
+
+**Plain L-BFGS wins on both columns.** Self-scaled BFGS is 63% worse on the mean and
+loses 79% of the margin at 1.65× the wall-clock — and the margin is the column that says
+whether there is a boiling front at all. `lbfgs-shared`, this repository's own
+implementation, tracks the framework one to 3%, which is the parity check that makes the
+comparison readable.
+
+This is the regime-dependent negative §7.5.2 predicted from first principles: L-BFGS
+already applies the Oren–Luenberger scaling to `H₀` every iteration, so self-scaling is
+largely redundant against an L-BFGS baseline while supplying something real against the
+unscaled full-memory BFGS the contrary papers use.
+
+> **`ssbroyden` was dropped, for cost, and the cost is the finding.** Its arm ran **8.2
+> hours on a single seed** against `lbfgs`'s 1033 s — 28× and still going — and was
+> stopped. That is structural rather than unlucky: the Broyden replay is `O(m²n)` per
+> iteration against L-BFGS's `O(mn)`, so at `history = 50` it is ~50× the work per step,
+> and the 4.3× on record was measured at `qn300` where far fewer curvature pairs
+> accumulate. A method whose per-iteration cost scales with the square of the memory is
+> not competitive at the budget where the quasi-Newton stage actually matters. Stated as
+> a dropped arm, not omitted.
+
+#### 7.5.28 beignet implemented — the only honest test of "Adam replaces Newton"
+
+arXiv:2605.24278 reports a **trainable multi-resolution Fourier feature pyramid** reaching
+"an accuracy regime previously attained only by using computationally expensive
+higher-order optimizers", *using Adam*. The claim is about the architecture, not the
+optimiser, which is what makes it testable here — and what makes running our own Adam
+longer a strawman, since §7.5.11 measured that axis flat and every study on disk has it
+saturating near 0.04–0.05 whatever is spent.
+
+Implemented in both backends. Each level holds a learnable periodic grid queried by the
+bandlimited interpolant of that grid, `g(u) = Re Σ_k DFT(θ)[k] exp(2πi k u) / N`. The
+grids are **trainable** — which is the whole mechanism, and the one thing that separates
+this from our existing multi-band arms, whose `B` is frozen under `stop_gradient`.
+
+Correctness asserted as properties rather than numbers: the interpolant reproduces its own
+grid at the nodes to 1e-16 in both backends, interpolates between nodes rather than
+stepping, takes gradient on every grid, and the two backends agree to 4.4e-16 from the
+same grid. Short both-backend pass: torch 40.8 s, JAX 22.3 s, identical parameter counts.
+
+**One registered deviation, and it is the main scientific risk.** Fourier interpolation is
+periodic and every benchmark in the paper is a periodic problem; this channel is not,
+since `T_c` rises monotonically from inlet to outlet. `beignet_pad` maps `ζ` into the
+interior of one period. If that is insufficient the failure will appear as error
+concentrated at the inlet and outlet rather than as a uniformly worse field, and that
+distinction decides whether a negative is about the paper or about the port.
+
+Measured cost: **1.94× a Fourier-embedding Adam step** (1613 against 831 ms/iter).
+`axial_study.py adamonly` runs it against the frozen-Fourier embedding at the same 30000
+Adam iterations and the same `lr = 1e-3`, one knob apart. Not yet measured.
+
+> The paper's own Table 2 puts MLP + BFGS at 7.11e-20 against beignet + Adam's 6.63e-19.
+> Even there, Adam *reaches* the higher-order regime rather than winning it.
 
 #### 7.5.24 Are bands and budget the same gain bought twice? — designed, not yet run
 
