@@ -28,6 +28,9 @@ EDITION = "ANL/NSE-SAS/5.8.1"
 TIMEOUT_S = 60
 MAX_WORKERS = 8
 RULE = "=" * 78
+# End of a Sphinx article body. Anchored on the footer rather than on a closing
+# `</div>`, because the body contains hundreds of nested divs.
+_BODY_END = r'<footer|role="contentinfo"'
 SUBRULE = "-" * 78
 
 type Html = str
@@ -117,8 +120,19 @@ def _display_math(match: re.Match[str]) -> str:
 
 def to_text(page_html: Html) -> str:
     """Convert a Sphinx page to plain text, keeping LaTeX and section anchors."""
-    body = re.search(r'<div itemprop="articleBody">(.*?)</div>\s*</div>', page_html, re.DOTALL)
-    text = body.group(1) if body else page_html
+    # From the body open tag to the page footer, NOT to the first nested `</div></div>`.
+    # The non-greedy version of this stopped at the first closing pair inside the body and
+    # silently truncated every long page: chapter 4 kept 24 of its 52 section-4.5
+    # equations, losing 4.5-25 -- the sodium void worth this project implements and cites.
+    # A page is a Sphinx article followed by a footer, so the footer is the reliable end;
+    # `_BODY_END` is asserted to exist so a template change fails loudly.
+    start = re.search(r'<div itemprop="articleBody">', page_html)
+    if start is None:
+        text = page_html
+    else:
+        rest = page_html[start.end() :]
+        end = re.search(_BODY_END, rest)
+        text = rest[: end.start()] if end else rest
 
     text = re.sub(r"<(script|style).*?</\1>", "", text, flags=re.DOTALL)
     text = re.sub(
