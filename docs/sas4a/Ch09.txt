@@ -3019,6 +3019,174 @@ TABLE 101 "T473 Pre-Transient History"
  9.65389E+07 1.00000E+00 4.85789E-02 1
 END
 
+Table 9.6.1 Input data utilized by the MFUEL model
+ | 
+
+ | 
+Variable Name
+ | 
+
+ | 
+
+ | 
+ICLAD1
+ | 
+
+ | 
+IPLUP
+ | 
+
+ | 
+IYLD
+ | 
+
+ | 
+KHDBK
+ | 
+
+ | 
+YLDTAB
+ | 
+
+ | 
+YLDTEM
+ | 
+
+ | 
+MSTEP
+ | 
+
+ | 
+IRHOK
+ | 
+
+ | 
+IMETAL
+ | 
+
+ | 
+IFUELO
+ | 
+
+ | 
+IFUELM
+ | 
+
+ | 
+IEUTOPT
+ | 
+
+ | 
+AXHI
+ | 
+
+ | 
+IDSSC
+ | 
+
+ | 
+PLENL
+ | 
+
+ | 
+RBR
+ | 
+
+ | 
+RER
+ | 
+
+ | 
+RBRPL
+ | 
+
+ | 
+RERPL
+ | 
+
+ | 
+RINFP
+ | 
+
+ | 
+ROUTFP
+ | 
+
+ | 
+PLIN
+ | 
+
+ | 
+TPLIN
+ | 
+
+ | 
+FLTPOW
+ | 
+
+ | 
+P0GAS
+ | 
+
+ | 
+BONDNA
+ | 
+
+ | 
+CDOSECONV
+ | 
+
+ | 
+W0
+ | 
+
+ | 
+RHOREF
+ | 
+
+ | 
+WUREF
+ | 
+
+ | 
+WPUREF
+ | 
+
+ | 
+WZRREF
+ | 
+
+ | 
+FPRSTY
+ | 
+
+ | 
+RAPIDEUT
+ | 
+
+ | 
+HFMELT
+ | 
+
+MFUEL prints detailed steady state and transient results for the fuel
+characterization to standard SAS output.
+IF IDSSC input is set to 1, steady-state
+results will be printed for each user-controlled coarse time step.
+Otherwise, only end of steady state simulation results will be printed.
+Users has the ability to print results with a desired frequency for
+steady-state and transient simulations. Steady-state print frequency can
+be controlled by the size of the power/flow Table. Transient print
+frequency can be controlled by IPO and
+IPOBOI inputs. In addition to standard
+output, each SAS run with MFUEL activation creates binary files for each
+channel storing the peak values of essential parameters at every time
+step. Steady-state and transient binary files including the peak values
+of relevant parameters as a function of time are named as
+MFUELss_Ci.dat and MFUELts_Ci.dat, respectively where i is the
+channel number. Steady-state binary file including the axial
+distribution of the relevant parameters as time snapshots is named as
+MFUELss_Ci-axial.dat.
+
 
 ------------------------------------------------------------------------------
 [page: Part03/Ch09/references.html]

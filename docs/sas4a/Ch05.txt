@@ -313,7 +313,564 @@ Expansion tank with cover gas
  | 
  | 
 Compressible gas volume, no liquid
- |
+ | 
+
+Table 5.2.2 Liquid Flow Element Types Used in PRIMAR-4
+ | 
+
+ | 
+Type Number
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+1
+ | 
+ | 
+Core subassemblies, SAS channels
+ | 
+
+ | 
+2
+ | 
+ | 
+Core bypass assemblies
+ | 
+
+ | 
+3
+ | 
+ | 
+Pipe
+ | 
+
+ | 
+4
+ | 
+ | 
+Check valve
+ | 
+
+ | 
+5
+ | 
+ | 
+Pump
+ | 
+
+ | 
+6
+ | 
+ | 
+IHX, shell side
+ | 
+
+ | 
+7
+ | 
+ | 
+IHX, tube side
+ | 
+
+ | 
+8
+ | 
+ | 
+Steam generator, sodium side
+ | 
+
+ | 
+9
+ | 
+ | 
+DRACS heat exchanger, tube side
+ | 
+
+ | 
+10
+ | 
+ | 
+DRACS heat exchanger, shell side
+ | 
+
+ | 
+11
+ | 
+ | 
+Valve
+ | 
+
+ | 
+12
+ | 
+ | 
+Air dump heat exchanger, sodium side
+ | 
+
+ | 
+13
+ | 
+ | 
+Annular element
+ | 
+
+ | 
+15
+ | 
+ | 
+Annular pump
+ | 
+
+The hydraulic equations for the primary and intermediate heat-transport
+loops are solved by a semi-implicit or fully implicit time differencing
+scheme in which the pressures and flows for all connected compressible
+volumes and segments are solved for simultaneously. By linearizing the
+equations for each time step, a semi-implicit or fully implicit solution
+can be obtained without resorting to iteration techniques. Linearized
+semi-implicit or fully implicit methods are most useful for long
+transients in which temperatures and flows change slowly, since in such
+cases accurate results can be obtained with large time steps so long as
+the step sizes are small enough that changes during a step are small.
+
+Three equations are used in calculating the pressures in the
+compressible volumes and the flow rates in the connecting liquid
+segments. They are the momentum equation for incompressible single-phase
+flow in a segment, an expression for the average flow rate in a segment
+during a time step, and an expression for the change in pressure in a
+compressible volume as a result of flow into it and out from it during a
+time step. Each of these equations is taken up in turn.
+
+[anchor: momentum-equation]
+
+### 5.2.1.1. Momentum Equation
+
+The momentum equation for a single-phase incompressible liquid is taken
+as
+
+$$\frac{1}{A}\frac{\partial \text{w}}{\partial \text{t}} + \frac{1}{A^{2}}\frac{\partial}{\partial \text{z}}\left( \frac{w^{2}}{\rho} \right) + \frac{\partial \text{p}}{\partial \text{z}} + \left( \frac{\partial \text{p}}{\partial \text{z}} \right)_{\text{loss}} = 0$$ [eq 5.2-1]
+
+where
+
+ $w$ = the mass flow rate
+
+ $A$ = the flow area
+
+ $\rho$ = the density of the liquid
+
+ $\frac{\partial \text{p}}{\partial \text{z}}$ = the pressure gradient driving
+the flow
+
+ $\left( \frac{\partial \text{p}}{\partial \text{z}} \right)_{\text{loss}}$ =
+the pressure drop from all of the loss terms
+
+When Eq. (5.2-1) is integrated over a segment containing several elements,
+it can be written as the basic equation for the flow in segment $i$ :
+
+$$\sum_{\text{k}}{ \frac{L_{\text{k}}}{A_{\text{k}}}} \frac{\text{dw}\left( i \right)}{\text{dt}} = p_{\text{in}}\left( i \right)
+ - p_{\text{out}}\left( i \right) - \Delta p_{\text{fr}}\left( i \right) - \Delta p_{\text{w}2}\left( i \right) - \Delta p_{K_{in}}\left( i \right) - \Delta p_{\text{v}}\left( i \right) - \Delta p_{\text{gr}}\left( i \right) + \Delta p_{\text{p}}\left( i \right)$$ [eq 5.2-2]
+
+Here, $\text{dw} \left( i \right) / \text{dt}$ is the time rate of change of the mass flow
+rate through segment $i$ . The summation is over the elements in segment
+ $i$ , and $L_{\text{k}}$ and $A_{\text{k}}$ are the length and flow area of
+element $k$ . The term $p_{\text{in}} \left( i \right)$ is the pressure at the inlet
+to segment $i$ , which is the pressure in the compressible volume at the
+inlet of segment $i$ . The term $p_{\text{out}} \left( i \right)$ is the pressure at
+the outlet of segment $i$ , or in the compressible volume at the outlet
+of segment $i$ . The term $\Delta p_{\text{fr}} \left( i \right)$ is the frictional
+pressure change for the segment $i$ , and with the minus sign in
+Eq. (5.2-2), it is a loss term. However, this frictional loss term for the
+segment is actually the sum of similar loss terms for each element in
+the segment. The same things can be said about the remaining terms in
+Eq. (5.2-2). Together with their respective signs,
+ $\Delta p_{\text{w}2} \left( i \right)$ is any orifice or bend pressure drop
+proportional to the square of the mass flow rate,
+ $\Delta p_{\text{v}} \left( i \right)$ is any valve pressure drop,
+ $\Delta p_{\text{gr}} \left( i \right)$ is the gravity-head pressure drop, and
+ $\Delta p_{\text{p}} \left( i \right)$ is the pump-head pressure increase from all of
+the pumps in segment $i$ .
+
+In Eq. (5.2-2), $\Delta p_{K_{in}} \left( i \right)$ is the minor pressure loss that occurs at the inlet of the segment.
+This term is defined as
+
+$$\Delta p_{K_{in}}\left( i \right) = K_{in}\left(Re_{in}\right) \frac{w \left| w \right|}{2\rho A_{in}^{2}}$$ [eq 5.2-3]
+
+where $K_{out}\left(Re_{out}\right)$ is the anisotropic Re-dependent loss coefficient
+at the inlet of segment $i$ , $Re_{in}$ is the Re number at the inlet of segment $i$ 
+and $A_{in}$ is the area at the inlet of segment $i$ .
+Anisotropic Re-dependent loss coefficients at segment inlets are defined using
+SegLossCoefTableID and additional information can be found in Section 5.3.3.2.
+
+Eq. (5.2-2) has the form:
+
+$$\sum_{\text{k}}{\frac{L_{\text{k}}}{A_{\text{k}}}} \frac{\text{dw}\left( i \right)}{\text{dt}} = f \left( w,t \right)$$ [eq 5.2-4]
+
+which can be written in finite difference form
+
+$$\sum_{\text{k}}\frac{L_{\text{k}}}{A_{\text{k}}}\frac{\Delta w \left( i \right)}{\Delta t} = \theta_{\text{1}}\left( i \right)f_{\text{i}}\left( w,t \right) + \theta_{2}\left( i \right)f_{\text{i}}(w + \Delta w,t + \Delta t)$$ [eq 5.2-5]
+
+where $\theta_1 +\theta_2 = 1$ . The parameters $\theta_1$ 
+and $\theta_2$ determine the degree of implicitness of the solution.
+For a fully explicit solution, $\theta_1 = 1$ and $\theta_2 = 0$ .
+For a fully implicit solution $\theta_1 = 0$ and $\theta_2 = 1$ .
+The degree of implicitness is discussed in Section 5.2.4 and in Section 3.19.1 in Chapter 3.
+
+The linearization consists in making the approximation that
+
+$$f\left( w + \Delta w,t + \Delta t \right) = f\left( w,t \right) + \Delta t\frac{\partial \text{f}}{\partial \text{t}} + \Delta w\frac{\partial \text{f}}{\partial \text{w}}$$ [eq 5.2-6]
+
+so the flow equation becomes
+
+$$\sum_{\text{k}}{\frac{L_{\text{k}}}{A_{\text{k}}}} \Delta w \left( i \right) = \Delta t \left\{ f \left( w,t \right) + \theta_{2}\left( i \right) \left\lbrack \Delta t \frac{\partial \text{f}}{\partial \text{t}} + \Delta w\frac{\partial \text{f}}{\partial \text{w}} \right\rbrack \right\}$$ [eq 5.2-7]
+
+which takes the form
+
+$$a_{0}\left( i \right) \Delta w\left( i \right) = a_{1}\left( i \right) + \theta_{2}\left( i \right) \left\{ a_{2}\left( i \right) + \Delta t \left\lbrack \Delta p\left( ji \right) - \Delta p\left( jo \right) \right\rbrack + a_{3}\left( i \right) \Delta w\left( i \right) \right\}$$ [eq 5.2-8]
+
+or
+
+$$\Delta w \left( i \right) = \frac{a_{1}\left( i \right) + \theta_{2}\left( i \right) \left\{ a_{2} \left( i \right) + \Delta t \left\lbrack \Delta p\left( ji \right) - \Delta p\left( jo \right) \right\rbrack \right\}}{a_{0}\left( i \right) - \theta_{2}\left( i \right) a_{3}\left( i \right)}$$ [eq 5.2-9]
+
+where $ji$ and $jo$ are the compressible volumes at the inlet and outlet
+of the liquid segment.
+
+In general, the $a$ ’s are sums of contributions from each element, $k$ ,
+in the segment. The terms are
+
+$$a_{0} = \sum_{\text{k}}{\Delta a_{0}\left( k \right)}$$ [eq 5.2-10]
+
+$$\Delta a_{0}\left( k \right) = \frac{L_{\text{k}}}{A_{\text{k}}}$$ [eq 5.2-11]
+
+$$a_{1} = \Delta t\left\lbrack p\left( ji,t \right) - p\left( jo,t \right) \right\rbrack - \Delta t \Delta p_{K_{in}} + \sum_{\text{k}}{\Delta a_{1}\left( k \right)}$$ [eq 5.2-12]
+
+$$\Delta a_{1}\left( k \right) = \left\lbrack - \Delta p_{\text{fr}}\left( k,t \right) - \Delta p_{\text{gr}}\left( k,t \right) - \Delta p_{\text{w}2}\left( k,t \right) - \Delta p_{\text{v}}\left( k,t \right) + \Delta p_{\text{p}}\left( k,t \right) \right\rbrack \Delta t$$ [eq 5.2-13]
+
+$$a_{2} = \sum_{\text{k}}{\Delta a_{2}\left( k \right)}$$ [eq 5.2-14]
+
+$$\Delta a_{2}\left( k \right) = \Delta t^{2}\frac{\partial}{\partial \text{t}}\lbrack\Delta p_{\text{P}}\left( k \right) - \Delta p_{\text{fr}}\left( k \right) - \Delta p_{\text{w}2}\left( k \right) - \Delta p_{\text{v}}\left( k \right) - \Delta p_{\text{gr}}\left( k \right)\rbrack$$ [eq 5.2-15]
+
+$$a_{3} = - \Delta t \frac{\partial \Delta p_{K_{in}}}{\partial w} + \sum_{\text{k}}{\Delta a_{3}\left( k \right)}$$ [eq 5.2-16]
+
+and
+
+$$\begin{align}\begin{aligned}\frac{\partial \Delta p_{K_{in}}}{\partial w} = 2\frac{\Delta p_{K_{in}}}{w} + \frac{\Delta p_{K_{in}}}{K_{in}(Re_{in})} \frac{\partial Re_{in}}{\partial \text{w}} \frac{\partial K_{in}}{\partial Re_{in}}\\\Delta a_{3}\left( k \right) = \Delta t \frac{\partial}{\partial \text{w}} \left\lbrack \Delta p_{\text{p}}\left( k \right) - \Delta p_{\text{fr}}\left( k \right) - \Delta p_{\text{w}2}\left( k \right) - \Delta p_{\text{v}} \left( k \right) - \Delta p_{\text{gr}}\left( k \right) \right\rbrack\end{aligned}\end{align}$$ [eq 5.2-17]
+
+In the above equations, it should be recognized that $\Delta$ is used in three
+different ways. First $\Delta t$ is the time step, $\Delta w \left( i \right)$ is the
+change in the mass flow rate in the liquid segment $i$ during the time
+step, and $\Delta p \left( ij \right)$ and $\Delta p \left( jo \right)$ are the changes in pressures
+in the compressible volumes at the inlet and outlet ends of liquid
+segment $i$ during the time step. Second, the $\Delta p$ ’s in Eq. (5.2-2)
+represent pressure differences, increases or decreases, along liquid
+segment $i$ . And third, as seen in Eq. (5.2-10), Eq. (5.2-12), Eq. (5.2-14), and Eq. (5.2-16),
+the $\Delta a$ ’s are incremental contributions form each of the elements to
+the $a$ ’s for the whole segment.
+
+The denominator in Eq. (5.2-9) should never be zero because $a_3$ 
+is negative or zero, since friction increases with increased flow and
+pump head decreases with increased flow.
+
+[anchor: average-flow-rate]
+
+### 5.2.1.2. Average Flow Rate
+
+The second main equation used in the hydraulics calculation is an
+expression for the average mass flow rate in a liquid segment during a
+time step. The average mass flow rate for segment $i$ is taken as a
+simple average of the flow rate at the beginning of the time step and
+that at the end of the time step.
+
+$$\overline{w}\left( i \right) = \frac{\left\lbrack w \left( i,t \right) + w \left( i,t + \Delta t \right) \right\rbrack}{2}$$ [eq 5.2-18]
+
+Linearization consists in expanding $w \left( i,t + \Delta t \right)$ to two terms
+and finite differencing the time derivative to give
+
+$$\overline{w} \left( i \right) = \frac{2 w \left( i,t \right) + \Delta w \left( i \right)}{2}$$ [eq 5.2-19]
+
+Eq. (5.2-19) relates the average mass flow rate in a segment during a
+time step to the change in the mass flow rate during that time step.
+
+[anchor: compressible-volume-pressure-changes]
+
+### 5.2.1.3. Compressible Volume Pressure Changes
+
+The third main equation in the hydraulics calculations is an expression
+for the change in pressure in a compressible volume during a time step.
+The pressure in a compressible volume can be affected in several ways.
+Liquid can flow in or out through the segments connecting the
+compressible volumes. The entering liquid may be at a higher or lower
+temperature than that already there, and the liquid flowing out removes
+liquid at the compressible volume temperature. In addition to the
+changes related to the liquid flows, the compressible volumes can be
+heated or cooled externally, or liquid can be added or withdrawn by an
+external agent. The flow of cover gas into or out of the compressible
+volume will also affect the pressure. The cover gas flows are treated
+separately, as in Section 5.7.
+
+The pressure in a compressible volume is assumed to vary linearly with
+changes in the mass or temperature of the liquid. Therefore, the change
+ $\Delta p \left( j \right)$ in pressure in the compressible volume $j$ during a time
+step is taken as a linear approximation in the average mass flow rates
+into and out from that compressible volume as:
+
+$$\Delta p\left( j \right) = b_{0}\left( j \right) + b_{1}\left( j \right)\left\lbrack \sum{{\overline{w}}_{\text{in}}\left( j \right)
+- \sum{{\overline{w}}_{\text{out}}\left( j \right) }} \right\rbrack + b_{2}\left( j \right) \left\lbrack \sum{{\overline{w}}_{\text{in}}\left( j \right) T_{\text{in}} - \sum{{\overline{w}}_{\text{out}} T_{\text{out}}\left( j \right)}} \right\rbrack$$ [eq 5.2-20]
+
+Here
+ $\sum{\overline{w}}_{\text{in}}\left( j \right)$ 
+is the sum of the average mass flow rates into compressible volume $j$ 
+from all of the attached liquid segments flowing into it. It should be
+noticed that Eq. (5.2-19) is the expression for the average mass flow rate
+in a segment, and if that segment flows into compressible volume $j$ ,
+then it is included with all of the other segment contributions to
+compressible volume $j$ .
+Similarly, $\sum{\overline{w}}_{\text{out}}\left( j \right)$ 
+is the sum of the average mass flow rates out of the compressible volume
+ $j$ from all of the attached liquid segments flowing out. The last two
+sums in Eq. (5.2-20) are the same as the ones just described except that
+all of the mass flow rates are multiplied by the temperatures of the
+flows: the average mass flow rates flowing into the compressible volume
+are multiplied by the temperatures in the respective segments, whereas
+the average mass flow rates flowing out are each multiplied by the
+temperature in the compressible volume. The coefficients
+ $b_1 \left( j \right)$ and $b_2 \left( j \right)$ include the time-step size
+and are computed for each type of compressible volume. The remaining
+term $b_0 \left( j \right)$ also contains the time step size and can be
+used to account for the effects of heat transfer to the compressible
+volume liquid from the compressible volume wall or from other
+components.
+
+[anchor: estimated-core-flow]
+
+## 5.2.2. Estimated Core Flow
+
+The liquid segments representing the core channels are a special case.
+In principle, the coolant mass flow rates in the core channels could be
+calculated simultaneously along with the other segments in the primary
+loop. But after the onset of boiling in the core, this would unduly
+complicate the boiling model. Instead, an estimate of the core mass
+flow rates is made from information stored by the core channel coolant
+dynamics routines during the previous time step, and this estimated flow
+is included in the primary loop calculation. After the primary and
+intermediate loop hydraulics calculations have been done, the core
+channel coolant dynamics routines compute the actual channel flows for
+each channel independently, using the newly calculated inlet and outlet
+plenum pressures as boundary conditions. Then, the differences between
+the estimated core flow and the actual computed core flow for a time
+step is used to adjust the coolant masses in the inlet and outlet
+plenums before the start of the calculations for the next time step.
+
+The mass flow rate for core channel $ic$ at the end $L$ , where $L = 1$ 
+is the inlet and $L = 2$ is the outlet, is estimated by the momentum
+equation
+
+$$\frac{dw_{\text{c}}\left( L,ic \right)}{\text{dt}} = C_{0}\left( L,ic \right) + C_{1}\left( L,ic \right) p\left( \text{JIN} \right) + C_{2}\left( L,ic \right) p \left( \text{JX} \right) + C_{3} \left( L,ic \right) dp_c\left( L,ic \right)$$ [eq 5.2-21]
+
+where $p \left( \text{JIN} \right)$ is the pressure in the compressible volume
+representing the inlet plenum, $p \left( \text{JX} \right)$ is the pressure in the
+compressible volume representing the outlet plenum, and $dp_c\left( L,ic \right)$ 
+is the pressure drop from the core channel inlet to outlet. The rate of change
+of the mass flow rate is taken as proportional to the inlet and outlet
+pressures and the pressure drop across the core channel. The
+coefficients $C_0$ , $C_1$ , $C_2$ , and
+ $C_3$ are the information stored during the previous time step,
+and are described in Section 3.12 of Chapter 3. The channel mass flow
+rate $w_{\text{c}} \left( L,ic \right)$ is evaluated at the beginning of the time
+step.
+
+Eq. (5.2-21) can be written in finite difference form as
+
+$$\begin{split}\frac{\Delta w_{\text{c}}\left( L,ic \right)}{\Delta \text{t}} = C_{0}\left( L,ic \right)
++ C_{1} \left( L,ic \right) \left( \theta_{1c} p \left( \text{JIN} \right) + \theta_{2c} \left(p\left( \text{JIN} \right) + \Delta p\left( \text{JIN} \right) \right) \right) \\
++ C_{2} \left( L,ic \right) \left( \theta_{1c} p \left( \text{JX} \right) + \theta_{2c} \left(p\left( \text{JX} \right) + \Delta p\left( \text{JX} \right) \right) \right) \\
++ C_{3} \left( L,ic \right) \left( \theta_{1c} dp_c\left( L,ic \right) + \theta_{2c} \left( dp_c\left( L,ic \right) + \Delta dp_c\left( L,ic \right)\right)\right)\end{split}$$ [eq 5.2-22]
+
+By redefining $C_{0}\left( L,ic \right)$ and $C_{3}\left( L,ic \right)$ ,
+
+$$C_{0}'\left( L,ic \right) = C_{0}\left( L,ic \right) + C_{3} dp_c\left( L,ic \right)$$ [eq 5.2-23]
+
+and
+
+$$C_{3}'\left( L,ic \right) = \frac{C_{3}\left( L,ic \right)}{2 w_{\text{c}}\left( L,ic \right)} \frac{\Delta dp_c\left( L,ic \right)}{\Delta w_{\text{c}}\left( L,ic \right)}$$ [eq 5.2-24]
+
+Eq. (5.2-22) can be simplified to
+
+$$\begin{split}\frac{\Delta w_{\text{c}}\left( L,ic \right)}{\Delta \text{t}} = C_{0}'\left( L,ic \right)
++ C_{1} \left( L,ic \right) \left( p \left( \text{JIN} \right) + \theta_{2c} \Delta p\left( \text{JIN} \right) \right) \\
++ C_{2} \left( L,ic \right) \left( p \left( \text{JX} \right) + \theta_{2c} \Delta p\left( \text{JX} \right) \right) \\
++ 2 \theta_{2c} C_{3}' \left( L,ic \right) w_{\text{c}}\left( L,ic \right) \Delta w_{\text{c}}\left( L,ic \right)\end{split}$$ [eq 5.2-25]
+
+or
+
+$$\begin{split}\Delta w_{\text{c}}\left( L,ic \right) = \frac{\Delta t}{1 - 2\theta_{2\text{c}}\left( L,ic \right)C_{3}'\left( L,ic \right)w_{\text{c}}\left( L,ic \right)\Delta t} \left\{ C_{0}' \left( L,ic \right) \right. \\ \left.
++ C_{1}\left( L,ic \right)\left\lbrack p\left( \text{JIN},t \right) + \theta_{2\text{c}}\left( L,ic \right) \Delta p \left( \text{JIN} \right) \right\rbrack \right. \\ \left.
++ C_{2}\left( L,ic \right)\left\lbrack p\left( \text{JX},t \right) + \theta_{2\text{c}}\left( L,ic \right) \Delta p \left( \text{JX} \right) \right\rbrack \right\}\end{split}$$ [eq 5.2-26]
+
+where $\theta_{2\text{c}}$ is the degree of implicitness for core channel
+ $ic$ . Eq. (5.2-26) plays the role for each core channel that
+Eq. (5.2-9) does for all the other liquid segments in the primary loop.
+
+Before boiling begins in the core channels, the differences between the
+estimated and the actual core flows are very small, largely because
+Eq. (5.2-21) is equivalent to the equation used by the pre-boiling core
+channel coolant dynamics routines, except that the coefficients in
+Eq. (5.2-21) do not account for the effects of coolant temperature changes
+during the current time step. After boiling begins, rapid changes in
+vapor pressures cause rapid changes in the inlet plenum pressure,
+necessitating a decrease in the time step size.
+
+[anchor: method-of-solution]
+
+## 5.2.3. Method of Solution
+
+Eq. (5.2-9), Eq. (5.2-19), Eq. (5.2-20), and Eq. (5.2-26) constitute a set of
+simultaneous equations for changes in the mass flow rates $\Delta w \left( i \right)$ 
+in the liquid segments and for changes in the pressures $\Delta p \left( j \right)$ in
+the compressible volumes during a time step. Eliminating the $\Delta w$ ’s,
+these equations can be written as a single matrix equation for the
+ $\Delta p$ ’s:
+
+$$\sum_{\text{J}}{c\left( I,J \right) \Delta p\left( J \right) = d\left( I \right)}$$ [eq 5.2-27]
+
+The coefficients $c \left( I,J \right)$ and $d \left( I \right)$ are sums of contributions
+ $\Delta c \left( I,J \right)$ and $\Delta d \left( I \right)$ from each segment. From segment $i$ ,
+in which the flow is from compressible volume $I$ to compressible volume
+ $J$ , the contribution to $c \left( I,J \right)$ is
+
+$$\Delta c\left( I,J \right) = \frac{- \theta_{2}\left( i \right) \left\lbrack b_{1}\left( J \right) + b_{2}\left( J \right) T_{\text{out}}\left( i \right) \right\rbrack \Delta t}{2 \left\lbrack a_{0}\left( i \right) - a_{3}\left( i \right) \theta_{2}\left( i \right) \right\rbrack}$$ [eq 5.2-28]
+
+and the contribution to $c \left( J,I \right)$ is
+
+$$\Delta c\left( J,I \right) = \frac{- \theta_{2}\left( i \right) \left\lbrack b_{1}\left( I \right) + b_{2}\left( I \right) T_{\text{in}}\left( i \right) \right\rbrack \Delta t}{2 \left\lbrack a_{0}\left( i \right) - a_{3}\left( i \right) \theta_{2}\left( i \right) \right\rbrack}$$ [eq 5.2-29]
+
+The contribution to $d \left( J \right)$ is
+
+$$\Delta d \left( J \right) = w\left( i,t \right) + \frac{a_{1}\left( i \right) + \theta_{2}\left( i \right) a_{2}\left( i \right)}{2 \left\lbrack a_{0}\left( i \right) - \theta_{2}\left( i \right) a_{3}\left( i \right) \right\rbrack} \left\lbrack b_{1}\left( J \right) + b_{2}\left( J \right) T_{\text{out}}\left( i \right) \right\rbrack$$ [eq 5.2-30]
+
+and the contribution to $d \left( I \right)$ is
+
+$$\Delta d\left( I \right) = - w \left( i,t \right) - \frac{a_{1}\left( i \right) + \theta_{2}\left( i \right) a_{2}\left( i \right)}{2 \left\lbrack a_{0}\left( i \right) - \theta_{2}\left( i \right) a_{3}\left( i \right) \right\rbrack} \left\lbrack b_{1}\left( I \right) + b_{2}\left( I \right) T_{\text{in}}\left( i \right) \right\rbrack$$ [eq 5.2-31]
+
+The contributions to diagonal terms are
+
+$$\Delta c\left( I,I \right) = \frac{\theta_{2}\left( i \right) \left\lbrack b_{1}\left( I \right) + b_{2}\left( I \right) T_{\text{in}}\left( i \right) \right\rbrack \Delta t}{2 \left\lbrack a_{0}\left( i \right) - \theta_{2}\left( i \right) a_{3}\left( i \right) \right\rbrack}$$ [eq 5.2-32]
+
+and
+
+$$\Delta c \left( J,J \right) = \frac{\theta_{2}\left( i \right) \left\lbrack b_{1}\left( J \right) + b_{2}\left( J \right) T_{\text{out}}\left( i \right) \right\rbrack \Delta t}{2 \left\lbrack a_{0}\left( i \right) - \theta_{2}\left( i \right) a_{3}\left( i \right) \right\rbrack}$$ [eq 5.2-33]
+
+Also, $b_0 \left( J \right)$ is added to $d \left( J \right)$ and 1.0 is added to
+the diagonal terms in $c$ . In these equations $T_{\text{in}} \left( i \right)$ and
+ $T_{\text{out}} \left( i \right)$ are the temperatures at the inlet and outlet of
+the liquid segment.
+
+The contributions to the coefficients $c \left( I,J \right)$ and $d \left( I \right)$ from
+the segments representing the core channel flows are obtained from
+Eq. (5.2-26), which is re-written as
+
+$$\Delta w_{\text{c}}\left( L,ic \right) = e_{0}\left( L,ic \right) + e_{1}\left( L,ic \right) \Delta p \left( \text{JIN} \right) + e_{2}\left( L,ic \right) \Delta p \left( \text{JX} \right)$$ [eq 5.2-34]
+
+where
+
+$$\begin{split}e_{0} \left( L,ic \right) = \frac{\Delta t}{d_{\text{n}}}\left\lbrack C_{0}\left( L,ic \right) + C_{1}\left( L,ic \right) p \left( \text{JIN},t \right) + C_{2}\left( L,ic \right) p \left( \text{JX},t \right) \right. \\ \left.
++ C_{3}\left( L,ic \right) w_{\text{c}}\left( L,ic \right) \left| w_{\text{c}}\left( L,ic \right) \right| \right\rbrack\end{split}$$ [eq 5.2-35]
+
+$$e_{1} \left( L,ic \right) = \frac{\theta_{2\text{c}}\left( L,ic \right) \Delta t C_{1} \left( L,ic \right)}{d_{\text{n}}}$$ [eq 5.2-36]
+
+$$e_{2} \left( L,ic \right) = \frac{\theta_{2\text{c}}\left( L,ic \right) \Delta t C_{2} \left( L,ic \right)}{d_{\text{n}}}$$ [eq 5.2-37]
+
+and
+
+$$d_{\text{n}} = 1 - 2 \theta_{2 \text{c}} \left( L,ic \right) C_{3} \left( L,ic \right) \left| w_{\text{c}} \left( L,ic \right) \right| \Delta t$$ [eq 5.2-38]
+
+The contribution to $d \left( \text{JIN} \right)$ is then
+
+$$\Delta d \left( \text{JIN} \right) = - \left\lbrack b_{1}\left( \text{JIN} \right) + b_{2} \left( \text{JIN} \right) T_{\text{in}} \left( ic \right) \right\rbrack \left\lbrack w_{\text{c}} \left( 1,ic \right) + \frac{e_{0}\left( 1,ic \right)}{2} \right\rbrack$$ [eq 5.2-39]
+
+also,
+
+$$\Delta d \left( \text{JX} \right) = \left\lbrack b_{1}\left( \text{JX} \right) + b_{2} \left( \text{JX} \right) T_{\text{out}} \left( ic \right) \right\rbrack \left\lbrack w_{\text{c}}\left( 2,ic \right) + \frac{e_{0} \left( 2,ic \right)}{2} \right\rbrack$$ [eq 5.2-40]
+
+$$\Delta c \left( \text{JIN},\text{JIN} \right) = \left\lbrack b_{1}\left( \text{JIN} \right) + b_{2}\left( \text{JIN} \right) T_{\text{in}} \left( ic \right) \right\rbrack \frac{e_{1}\left( 1,ic \right)}{2}$$ [eq 5.2-41]
+
+$$\Delta c \left( \text{JX},\text{JX} \right) = - \left\lbrack b_{1}\left( \text{JIN} \right) + b_{2}\left( \text{JX} \right) T_{\text{out}} \left( ic \right) \right\rbrack \frac{e_{2}\left( 2,ic \right)}{2}$$ [eq 5.2-42]
+
+$$\Delta c \left( \text{JIN},\text{JX} \right) = \left\lbrack b_{1}\left( \text{JIN} \right) + b_{2}\left( \text{JIN} \right) T_{\text{in}} \left( ic \right) \right\rbrack \frac{e_{2}\left( 1,ic \right)}{2}$$ [eq 5.2-43]
+
+and
+
+$$\Delta c\left( \text{JX},\text{JIN} \right) = \left\lbrack b_{1}\left( \text{JX} \right) + b_{2}\left( \text{JX} \right) T_{\text{out}} \left( ic \right) \right\rbrack \frac{e_{1}\left( 2,ic \right)}{2}$$ [eq 5.2-44]
+
+The contributions to the coefficients $c \left( I,J \right)$ and $d \left( J \right)$ from all the
+liquid segments in a loop have been made at this point, and Eq. (5.2-27)
+is solved by Gaussian elimination to yield the pressure changes in all
+the compressible volumes in the loop during the time step. With the
+pressure changes now known, Eq. (5.2-9) is solved for the mass flow-rate
+changes in the liquid segments in the loop, and Eq. (5.2-26) is solved for
+the estimated channel flow changes during the time step. The pressure
+changes and the mass flow rate changes are then added to the values of
+the pressures and flow rates at the beginning of the time step to obtain
+the respective values at the end of the time step.
+
+The above procedure is carried out separately for the primary loops and
+for the intermediate loops. The core channel flow segments are included
+only in the primary loops.
+
+[anchor: degree-of-implicitness]
+
+## 5.2.4. Degree of Implicitness
+
+As mentioned in Section 5.2.1, the parameters $\theta_1$ and
+ $\theta_2$ determine the degree of implicitness of the calculation.
+For small time steps, a semi-implicit treatment with $\theta_1 =
+\theta_2 = .5$ is most accurate. For large time steps, a fully
+implicit calculation with $\theta_1 = 0$ and $\theta_2 = 1$ is
+more accurate and numerically more stable. As discussed in Section 3.19.1,
+the degree of implicitness is computed separately for each liquid
+segment, $i$ , as
+
+$$\theta_{2} \left( j \right) = \frac{a + b\gamma\left( i \right) + \gamma\left( i \right)^{2}}{2a + c\gamma\left( i \right) + \gamma\left( i \right)^{2}}$$ [eq 5.2-45]
+
+where
+
+$$\gamma\left( i \right) = - \frac{a_{3}\left( i \right)}{a_{0}\left( i \right)}$$ [eq 5.2-46]
+
+ $a = 6.12992$ 
+
+ $b = 2.66054$ 
+
+and
+
+ $c = 3.56284$ 
+
+Then
+
+$$\theta_{1}\left( i \right) = 1 - \theta_{2}\left( i \right)$$ [eq 5.2-47]
+
+Note that $a_3 \left( i \right)$ is always negative and is proportional to
+ $\Delta t$ , the time-step size. Eq. (5.2-45) and Eq. (5.2-46) give the results
+that $\theta_2$ approaches 0.5 for small time steps, $\theta_2$ 
+approaches 1.0 for large time steps, and $\theta_2$ makes a smooth
+transition between 0.5 and 1.0 for intermediate-sized time steps.
+
+Liquid segments attached to an almost incompressible liquid junction are a
+special case. Because such compressible volumes are much smaller than
+other compressible volumes, their time constants for changes of all
+kinds are short; and because of it, these liquid segments are treated
+with a fully implicit ( $\theta_2 = 1.0$ ) flow calculation regardless
+of time-step size.
+
+The degree of implicitness used in the calculated estimated channel flow
+for channel $ic$ is
+
+$$\theta_{2\text{c}}\left( L,ic \right) = \frac{a + b\gamma_{\text{c}}\left( L,ic \right) + \gamma_{\text{c}}\left( L,ic \right)^{2}}{2a + c\gamma_{\text{c}} \left( L,ic \right) + \gamma_{\text{c}} \left( L,ic \right)^{2}}$$ [eq 5.2-48]
+
+where $\gamma_{\text{c}}$ is given by
+
+$$\gamma_{\text{c}} = \frac{2\Delta t}{w_{\text{c}}\left( L,ic \right)C_{3}\left( L,ic \right)}$$ [eq 5.2-49]
 
 
 ------------------------------------------------------------------------------
@@ -2636,6 +3193,373 @@ INPMR4 3 0 0
  831 10 6 0 0 0 0 0 0 0 0 0
  881 10 0 0 0 0 0 0 0 0 0 50
 END
+
+PMR4IN 18 0 0
+ 1 5 30.0 4.78500E+03 129.0 303.0 1.73900E+03
+ 6 5 1.73900E+03 1.73900E+03 1.73900E+03 1.60000E+03 1.60000E+03
+ 11 5 0.0 1.60000E+03 1.60000E+03 0.0 0.0
+ 41 5 0.0-2.99600E+00-2.99600E+00-2.99600E+00 4.75600E+00
+ 46 5 4.83600E+00 4.75600E+00 4.83600E+00 9.52880E+00 1.14340E+01
+ 51 5 1.14340E+01 9.52880E+00 1.14340E+01 1.14340E+01 0.0
+ 81 5 0.0 1.0 1.0 1.0 1.0
+ 86 5 1.0 1.0 3.0 1.0 1.0
+ 91 5 3.0 2.0 1.0 1.0 2.0
+ 96 5 1.0 1.0 1.0 1.0 1.0
+ 101 5 1.0 1.0 1.0 1.0 1.0
+ 106 5 1.0 1.0 0.0 0.0 0.0
+ 161 5 0.0 3.0 1.45000E-01 1.1 2.7
+ 166 5 1.45000E-01 1.1 2.7 4.83600E+00 4.83600E+00
+ 171 5 9.32580E+00 1.79430E+00-9.00000E-01-9.00000E-01-2.98950E+00
+ 176 5 4.83600E+00 4.83600E+00 9.32580E+00 1.79430E+00-9.00000E-01
+ 181 5-9.00000E-01-2.98950E+00 9.52900E+00 1.79430E+00 9.32580E+00
+ 186 5 1.62920E+01 4.17600E+00 1.14340E+01 1.14340E+01 1.37520E+01
+ 191 5 9.52900E+00 1.79430E+00 9.32580E+00 1.62920E+01 4.17600E+00
+ 196 5 1.14340E+01 1.14340E+01 1.37520E+01 0.0 0.0
+ 301 5 0.0 5.99600E+00 3.14100E+00 9.55000E-01 1.6
+ 306 5 3.14100E+00 9.55000E-01 1.6 3.35280E+01 1.0
+ 311 5 2.43840E+01 8.82000E+00 2.23600E+01 1.0 2.23600E+01
+ 316 5 3.35280E+01 1.0 2.43840E+01 8.82000E+00 2.23600E+01
+ 321 5 1.0 2.23600E+01 1.0 95.0 8.82000E+00
+ 326 5 311.0 1.21160E+01 132.0 2.0 1.52400E+01
+ 331 5 1.0 95.0 8.82000E+00 311.0 1.21160E+01
+ 336 5 132.0 2.0 1.52400E+01 0.0 0.0
+ 441 5 0.0 1.0 1.00000E-02 1.00000E-02 1.00000E-02
+ 446 5 1.00000E-02 1.00000E-02 1.00000E-02 6.20720E-01 2.68000E-01
+ 451 5 2.68000E-01 1.93600E+00 2.68000E-01 2.68000E-01 2.68000E-01
+ 456 5 6.20720E-01 2.68000E-01 2.68000E-01 1.93600E+00 2.68000E-01
+ 461 5 2.68000E-01 2.68000E-01 2.68000E-01 2.68000E-01 8.75000E-01
+ 466 5 2.68000E-01 2.68000E-01 2.68000E-01 2.68000E-01 2.68000E-01
+ 471 5 2.68000E-01 2.68000E-01 8.75000E-01 2.68000E-01 2.68000E-01
+ 476 5 2.68000E-01 2.68000E-01 2.68000E-01 0.0 0.0
+ 581 5 0.0 1.0 1.00000E-01 1.00000E-01 1.00000E-01
+ 586 5 1.00000E-01 1.00000E-01 1.00000E-01 8.89000E-01 5.84200E-01
+ 591 5 5.84200E-01 3.77000E-02 5.84200E-01 5.84200E-01 5.42000E-01
+ 596 5 8.89000E-01 5.84200E-01 5.84200E-01 3.77000E-02 5.84200E-01
+ 601 5 5.84200E-01 5.84200E-01 5.84200E-01 5.84200E-01 1.97660E-02
+ 606 5 5.84200E-01 1.84000E-02 5.84200E-01 5.84200E-01 8.99000E-02
+ 611 5 5.84200E-01 5.84200E-01 1.97660E-02 5.84200E-01 1.84000E-02
+ 616 5 5.84200E-01 5.84200E-01 8.99000E-02 0.0 0.0
+ 721 5 0.0 5.00000E-05 5.00000E-05 5.00000E-05 5.00000E-05
+ 726 5 5.00000E-05 5.00000E-05 5.00000E-05 5.00000E-05 5.00000E-05
+ 731 5 5.00000E-05 5.00000E-05 5.00000E-05 5.00000E-05 5.00000E-05
+ 736 5 5.00000E-05 5.00000E-05 5.00000E-05 5.00000E-05 5.00000E-05
+ 741 5 5.00000E-05 5.00000E-05 5.00000E-05 5.00000E-05 5.00000E-05
+ 746 5 5.00000E-05 5.00000E-05 5.00000E-05 5.00000E-05 5.00000E-05
+ 751 5 5.00000E-05 5.00000E-05 5.00000E-05 5.00000E-05 5.00000E-05
+ 756 5 5.00000E-05 5.00000E-05 5.00000E-05 0.0 0.0
+ 861 5 0.0 0.0 1.0 0.0 1.0
+ 866 5 1.0 0.0 1.0 1.0 0.0
+ 871 5 10.9 0.0 6.8 1.0 6.8
+ 876 5 1.0 0.0 10.9 0.0 6.8
+ 881 5 1.0 6.8 0.0 9.6 0.0
+ 886 5 18.9 0.0 28.6 1.0 1.0
+ 891 5 0.0 9.6 0.0 18.9 0.0
+ 896 5 28.6 1.0 1.0 0.0 0.0
+ 1141 5 0.0 30.0 1.09550E+05 1.09550E+05 1.09550E+05
+ 1146 5 1.09550E+05 1.09550E+05 1.09550E+05 1.09550E+05 1.65490E+05
+ 1151 5 1.09550E+05 1.09550E+05 1.09550E+05 1.09550E+05 1.09550E+05
+ 1156 5 1.09550E+05 1.65490E+05 1.09550E+05 1.09550E+05 1.09550E+05
+ 1161 5 1.09550E+05 1.09550E+05 1.09550E+05 1.09550E+05 1.09550E+05
+ 1166 5 1.09550E+05 1.09550E+05 1.09550E+05 1.09550E+05 1.09550E+05
+ 1171 5 8.74070E+03 1.09550E+05 1.09550E+05 1.09550E+05 1.09550E+05
+ 1176 5 1.09550E+05 1.09550E+05 1.09550E+05 8.74070E+03 0.0
+ 1281 5 0.0 0.0 1.83530E+05 1.83530E+05 1.83530E+05
+ 1286 5 1.83530E+05 1.83530E+05 1.83530E+05 1.83530E+05 2.79290E+05
+ 1291 5 1.83530E+05 1.83530E+05 1.83530E+05 1.83530E+05 1.83530E+05
+ 1296 5 1.83530E+05 2.79290E+05 1.83530E+05 1.83530E+05 1.83530E+05
+ 1301 5 1.83530E+05 1.83530E+05 1.83530E+05 1.83530E+05 1.83530E+05
+ 1306 5 1.83530E+05 1.83530E+05 1.83530E+05 1.83530E+05 1.83530E+05
+ 1311 5 2.79290E+04 1.83530E+05 1.83530E+05 1.83530E+05 1.83530E+05
+ 1316 5 1.83530E+05 1.83530E+05 1.83530E+05 2.79290E+04 0.0
+ 1421 5 0.0 0.0 86.4 130.0 16.0
+ 1426 5 1.0 100.0 1.0 8.0 40.0
+ 1431 5 1.0 8.0 40.0 1.0 0.0
+ 1461 5 0.0 1.00700E+05 1.00700E+05 0.0 1.00700E+05
+ 1466 5 1.00700E+05 7.17000E+05 7.17000E+05 0.0 7.17000E+05
+ 1471 5 7.17000E+05 0.0 0.0 0.0 0.0
+ 1496 5 0.0 0.0 0.0 1.10000E-09 0.0
+ 1506 5 0.0 0.0 0.0 0.0 1.10000E-09
+ 1571 5 0.0 0.0 0.0 0.0 -1.6000E+00
+ 1576 5 3.0 4.83600E+00 1.43600E+01 1.43600E+01 1.43600E+01
+ 1581 5 10.4 1.37500E+01 1.14300E+01 10.4 1.37500E+01
+ 1586 5 1.14300E+01 0.0 0.0 0.0 0.0
+ 1611 5 0.0 0.0 0.0 27.0 3.07000E+00
+ 1616 5 1.0 10.0 1.0 2.5 6.0
+ 1621 5 0.0 2.5 6.0 0.0 0.0
+ 1651 5 660.9 0.0 0.0 808.2 808.2
+ 1656 5 808.2 0.0 0.0 616.5 0.0
+ 1661 5 0.0 616.5 0.0 0.0 0.0
+ 1686 5 0.0 0.0 0.0 1.6 208.1
+ 1691 5 1.0 100.0 15.0 15.0 5.0
+ 1696 5 5.0 15.0 15.0 0.0 0.0
+ 1721 5 3.49150E-03 3.49150E-03 6.65840E-03 6.65840E-03 3.49150E-03
+ 1726 5 3.49150E-03 0.0 0.0 0.0 0.0
+ 1746 5 0.0 0.0 0.0 1.0 1.0
+ 1751 5 1.0 3.0 1.0 1.0 1.0
+ 1756 5 1.0 1.0 1.0 1.0 1.0
+ 1801 5 0.0 0.0 0.0 0.0 6.66750E-02
+ 1806 5 6.66750E-02 9.20750E-02 9.20750E-02 6.66750E-02 6.66750E-02
+ 1861 5 0.0 1.0 1.0 1.0 1.0
+ 1866 5 1.0 0.0 0.0 0.0 0.0
+ 1896 5 0.0 0.0 0.0 1.20000E+03 0.0
+ 1911 5 1.12675E+06 0.0 0.0 0.0 0.0
+ 1921 5 0.0 0.0 1.16868E+02 0.0 0.0
+ 1931 5 0.0 0.0 0.0 0.0 1.93200E+03
+ 1946 5 0.0 9.00000E-01 0.0 0.0 0.0
+ 1956 5 0.0 0.0 0.0 1.00000E-01 0.0
+ 1981 5 0.0 0.0 1.22900E+00-1.80000E-01 1.92000E-01
+ 1986 5-2.80000E-01 3.90000E-02 3.0-2.20400E-01 1.14400E-01
+ 1991 5 8.05000E-02 6.02000E-02 5.84000E-01 3.30000E-02 5.53000E-01
+ 1996 5-1.52000E-01-1.90000E-02 8.00000E-03 8.00000E-03 0.0
+ 2001 5 0.0 3.24000E-02 1.0 1.0 5.12000E-01
+ 2006 5 3.79000E-01 2.87000E-01 2.21000E-01 1.74000E-01 1.14400E-01
+ 2011 5 8.05000E-02 6.02000E-02 4.76000E-02 3.96000E-02 2.64000E-02
+ 2016 5 1.76000E-02 1.18000E-02 8.00000E-03 8.00000E-03 0.0
+ 2021 5 0.0 3.24000E-02 1.0 1.0 3.00000E-01
+ 2026 5 1.90000E-01 1.20000E-01 8.00000E-02 6.00000E-02 4.00000E-02
+ 2031 5 3.00000E-02 2.00000E-02 1.60000E-02 1.40000E-02 1.20000E-02
+ 2036 5 1.00000E-02 9.00000E-03 8.00000E-03 8.00000E-03 0.0
+ 2041 5 0.0 3.24000E-02 1.0 1.0 3.00000E-01
+ 2046 5 1.90000E-01 1.20000E-01 8.00000E-02 6.00000E-02 4.00000E-02
+ 2051 5 3.00000E-02 2.00000E-02 1.60000E-02 1.40000E-02 1.20000E-02
+ 2056 5 1.00000E-02 9.00000E-03 8.00000E-03 8.00000E-03 0.0
+ 2061 5 0.0 3.24000E-02 0.0 0.0 0.0
+ 2221 5 0.0 0.0 1.0 0.0 0.0
+ 2226 5 3.0 4.0 5.0 6.0 8.0
+ 2231 5 10.0 12.0 0.0 1.00000E-02 1.00000E+03
+ 2236 5 24.0 28.0 32.0 400.0 401.0
+ 2241 5 1.00000E+04 19.0 0.0 1.00000E+03 2.0
+ 2246 5 3.0 4.0 5.0 6.0 8.0
+ 2251 5 10.0 12.0 14.0 16.0 20.0
+ 2256 5 24.0 28.0 32.0 400.0 401.0
+ 2261 5 1.00000E+04 19.0 0.0 1.00000E+03 2.0
+ 2266 5 3.0 4.0 5.0 6.0 8.0
+ 2271 5 10.0 12.0 14.0 16.0 20.0
+ 2276 5 24.0 28.0 32.0 33.0 40.0
+ 2281 5 1.00000E+04 19.0 0.0 1.00000E+03 2.0
+ 2286 5 3.0 4.0 5.0 6.0 8.0
+ 2291 5 10.0 12.0 14.0 16.0 20.0
+ 2296 5 24.0 28.0 32.0 33.0 40.0
+ 2301 5 1.00000E+04 19.0 0.0 0.0 0.0
+ 2461 5 0.0 0.0 9.8 2.13000E-10 2.13000E-10
+ 2466 5 2.13000E-10 0.0 0.0 0.0 2.13000E-10
+ 2471 5 2.13000E-10 2.13000E-10 2.13000E-10 2.13000E-10 2.13000E-10
+ 2501 5 0.0-2.80000E-04-2.80000E-04-2.80000E-04-2.80000E-04
+ 2506 5-2.80000E-04-2.80000E-04-2.80000E-04-2.80000E-04-2.80000E-04
+ 2511 5-2.80000E-04-2.80000E-04-2.80000E-04 0.0 0.0
+ 2536 5 0.0 0.0 0.0 0.0 844.0
+ 2541 5 844.0 844.0 844.0 844.0 844.0
+ 2546 5 844.0 844.0 844.0 844.0 844.0
+ 2551 5 844.0 0.0 0.0 0.0 0.0
+ 2576 5 0.0 0.0 5.00000E+04 1.00000E+03 5.00000E+04
+ 2581 5 5.00000E+04 5.00000E+04 5.00000E+04 5.00000E+04 5.00000E+04
+ 2586 5 5.00000E+04 5.00000E+04 5.00000E+04 5.00000E+04 0.0
+ 2616 5 19.8 39.3 6.4 1.0 21.8
+ 2621 5 1.0 4.0 11.8 1.0 4.0
+ 2626 5 11.8 1.0 0.0 0.0 0.0
+ 2651 5 0.0 0.0 0.0 7.59000E+06 1.30000E+08
+ 2656 5 2.45000E+06 3.83000E+05 8.35000E+06 3.83000E+05 1.53000E+06
+ 2661 5 4.52000E+06 3.83000E+05 1.53000E+06 4.52000E+06 3.83000E+05
+ 2691 5 0.0 0.0 0.0 1.60000E-02 8.60000E-01
+ 2696 5 4.55000E+00 1.96200E+01 1.96200E+01 0.0 0.0
+ 2701 5 0.0 0.0 0.0 0.0 1.96200E+01
+ 2706 5 1.96200E+01 0.0 0.0 0.0 0.0
+ 2711 5 0.0 0.0 1.96200E+01 1.96200E+01 0.0
+ 2721 5 1.96200E+01 1.96200E+01 0.0 0.0 0.0
+ 2726 5 0.0 0.0 0.0 1.96200E+01 1.96200E+01
+ 2736 5 0.0 6.13000E-04 6.13000E-04 0.0 0.0
+ 2741 5 0.0 0.0 0.0 0.0 6.13000E-04
+ 2746 5 6.13000E-04 0.0 0.0 0.0 0.0
+ 2751 5 0.0 0.0 6.13000E-04 6.13000E-04 0.0
+ 2761 5 6.90000E+06 6.90000E+06 0.0 0.0 0.0
+ 2766 5 0.0 0.0 0.0 6.90000E+06 6.90000E+06
+ 2776 5 0.0 6.90000E+06 6.90000E+06 0.0 0.0
+ 2781 5 0.0 0.0 0.0 0.0 6.90000E+06
+ 2786 5 6.90000E+06 0.0 0.0 0.0 0.0
+ 2791 5 0.0 0.0 6.90000E+06 6.90000E+06 0.0
+ 2801 5 1.0 1.0 1.0 1.0 1.0
+ 2806 5 1.0 1.0 1.0 1.0 1.0
+ 2811 5 1.0 1.0 1.0 1.0 0.0
+ 2856 5 0.0 9.77550E-04 0.0 0.0 0.0
+ 2861 5 0.0 9.77550E-04 0.0 0.0 0.0
+ 2921 5 1.83000E-02 1.83000E-02 0.0 0.0 0.0
+ 2926 5 0.0 0.0 0.0 1.83000E-02 1.83000E-02
+ 2936 5 0.0 1.0 1.0 0.0 0.0
+ 2951 5 1.0 1.0 0.0 0.0 0.0
+ 3101 5 0.0 0.0 0.0 0.0 5.51000E+00
+ 3106 5 5.51000E+00 10.5 10.5 10.5 0.0
+ 3116 5 0.0 0.0 0.0 10.5 10.5
+ 3121 5 10.5 10.5 10.5 0.0 0.0
+ 3271 5 0.0 0.0 0.0 1.00000E+03 15.0
+ 3276 5 1.00000E+03 1.00000E+03 0.0 0.0 0.0
+ 3286 5 0.0 0.0 1.00000E+03 15.0 1.00000E+03
+ 3291 5 1.00000E+03 0.0 0.0 0.0 0.0
+ 3441 5 0.0 0.0 0.0 0.0 1.80000E+06
+ 3446 5 1.80000E+06 0.0 0.0 1.60000E-02 8.60000E-01
+ 3451 5 4.55000E+00 1.60000E-02 8.60000E-01 4.55000E+00 1.0
+ 3456 5 1.0 1.0 1.0 1.0 1.0
+ 3461 5 1.0 1.0 1.0 1.0 1.0
+ 3466 5 1.0 1.0 1.0 1.0 1.0
+ 3471 5 1.0 1.0 1.0 1.0 1.0
+ 3476 5 1.0 1.0 1.0 1.0 1.0
+ 3481 5 1.0 1.0 1.0 1.0 1.0
+ 3486 5 1.0 1.0 1.0 1.0 1.0
+ 3491 5 1.0 1.0 1.0 1.0 1.0
+ 3496 5 1.0 1.0 1.0 1.0 1.0
+ 3501 5 1.0 1.0 1.0 1.0 1.0
+ 3506 5 1.0 1.0 1.0 1.0 1.0
+ 3511 5 1.0 1.0 1.0 1.0 1.0
+ 3516 5 6.56850E+00 6.56850E+00 0.0 0.0 0.0
+ 3521 5 0.0 0.0 0.0 1.98990E+02 1.98990E+02
+ 3531 5 0.0 1.76990E+02 1.76990E+02 0.0 0.0
+ 3536 5 0.0 0.0 0.0 0.0 1.09900E-01
+ 3541 5 1.09900E-01 0.0 0.0 0.0 0.0
+ 3546 5 0.0 0.0 1.22865E-03 1.22865E-03 0.0
+ 3556 5 4.47000E+06 4.47000E+06 0.0 0.0 0.0
+ 3561 5 0.0 0.0 0.0 4.47000E+06 4.47000E+06
+ 3571 5 0.0 1.96200E+01 1.96200E+01 0.0 0.0
+ 3576 5 0.0 0.0 0.0 0.0 1.96200E+01
+ 3581 5 1.96200E+01 0.0 0.0 0.0 0.0
+ 3586 5 0.0 0.0 1.00000E+08 1.00000E+08 0.0
+ 3596 5 1.00000E+08 1.00000E+08 0.0 0.0 0.0
+ 3601 5 0.0 0.0 0.0 1.0 1.0
+ 3606 5 0.0 0.0 1.0 1.0 0.0
+ 3611 5 0.0 0.0 60.0 5.6 1.0
+ 3616 5 100.0 1.0 2.7 23.0 0.0
+ 3621 5 2.7 23.0 0.0 0.0 0.0
+ 3646 5 0.0 0.0 0.0 0.0 1.60000E-02
+ 3651 5 8.60000E-01 4.55000E+00 1.60000E-02 8.60000E-01 4.55000E+00
+ 3656 5 1.95300E+00 0.0 0.0 0.0 0.0
+END
+
+[anchor: example-of-a-primary-loop]
+
+## 5.13.2. Example of a Primary Loop
+
+As an aid to the user in preparing PRIMAR-4 input data, the primary loop
+in Figure 5.13.1 is described.
+
+Figure 5.13.1 Example of a Primary Loop.
+
+This primary loop consists of five compressible volumes, CV1,…,CV5,
+five liquid segments, S1,…S5, fourteen elements, E1,…,E14,
+distributed among the liquid segments, nine temperature groups,
+T1,…,T9, of liquid flow elements, and three gas segments. The
+compressible volumes are:
+
+CV1 = inlet plenum
+
+CV2 = outlet plenum with cover gas
+
+CV3 = pump bowl and cover gas
+
+CV4 = compressible gas volume, no liquid
+
+CV5 = compressible gas volume, no liquid
+
+The elements are:
+
+E1 = core subassemblies
+
+E2, E4, E5, E7, E8, E10, E12, E13, E14 = pipes
+
+E3, E6 = bypass channels
+
+E9 = pump impeller
+
+E11 = shell side of intermediate heat exchanger
+
+The elements in liquid segment S5, for example, are E9, E10, E11, E12,
+E13, and E14.
+
+The assumed directions of flow for the liquid, as well as for the gas,
+segments are indicated in the diagram. It is this assumed direction of
+flow that is used in choosing the inlet and outlet compressible volumes
+for a liquid or for a gas segment. For example, CV3 is the inlet
+compressible volume and CV1 is the outlet compressible volume for liquid
+segment S5, while CV3 and CV4 are the inlet and outlet compressible
+volumes for gas segment G2. It is also with respect to the assumed
+directions of the segments that positive and negative flow rates are
+interpreted. Finally, it should be observed that positive inlet flow to
+a liquid or gas segment is flow out of the compressible volume at the
+segment inlet.
+
+The multiplicity of 3 that appears in Figure 5.13.1 where G2 joins CV4,
+where E8 joins CV2, and where E14 joins CV1 is present because in this
+example there are actually three identical primary loops attached to the
+respective compressible volumes, and instead of performing three
+identical calculations, the code computes one primary loop and
+multiplies the appropriate flows by 3. It should be noticed, however,
+that the multiplicity for liquid segment S4 is 3 at the inlet and 1 at
+the outlet, for liquid segment S5 it is 1 at the inlet and 3 at the
+outlet, and for gas segment G2 it is 1 at the inlet and 3 at the outlet.
+The multiplicity for all other liquid and gas segments must be set to 1
+at both ends.
+
+The liquid temperature calculations, which are performed after the
+liquid flow calculations have been completed, are done by temperature
+groups. This allows for the grouping of adjacent elements whose
+temperatures are computed in a similar way, such as elements E12, E13,
+and E14, all of which are pipes in temperature group T10, and also
+elements E9, and E10, a pump and connecting pipe, in temperature group
+T8. Where such grouping is inappropriate, a single element comprises a
+temperature group, such as the bypass channels as T2 and T5 and the
+intermediate heat exchanger as T9.
+
+Although not shown in the figure, if an intermediate loop were to be
+added, it would be structured in a fashion similar to the primary loop,
+and it would contain an element representing the tube side of the
+intermediate heat exchanger and would be located next to E11 in the
+diagram.
+
+[anchor: output-description]
+
+## 5.13.3. Output Description
+
+The PRIMAR output information is largely self-explanatory. Specimens of
+three output printouts for the example in Section 5.13.2 are displayed.
+The first is an input edit in which all of the input variables in Blocks
+3 and 18 are echoed back. The second is a print of the steady-state
+values calculated by the PRIMAR steady-state routines. Finally, the
+third is the print of the values calculated by the transient routines at
+a later time step.
+
+[anchor: plotting-primar-4-data]
+
+## 5.13.4. Plotting PRIMAR-4 Data
+
+The PRIMAR4.dat binary output file is created by the PRIMAR-4 module
+when the input parameter NBINOT > 0. Data written to PRIMAR4.dat can be
+extracted with the PRIMAR4toXML utility which converts PRIMAR4.dat from
+binary to an XML spreadsheet. The XML spreadsheet can be imported into
+Microsoft Excel for convenient post-processing.
+
+Once imported into Microsoft Excel, the XML version of PRIMAR4.dat will
+contain one row for each time step that was printed. The first few
+columns provide information related to the time, and the remaining
+columns provide the results of the variables selected in the IBINTOT
+array. They are in the same order that they are input, e.g. from K = 1
+to NBINOT. In particular,
+
+Column A: ISTEP time step number
+
+Column B: IPRSTP printed time step number
+
+Column C: Time (sec)
+
+Column D: Data associated with IBINOT(1)
+
+Column E: Data associated with IBINOT(2)
+
+And so on up to IBINOT(NBINOT)
+
+Unlike other binary output files, only user-selected data appears on
+PRIMAR4.dat. That is, if you do not request a particular data item (e.g.
+liquid segment flow rate) to be written, then it will not appear in
+PRIMAR4.dat. The user selects the data items in the INPMR4 input block
+(Block 3) using inputs NBINOT, IBINST, IBINOT, and INULLT. The input specifications are shown in
+Table 2.7.1. The appropriate values for IBNTYP and INUM for each
+available variable are provided in Table 2.7.2.
 
 
 ------------------------------------------------------------------------------
@@ -5640,6 +6564,14 @@ iEll Kind C1f C2f C3f C1b C2b C3b
 4 1 1 100000 -1 2.2 20000 -1
 END
 
+Listing 5.3.2 Example of Segment Inlet Anisotropic Loss Coefficient Input
+
+TABLE <id> <name>
+iSGL Kind C1f C2f C3f C1b C2b C3b A Dh ReL
+1 1 0.5 100000 -1 1.5 2 0 2.2 6.5 0.0
+4 1 1 100000 -1 2.2 20000 -1 0.002 0.003183099 1.0
+END
+
 
 ------------------------------------------------------------------------------
 [page: Part02/Ch05/hydra-pump.html]
@@ -6961,7 +7893,1583 @@ Table 5.3.5 Correlation Coefficients for Use with the ALMR EM Pump Model
  | 
  | 
 915.555
- |
+ | 
+
+Table 5.3.6 Pump Head and Efficiency for the ALMR EM Pump Model
+ | 
+
+ | 
+Normalized
+
+Voltage
+
+ | 
+ | 
+Normalized
+
+Frequency
+
+ | 
+ | 
+Normalized
+
+Flow
+
+ | 
+ | 
+Measured
+
+Normalized
+
+Head
+
+ | 
+ | 
+Fit
+
+Normalized
+
+Head
+
+ | 
+ | 
+Measured
+
+Efficiency
+
+ | 
+ | 
+Fit
+
+Efficiency
+
+ | 
+
+ | 
+
+ | 
+1.000
+ | 
+ | 
+1.000
+ | 
+ | 
+1.148
+ | 
+ | 
+0.042
+ | 
+ | 
+0.041
+ | 
+ | 
+0.115
+ | 
+ | 
+0.133
+ | 
+
+ | 
+1.000
+ | 
+ | 
+1.000
+ | 
+ | 
+1.124
+ | 
+ | 
+0.250
+ | 
+ | 
+0.242
+ | 
+ | 
+0.505
+ | 
+ | 
+0.469
+ | 
+
+ | 
+1.000
+ | 
+ | 
+1.000
+ | 
+ | 
+1.086
+ | 
+ | 
+0.500
+ | 
+ | 
+0.524
+ | 
+ | 
+0.781
+ | 
+ | 
+0.807
+ | 
+
+ | 
+1.000
+ | 
+ | 
+1.000
+ | 
+ | 
+1.000
+ | 
+ | 
+1.000
+ | 
+ | 
+1.000
+ | 
+ | 
+1.000
+ | 
+ | 
+0.997
+ | 
+
+ | 
+1.000
+ | 
+ | 
+1.000
+ | 
+ | 
+0.800
+ | 
+ | 
+1.483
+ | 
+ | 
+1.494
+ | 
+ | 
+0.928
+ | 
+ | 
+0.915
+ | 
+
+ | 
+1.000
+ | 
+ | 
+1.000
+ | 
+ | 
+0.600
+ | 
+ | 
+1.508
+ | 
+ | 
+1.514
+ | 
+ | 
+0.710
+ | 
+ | 
+0.709
+ | 
+
+ | 
+1.000
+ | 
+ | 
+1.000
+ | 
+ | 
+0.400
+ | 
+ | 
+1.399
+ | 
+ | 
+1.389
+ | 
+ | 
+0.469
+ | 
+ | 
+0.468
+ | 
+
+ | 
+1.000
+ | 
+ | 
+1.000
+ | 
+ | 
+0.200
+ | 
+ | 
+1.265
+ | 
+ | 
+1.270
+ | 
+ | 
+0.229
+ | 
+ | 
+0.229
+ | 
+
+ | 
+1.000
+ | 
+ | 
+1.000
+ | 
+ | 
+0.000
+ | 
+ | 
+1.134
+ | 
+ | 
+1.133
+ | 
+ | 
+0.000
+ | 
+ | 
+0.000
+ | 
+
+ | 
+0.627
+ | 
+ | 
+0.778
+ | 
+ | 
+0.886
+ | 
+ | 
+0.042
+ | 
+ | 
+0.042
+ | 
+ | 
+0.183
+ | 
+ | 
+0.256
+ | 
+
+ | 
+0.627
+ | 
+ | 
+0.778
+ | 
+ | 
+0.862
+ | 
+ | 
+0.167
+ | 
+ | 
+0.158
+ | 
+ | 
+0.551
+ | 
+ | 
+0.600
+ | 
+
+ | 
+0.627
+ | 
+ | 
+0.778
+ | 
+ | 
+0.824
+ | 
+ | 
+0.333
+ | 
+ | 
+0.314
+ | 
+ | 
+0.817
+ | 
+ | 
+0.879
+ | 
+
+ | 
+0.627
+ | 
+ | 
+0.778
+ | 
+ | 
+0.762
+ | 
+ | 
+0.581
+ | 
+ | 
+0.500
+ | 
+ | 
+0.970
+ | 
+ | 
+0.932
+ | 
+
+ | 
+0.628
+ | 
+ | 
+0.778
+ | 
+ | 
+0.762
+ | 
+ | 
+0.581
+ | 
+ | 
+0.505
+ | 
+ | 
+0.970
+ | 
+ | 
+0.932
+ | 
+
+ | 
+0.312
+ | 
+ | 
+0.472
+ | 
+ | 
+0.532
+ | 
+ | 
+0.042
+ | 
+ | 
+0.052
+ | 
+ | 
+0.318
+ | 
+ | 
+0.381
+ | 
+
+ | 
+0.312
+ | 
+ | 
+0.472
+ | 
+ | 
+0.520
+ | 
+ | 
+0.083
+ | 
+ | 
+0.097
+ | 
+ | 
+0.529
+ | 
+ | 
+0.608
+ | 
+
+ | 
+0.312
+ | 
+ | 
+0.472
+ | 
+ | 
+0.495
+ | 
+ | 
+0.167
+ | 
+ | 
+0.178
+ | 
+ | 
+0.773
+ | 
+ | 
+0.848
+ | 
+
+ | 
+0.312
+ | 
+ | 
+0.472
+ | 
+ | 
+0.476
+ | 
+ | 
+0.227
+ | 
+ | 
+0.226
+ | 
+ | 
+0.863
+ | 
+ | 
+0.884
+ | 
+
+ | 
+1.202
+ | 
+ | 
+1.111
+ | 
+ | 
+1.143
+ | 
+ | 
+1.306
+ | 
+ | 
+1.144
+ | 
+ | 
+1.008
+ | 
+ | 
+1.009
+ | 
+
+ | 
+0.929
+ | 
+ | 
+0.944
+ | 
+ | 
+0.952
+ | 
+ | 
+0.905
+ | 
+ | 
+0.912
+ | 
+ | 
+0.998
+ | 
+ | 
+1.003
+ | 
+
+ | 
+0.820
+ | 
+ | 
+0.833
+ | 
+ | 
+0.857
+ | 
+ | 
+0.734
+ | 
+ | 
+0.835
+ | 
+ | 
+0.986
+ | 
+ | 
+0.981
+ | 
+
+ | 
+0.519
+ | 
+ | 
+0.667
+ | 
+ | 
+0.667
+ | 
+ | 
+0.444
+ | 
+ | 
+0.415
+ | 
+ | 
+0.954
+ | 
+ | 
+0.932
+ | 
+
+ | 
+0.437
+ | 
+ | 
+0.556
+ | 
+ | 
+0.571
+ | 
+ | 
+0.327
+ | 
+ | 
+0.383
+ | 
+ | 
+0.917
+ | 
+ | 
+0.920
+ | 
+
+ | 
+0.251
+ | 
+ | 
+0.500
+ | 
+ | 
+0.476
+ | 
+ | 
+0.227
+ | 
+ | 
+0.096
+ | 
+ | 
+0.855
+ | 
+ | 
+0.789
+ | 
+
+ | 
+0.219
+ | 
+ | 
+0.389
+ | 
+ | 
+0.381
+ | 
+ | 
+0.145
+ | 
+ | 
+0.143
+ | 
+ | 
+0.757
+ | 
+ | 
+0.757
+ | 
+
+ | 
+0.153
+ | 
+ | 
+0.278
+ | 
+ | 
+0.286
+ | 
+ | 
+0.082
+ | 
+ | 
+0.111
+ | 
+ | 
+0.567
+ | 
+ | 
+0.602
+ | 
+
+ | 
+0.071
+ | 
+ | 
+0.222
+ | 
+ | 
+0.190
+ | 
+ | 
+0.037
+ | 
+ | 
+0.025
+ | 
+ | 
+0.268
+ | 
+ | 
+0.255
+ | 
+
+ | 
+0.027
+ | 
+ | 
+0.111
+ | 
+ | 
+0.095
+ | 
+ | 
+0.009
+ | 
+ | 
+0.010
+ | 
+ | 
+0.026
+ | 
+ | 
+0.031
+ | 
+
+Figure 5.3.1 Pump Head, Data and Fits for the ALMR EM Pump Model.
+
+Figure 5.3.2 Pump Efficiency, Data and Fits for the ALMR EM Pump Model.
+
+[anchor: equivalent-circuit-em-pump]
+
+### 5.3.4.3.3. Equivalent Circuit EM Pump
+
+Equivalent circuit theory enables generalized systems-level modeling of EM pumps based on an electric circuit with components that represent the main responses of the pump.
+By representing the various dissipative and inertial aspects of the pump with resistors and inductors within a hypothetical electrical circuit, traditional circuit analysis techniques are used to approximate the pump’s internal energy flow.
+Benefits of equivalent circuit theory within SAS include generic pump control as functions of voltage and frequency, flexibility to model a range of pump designs and operating conditions, and computational efficiency.
+
+Two pump models are available on the basis of equivalent circuit theory, referred to as the “detailed” and “simple” models.
+With the exception of the governing circuit and consequent governing equations, the two models share the same framework, features, and calculation procedures.
+The common features are discussed here, while the details that differ between the two models are discussed in the subsections below and Section 5.16.7.
+
+The equivalent circuit models assume that the pump is a three-phase, wye-connected, linear electromagnetic pump (annular or non-annular, depending on the specification of ITYPEL).
+Assuming each phase is equally loaded, all phases are represented using a single circuit of either detailed or simple type.
+Equating the circuit prediction for electrical power dissipation in resistors representing fluid mechanical power with the hydraulic power imparted to the fluid, the pressure developed by the pump (not including friction, gravity, or form losses) is predicted as
+
+$$\Delta p_P = \frac{3 I^2 \Psi(s)}{Q}$$ [eq 5.3-165]
+
+where
+
+ $\Delta p_P$ = pump developed pressure
+
+ $I$ = total phase current
+
+ $Q$ = fluid volumetric flowrate
+
+ $\Psi(s)$ = model-dependent circuit transform function
+
+ $s$ = $1 - \frac{v_f}{v_s}$ = slip
+
+ $v_f$ = fluid velocity
+
+ $v_s$ = pump synchronous speed
+
+Due to the limited inertia of EM pumps, a quasi-static assumption is employed in solving for $I$ and $\Psi$ .
+Therefore the steady-state circuit equations are solved at each transient time step.
+
+Based on this expression, the contributions to the $\Delta a_i(k)$ ’s in Eq. (5.2-11), Eq. (5.2-13), Eq. (5.2-15), and Eq. (5.2-17) are:
+
+$$\Delta a_0(k) = \Delta a_{0}^{\text{pipe}}$$ [eq 5.3-166]
+
+$$\Delta a_1(k) = \Delta t \Delta p_P(k) + \Delta a_{1}^{\text{pipe}}$$ [eq 5.3-167]
+
+$$\Delta a_2(k) = \Delta a_{2}^{\text{pipe}}$$ [eq 5.3-168]
+
+$$\Delta a_3(k) = \Delta t \frac{\partial \Delta p_P(k)}{\partial w} + \Delta a_{3}^{\text{pipe}} \approx \Delta t \frac{\Delta p_P(k,1.01(w+10^{-6}))- \Delta p_P(k,w)}{0.01 w + 1.01*10^{-6}} + \Delta a_{3}^{\text{pipe}}$$ [eq 5.3-169]
+
+Pump efficiency is calculated by dividing fluid power in the forward direction by the electrical power dissipated in the entire pump (including all three phases) as
+
+$$\eta = \frac{\left(\Delta p_P - \Delta p_f\right) \cdot Q}{3 V_s I \cos{\phi}}$$ [eq 5.3-170]
+
+where
+
+ $\eta$ = efficiency
+
+ $\Delta p_f$ = friction losses in the pump element
+
+ $V_s$ = power source phase voltage
+
+ $\phi$ = phase angle
+
+Arbitrary control of the pump’s power supply is enabled through the use of FUNCTION blocks to individually control voltage and frequency with time.
+
+The steady-state initialization process is outlined in Figure 5.3.3.
+
+Figure 5.3.3 Flow chart of the steady-state initialization procedure for equivalent circuit pumps.
+
+The resistance representing Joule heating is adjusted for fluid temperature using TR.
+In the case that TR is specified, the Joule resistance is assumed to be proportional to the temperature-dependent fluid electrical resistance as discussed specifically for each model.
+The default correlation for sodium electrical resistivity is given in Eq. (5.3-171), with $371 \text{ K} \leq T \leq 1373 \text{ K}$ [5-10].
+
+$$\rho_r(T) = C_1 + C_2 T + C_3 T^2$$ [eq 5.3-171]
+
+where
+
+ $C_1$ = 7.756E-8 Ω-m
+
+ $C_2$ = 2.054E-10 Ω-m/C
+
+ $C_3$ = 3.481E-13 Ω-m/C^2
+
+ $T$ = fluid temperature
+
+The user may also enter their own correlation coefficients to be used in Eq. (5.3-171) as described in Table 5.3.8 for either sodium or when other coolants are employed (see ICLPRP and INAS3D).
+
+Once circuit parameters are deduced, initialization uses the flow rate and pressure across the pump element as determined by PRIMAR-4 to determine the pump’s current, power factor, voltage, and efficiency at steady-state.
+The steady-state pump voltage is then stored as the amplitude of the normalized voltage used during transient steps.
+
+Pump heating may be modeled for equivalent circuit pumps using the scaling factor fH.
+This feature is discussed within the temperature calculation section.
+
+[anchor: detailed-circuit-model]
+
+#### 5.3.4.3.3.1. Detailed Circuit Model
+
+Figure 5.3.4 Equivalent circuit of one phase of an annular linear induction pump used in the detailed circuit model.
+
+The equivalent circuit used in the detailed model is shown in Figure 5.3.4 where
+
+ $R_1$ = primary electrical resistance
+
+ $R_D$ = electrical resistance of ducts
+
+ $R_J$ = Joule heating resistance
+
+ $R_M$ = fluid mechanical work resistance
+
+ $X_1$ = $2 \pi f L_1$ = coil leakage reactance
+
+ $X_2$ = $2 \pi f L_2$ = magnetizing reactance
+
+ $L_1$ = coil leakage inductance
+
+ $L_2$ = magnetizing inductance
+
+ $f$ = power source frequency
+
+Note that all circuit parameters in the detailed circuit model can be functions of both $s$ and $f$ .
+These functionalities are specified using FUNCTION blocks.
+
+Using this circuit, $\Psi$ in Eq. (5.3-165) is
+
+$$\Psi= \frac{R_m R_D^2 X_2^2}{(R_j+R_m)^2 R_D^2 +(R_J+R_m+R_D)^2X_2^2}$$ [eq 5.3-172]
+
+Steady-state initialization of the detailed circuit model starts by evaluating the initial frequency specified through fFuncID.
+Using this, the initial slip is calculated with the user-provided synchronous speed.
+Having both frequency and slip, the respective FUNCTION blocks for each of the circuit parameters are evaluated at $t$ = 0.
+
+If temperature adjustment of circuit parameters is requested, $R_J$ at each timestep is adjusted to $R_J'$ using the proportionality relation
+
+$$R_J' = C \rho_r(T)$$ [eq 5.3-173]
+
+where $C$ is a proportionality constant determined using the value of $R_J$ at $t$ = 0 along with TR.
+
+[anchor: simple-circuit-model]
+
+#### 5.3.4.3.3.2. Simple Circuit Model
+
+Figure 5.3.5 Equivalent circuit of one phase of an annular linear induction pump used in the simple circuit model.
+
+The equivalent circuit used in the simple model is shown in Figure 5.3.5 where $R_2$ is a resistance representing both Joule and mechanical power.
+Note that all circuit parameters in the simple circuit model are assumed constant.
+
+Using this circuit, $\Psi$ in Eq. (5.3-165) is
+
+$$\Psi = \frac{R_2(1-s)}{s \left( \frac{R_2^2}{X_2^2 s^2} + 1 \right)}$$ [eq 5.3-174]
+
+Determination of circuit parameters during steady-state initialization of the simple circuit model consists of an inversion process using “rated” conditions specified by the user.
+In this way, the user is not required to know specific electrical/geometric details of the pump, but rather specifies only operating characteristics instead, making the simple model easier to use when pump details are unknown.
+In this case, “rated” conditions can be any operating state of the pump, though all specified rated conditions for a given pump should be for a fixed operation point (i.e. it is not permissible to specify rated flow at one voltage and rated current at another).
+
+The equations used for determining the circuit parameters are
+
+$$R_2 = \frac{\Delta P_{P,R}(A_Rv_s\frac{s_R^2-1}{s_R})}{3I_R^2-3I_S^2\frac{\Delta P_{P,R}}{\Delta P_S s_R}}$$ [eq 5.3-175]
+
+$$X_{2,R} = \frac{R_2}{\sqrt{\frac{3 I_S^2 R_2}{A_R v_{s,R} \Delta P_{P,S} } - 1}}$$ [eq 5.3-176]
+
+$$R_1 = \frac{\frac{\Delta P_{P,R} Q_R}{3I_R^2 \eta_R}(R_2^2+X_2^2s_R^2) - s_R R_2 X_2^2}{R_2^2+X_2^2s_R^2}$$ [eq 5.3-177]
+
+$$X_{1,R} = \left[\left(\frac{V_R}{I_R}\right)^2 -\left(R_1 + \frac{s_R R_2 X_2^2}{R_2^2+s_R^2 X_2^2}\right)^2 \right]^{0.5} - \frac{R_2^2X_2}{R_2^2 + X_2^2s_R^2}$$ [eq 5.3-178]
+
+where the subscripts $R$ and $S$ indicate rated and stall (i.e. zero flow) conditions, respectfully.
+
+iDPOPT is used to adjust $\Delta p_R$ for friction losses if requested by the user.
+Then all values in Eq. (5.3-175) - Eq. (5.3-178) can be deduced from user input except for $I_S$ .
+Therefore these equations are solved using a fixed-point iteration on $I_S$ until convergence to within epsIs is achieved.
+Once converged, $L_1$ and $L_2$ are deduced using $f_R$ .
+Steady-state circuit reactances are then calculated using frequency at $t$ = 0 specified through f0.
+Note that the inversion process used to arrive at Eq. (5.3-175) - Eq. (5.3-178) makes the determinination of circuit parameters in the simple circuit model highly sensitive to the rated conditions specified.
+For this reason, a set of suggested values to represent a realistic pump are provided Table 5.3.10.
+
+If temperature adjustment of circuit parameters is requested, $R_2$ at each timestep is adjusted to $R_2'$ using the proportionality relation
+
+$$R_2' = C \rho_r(T)$$ [eq 5.3-179]
+
+where $C$ is determined as outlined for the detailed circuit model.
+
+[anchor: model-inputs]
+
+#### 5.3.4.3.3.3. Model Inputs
+
+Inputs for equivalent circuit models consist of data entered in both EMPUMP blocks and in standard input records.
+In addition to those inputs required for all liquid elements in INPMR4 and PMR4IN, standard input records related specifically to equivalent circuit pumps are highlighted in Table 5.3.7.
+
+Table 5.3.7 INPMR4 inputs for Equivalent Circuit models.
+
+ | 
+
+ | 
+Variable
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+ITYPEL(IELL)
+ | 
+ | 
+Liquid element type of element IELL, specify 5 for a non-annular pump or 15 for an annular .
+ | 
+
+ | 
+IELPMP(IPMP)
+ | 
+ | 
+Element number corresponding to pump IPMP.
+ | 
+
+ | 
+IEMPMP(IPMP)
+ | 
+ | 
+Option to specify that pump IPMP uses the equivalent circuit EM pump model (IEMPMP = -3).
+ | 
+
+ | 
+ILRPMP(IPMP)
+ | 
+ | 
+EMPUMP block number containing information for equivalent circuit pump IPMP.
+ | 
+
+For pumps specified as annular (ITYPEL = 15), a number of additional inputs are required in INPMR4 and PMR4IN.
+
+The required EMPUMP block inputs are highlighted below by those which are common to all models, those which are specific to the detailed circuit model, and those which are specific to the simple circuit model.
+For the simple circuit model, suggested values are provided to represent the pump from Ref. [5-11].
+
+Table 5.3.8 EMPUMP block inputs common to all Equivalent Circuit model options.
+
+ | 
+
+ | 
+Keyword
+ | 
+ | 
+Description
+ | 
+ | 
+Units
+ | 
+ | 
+Type
+ | 
+ | 
+Range
+ | 
+
+ | 
+
+ | 
+VFuncID
+ | 
+ | 
+FUNCTION block number corresponding to $V_s(t)$ , the normalized pump voltage with time. If omitted, voltage is held constant at steady-state value. If $V_s(0)$ ≠ 1, table will be normalized to the steady-state value.
+ | 
+ | 
+–
+ | 
+ | 
+Integer, optional
+ | 
+ | 
+0 < VFuncID
+ | 
+
+ | 
+fFuncID
+ | 
+ | 
+FUNCTION block number corresponding to $f(t)$ , the normalized pump frequency with time.
+ | 
+ | 
+–
+ | 
+ | 
+Integer
+ | 
+ | 
+0 < fFuncID
+ | 
+
+ | 
+f0
+ | 
+ | 
+Initial frequency of the pump.
+ | 
+ | 
+Hz
+ | 
+ | 
+Float
+ | 
+ | 
+0 < f0
+ | 
+
+ | 
+fH
+ | 
+ | 
+Fraction of pump heating to be included in thermal calculations. If omitted, pump heating is turned off.
+ | 
+ | 
+–
+ | 
+ | 
+Float, optional
+ | 
+ | 
+0 ≤ fH
+ | 
+
+ | 
+fOD
+ | 
+ | 
+Fraction of pump heating to be deposited in outer wall of an annular pump element. Ignored for pipe-type pumps. If omitted, $F_{OD}=\frac{MC_{OD}}{MC_{OD}+MC_{ID}}$ , where $MC_{OD}$ is WALLMC and $MC_{ID}$ is WALMC2.
+ | 
+ | 
+–
+ | 
+ | 
+Float, optional
+ | 
+ | 
+0 ≤ fOD ≤ 1
+ | 
+
+ | 
+TR
+ | 
+ | 
+Temperature of fluid flow through the pump at rated conditions. If omitted, temperature dependence of circuit parameters is turned off.
+ | 
+ | 
+K
+ | 
+ | 
+Float, optional
+ | 
+ | 
+0 ≤ TR
+ | 
+
+ | 
+C1
+ | 
+ | 
+Constant coefficient in Eq. (5.3-171). If any of C1, C2, or C3 are provided, all three defaults are overwritten.
+ | 
+ | 
+Ω-m
+ | 
+ | 
+Float, optional
+ | 
+ | 
+–
+ | 
+
+ | 
+C2
+ | 
+ | 
+Linear coefficient in Eq. (5.3-171). If any of C1, C2, or C3 are provided, all three defaults are overwritten.
+ | 
+ | 
+Ω-m/C
+ | 
+ | 
+Float, optional
+ | 
+ | 
+–
+ | 
+
+ | 
+C3
+ | 
+ | 
+Quadratic coefficient in Eq. (5.3-171). If any of C1, C2, or C3 are provided, all three defaults are overwritten.
+ | 
+ | 
+Ω-m/C^2
+ | 
+ | 
+Float, optional
+ | 
+ | 
+–
+ | 
+
+Table 5.3.9 Model inputs for the DETAILED option.
+
+ | 
+
+ | 
+Keyword
+ | 
+ | 
+Description
+ | 
+ | 
+Units
+ | 
+ | 
+Type
+ | 
+ | 
+Range
+ | 
+
+ | 
+
+ | 
+R1FuncID
+ | 
+ | 
+FUNCTION block number corresponding to 𝑅1(𝑠,𝑓).
+ | 
+ | 
+–
+ | 
+ | 
+Integer
+ | 
+ | 
+0 < R1FuncID
+ | 
+
+ | 
+RDFuncID
+ | 
+ | 
+FUNCTION block number corresponding to 𝑅D(𝑠,𝑓).
+ | 
+ | 
+–
+ | 
+ | 
+Integer
+ | 
+ | 
+0 < RDFuncID
+ | 
+
+ | 
+RJFuncID
+ | 
+ | 
+FUNCTION block number corresponding to 𝑅J(𝑠,𝑓).
+ | 
+ | 
+–
+ | 
+ | 
+Integer
+ | 
+ | 
+0 < RJFuncID
+ | 
+
+ | 
+RMFuncID
+ | 
+ | 
+FUNCTION block number corresponding to 𝑅M(𝑠,𝑓).
+ | 
+ | 
+–
+ | 
+ | 
+Integer
+ | 
+ | 
+0 < RMFuncID
+ | 
+
+ | 
+L1FuncID
+ | 
+ | 
+FUNCTION block number corresponding to 𝐿1(𝑠,𝑓).
+ | 
+ | 
+–
+ | 
+ | 
+Integer
+ | 
+ | 
+0 < L1FuncID
+ | 
+
+ | 
+L2FuncID
+ | 
+ | 
+FUNCTION block number corresponding to 𝐿2(𝑠,𝑓).
+ | 
+ | 
+–
+ | 
+ | 
+Integer
+ | 
+ | 
+0 < L2FuncID
+ | 
+
+ | 
+vs
+ | 
+ | 
+Synchronous pump speed corresponding to $f(0)$ .
+ | 
+ | 
+m/s
+ | 
+ | 
+Float
+ | 
+ | 
+0 < vs
+ | 
+
+Table 5.3.10 Model inputs for the SIMPLE option.
+
+ | 
+
+ | 
+Keyword
+ | 
+ | 
+Description
+ | 
+ | 
+Units
+ | 
+ | 
+Type
+ | 
+ | 
+Range
+ | 
+ | 
+Suggested Value
+ | 
+
+ | 
+
+ | 
+dPR
+ | 
+ | 
+Developed pressure over the pump at rated conditions.
+ | 
+ | 
+Pa
+ | 
+ | 
+Float
+ | 
+ | 
+0 < dPR
+ | 
+ | 
+2.0E5
+ | 
+
+ | 
+dPS
+ | 
+ | 
+Developed pressure over the pump at stall conditions (i.e. zero flow) at rated voltage and frequency.
+ | 
+ | 
+Pa
+ | 
+ | 
+Float
+ | 
+ | 
+0 < dPS
+ | 
+ | 
+3.0E5
+ | 
+
+ | 
+etaR
+ | 
+ | 
+Fractional pump efficiency at rated conditions.
+ | 
+ | 
+–
+ | 
+ | 
+Float
+ | 
+ | 
+0 < etaR ≤ 1
+ | 
+ | 
+0.45
+ | 
+
+ | 
+IR
+ | 
+ | 
+Phase current at rated conditions.
+ | 
+ | 
+A
+ | 
+ | 
+Float
+ | 
+ | 
+0 < IR
+ | 
+ | 
+1700
+ | 
+
+ | 
+VR
+ | 
+ | 
+Phase voltage at rated conditions.
+ | 
+ | 
+V
+ | 
+ | 
+Float
+ | 
+ | 
+0 < VR
+ | 
+ | 
+510
+ | 
+
+ | 
+fR
+ | 
+ | 
+Power supply frequency at rated conditions.
+ | 
+ | 
+1/s
+ | 
+ | 
+Float
+ | 
+ | 
+0 < fR
+ | 
+ | 
+12
+ | 
+
+ | 
+WR
+ | 
+ | 
+Mass flow rate through the pump at rated conditions.
+ | 
+ | 
+kg/s
+ | 
+ | 
+Float
+ | 
+ | 
+0 < WR
+ | 
+ | 
+1333
+ | 
+
+ | 
+sR
+ | 
+ | 
+Slip at rated conditions.
+ | 
+ | 
+–
+ | 
+ | 
+Float
+ | 
+ | 
+0 < sR < 1
+ | 
+ | 
+0.2
+ | 
+
+ | 
+iDPOPT
+ | 
+ | 
+If iDPOPT ≠ 0, rated and stall input parameters have been adjusted to account for pressure losses. If iDPOPT = 0 or omitted, rated and stall input parameters are based on net pressure rise.
+ | 
+ | 
+–
+ | 
+ | 
+Integer, optional
+ | 
+ | 
+–
+ | 
+ | 
+1
+ | 
+
+ | 
+espIs
+ | 
+ | 
+Fractional convergence tolerance of the fixed-point iteration to determine stall current. If omitted, epsIS = 10E-8.
+ | 
+ | 
+–
+ | 
+ | 
+Float, optional
+ | 
+ | 
+0 < epsIs
+ | 
+ | 
+–
+ | 
+
+Example input showing a detailed-circuit annular pump along with a simple-circuit non-annular pump:
+
+INPMR4 3 1 0
+#
+# NELEMT
+ 10 : 2 # only two elements
+# ITYPEL
+ 49 : 5 15 # first is a pump, second is annular pump
+# NANEL
+ 1243 : 1 # one element is annular
+# IELANE
+ 1244 : 2 # element 2 is the annular element
+# NPUMP
+ 405 : 2 # two pumps
+# IELPMP
+ 406 : 1 2 # elements 1 and 2 are pumps
+# IEMPMP
+ 418 : -3 -3 # pumps 1 and 2 are equivalent circuit pumps
+# ILRPMP
+ 430 : 1 2 # eq circ pumps correspond to EMPUMP blocks 1 and 2, respectively
+#
+# other integer inputs, including segments, CVs, temperature groups, etc...
+#
+ -1
+#
+PMR4IN 18 1 0
+#
+# element float inputs, including ZOUTEL, XLENEL, AREAEL, etc...
+#
+# annular element float inputs, including WALMC2, WALLH2, etc...
+#
+ -1
+#
+EMPUMP 1 SIMPLE
+ VFuncID = 1
+ fFuncID = 1
+ f0 = 12
+ fH = 0.5 # pump heat is modeled at half strength
+ TR = 0 # do not adjust R2 for temperature
+ dPR = 0.2E6
+ dPS = 0.3E6
+ etaR = 0.45
+ IR = 1700.
+ VR = 850.
+ fR = 12.
+ WR = 1333
+ sR = 0.2
+ epsIs = 1E-10
+ iDPOPT = 1
+
+ FUNCTION 1 "VoltageAndFrequencyFunction"
+ TYPE = TABLE
+ SOURCE = 1
+ END
+
+ # voltage and frequency hold constant
+ TABLE 1 VoltageTable
+ x y
+ 0 1
+ 1 1
+ END
+END
+
+EMPUMP 2 DETAILED
+ fFuncID = 1
+ VFuncID = 10
+ f0 = 12
+ fOD = 0.5
+ fH = 0 # pump heat is not modeled
+ TR = 573.15 # adjust RJ for temperature, using 573.15 K to determine proportionality constant
+ vs = 12.
+ R1FuncID = 2
+ RDFuncID = 3
+ RJFuncID = 4
+ RMFuncID = 5
+ L1FuncID = 6
+ L2FuncID = 7
+
+ # voltage is halved after 100 seconds
+ FUNCTION 10 "VoltageFunction"
+ TYPE = TABLE
+ TABLE 1 VoltageTable
+ x y
+ 0 1
+ 100 0.5
+ END
+ END
+
+ # frequency doubles after 100 seconds
+ FUNCTION 1 "FrequencyFunction"
+ TYPE = TABLE
+ TABLE 1 FrequencyTable
+ x y
+ 0 1
+ 100 2
+ END
+ END
+
+ # R1 holds constant
+ FUNCTION 2 "R1Function"
+ TYPE = TABLE
+ TABLE 1 SuperLocalTable
+ x y
+ 0 0.08
+ 1 0.08
+ END
+ END
+
+ # RD holds constant
+ FUNCTION 3 "RDFunction"
+ TYPE = TABLE
+ TABLE 1 RDTable
+ x y
+ 0 10.
+ 1 10.
+ END
+ END
+
+ # RD holds constant
+ FUNCTION 4 "RJFunction2"
+ TYPE = TABLE
+ TABLE 1 RJTable
+ x y
+ 0 0.44
+ 1 0.44
+ END
+ END
+
+ # RM holds constant
+ FUNCTION 5 "RMFunction"
+ TYPE = TABLE
+ TABLE 1 RMTable
+ x y
+ 0 0.7
+ 1 0.7
+ END
+ END
+
+ # L1 holds constant
+ FUNCTION 6 "L1Function"
+ TYPE = TABLE
+ TABLE 1 L1Table
+ x y
+ 0 0.004
+ 1 0.004
+ END
+ END
+
+ # L2 holds constant
+ FUNCTION 7 "L2Function"
+ TYPE = TABLE
+ TABLE 1 L2Table
+ x y
+ 0 0.01
+ 1 0.01
+ END
+ END
+END
 
 
 ------------------------------------------------------------------------------
@@ -7440,6 +9948,63 @@ TABLE <id> <name>
  4 100 # Function 100 is assigned to the coolant of Element 4
 END
 
+Listing 5.4.2 Sample Direct Wall Heat Table Input
+
+TABLE <id> <name>
+ iEll fID
+ 1003 200 # Function 200 is assigned to INNER wall of annular element 3.
+ 3 10 # Function 10 is assigned to the wall of element 3.
+ 4 11 # Function 11 is assigned to the wall of element 4.
+END
+
+[anchor: pump-heat]
+
+### 5.4.1.3.2. Pump Heat
+
+Pump heating is implemented by calculating the contributions to linear heat rates $q_{\text{c}}'$ , $q_{\text{w}}'$ , $q_{\text{wa}}'$ , and $q_{\text{wb}}'$ in the equations above.
+Currently this treatment is limited only to equivalent circuit pump models, where the scaling factor fH is used to control the fraction of power dissipated in various resistors representing fluid and wall components.
+
+Detailed Equivalent Circuit Model
+
+For reference to the variables cited below, see the governing circuit.
+Power dissipated by $R_1$ and $R_D$ in each phase is deposited into the element wall while power disspated in $R_J$ is deposited in the fluid.
+For nodes of element $k$ that corresponds to an equivalent circuit pump, this is expressed as
+
+$$q_{\text{c}}' = \frac{3 f_H I_3^2 R_J}{L_{\text{k}}}$$ [eq 5.4-23]
+
+where
+
+ $L_{\text{k}}$ = length of element $k$ 
+
+ $I_3$ = current through resistor $R_J$ 
+
+and
+
+$$q_{\text{w}}' = \frac{3 f_H \left(I^2 R_1 + I_2^2 R_D \right)}{L_{\text{k}}}$$ [eq 5.4-24]
+
+If the pump element is annular (see ITYPEL), users can control how much of the wall heat is put into each of $q_{wa}'$ and $q_{wb}'$ as
+
+$$\begin{split}q_{\text{wa}}' &= f_{OD} q_{\text{w}}' \\
+q_{\text{wb}}' &= (1 - f_{OD}) q_{\text{w}}'\end{split}$$ [eq 5.4-25]
+
+where $f_{OD}$ is fOD.
+
+Simple Equivalent Circuit Model
+
+For reference to the variables cited below, see the governing circuit.
+Power dissipated by $R_1$ in each phase is deposited into the element wall as
+
+$$q_{\text{w}}' = \frac{3 f_H I^2 R_1}{L_{\text{k}}}$$ [eq 5.4-26]
+
+No power is deposited into the coolant in the simple circuit model.
+
+If the pump element is annular (see ITYPEL), users can control how much of the wall heat is put into each of $q_{wa}'$ and $q_{wb}'$ as
+
+$$\begin{split}q_{\text{wa}}' &= f_{OD} q_{\text{w}}' \\
+q_{\text{wb}}' &= (1 - f_{OD}) q_{\text{w}}'\end{split}$$ [eq 5.4-27]
+
+where $f_{OD}$ is fOD.
+
 
 ------------------------------------------------------------------------------
 [page: Part02/Ch05/temp-ihx.html]
@@ -7773,7 +10338,368 @@ $$D_{1} = \alpha_{1} T_{\text{CS}} \left( j + 1 \right)$$
 
 $$D_{2} = \beta_{1} T_{\text{CS}} \left( j + 1 \right) + \beta_{2} T_{\text{CT}}\left( j + 1 \right)$$
 
-\[D_{3} = \alpha_{3} T_{\text{CT}} \left( j + 1 \right)\]
+$$D_{3} = \alpha_{3} T_{\text{CT}} \left( j + 1 \right)$$
+
+where
+
+ $w_{\text{S}}$ , $w_{\text{T}}$ = the positive steady-state flow rates for the shell and tube sides
+
+The other symbols have the same meanings as in Section 5.4.2.2.
+
+The matrix Eq. (5.4-48) is solved by standard tri-diagonal inversion in subroutine INVRT3.
+
+[anchor: phx-boundary-conditions-and-coolant-options]
+
+## 5.4.2.6. PHX: Boundary Conditions and Coolant Options
+
+The boundary conditions for a PHX are specified using function blocks.
+The inlet temperature for the secondary coolant should be provided in K within the function block
+iPHXTID. In order to ensure a smooth transition from the steady state calculation to the
+transient calculation, the inlet temperatures defined in iPHXTID are corrected. The correction factor is defined
+as the difference between the user provided steady state temperature and the SAS4A/SASSYS-1 calculated steady state temperature.
+The flow rate for the secondary coolant should be provided in kg/s within the function block iPHXWID.
+The secondary flowrate can be positive (countercurrent) or negative (cocurrent), but flow reversal can not occur during a transient.
+A cocurrent configuration requires a null transient calculation and is considered an advanced user option.
+
+The coolant type on the secondary side of a PHX can differ from the coolant type on the primary side of the PHX. The secondary coolant
+is defined using iPHXPRP. The available options for iPHXPRP are the same options available for ICLPRP. If
+a value is not provided for iPHXPRP, the secondary coolant type is assumed to be the same coolant type as the primary side.
+
+[anchor: hx-input-description]
+
+## 5.4.2.7. HX Input Description
+
+Table 5.4.3 Input in INPMR4 (Block 3) for all HX Models
+ | 
+
+ | 
+Variable
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+NIHX
+ | 
+ | 
+Number of heat exchangers.
+ | 
+
+ | 
+IELIHX
+ | 
+ | 
+Element number for the primary element in HX IIHX.
+ | 
+
+ | 
+ILIHXS
+ | 
+ | 
+Element number for the secondary element in HX IIHX.
+ | 
+
+ | 
+IHXCLC
+ | 
+ | 
+Model selection parameter for HX IIHX.
+ | 
+
+ | 
+ISSIHX
+ | 
+ | 
+Steady state temperature drop parameter for HX IIHX.
+ | 
+
+Table 5.4.4 Input in INPMR4 (Block 3) for a PHX Model
+ | 
+
+ | 
+Variable
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+iPHXPRP
+ | 
+ | 
+Coolant type for secondary element. Optional
+ | 
+
+ | 
+iPHXTID
+ | 
+ | 
+Function block ID for secondary element inlet temperature boundary condition.
+ | 
+
+ | 
+iPHXWID
+ | 
+ | 
+Function block ID for secondary element flow rate boundary condition.
+ | 
+
+Table 5.4.5 Input in PMR4IN (Block 18) for all HX Models
+
+ | 
+
+ | 
+Variable
+ | 
+ | 
+Range
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+XLENEL
+ | 
+ | 
+>0.0
+ | 
+ | 
+Length of the element.
+ | 
+
+ | 
+AREAEL
+ | 
+ | 
+>0.0
+ | 
+ | 
+Cross-sectional flow area of the liquid element.
+ | 
+
+ | 
+DHELEM
+ | 
+ | 
+>0.0
+ | 
+ | 
+Hydraulic diameter of liquid element.
+ | 
+
+ | 
+ROUGHL
+ | 
+ | 
+>=0.0
+ | 
+ | 
+Pipe surface roughness of liquid element
+ | 
+
+ | 
+BENDNM
+ | 
+ | 
+>=0.0
+ | 
+ | 
+Number of bends in liquid element.
+ | 
+
+ | 
+G2PRDR
+ | 
+ | 
+>=0.0
+ | 
+ | 
+Initial orifice coefficient of liquid element
+ | 
+
+ | 
+WALLMC
+ | 
+ | 
+>=0.0
+ | 
+ | 
+Wall heat capacity per unit length of liquid element. Ignored for heat exchanger elements.
+ | 
+
+ | 
+WALLH
+ | 
+ | 
+>=0.0
+ | 
+ | 
+Wall heat transfer coefficient of liquid element. Ignored for heat exchanger elements.
+ | 
+
+ | 
+DTIHX
+ | 
+ | 
+/-
+ | 
+ | 
+Optional user specified steady state temperature drop for the primary element within HX.
+ | 
+
+Table 5.4.6 Input in PMR4IN (Block 18) for the detailed HX Model
+
+ | 
+
+ | 
+Variable
+ | 
+ | 
+Range
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+DZSHPX
+ | 
+ | 
+>=0.0
+ | 
+ | 
+Fractional axial node heights within HX.
+ | 
+
+ | 
+HFPIHX
+ | 
+ | 
+>=0.0
+ | 
+ | 
+Fouling heat transfer coefficient for shell side flow within HX.
+ | 
+
+ | 
+HFIIHX
+ | 
+ | 
+>=0.0
+ | 
+ | 
+Fouling heat transfer coefficient for tube side flow within HX.
+ | 
+
+ | 
+SLANTX
+ | 
+ | 
+>=0.0 <=1.0
+ | 
+ | 
+Slant-height factor of the tube side flow within HX.
+ | 
+
+ | 
+PERSPX
+ | 
+ | 
+>0.0
+ | 
+ | 
+Perimeter between shell and shell side coolant within HX.
+ | 
+
+ | 
+PERPTX
+ | 
+ | 
+>0.0
+ | 
+ | 
+Perimeter between tube and shell side coolant within HX.
+ | 
+
+ | 
+PERTIX
+ | 
+ | 
+>0.0
+ | 
+ | 
+Perimeter between tube and tube side coolant within HX.
+ | 
+
+ | 
+DSHIHX
+ | 
+ | 
+>0.0
+ | 
+ | 
+Shell thickness within HX.
+ | 
+
+ | 
+DTUIHX
+ | 
+ | 
+>0.0
+ | 
+ | 
+Tube thickness within HX.
+ | 
+
+ | 
+RCSHHX
+ | 
+ | 
+>0.0
+ | 
+ | 
+Volumetric heat capacity of the shell within HX.
+ | 
+
+ | 
+RCTUHX
+ | 
+ | 
+>0.0
+ | 
+ | 
+Volumetric heat capacity of the tube within HX.
+ | 
+
+ | 
+XKSHHX
+ | 
+ | 
+>0.0
+ | 
+ | 
+Thermal conductivity of the shell within HX.
+ | 
+
+ | 
+XKTUHX
+ | 
+ | 
+>0.0
+ | 
+ | 
+Thermal conductivity of the tube within HX.
+ |
 
 
 ------------------------------------------------------------------------------
@@ -10181,6 +13107,694 @@ int main (void)
  printf ("Done!\n");
  return 0;
 }
+
+[anchor: rvacs-input-description]
+
+## 5.4.7.4. RVACS Input Description
+
+Table 5.4.19 Input in INPMR4 (Block 3) for all RVACS Models
+ | 
+
+ | 
+Variable
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+NSCRVC
+ | 
+ | 
+Number of sections in the RVACS model.
+ | 
+
+ | 
+IRVOPT
+ | 
+ | 
+RVACS model selection
+ | 
+
+ | 
+IELRVC
+ | 
+ | 
+Element number or -ICV, starting at the bottom and going up.
+ | 
+
+ | 
+NANRVC
+ | 
+ | 
+Number of nodes in this section.
+ | 
+
+ | 
+IDBRV
+ | 
+ | 
+Debug parameter for RVACS
+ | 
+
+Table 5.4.20 Input in INPMR4 (Block 3) for the simple RVACS Model
+
+ | 
+
+ | 
+Variable
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+IDRVACSTin
+ | 
+ | 
+FUNCTION ID for RVACS heat-sink temperature as a function of time. If IDRVACSTin = 0, the heat-sink temperature is specified by TAIRVC.
+ | 
+
+ | 
+IRVHTS
+ | 
+ | 
+FUNCTION ID for the RVACS heat transfer coefficient scaling factor as a function of time. If IRVHTS = 0, the scaling factor defaults to one.
+ | 
+
+Table 5.4.21 Input in INPMR4 (Block 3) for the detailed RVACS Model
+
+ | 
+
+ | 
+Variable
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+IDRVACSTin
+ | 
+ | 
+FUNCTION ID for RVACS air inlet temperature as a function of time. If IDRVACSTin = 0, TAIRVC will be used.
+ | 
+
+ | 
+IDRVACSKin
+ | 
+ | 
+FUNCTION ID for RVACS air inlet orifice coefficient as a function of time. If IDRVACSKin = 0, ORFIN will be used.
+ | 
+
+ | 
+ILGVHT
+ | 
+ | 
+Option to specify whether the first element in the RVACS model will be treated as a lower cavity mixing region.
+ | 
+
+Table 5.4.22 Input in PMR4IN (Block 18) for all RVACS Models
+ | 
+
+ | 
+Variable
+ | 
+ | 
+Range
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+XLRVC
+ | 
+ | 
+>=0.0
+ | 
+ | 
+Length of RVACS section.
+ | 
+
+ | 
+SLRVC
+ | 
+ | 
+>=0.0 <=1.0
+ | 
+ | 
+Slope of RVACS section.
+ | 
+
+ | 
+PERVAC
+ | 
+ | 
+>0.0
+ | 
+ | 
+Reactor vessel perimeter.
+ | 
+
+ | 
+ZBRVC
+ | 
+ | 
+-
+ | 
+ | 
+The bottom elevation of RVACS.
+ | 
+
+Table 5.4.23 Input in PMR4IN (Block 18) for the simple RVACS Model
+ | 
+
+ | 
+Variable
+ | 
+ | 
+Range
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+RVHTAB
+ | 
+ | 
+!=0.0
+ | 
+ | 
+Table of H vs T.
+ | 
+
+ | 
+RVHTMP
+ | 
+ | 
+!=0.0
+ | 
+ | 
+Reactor vessel temperature for RVHTAB table.
+ | 
+
+ | 
+TAIRVC
+ | 
+ | 
+!=0.0
+ | 
+ | 
+Air inlet temperature. Ignored if IDRVACSTin > 0.
+ | 
+
+Table 5.4.24 Input in PMR4IN (Block 18) for the detailed RVACS Model
+
+ | 
+
+ | 
+Variable
+ | 
+ | 
+Range
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+PERGV
+ | 
+ | 
+>0.0
+ | 
+ | 
+Perimeter of the guard vessel for convective heat transfer.
+ | 
+
+ | 
+PERGVO
+ | 
+ | 
+>0.0
+ | 
+ | 
+Perimeter of the guard vessel for radiative heat transfer.
+ | 
+
+ | 
+PERFS
+ | 
+ | 
+>0.0
+ | 
+ | 
+Perimeter of the inner finned shell for convective heat transfer.
+ | 
+
+ | 
+PERFSO
+ | 
+ | 
+>0.0
+ | 
+ | 
+Perimeter used for 1) conduction between the inner finned shell and outer finned shell, 2) convection from the outer finned shell to the air, 3) convection from the outer wall to the air, 4) radiation from the outer finned shell to the outer wall, and 5) conduction from the outer wall inner node to the outer wall outer node.
+ | 
+
+ | 
+AIRARV
+ | 
+ | 
+>0.0
+ | 
+ | 
+Flow area between the guard vessel and finned shell.
+ | 
+
+ | 
+AIRAR2
+ | 
+ | 
+>0.0
+ | 
+ | 
+Flow area between the finned shell and the outer wall
+ | 
+
+ | 
+EPSRV
+ | 
+ | 
+>=0.0
+ | 
+ | 
+Emissivity of the reactor vessel.
+ | 
+
+ | 
+EPSGV
+ | 
+ | 
+>=0.0
+ | 
+ | 
+Emissivity of the inner guard vessel wall.
+ | 
+
+ | 
+EPSGVO
+ | 
+ | 
+>=0.0
+ | 
+ | 
+Emissivity of the outer guard vessel wall.
+ | 
+
+ | 
+EPSFSI
+ | 
+ | 
+>=0.0
+ | 
+ | 
+Emissivity of the inner finned shell wall.
+ | 
+
+ | 
+EPSFS
+ | 
+ | 
+>=0.0
+ | 
+ | 
+Emissivity of the outer finned shell wall.
+ | 
+
+ | 
+EPSOW
+ | 
+ | 
+>=0.0
+ | 
+ | 
+Emissivity of the outer wall.
+ | 
+
+ | 
+GVMC
+ | 
+ | 
+>0.0
+ | 
+ | 
+Heat capacity of the guard vessel wall per unit length.
+ | 
+
+ | 
+FSMCI
+ | 
+ | 
+>0.0
+ | 
+ | 
+Heat capacity of the finned shell inner node wall per unit length.
+ | 
+
+ | 
+FSMCO
+ | 
+ | 
+>0.0
+ | 
+ | 
+Heat capacity of the finned shell outer node wall per unit length.
+ | 
+
+ | 
+CRMCI
+ | 
+ | 
+>0.0
+ | 
+ | 
+Heat capacity of the outer wall inner node wall per unit length.
+ | 
+
+ | 
+CRMCO
+ | 
+ | 
+>0.0
+ | 
+ | 
+Heat capacity of the outer wall outer node wall per unit length.
+ | 
+
+ | 
+HGASRV
+ | 
+ | 
+>=0.0
+ | 
+ | 
+Heat transfer coefficient between the reactor vessel and guard vessel. Can include convective and conductive heat transfer.
+ | 
+
+ | 
+HFSRV
+ | 
+ | 
+>=0.0
+ | 
+ | 
+Heat transfer coefficient between the inner and outer finned shell nodes.
+ | 
+
+ | 
+RW5RV
+ | 
+ | 
+>0.0
+ | 
+ | 
+Thermal resistance of the outer wall inner node.
+ | 
+
+ | 
+HCONRV
+ | 
+ | 
+>=0.0
+ | 
+ | 
+Heat transfer coefficient of the outer wall outer node.
+ | 
+
+ | 
+TW6RV
+ | 
+ | 
+>0.0
+ | 
+ | 
+Temperature of the outer wall outer node.
+ | 
+
+ | 
+TAIRVC
+ | 
+ | 
+>0.0
+ | 
+ | 
+Air inlet temperature. Ignored if IDRVACSTin > 0.
+ | 
+
+ | 
+XLAIRV
+ | 
+ | 
+>0.0
+ | 
+ | 
+Length of the inlet stack.
+ | 
+
+ | 
+DHAIRV
+ | 
+ | 
+>0.0
+ | 
+ | 
+Hydraulic diameter of the inlet stack.
+ | 
+
+ | 
+AARIRV
+ | 
+ | 
+>0.0
+ | 
+ | 
+Flow area of the inlet stack.
+ | 
+
+ | 
+XLAORV
+ | 
+ | 
+>0.0
+ | 
+ | 
+Length of the outlet stack.
+ | 
+
+ | 
+DHAORV
+ | 
+ | 
+>0.0
+ | 
+ | 
+Hydraulic diameter of the outlet stack.
+ | 
+
+ | 
+AARORV
+ | 
+ | 
+>0.0
+ | 
+ | 
+Flow area of the outlet stack.
+ | 
+
+ | 
+C1RV
+ | 
+ | 
+>0.0
+ | 
+ | 
+First coefficient of the heat transfer correlation for air.
+ | 
+
+ | 
+C2RV
+ | 
+ | 
+-
+ | 
+ | 
+Second coefficient of the heat transfer correlation for air.
+ | 
+
+ | 
+C3RV
+ | 
+ | 
+>0.0
+ | 
+ | 
+Third coefficient of the heat transfer correlation for air.
+ | 
+
+ | 
+C4RV
+ | 
+ | 
+-
+ | 
+ | 
+Fourth coefficient of the heat transfer correlation for air.
+ | 
+
+ | 
+REYTRV
+ | 
+ | 
+>=0.0
+ | 
+ | 
+Reynolds number at which laminar flow transitions to turbulent flow. This input is overwritten according to Eq. (5.4-123)
+ | 
+
+ | 
+SIGSTB
+ | 
+ | 
+>=0.0
+ | 
+ | 
+Stefan-Boltzmann constant.
+ | 
+
+ | 
+AFRTRV
+ | 
+ | 
+>=0.0
+ | 
+ | 
+First turbulent friction factor parameter.
+ | 
+
+ | 
+BFRTRV
+ | 
+ | 
+-
+ | 
+ | 
+Second turbulent friction factor parameter.
+ | 
+
+ | 
+AFRLRV
+ | 
+ | 
+>=0.0
+ | 
+ | 
+Laminar friction factor parameter.
+ | 
+
+ | 
+ORFIN
+ | 
+ | 
+>=0.0
+ | 
+ | 
+Inlet orifice coefficient. Ignored if IDRVACSKin > 0.
+ | 
+
+ | 
+XLUNRV
+ | 
+ | 
+>0.0
+ | 
+ | 
+Length of upper reactor vessel node.
+ | 
+
+ | 
+UNGVMC
+ | 
+ | 
+>0.0
+ | 
+ | 
+Heat capacity of the upper guard vessel node per unit length.
+ | 
+
+ | 
+UNFSMC
+ | 
+ | 
+>0.0
+ | 
+ | 
+Heat capacity of the upper finned shell node per unit length.
+ | 
+
+ | 
+AIRAUN
+ | 
+ | 
+>0.0
+ | 
+ | 
+Flow area of the upper node.
+ | 
+
+ | 
+FINVNT
+ | 
+ | 
+>=0.0
+ | 
+ | 
+Inverse scaling factor for structure thermal inertia during null transient. Default: 10.0.
+ | 
+
+ | 
+SPLITF
+ | 
+ | 
+>=0.0 <=1.0
+ | 
+ | 
+Splitting factor for the air flow if the lower cavity mixing region is used.
+ | 
+
+ | 
+HTCLGV
+ | 
+ | 
+>=0.0
+ | 
+ | 
+Heat transfer coefficient between the lower guard vessel and the air in the lower cavity.
+ |
 
 
 ------------------------------------------------------------------------------

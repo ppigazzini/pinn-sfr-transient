@@ -1785,7 +1785,155 @@ schematic.
  | 
  | 
  $\theta_{\text{K+1}}$ 
- |
+ | 
+
+ | 
+ $\rho_{\text{K-1}}$ 
+ | 
+ | 
+ $\rho_{\text{K}}$ 
+ | 
+ | 
+ $\rho_{\text{K+1}}$ 
+ | 
+
+ | 
+ $P_{\text{K-1}}$ 
+ | 
+ | 
+ $P_{\text{K}}$ 
+ | 
+ | 
+ $P_{\text{K+1}}$ 
+ | 
+
+ | 
+ $S_{\text{K-1}}$ 
+ | 
+ | 
+ $S'_{\text{K}}$ 
+ | 
+ | 
+ $S'_{\text{K+1}}$ 
+ | 
+
+ | 
+ $z_{\text{K}}$ 
+ | 
+ | 
+ $z_{\text{K+1}}$ 
+ | 
+
+The finite difference form of the momentum conservation Eq. (14.2-44), is
+written using the definitions 14.2-46 and 14.2-47 as:
+
+$$\begin{split} \frac{\left( {\rho'}_{\text{fufi,bk}}^{n + 1} u_{\text{fuca,K}}^{n + 1} - {\rho'}_{\text{fufi,bk}}^{n} u_{\text{fuca,K}}^{n} \right)}{\Delta t_{\text{PL}}} = - \left\lbrack \left( u_{\text{fuca}}^{2} {\rho'}_{\text{fufi}} \right)_{\text{K}}^{n} \right. \\ \left.
+ - \left( u_{\text{fuca}}^{2} {\rho'}_{\text{fufi}} \right)_{\text{K-1}}^{n} \right\rbrack \big/ \Delta z - \theta_{\text{ca,bk}} \left\lbrack \left( 1 - \varepsilon \right) \cdot \left( P_{\text{ca,K}}^{n} - P_{\text{ca,K-1}}^{n} \right) \right. \\ \left.
+ + \varepsilon \cdot \left( P_{\text{ca,K}}^{n + 1} - P_{\text{ca,K-1}}^{n + 1} \right) + \left( P_{\text{vi,K}}^{n} - P_{\text{vi,K-1}}^{n} \right) \right\rbrack \big/ \Delta z - g {\rho'}_{\text{fufi,bk}} \\
+ - u_{\text{fuca,K}}^{n + 1} \left| u_{\text{fuca,K}}^{n} \right| {\rho'}_{\text{fufi,bk}}^{n} F_{\text{friction,bk}} \big/ \left( 2D_{\text{ca}} \right) - \left( {S'}_{\text{fuca,ej,K-1}}^{n + 1/2} \right. \\ \left.
+ + {S'}_{\text{fuca,ej,K}}^{n + 1/2} + {S'}_{\text{fica,ej,K-1}}^{n + 1/2} + {S'}_{\text{fica,ej,K}}^{n + 1/2} \right) \cdot \left( u_{\text{fuca,K}}^{n + 1} + u_{\text{fuca,K}}^{n} \right) \cdot 0.25\end{split}$$ [eq 14.2-61]
+
+where
+
+ $\varepsilon$ = Input value EPCH that can be between zero and one (see
+Eq. (14.2-1)),
+
+and $\Delta z$ implies $0.5 \left( \Delta z_{\text{K-1}} + \Delta z_{\text{K}} \right)$ .
+
+By defining
+
+$${S'}_{\text{fuca,ej,bk}}^{n + 1/2} = \left( {S'}_{\text{fica,ej,K-1}}^{n + 1/2} + {S'}_{\text{fica,ej,K}}^{n + 1/2} + {S'}_{\text{fica,ej,K-1}}^{n + 1/2} + {S'}_{\text{fica,ej,K}}^{n + 1/2} \right) \cdot 0.5$$ [eq 14.2-62]
+
+and by collecting all terms with $u_{\text{uica}}^{n + 1}$ on the
+left-hand side of the equation, one obtains
+
+$$\begin{split} u_{\text{fuca,K}}^{n + 1} \left\lbrack \frac{{\rho'}_{\text{fufi,bk}}^{n + 1}}{\Delta t_{\text{PL}}} + \left| u_{\text{fuca,K}}^{n} \right| {\rho'}_{\text{fufi,bk}}^{n} \frac{F_{\text{friction,bk}}}{\left( 2D_{\text{ca}} \right)} \right. \\ \left.
+ + {S'}_{\text{fufi,ej,bk}}^{n + 1/2} \cdot 0.5 \right\rbrack = \frac{{\rho'}_{\text{fufi,bk}}^{n} u_{\text{fuca,K}}^{n}}{\Delta t_{\text{PL}}} \\
+ - \frac{\left\lbrack \left( u_{\text{fuca}}^{2} {\rho'}_{\text{fufi}} \right)_{\text{K}}^{n} - \left( u_{\text{fuca}}^{2} {\rho'}_{\text{fufi}} \right)_{\text{K-1}}^{n} \right\rbrack}{\Delta z} \\
+ - \theta_{\text{ca,bk}} \left\lbrack \left( 1 - \varepsilon \right) \cdot \left( P_{\text{ca,K}}^{n} - P_{\text{ca,K-1}}^{n} \right) \right. \\ \left.
+ + \varepsilon \left( P_{\text{ca,K}}^{n + 1} - P_{\text{ca,K-1}}^{n + 1} \right) + \left( P_{\text{vi,K}}^{n} - P_{\text{vi,K-1}}^{n} \right) \right\rbrack \big/ \Delta z - g {\rho'}_{\text{fufi,bk}} \\
+ - {S'}_{\text{fuca,ej,bk}}^{n + 1/2} u_{\text{fuca,K}}^{n} \cdot 0.5 \\\end{split}$$ [eq 14.2-63]
+
+The convective momentum flux in Eq. (14.2-63) is calculated as
+
+$$\begin{split} \left( u_{\text{fuca}}^{2} {\rho'}_{\text{fufi}} \right)_{\text{K}} = \begin{cases}
+ {\rho'}_{\text{fufi,K}} u_{\text{fuca,K}}^{2} & \text{if } \left( u_{\text{fuca,K}} + u_{\text{fuca,K+1}} \right) > 0 \\
+ {\rho'}_{\text{fufi,K}} u_{\text{fuca,K+1}}^{2} & \text{if } \left( u_{\text{fuca,K}} + u_{\text{fuca,K+1}} \right) < 0
+ \end{cases}\end{split}$$ [eq 14.2-64]
+
+$$\begin{split} \left( u_{\text{fuca}}^{2} {\rho'}_{\text{fufi}} \right)_{\text{K-1}} = \begin{cases}
+ {\rho'}_{\text{fufi,K-1}} u_{\text{fuca,K-1}}^{2} & \text{if } \left( u_{\text{fuca,K-1}} + u_{\text{fuca,K}} \right) > 0 \\
+ {\rho'}_{\text{fufi,K-1}} u_{\text{fuca,K}}^{2} & \text{if } \left( u_{\text{fuca,K-1}} + u_{\text{fuca,K}} \right) < 0
+ \end{cases}\end{split}$$ [eq 14.2-65]
+
+where
+
+$${\rho'}_{\text{fufi,K}} = {\rho'}_{\text{fuca,K}} + {\rho'}_{\text{fica,K}}$$ [eq 14.2-66]
+
+The momentum fluxes for the lower and upper end cells of the cavity,
+which are designated by KK1 and KKMX, are:
+
+$$\begin{split} \left( u_{\text{fuca}}^{2} {\rho'}_{\text{fufi}} \right)_{\text{KK1}} = \begin{cases}
+ {\rho'}_{\text{fufi,KK1}} u_{\text{fuca,KK1+1}}^{2} \cdot 0.25 & \text{if } u_{\text{fuca,KK1+1}} > 0 \\
+ {\rho'}_{\text{fufi,KK1}} u_{\text{fuca,KK+1}}^{2} & \text{if } u_{\text{fuca,KK1+1}} < 0
+ \end{cases}\end{split}$$ [eq 14.2-67]
+
+$$\begin{split} \left( u_{\text{fuca}}^{2} {\rho'}_{\text{fufi}} \right)_{\text{KKMX}} = \begin{cases}
+ \rho_{\text{fufi,KKMX}} u_{\text{fuca,KKMX}}^{2} & \text{if } u_{\text{fuca,KKMX}} > 0 \\
+ \rho_{\text{fufi,KKMX}} u_{\text{fuca,KKMX}}^{2} \cdot 0.25 & \text{if } u_{\text{fuca,KKMX}} < 0
+ \end{cases}\end{split}$$ [eq 14.2-68]
+
+The factor 0.25 in the above convection terms comes from the assumption
+of a zero velocity at the end of the cavity.
+
+The momentum Eq. (14.2-63) can be solved for
+ $u_{\text{fuca,K}}^{n + 1}$ if Eq. (14.2-59), Eq. (14.2-60), and Eq. (14.2-64)
+through Eq. (14.2-68) are used.
+
+[anchor: time-step-determination-for-the-in-pin-motion]
+
+## 14.2.8. Time-step Determination for the In-Pin Motion
+
+The PLUTO2 time step $\Delta t_{\text{PL}}$ used in the numerical solution of
+all the in-pin and channel conservation equations is restricted by the
+sonic Courant conditions for both the in-pin and channel flows. The
+sonic Courant condition for the channel flow and the determination of
+the PLUTO2 time step $\Delta t_{\text{PL}}$ is given at the end of the
+channel flow description in Section 14.4.6.4. In the present section,
+only the restriction imposed by the sonic Courant condition for the
+in-pin flow is described.
+
+The time-step size for the in-pin motion is computed to be a fraction,
+0.4, of the minimum time step based on the sonic Courant condition
+
+$$\Delta t_{\text{PL,pin}} = 0.4 \cdot \min\left\lbrack \frac{{z}_{\text{K}}}{v_{\text{sonic,K}} + |u_{\text{fuca,K}}|} \right\rbrack_{\text{K = KK1,KKMX}}$$ [eq 14.2-69]
+
+The minimum in Eq. (14.2-69) is evaluated over all the axial cells of the
+molten fuel cavity. The sonic velocity is calculated from an expression
+for an adiabatic, homogeneous two-component gas-liquid mixture which is
+based on Eq. 27 in Reference [14-28].
+
+$$\begin{split} v_{\text{sonic}}^{2} = \gamma_{\text{fi}} P_{\text{fica}} \big/ \left\{ \left\lbrack \alpha_{\text{fica}}^{2} \cdot \rho_{\text{fica}} + \alpha_{\text{fica}} \left( 1 - \alpha_{\text{fica}} \right) \rho_{\text{fuca}} \right\rbrack \right. \\ \left.
+ + \left\lbrack \left( 1 - \alpha_{\text{fica}} \right)^{2} \rho_{\text{fica}} + \alpha_{\text{fica}} \left( 1 - \alpha_{\text{fica}} \right) \rho_{\text{fica}} \right\rbrack \gamma_{\text{fi}} P_{\text{fica}} K_{\text{fu}} \right\} \\\end{split}$$ [eq 14.2-70]
+
+where
+
+ $\alpha_{\text{fica}} = \frac{\theta_{\text{fica}}}{\theta_{\text{ca}}}$ = void fraction in
+the cavity
+
+ $\gamma_{\text{fi}} = \frac{C_{\text{p,fi}}}{C_{\text{v,fi}}} = 1.4$ (value
+assumed in PLUTO2)
+
+ $K_{\text{fu}} = \text{CMFU}$ = input liquid fuel compressibility
+
+The above equation holds for adiabatic gas behavior, although the in-pin
+fission-gas treatment in $\text{PLUTO2}$ is isothermal (the gas temperature is
+assumed to be always equal to the fuel temperature). However, the sonic
+velocity for adiabatic gas behavior is higher than that for isothermal
+gas behavior, and thus, leads to a more conservative (i.e., smaller)
+time step. Moreover, if a pure gas flow were treated in sections of pins
+with a prefabricated central hole, the current time-step determination
+would actually be necessary.
 
 
 ------------------------------------------------------------------------------

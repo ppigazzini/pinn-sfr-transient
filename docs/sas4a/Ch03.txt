@@ -3200,6 +3200,135 @@ iZone Kind C1f C2f C3f C1b C2b C3b A Dh ReL
 4 1 1 100000 -1 2.2 20000 -1 0.002 0.003183099 10.0
 END
 
+[anchor: finite-difference-equations-coolant-flow-rates]
+
+## 3.9.4. Finite Difference Equations - Coolant Flow Rates
+
+If
+ $w_{1} = w\left( t \right),\ w_{2} = w\left( t + \Delta t \right),\ \Delta w = w_{2} - w_{1}$ ,
+then we approximate $\Delta w$ as
+
+$$\Delta w = \left\lbrack \theta_{1}\left. \frac{\partial \text{w}}{\partial \text{t}} \right|_{t} + \theta_{2}\left. \frac{\partial \text{w}}{\partial \text{t}} \right|_{t + \Delta t } \right\rbrack \Delta t$$ [eq 3.9-26]
+
+and
+
+$$\theta_{1} + \theta_{2} = 1.0$$ [eq 3.9-27]
+
+in which $\theta_2$ is the degree of implicitness. For small time
+steps a semi-implicit calculation is used, with $\theta_1$ =
+ $\theta_2 = .5~$ . For a fully implicit calculation for large time
+steps, $\theta_1 = 0$ and $\theta_2 = 1.0~$ . The value used for
+ $\theta_2$ is
+
+$$\theta_{2} = \frac{6.12992 + 2.66054x + x^{2}}{2\ x\ 6.12992 + 3.56284x + x^{2}}$$ [eq 3.9-28]
+
+where
+
+$$x = \Delta t/\tau$$ [eq 3.9-29]
+
+and $\tau$ is the time constant for flow rate changes given by
+
+$$\tau = I_{1}/d_{1}$$ [eq 3.9-30]
+
+The definition of $d_1$ is given by Eq. (3.9-37) below. This
+correlation for $\theta_2$ is discussed in Section 3.19.1. The
+additional approximations are made that
+
+$$\left( w_{1} + \Delta w \right)^{2} \simeq w_{1}^{2} + 2\Delta w\ w_{1}$$ [eq 3.9-31]
+
+$$\left( w_{1} + \Delta w \right) \left| w_{1} + \Delta w \right| \simeq w_{1} \left| w_{1} \right| + 2\left| w_{1} \right| \Delta w$$ [eq 3.9-32]
+
+$$\left( w_{1} + \Delta w \right)\left| w_{1} + \Delta w \right|^{1 + b_{\text{fr}}} \simeq w_{1}\left| w_{1} \right|^{1 + b_{\text{fr}}} + \left( 2 + b_{\text{fr}} \right)\left| w_{1} \right|^{1 + b_{\text{fr}}}\ \Delta w$$ [eq 3.9-33]
+
+$$I_{4}(w_1 + \Delta w) \simeq I_{4}(w_1) + \frac{\partial I_{4}}{\partial Re}\frac{\partial Re}{\partial w}\Delta w$$ [eq 3.9-34]
+
+These equations are combined to give
+
+where $p_{\text{t}1}$ and $p_{\text{t}2}$ are the pressures at the top of
+the subassembly at the beginning and end of the time step. Similarly,
+ $p_{\text{b}1}$ and $p_{\text{b}2}$ are the pressures at the bottom of the
+subassembly at the beginning and end of the time step, respectively.
+
+Solving for the coolant flow rate change, $\Delta w$ , gives
+
+$$\Delta w = \Delta t \frac{\left\lbrack \theta_{1}\left( p_{\text{b}1} - p_{\text{t}1} \right) + \theta_{2}\left( p_{\text{b}2} - p_{\text{t}2} \right) - I_{2}w_{1}^{2} - A'_{\text{fL}}I_{\text{3L}}w_{1} - A'_{\text{fr}}I_{\text{3T}}w_{1}\left| w_{1} \right|^{1 + b_{\text{fr}}} - I_{4}(w_1) w_{1} \left| w_{1} \right| - g I_{5} \right\rbrack}{\left( I_{1} + \Delta t\ \theta_{2}d_{1} \right)}$$ [eq 3.9-36]
+
+where
+
+$$d_{1} = 2 w_{1} I_{2} + A'_{\text{fL}}I_{\text{3L}} + \left( 2 + b_{\text{fr}} \right){ \left| w_{1} \right|}^{1 + b_{\text{fr}}} A'_{\text{fr} }I_{\text{3T}} + 2 |w_1| I_{4}(w_1) + w_1 |w_1| \frac{\partial I_{4}}{\partial Re}\frac{\partial Re}{\partial w}$$ [eq 3.9-37]
+
+The temperatures used to evaluate $\rho_{\text{c}}$ and
+ $\overline{\mu}$ in Eq. (3.9-12), Eq. (3.9-14), Eq. (3.9-16), Eq. (3.9-18) and Eq. (3.9-20) are
+extrapolated coolant temperatures, extrapolated to the end of the
+coolant step.
+
+[anchor: coolant-pressures]
+
+## 3.9.5. Coolant Pressures
+
+After the flow rate has been calculated, the coolant pressures in a
+channel at the end of a time step are calculated. First, the pressure at
+node $\text{MZC}$ , the last node at the top of the subassembly, is calculated as
+
+$$p\left( \text{MZC} \right) = p_{\text{t}2} + \left\lbrack \frac{\Delta z_{\text{i}}}{A} \right\rbrack_{\text{t}}\frac{\partial \text{w}}{\partial \text{t}}$$ [eq 3.9-38]
+
+where
+
+$$p_{\text{t}2} = p_{\text{x}2} + \rho_{\text{cout}} g \left\lbrack z_{\text{plu}} - z_{\text{c}}\left( \text{MZC} \right) \right\rbrack$$ [eq 3.9-39]
+
+ $z_{\text{plu}}$ = outlet plenum elevation
+
+ $\rho_{\text{cout}}$ = density at outlet
+
+ $p_{\text{x}2}$ = coolant outlet plenum pressure at the end of the time
+step
+
+Note that $p_{\text{x}2}$ , the outlet plenum pressure supplied by the
+primary loop module, is defined at an elevation $z_{\text{plu}}$ , the
+elevation of the upper plenum, whereas
+ $p\left( \text{MZC} \right)$ is calculated at
+ $z\left( \text{MZC} \right)$ , so the gravity head
+term occurs in Eq. (3.9-39).
+
+After $p\left( \text{MZC} \right)$ has been calculated,
+the other pressures are calculated, starting at node $\text{MZC}$ -1 working down,
+using
+
+and
+
+$$\begin{split} p \left( \text{JC} \right) = \begin{cases}
+ p \left( \text{JC} \right) + \left| w \right| w K_{i}/\left(2\rho_{\text{c}} A_i^2 \right) & \text{JC} = \text{JC}_i \\
+ p \left( \text{JC} \right) & \text{JC} \ne \text{JC}_i \\
+ \end{cases}\end{split}$$ [eq 3.9-41]
+
+Note $\text{JC}_i = \text{MZC}-1$ for the channel outlet, $i=\text{NZONE}+1$ .
+
+In Eq. (3.9-38) and Eq. (3.9-40), the value used for $\frac{\partial w}{\partial t}$ is calculated at
+the end of the time step for the transient calculation as
+
+$$\frac{\partial \text{w}}{\partial \text{t}} = \frac{\left\lbrack p_{\text{b}2} - p_{\text{t}2} - w_{2}^{2} I_{2} - A'_{\text{fL}}w_{2}I_{\text{3L}} - A'_{\text{fr}}w_{2}\left| w_{2} \right|^{1 + b_{\text{fr}}} I_{\text{3T}} - w_{2}\left| w_{2} \right|I_{4}(w_2) - g I_{5} \right\rbrack}{I_{1}}$$ [eq 3.9-42]
+
+The pressure, $p_{\text{b}2}$ at the bottom of the subassembly
+at the end of the time step is calculated as
+
+$$p_{\text{b}2} = p_{\text{in}2} - \rho_{\text{cin}} g \left\lbrack z_{\text{c}}\left( 1 \right) - z_{\text{pll}} \right\rbrack$$ [eq 3.9-43]
+
+ $z_{\text{pll}}$ = plenum location. Note that
+ $p_{\text{in}2}$ , the inlet plenum pressure supplied by the
+primary loop module, is defined at an elevation
+ $z_{\text{pll}}$ , the elevation of the lower plenum.
+
+The pressure distribution in the steady state is calculated the same as
+in the transient, except that $\frac{\partial w}{\partial t}$ is zero in the steady-state
+calculation.
+
+At the end of the steady state calculation, SAS will adjust the values of XKORI such that the pressure drop
+across each channel is consistent, given the user provided flow rates.
+These adjustments are reported in the standard output file.
+The magnitude of these adjustments can be limited using ADJKTOL.
+If ADJKTOL is set to a positive value and SAS determines an adjustment to XKORI that is larger than the
+defined tolerance is required, SAS will report an error and the simulation will be terminated.
+
 
 ------------------------------------------------------------------------------
 [page: Part02/Ch03/multi-pin.html]
@@ -5032,7 +5161,237 @@ TSMPDR
  | 
  | 
 Transient driver for the detailed subchannel model. Calculates one coolant time step for one group of channels.
- |
+ | 
+
+Table 3.14.2 SAS4A/SASSYS-1 Subroutines Used with Detailed Subchannel Model
+
+ | 
+
+ | 
+Subroutine
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+CCLAD
+ | 
+ | 
+Cladding heat capacity.
+ | 
+
+ | 
+CFUEL
+ | 
+ | 
+Fuel heat capacity.
+ | 
+
+ | 
+DATMOV
+ | 
+ | 
+Copies data packs from the dynamically allocated memory container to the regular common blocks and moves them back.
+ | 
+
+ | 
+HBSMPL
+ | 
+ | 
+Simple model for the bond gap conductance between the fuel and the cladding.
+ | 
+
+ | 
+INVRT3
+ | 
+ | 
+Solves a tri-diagonal matrix equation for temperatures. Note, INVRT3 and INVTRI have similar uses, but INVTRI can handle a more general tri-diagonal matrix.
+ | 
+
+ | 
+KFUEL
+ | 
+ | 
+Calculates fuel thermal conductivity.
+ | 
+
+ | 
+LINES
+ | 
+ | 
+Counts the number of lines that have been printed and puts page headings in the output.
+ | 
+
+ | 
+POINST
+ | 
+ | 
+Calculates pointers used by DATMOV and in the memory management.
+ | 
+
+ | 
+READIN
+ | 
+ | 
+Reads the input data
+ | 
+
+ | 
+RESTAR
+ | 
+ | 
+Reads or writes a restart file.
+ | 
+
+ | 
+SHAPE
+ | 
+ | 
+Sets the axial power shape in the fuel pin section of a channel.
+ | 
+
+ | 
+SSCOOL
+ | 
+ | 
+Calculates steady-state coolant temperatures and pressures ignoring subchannel-to-subchannel cross flow and heat transfer. Used for initial conditions for the steady-state null transient.
+ | 
+
+ | 
+SSHRT
+ | 
+ | 
+Steady-state fuel pin temperatures.
+ | 
+
+ | 
+TSHTN5
+ | 
+ | 
+Calculates melting of the cladding.
+ | 
+
+ | 
+TSHTN6
+ | 
+ | 
+Calculates melting of the fuel.
+ | 
+
+ | 
+TSPRNT
+ | 
+ | 
+Prints thermal hydraulic output for selected channels.
+ | 
+
+Table 3.14.3 SAS4A/SASSYS-1 Drivers that Call Detailed Subchannel Model
+
+ | 
+
+ | 
+Subroutine
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+INPDRV
+ | 
+ | 
+Input driver, calls READIN
+ | 
+
+ | 
+SSTHRM
+ | 
+ | 
+Steady-state thermal hydraulics driver for the core channel calculations.
+ | 
+
+ | 
+TSTHRM
+ | 
+ | 
+Transient thermal hydraulics driver for the core channel calculations.
+ | 
+
+[anchor: required-computer-capabilities]
+
+## 3.14.7. Required Computer Capabilities
+
+One question that has been addressed is whether it is practical to run a
+detailed whole core case on currently available computers. There are two
+main computer-related considerations. One consideration is whether
+currently available computers have enough memory for a whole core case.
+The other consideration is whether computers are fast enough to run a
+large case in a reasonable amount of time.
+
+[anchor: memory-requirements]
+
+### 3.14.7.1. Memory Requirements
+
+For the detailed subchannel model the SAS4A/SASSYS-1 code requires 0.13
+or 0.17 MB of main memory per channel, depending on whether or not the
+fuel pin mechanics model in the code is used in addition to the
+subchannel thermal hydraulics model. An additional 8 MB are used for
+coding, and a few MB are used for non-channel dependent memory.
+
+To determine how many channels are required for a detailed treatment,
+consider the ALMR mod B reactor design, which is a moderately sized
+reactor, with a power rating of 840 MWt. This reactor contains 108
+driver subassemblies with 271 pins and 546 coolant subchannels per
+subassembly, 84 blanket subassemblies with 127 pins and 258 coolant
+subchannels per subassembly, 66 shield subassemblies with 7 pins and 18
+coolant subchannels per subassembly, and a few other subassemblies. With
+a one computational channel per subchannel treatment, a whole core case
+could therefore use about 81,000 channels. This would require 10.5 -
+13.8 GB of memory, although if the core loading is symmetrical the
+number of computational channels and the memory requirements could be
+reduced by making use of the symmetry. Liquid metal reactor designs
+about four times as large as the ALMR reactor have been considered. A
+detailed analysis of such a design might require 40 - 50 GB of memory.
+Some current computers are limited to a maximum of 2 GB of memory,
+although many computers have more memory. Accessing more than 2 GB of
+memory would probably require the use of 64 bit integers.
+
+[anchor: speed-considerations]
+
+### 3.14.7.2. Speed Considerations
+
+Timing data for the new detailed subchannel model indicates that the
+time required on an old Sun Blade computer with a processor speed of 500
+MHz is about 8 ms per time step per channel. Thus, even if this computer
+had enough memory to run the 81,000 channel ALMR case discussed above,
+the time required for a solution for 1000 time steps could be 650,000
+seconds, or 7.5 days. Computers with processor speeds significantly
+greater than 500 MHz are currently available, but it appears that
+running a large case will require significant amounts of computing power
+and running time.
+
+[anchor: use-of-a-multi-processor-cluster]
+
+### 3.14.7.3. Use of a Multi-Processor Cluster
+
+Because of the memory and speed considerations listed above, it might
+appear that the most practical way to run large cases with the new model
+is with the use of a cluster of processors, with one or more
+subassemblies run on each processor. The model was developed with that
+in mind. However, the older modules in SAS4A/SASSYS-1 were written
+before clusters of processors were being considered, and converting the
+whole code to run on multiple processors would require a great effort.
+Currently the approach is to model part of the core with the detailed
+subchannel model and to model the rest of the core with the older, less
+detailed models which require considerably less memory and computing
+time. This approach works well with the current code and current
+computers. High-end currently available computers have enough memory and
+speed to run large detailed subchannel cases on a single computer.
 
 
 ------------------------------------------------------------------------------
@@ -8450,7 +8809,1599 @@ Beginning of the time step
  | 
 End of the time step
  | 
- | |
+ | | 
+
+ | 
+
+ | 
+Symbol
+ | 
+ | 
+Description
+ | 
+ | 
+Units
+ | 
+
+ | 
+
+ | 
+ $A_{\text{c}}$ 
+ | 
+ | 
+Coolant flow area
+ | 
+ | 
+m2
+ | 
+
+ | 
+ $A_{\text{ep}}$ 
+ | 
+ | 
+Cross sectional area of the clad in the gas plenum region
+ | 
+ | 
+m2
+ | 
+
+ | 
+ $A_{\text{g}}$ 
+ | 
+ | 
+Cross sectional area of the plenum gas
+ | 
+ | 
+m2
+ | 
+
+ | 
+ $A_{\text{fr}}$ , $b_{\text{fr}}$ 
+ | 
+ | 
+Coefficients in the friction factor correlation: $f = A_{\text{fr}}\left( \text{Re} \right)^{b_{\text{fr}}}$ 
+ | 
+ | 
+–
+ | 
+
+ | 
+ $c$ 
+ | 
+ | 
+Specific heat
+ | 
+ | 
+J/kg-K
+ | 
+
+ | 
+ $\overline{c}_{\text{c}}$ 
+ | 
+ | 
+Coolant specific heat
+ | 
+ | 
+J/kg-K
+ | 
+
+ | 
+ $c_{\text{e}}$ 
+ | 
+ | 
+Cladding specific heat
+ | 
+ | 
+J/kg-K
+ | 
+
+ | 
+ $\overline{c}_{\text{f}}$ 
+ | 
+ | 
+Average fuel specific heat, averaged over a time step
+ | 
+ | 
+J/kg-K
+ | 
+
+ | 
+ $c_{\text{m}}$ 
+ | 
+ | 
+Modified specific heat in the melting range
+ | 
+ | 
+J/kg-K
+ | 
+
+ | 
+ $c_{\text{mix}}$ 
+ | 
+ | 
+Coolant specific heat in the mixing zone used for re-entry temperature calculation
+ | 
+ | 
+J/kg-K
+ | 
+
+ | 
+ $c_1$ , $c_2$ , $c_3$ 
+ | 
+ | 
+Correlation constants used in coolant heat-transfer coefficients
+ | 
+ | 
+–
+ | 
+
+ | 
+ $D$ 
+ | 
+ | 
+Right-hand-side terms in the matrix equations for radial temperature profiles
+ | 
+ | 
+J/m
+ | 
+
+ | 
+ $D_{\text{h}}$ 
+ | 
+ | 
+Hydraulic diameter
+ | 
+ | 
+m
+ | 
+
+ | 
+ $d_{\text{sti}}$ 
+ | 
+ | 
+Structure inner node thickness
+ | 
+ | 
+m
+ | 
+
+ | 
+ $d_{\text{sto}}$ 
+ | 
+ | 
+Structure outer node thickness
+ | 
+ | 
+m
+ | 
+
+ | 
+ $E_{\text{ec}}$ 
+ | 
+ | 
+Heat flux from clad to coolant, integrated over a time step
+ | 
+ | 
+J/m2
+ | 
+
+ | 
+ $E_{\text{sc}}$ 
+ | 
+ | 
+Heat flux form structure to coolant, integrated over a time step
+ | 
+ | 
+J/m2
+ | 
+
+ | 
+ $f$ 
+ | 
+ | 
+Friction factor
+ | 
+ | 
+–
+ | 
+
+ | 
+ $f_{\text{i}}$ 
+ | 
+ | 
+Fraction of the structure thickness represented by the inner node
+ | 
+ | 
+–
+ | 
+
+ | 
+ $f_{\text{o}}$ 
+ | 
+ | 
+Fraction of the structure thickness represented by the outer node
+ | 
+ | 
+–
+ | 
+
+ | 
+ $g$ 
+ | 
+ | 
+Acceleration of gravity
+ | 
+ | 
+m/s2
+ | 
+
+ | 
+ $h_{\text{b}}$ 
+ | 
+ | 
+Bond gap conductance
+ | 
+ | 
+W/m2-K
+ | 
+
+ | 
+ $h_{\text{c}}$ 
+ | 
+ | 
+Coolant-film heat-transfer coefficient
+ | 
+ | 
+W/m2-K
+ | 
+
+ | 
+ $h_{\text{cond}}$ 
+ | 
+ | 
+Condensation heat-transfer coefficient for sodium vapor
+ | 
+ | 
+W/m2-K
+ | 
+
+ | 
+ $H_{\text{eg}}$ 
+ | 
+ | 
+Heat-transfer coefficient form the gas in the gas plenum to the cladding
+ | 
+ | 
+W/m2-K
+ | 
+
+ | 
+ $H_{\text{erc}}$ 
+ | 
+ | 
+Heat-transfer coefficient from the cladding or reflector outer node to the coolant
+ | 
+ | 
+W/m2-K
+ | 
+
+ | 
+ $h_{\text{r}}$ 
+ | 
+ | 
+Equivalent radiation heat-transfer coefficient
+ | 
+ | 
+W/m2-K
+ | 
+
+ | 
+ $H_{\text{rio}}$ 
+ | 
+ | 
+Heat-transfer coefficient from the structure inner node to the reflector outer node
+ | 
+ | 
+W/m2-K
+ | 
+
+ | 
+ $H_{\text{sic}}$ 
+ | 
+ | 
+Heat-transfer coefficient from the structure inner node to the coolant
+ | 
+ | 
+W/m2-K
+ | 
+
+ | 
+ $H_{\text{stio}}$ 
+ | 
+ | 
+Heat-transfer coefficient from the structure inner node to the structure outer node
+ | 
+ | 
+W/m2-K
+ | 
+
+ | 
+ $i$ 
+ | 
+ | 
+Radial node number
+ | 
+ | 
+–
+ | 
+
+ | 
+ $ic$ 
+ | 
+ | 
+Core channel number
+ | 
+ | 
+–
+ | 
+
+ | 
+ $I_1$ 
+ | 
+ | 
+Inertial integral in the momentum equation
+ | 
+ | 
+m-1
+ | 
+
+ | 
+ $I_2$ 
+ | 
+ | 
+Acceleration integral in the momentum equation
+ | 
+ | 
+m/kg
+ | 
+
+ | 
+ $I_3$ 
+ | 
+ | 
+Friction integral in the momentum equation
+ | 
+ | 
+m/kg
+ | 
+
+ | 
+ $I_4$ 
+ | 
+ | 
+Orifice term in the momentum equation
+ | 
+ | 
+m/kg
+ | 
+
+ | 
+ $I_5$ 
+ | 
+ | 
+Density integral in the momentum equation
+ | 
+ | 
+kg/m2
+ | 
+
+ | 
+ $j$ 
+ | 
+ | 
+Fuel axial node number
+ | 
+ | 
+–
+ | 
+
+ | 
+ $jc$ 
+ | 
+ | 
+Coolant axial node number
+ | 
+ | 
+–
+ | 
+
+ | 
+ $\text{JC}$ 
+ | 
+ | 
+Axial node number
+ | 
+ | 
+–
+ | 
+
+ | 
+ $k$ 
+ | 
+ | 
+Thermal conductivity
+ | 
+ | 
+W/m-K
+ | 
+
+ | 
+ $k_{\text{ep}}$ 
+ | 
+ | 
+Cladding thermal conductivity in the gas plenum region
+ | 
+ | 
+W/m-K
+ | 
+
+ | 
+ $\overline{k}_{\text{i~j}}$ 
+ | 
+ | 
+Weighted average thermal conductivity for heat flow from node i to j
+ | 
+ | 
+W/m-K
+ | 
+
+ | 
+ $K_{\text{or}}$ 
+ | 
+ | 
+Orifice coefficient
+ | 
+ | 
+–
+ | 
+
+ | 
+ $L$ 
+ | 
+ | 
+1 for subassembly inlet, 2 for outlet
+ | 
+ | 
+–
+ | 
+
+ | 
+ $\text{MZC}$ 
+ | 
+ | 
+Total number of coolant axial nodes
+ | 
+ | 
+–
+ | 
+
+ | 
+ $m_{\text{e}}$ 
+ | 
+ | 
+Cladding mass
+ | 
+ | 
+kg
+ | 
+
+ | 
+ $m_{\text{f}}$ 
+ | 
+ | 
+Fuel mass
+ | 
+ | 
+kg
+ | 
+
+ | 
+ $M_{\text{mix}}$ 
+ | 
+ | 
+Mass of sodium in the mixing volume
+ | 
+ | 
+kg
+ | 
+
+ | 
+ $\text{NC}$ 
+ | 
+ | 
+Radial node number of the coolant node
+ | 
+ | 
+–
+ | 
+
+ | 
+ $\text{NE}$ 
+ | 
+ | 
+Radial node number for the cladding mid-point
+ | 
+ | 
+–
+ | 
+
+ | 
+ $\text{NE}'$ 
+ | 
+ | 
+Radial node number for the cladding outer surface node
+ | 
+ | 
+–
+ | 
+
+ | 
+ $\text{NE}''$ 
+ | 
+ | 
+Radial node number for the cladding inner surface node
+ | 
+ | 
+–
+ | 
+
+ | 
+ $\text{NN}$ 
+ | 
+ | 
+NT-1
+ | 
+ | 
+–
+ | 
+
+ | 
+ $N_{\text{ps}}$ 
+ | 
+ | 
+Number of fuel pins represented by a channel
+ | 
+ | 
+–
+ | 
+
+ | 
+ $\text{NR}$ 
+ | 
+ | 
+Radial node number for the fuel outer surface radius. (note $\text{NR}=\text{NE}''$ )
+ | 
+ | 
+–
+ | 
+
+ | 
+ $\text{NSI}$ 
+ | 
+ | 
+Radial node number for the inner structure node
+ | 
+ | 
+–
+ | 
+
+ | 
+ $\text{NSO}$ 
+ | 
+ | 
+Radial node number for the outer structure node
+ | 
+ | 
+–
+ | 
+
+ | 
+ $\text{NT}$ 
+ | 
+ | 
+Radial node number for the fuel outer surface temperature node
+ | 
+ | 
+–
+ | 
+
+ | 
+ $p$ 
+ | 
+ | 
+Pressure
+ | 
+ | 
+Pa
+ | 
+
+ | 
+ $p_{\text{b}}$ 
+ | 
+ | 
+Pressure at the bottom of the subassembly
+ | 
+ | 
+Pa
+ | 
+
+ | 
+ $p_{\text{b1}}$ , $p_{\text{b2}}$ 
+ | 
+ | 
+pb at beginning and end of a time step
+ | 
+ | 
+Pa
+ | 
+
+ | 
+ $p_{\text{in}}$ 
+ | 
+ | 
+Pressure in the coolant inlet plenum
+ | 
+ | 
+Pa
+ | 
+
+ | 
+ $\overline{P}_{\text{j}}$ 
+ | 
+ | 
+Heat production rate in axial node j
+ | 
+ | 
+W
+ | 
+
+ | 
+ $P_{\text{r}}$ 
+ | 
+ | 
+Radial power shape, per unit mass
+ | 
+ | 
+–
+ | 
+
+ | 
+ $p_{\text{t}}$ 
+ | 
+ | 
+Pressure at the top of the subassembly
+ | 
+ | 
+Pa
+ | 
+
+ | 
+ $p_{\text{t1}}$ , $p_{\text{t2}}$ 
+ | 
+ | 
+pt at the beginning and end of a time step
+ | 
+ | 
+Pa
+ | 
+
+ | 
+ $p_{\text{x}}$ 
+ | 
+ | 
+Pressure in the coolant outlet plenum
+ | 
+ | 
+Pa
+ | 
+
+ | 
+ $\left( \frac{\partial \text{p}}{\partial \text{z}} \right)_{\text{fr}}$ 
+ | 
+ | 
+Friction pressure drop
+ | 
+ | 
+Pa/m
+ | 
+
+ | 
+ $\left( \frac{\partial \text{p}}{\partial \text{z}} \right)_{\text{k}}$ 
+ | 
+ | 
+Orifice pressure drop
+ | 
+ | 
+Pa/m
+ | 
+
+ | 
+ $Q_{\text{c}}$ 
+ | 
+ | 
+Coolant heat source due to direct heating by neutrons and gamma rays
+ | 
+ | 
+W/m3
+ | 
+
+ | 
+ $Q_{\text{ct}}$ 
+ | 
+ | 
+Total steady-state heat source per unit of coolant volume
+ | 
+ | 
+W/m3
+ | 
+
+ | 
+ $Q_{\text{ec}}$ 
+ | 
+ | 
+Heat flow from clad to coolant
+ | 
+ | 
+W/m3
+ | 
+
+ | 
+ $q_{\text{fe}}$ 
+ | 
+ | 
+Fuel-to-cladding heat flux
+ | 
+ | 
+W/m2
+ | 
+
+ | 
+ $Q_{\text{sc}}$ 
+ | 
+ | 
+Heat flow from structure to coolant
+ | 
+ | 
+W/m3
+ | 
+
+ | 
+ $Q_{\text{sm}} \left( i \right)$ 
+ | 
+ | 
+Sum of the heat sources for all radial nodes inside and including node i
+ | 
+ | 
+W
+ | 
+
+ | 
+ $Q_{\text{st}}$ 
+ | 
+ | 
+Structure heat source due to direct heating by neutrons and gamma rays
+ | 
+ | 
+W/m2
+ | 
+
+ | 
+ $Q_{\text{v}}$ 
+ | 
+ | 
+Heat source per unit volume
+ | 
+ | 
+W/m3
+ | 
+
+ | 
+ $r$ 
+ | 
+ | 
+Radius
+ | 
+ | 
+m
+ | 
+
+ | 
+ $r_{\text{brp}}$ 
+ | 
+ | 
+Clad inner radius in the gas plenum region
+ | 
+ | 
+m
+ | 
+
+ | 
+ $\text{Re}$ 
+ | 
+ | 
+Reynolds number
+ | 
+ | 
+–
+ | 
+
+ | 
+ $R_{\text{ec}}$ 
+ | 
+ | 
+Thermal resistance between clad and coolant
+ | 
+ | 
+m2-K/W
+ | 
+
+ | 
+ $R_{\text{ehf}}$ 
+ | 
+ | 
+Thermal resistance of the outer fourth of the cladding
+ | 
+ | 
+m2-K/W
+ | 
+
+ | 
+ $r_{\text{erp}}$ 
+ | 
+ | 
+Cladding outer radius in the gas plenum region
+ | 
+ | 
+m
+ | 
+
+ | 
+ $R_{\text{g}}$ 
+ | 
+ | 
+Thermal resistance of the gas in the plenum
+ | 
+ | 
+m2-K/W
+ | 
+
+ | 
+ $r_{\text{o}} \left( i \right)$ 
+ | 
+ | 
+Steady-state radial mesh
+ | 
+ | 
+m
+ | 
+
+ | 
+ $S_{\text{er}}$ 
+ | 
+ | 
+Perimeter of the cladding or reflector in contact with the coolant
+ | 
+ | 
+m
+ | 
+
+ | 
+ $S_{\text{st}}$ 
+ | 
+ | 
+Structure perimeter, heat-transfer area per unit height
+ | 
+ | 
+m
+ | 
+
+ | 
+ $T$ 
+ | 
+ | 
+Temperature
+ | 
+ | 
+K
+ | 
+
+ | 
+ $t$ 
+ | 
+ | 
+Time
+ | 
+ | 
+s
+ | 
+
+ | 
+ $T_{\text{cin}}$ 
+ | 
+ | 
+Coolant inlet temperature
+ | 
+ | 
+K
+ | 
+
+ | 
+ $T_{\text{cout}}$ 
+ | 
+ | 
+Coolant outlet temperature
+ | 
+ | 
+K
+ | 
+
+ | 
+ $T_{\text{eex}}$ 
+ | 
+ | 
+Extrapolated clad temperature
+ | 
+ | 
+K
+ | 
+
+ | 
+ $T_{\text{eq}}$ 
+ | 
+ | 
+Equilibrium temperature in the mixing volume
+ | 
+ | 
+K
+ | 
+
+ | 
+ $\overline{T}_{\text{exp}}$ 
+ | 
+ | 
+Temperature of the sodium expelled from the subassembly into a mixing volume, averaged over a time step
+ | 
+ | 
+K
+ | 
+
+ | 
+ $\overline{T}_{\text{f}}$ 
+ | 
+ | 
+Average fuel temperature at an axial node, mass-weighted average
+ | 
+ | 
+K
+ | 
+
+ | 
+ $T_{\text{g}}$ 
+ | 
+ | 
+Plenum gas temperature
+ | 
+ | 
+K
+ | 
+
+ | 
+ $T_{\text{liq}}$ 
+ | 
+ | 
+Liquidus temperature
+ | 
+ | 
+K
+ | 
+
+ | 
+ $T_{\text{out}}$ 
+ | 
+ | 
+Bulk temperature in the coolant outlet plenum
+ | 
+ | 
+K
+ | 
+
+ | 
+ $t_{\text{p1}}$ , $t_{\text{p2}}$ 
+ | 
+ | 
+Times at the beginning and end of a PRIMAR time step
+ | 
+ | 
+s
+ | 
+
+ | 
+ $T_{\text{ri}}$ 
+ | 
+ | 
+Reflector inner node temperature
+ | 
+ | 
+K
+ | 
+
+ | 
+ $T_{\text{ro}}$ 
+ | 
+ | 
+Reflector outer node temperature
+ | 
+ | 
+K
+ | 
+
+ | 
+ $T_{\text{sol}}$ 
+ | 
+ | 
+Solidus temperature
+ | 
+ | 
+K
+ | 
+
+ | 
+ $T_{\text{o}}$ 
+ | 
+ | 
+Temperature at the beginning of a time step
+ | 
+ | 
+K
+ | 
+
+ | 
+ $T_1$ 
+ | 
+ | 
+Temperature at the beginning of a time step
+ | 
+ | 
+K
+ | 
+
+ | 
+ ${T'}_1$ 
+ | 
+ | 
+Temperature of the coolant entering an axial node at the end of a time step
+ | 
+ | 
+K
+ | 
+
+ | 
+ $T_2$ 
+ | 
+ | 
+Temperature at the end of a time step
+ | 
+ | 
+K
+ | 
+
+ | 
+ ${T'}_2$ 
+ | 
+ | 
+Temperature of the coolant entering an axial node at the end of a time step
+ | 
+ | 
+K
+ | 
+
+ | 
+ $U_{\text{melt}}$ 
+ | 
+ | 
+Heat of fusion
+ | 
+ | 
+J/kg
+ | 
+
+ | 
+ $v$ 
+ | 
+ | 
+Velocity
+ | 
+ | 
+m/s
+ | 
+
+ | 
+ $w$ 
+ | 
+ | 
+Coolant mass flow rate
+ | 
+ | 
+kg/s
+ | 
+
+ | 
+ $w_{\text{e}}$ 
+ | 
+ | 
+Estimated mass flow rate
+ | 
+ | 
+kg/s
+ | 
+
+ | 
+ $w_{\text{fe}}$ 
+ | 
+ | 
+Thickness of the liquid-sodium film left on the cladding after voiding occurs
+ | 
+ | 
+m
+ | 
+
+ | 
+ $w_{\text{fr}}$ 
+ | 
+ | 
+Thickness of the liquid-sodium film left on the reflector after voiding occurs
+ | 
+ | 
+m
+ | 
+
+ | 
+ $w_{\text{fst}}$ 
+ | 
+ | 
+Thickness of the liquid-sodium film left on the structure after voiding occurs
+ | 
+ | 
+m
+ | 
+
+ | 
+ $w_1$ , $w_2$ 
+ | 
+ | 
+w at beginning and end of a time step
+ | 
+ | 
+kg/s
+ | 
+
+ | 
+ $\Delta w$ 
+ | 
+ | 
+Change in w during a time step
+ | 
+ | 
+kg/s
+ | 
+
+ | 
+ $x$ 
+ | 
+ | 
+Distance
+ | 
+ | 
+m
+ | 
+
+ | 
+ $x_{\text{I1}} \left( \text{JC} \right)$ 
+ | 
+ | 
+Nodal contribution to I1
+ | 
+ | 
+m-1
+ | 
+
+ | 
+ $x_{\text{I2}} \left( \text{JC} \right)$ 
+ | 
+ | 
+Nodal contribution to I2
+ | 
+ | 
+m/kg
+ | 
+
+ | 
+ $x_{\text{I3}} \left( \text{JC} \right)$ 
+ | 
+ | 
+Nodal contribution to I3
+ | 
+ | | 
+
+ | 
+ $x_{\text{I5}} \left( \text{JC} \right)$ 
+ | 
+ | 
+Nodal contribution to I5
+ | 
+ | 
+kg/m2
+ | 
+
+ | 
+ $z$ 
+ | 
+ | 
+Axial position
+ | 
+ | 
+m
+ | 
+
+ | 
+ $z$ 
+ | 
+ | 
+Elevation
+ | 
+ | 
+m
+ | 
+
+ | 
+ $\Delta z$ 
+ | 
+ | 
+Node height
+ | 
+ | 
+m
+ | 
+
+ | 
+ $z_{\text{pb}}$ 
+ | 
+ | 
+Elevation at the bottom of the gas plenum
+ | 
+ | 
+m
+ | 
+
+ | 
+ $z_{\text{pt}}$ 
+ | 
+ | 
+Elevation at the top of the gas plenum
+ | 
+ | 
+m
+ | 
+
+ | 
+ $z_{\text{pll}}$ 
+ | 
+ | 
+Reference elevation of the coolant inlet plenum
+ | 
+ | 
+m
+ | 
+
+ | 
+ $z_{\text{plu}}$ 
+ | 
+ | 
+Reference elevation of the coolant outlet plenum
+ | 
+ | 
+m
+ | 
+
+ | 
+ $\alpha$ 
+ | 
+ | 
+Heat capacity terms in the matrix equations for radial temperature profiles
+ | 
+ | 
+J/m-K
+ | 
+
+ | 
+ $\alpha_{\text{e}}$ 
+ | 
+ | 
+Cladding thermal expansion coefficient
+ | 
+ | 
+K-1
+ | 
+
+ | 
+ $\alpha_{\text{f}}$ 
+ | 
+ | 
+Fuel thermal expansion coefficient
+ | 
+ | 
+K-1
+ | 
+
+ | 
+ $\beta$ 
+ | 
+ | 
+Thermal conductivity terms in the matrix equations for radial temperature profiles
+ | 
+ | 
+J/m-K
+ | 
+
+ | 
+ $\gamma_{\text{c}}$ 
+ | 
+ | 
+Fraction of the total heat production that goes directly into the coolant
+ | 
+ | 
+–
+ | 
+
+ | 
+ $\gamma_{\text{e}}$ 
+ | 
+ | 
+Fraction of the total heat production that goes directly into the cladding
+ | 
+ | 
+–
+ | 
+
+ | 
+ $\gamma_{\text{s}}$ 
+ | 
+ | 
+Fraction of the total heat production that goes directly into the structure
+ | 
+ | 
+–
+ | 
+
+ | 
+ $\gamma_2$ 
+ | 
+ | 
+Ratio of the structure perimeter to the cladding perimeter
+ | 
+ | 
+–
+ | 
+
+ | 
+ $\Delta r$ 
+ | 
+ | 
+Radial node size
+ | 
+ | 
+m
+ | 
+
+ | 
+ $\Delta r_{\text{i,j}}$ 
+ | 
+ | 
+Effective radial distance for heat flow from node I to node j
+ | 
+ | 
+m
+ | 
+
+ | 
+ $\Delta t$ 
+ | 
+ | 
+Time-step size
+ | 
+ | 
+s
+ | 
+
+ | 
+ $\Delta z$ 
+ | 
+ | 
+Axial node height
+ | 
+ | 
+m
+ | 
+
+ | 
+ $\varepsilon$ 
+ | 
+ | 
+Thermal emissivity
+ | 
+ | 
+–
+ | 
+
+ | 
+ $\theta_1$ , $\theta_2$ 
+ | 
+ | 
+Degree of explicitness or implicitness in the solution
+ | 
+ | 
+–
+ | 
+
+ | 
+ $\rho$ 
+ | 
+ | 
+Density
+ | 
+ | 
+kg/m3
+ | 
+
+ | 
+ $\rho_{\text{c}}$ 
+ | 
+ | 
+Coolant density
+ | 
+ | 
+kg/m3
+ | 
+
+ | 
+ $\rho_{\text{cin}}$ 
+ | 
+ | 
+Coolant density in the inlet plenum
+ | 
+ | 
+kg/m3
+ | 
+
+ | 
+ $\rho_{\text{cout}}$ 
+ | 
+ | 
+Coolant density in the outlet plenum
+ | 
+ | 
+kg/m3
+ | 
+
+ | 
+ $\left( \rho c_{\text{g}} \right)$ 
+ | 
+ | 
+Density times specific heat of the plenum gas
+ | 
+ | 
+J/m3-K
+ | 
+
+ | 
+ $\left( \rho c_{\text{r}} \right)$ 
+ | 
+ | 
+Density times specific heat for the reflector
+ | 
+ | 
+J/m3-K
+ | 
+
+ | 
+ $\rho_{\text{e}}$ 
+ | 
+ | 
+Cladding density
+ | 
+ | 
+kg/m3
+ | 
+
+ | 
+ $\sigma$ 
+ | 
+ | 
+Stefan-Bolzmann constant
+ | 
+ | 
+W/m2-K4
+ | 
+
+ | 
+ $\tau$ 
+ | 
+ | 
+Time constant for flow rate changes
+ | 
+ | 
+s
+ | 
+
+ | 
+ $\tau_{\text{c}}$ 
+ | 
+ | 
+Condensation heat-transfer time constant
+ | 
+ | 
+s
+ | 
+
+ | 
+ $\tau_{\text{ro}}$ 
+ | 
+ | 
+Time constant for temperature changes in the outer reflector node
+ | 
+ | 
+s
+ | 
+
+ | 
+ $\tau_{\text{sti}}$ 
+ | 
+ | 
+Time constant for temperature changes in the inner structure node
+ | 
+ | 
+s
+ | 
+
+ | 
+ $\mu$ 
+ | 
+ | 
+Coolant viscosity
+ | 
+ | 
+Pa-s
+ | 
+
+ | 
+ $\overline{\mu}\left( \text{JC} \right)$ 
+ | 
+ | 
+Average value of $\mu$ for node JC
+ | 
+ | 
+Pa-s
+ | 
+
+ | 
+ $\Psi$ 
+ | 
+ | 
+Source terms in the matrix equations for radial temperature profiles
+ | 
+ | 
+–
+ |
 
 
 ------------------------------------------------------------------------------
@@ -11738,3 +13689,1880 @@ DO ITYPE = 1, NTYPES
  ENDDO
 
 ENDDO
+
+The assembly type definitions begin with a record containing a single
+integer parameter, NTYPES, defining the number of assembly types
+contained in this data section. Each of the assembly type definitions
+that follow contains a title record (TYPE_TITLE, 80 characters) and an
+attributes record containing the following parameters:
+
+ITYPEID Unique identification number for this assembly type.
+
+NCHAN Number of “data channels” defined for this assembly type.
+
+NZ Number of axial segments boundaries. (Typically, NZ = MZ + 1.)
+
+Z Z coordinates of the axial segment boundaries in the local coordinate
+system.
+
+Following the assembly type attributes record is one record for each of
+the NCHAN data channels defined for an assembly type. The data channel
+record defines the attributes and geometric shape (in the x-y plane) of
+the data channel:
+
+IRELCH Relative data channel identification number. (See ICHOFF below.)
+
+NP Number of vertices in the polygon defining this data channel.
+(Presently, NP must be 3 or 4.)
+
+X, Y (X,Y) coordinates of the vertices defining the polygon for this
+data channel in local coordinates.
+
+[anchor: assembly-definitions]
+
+3.19.3.7.1.3. Assembly Definitions
+
+The second data section defines “actual” assemblies in the problem
+geometry by placing assembly types defined earlier into a global
+coordinate system. The structure of the assembly definitions is
+represented by the following pseudo code:
+
+NSUBS
+
+DO ISUB = 1, NSUBS
+
+ SUB\_TITLE(ISUB)
+
+ ISUBID(ISUB), ISUBTYPEID(ISUB), ICHOFF(ISUB),
+XOFF(ISUB),YOFF(ISUB),ZOFF(ISUB)
+
+ENDDO
+
+The subassembly definitions begin with a record containing a single
+integer parameter, NSUBS, defining the number of assemblies being
+specified in the visualization mesh geometry file. This need not
+represent all the assemblies in the problem geometry, only those for
+which a visualization mesh is needed. Each of the assembly definitions
+that follow contains a title record (SUB_TITLE, 80 characters) and an
+assembly attributes record containing the following parameters:
+
+ISUBID Identification number for this subassembly.
+
+ISUBTYPEID Identification number of the assembly type being used to
+define this assembly.
+
+ICHOFF Integer offset to translate each relative data channel
+identification number into an absolute (global) data channel
+identification number.
+
+XOFF, YOFF, ZOFF Coordinate offsets to translate local coordinates of
+the type definition into global coordinates of the problem geometry.
+
+Absolute data channel identification numbers are constructed from the
+sum of the relative data channel identification number (IRELCH) and the
+data channel offset (ICHOFF) for each of the data channels that define
+an assembly type. For data channels that represent coolant, IRELCH
+typically starts at 1 and increases by 1 for each coolant subchannel in
+the assembly type definition. When added to ICHOFF, the resulting data
+channel identification corresponds to the channel number (ICH) in the
+SAS4A/SASSYS-1 simulation. Note that because multiple data channels may
+be used to represent the complex shape of a particular region (the
+coolant region of a subchannel, for example) absolute data channel
+identification numbers need not be unique in the visualization mesh
+geometry file.
+
+For data channels that represent regions other than coolant, an
+additional term is introduced into the definition of IRELCH. If ICHTYPE
+represents the channel types as defined by the bulleted list on
+Page 3-184, then the additional term added to IRELCH is equal to
+ICHTYPE×106. This procedure is also used by SAS4A/SASSYS-1 to
+create data channel identification numbers based on the channel number,
+ICH, and guarantees correct association between the visualization mesh
+and the simulation data. That is, simulation data is correctly
+associated with the visualization mesh when (IRELCH + ICHOFF) =
+(ICHTYPE×106 + ICH).
+
+[anchor: visualization-data-file]
+
+#### 3.19.3.7.2. Visualization Data File
+
+The visualization data file is an unformatted (binary) Fortran file that
+contains a file header followed by one data section for each time step
+saved during a simulation. All numeric data is represented by four byte
+integers and double-precision (eight-byte) floating point values. Byte
+order does not matter, since the file reader for VisIt was designed to
+detect and support both conventions. However byte order must be
+consistent within a single file.
+
+[anchor: section-a3-3-7-2-1]
+
+3.19.3.7.2.1. File Header
+
+The simulation data file header consists of a record that identifies
+file attributes and two problem title records. The first record defines
+the following file attributes:
+
+FILEID File ID. Must be the four characters SAS_. (The fourth
+character is a space.)
+
+FILETYPE File Type. Must be the four characters DATA.
+
+DATAVER1 Integer File Version. Currently, DATAVER1 = 1.
+
+DATAVER2 Integer File Sub-version. Currently, DATAVER2 = 0.
+
+CHRDATE File Creation Date. (Eight-byte character string.)
+
+CHRTIME File Creation Time. (Eight-byte character string.)
+
+The first four attributes are used by the VisIt file reader to ensure
+that the correct reader is being used to parse the data file. If major
+or minor changes to the file format are introduced, the DATAVER1 and
+DATAVER2 attributes will be changed to identify the correct file format
+for the reader to parse.
+
+The second and third records in the file header represent two
+80-character problem titles. The problem titles are determined by the
+two title records provided as part of the SAS4A/SASSYS-1 input.
+
+[anchor: simulation-data]
+
+3.19.3.7.2.2. Simulation Data
+
+The remainder of the visualization data file consists of repeated blocks
+of simulation data. Data blocks contain simulation data for each time
+step that is recorded as determined by the value of the IVIS3D input
+parameter. The details of the simulation data
+that is recorded are determined by the channel-dependent input
+parameter, LDETL. The arrangement of data in
+the simulation data block is described by the following pseudo code:
+
+TIME, NDATA
+
+DO J = 1, NDATA
+
+ ICHID(J), ND(J), (DATA(J,K),K=1,ND)
+
+ENDDO
+
+The first record in the data block contains the current simulation time
+(TIME) and the number of data channels that are to follow (NDATA).
+Although all data blocks from a simulation will have the same length and
+the same number of data channels, the NDATA parameter is provided to
+facilitate parsing and verification by file readers.
+
+Following the initial record is a series of NDATA records containing
+simulation data represented by the following parameters:
+
+ICHID Unique ID for this data channel.
+
+ND Number of axial data values for this data channel. (Typically, ND =
+MZ.)
+
+DATA Simulation data, with one value for each axial position.
+
+Data channel IDs must be unique within each data block and are
+associated with zero or more data channels in the visualization mesh
+geometry in order to project the data into three-dimensional space. The
+construction of the data channel ID is described in the previous section
+as $\text{ICHID} = \left( \text{ICHTYPE} \times 10^{6} + \text{ICH} \right)$ and ensures a unique value based
+on SAS4A/SASSYS-1 channel numbers (ICH) and the type of data being
+stored.
+
+[9]
+
+A row of pins is the same as a ring of pins
+
+[10]
+
+Equations reference other variable columns using the assigned letter.
+SC=Subchannel, SA=Subassembly.
+
+[11]
+
+Thimble flow region not shown
+
+[12]
+
+These parameters are only used to generate the visualization mesh
+geometry and, with the exception of LDETL, are not incorporated into
+the SAS4A/SASSYS-1 input that is generated for the subchannel
+definitions.
+
+[13]
+
+SA = Subassembly
+
+[14]
+
+Animations of the SHRT-17 simulation can be viewed at
+http://internal.ne.anl.gov/~fanning/SHRT17.html
+
+[15]
+
+The misnomer arises because the channel ID and channel type
+parameters actually exist in the geometry file as a single integer
+parameter that represents a unique “data channel” that is used to
+associate simulation data with the visualization mesh.
+
+[anchor: appendix-3-4-coolant-physical-properties]
+
+## 3.19.4. APPENDIX 3.4: Coolant Physical Properties
+
+[anchor: section-a3-4-1]
+
+### 3.19.4.1. Introduction
+
+The expressions used in SAS4A/SASSYS-1 to model coolant physical
+properties as functions of temperature are derived from data
+correlations generated by Padilla [12.1]
+and by Fink and Leibowitz [12-12].
+These correlations were developed using sodium coolant properties that match the most recent measurements available,
+namely those of Bhise and Bonilla [12-13]
+and Da Gupta and Bonilla [12-14]. The mathematical forms of
+these properties are maintained for coolants independent of their composition.
+
+The mathematical expressions for coolant physical properties are provided in the sections
+below, including brief descriptions of their origins. In all cases, the temperature $T$ is in Kelvin.
+
+[anchor: sodium-coolant-physical-properties]
+
+### 3.19.4.2. Sodium Coolant Physical Properties
+
+Details for sodium coolant properties and the associated polynomial coefficients are
+described in Section 12.13. This information is not repeated here.
+
+[anchor: lead-coolant-physical-properties]
+
+### 3.19.4.3. Lead Coolant Physical Properties
+
+The lead coolant properties are derived from the data and correlations available in
+[A3.4-1]. The mathematical expressions in [A3.4-1] are not directly implemented, but rather a least-squares approximation to these correlations was generated for lead coolant properties to match the existing sodium-derived forms implemented within SAS4A/SASSYS-1. The error introduced by this approach, which is largely considered negligible, has been quantified and documented in the sections below.
+
+[anchor: lead-critical-temperature]
+
+#### 3.19.4.3.1. Lead Critical Temperature
+
+The critical temperature (Tc) is an important parameter for the development of an equation of state (EOS) and the extension of information on the available thermophysical data to higher temperatures and pressures.
+A very large uncertainty exists in the critical temperature for lead as indicated in [A3.4-1].
+
+The literature review performed in [A3.4-1] takes into account the large uncertainty in the estimations of the critical temperature.
+The value recommended is:
+
+$$\text{T}_{Crit} = 5000.0 \pm 200 \text{ K}$$ [eq 3.19-61]
+
+[anchor: lead-heat-of-vaporization]
+
+#### 3.19.4.3.2. Lead Heat of Vaporization
+
+The heat of vaporization at the normal boiling point is also referred to the latent heat (enthalpy) of vaporization in the literature.
+It quantifies the energy required to break the atomic binding in lead.
+
+The literature review in [A3.4-1] outlines a relatively small standard deviation.
+The recommended value in [A3.4-1] for the latent heat of vaporization for pure lead at the normal boiling point is:
+
+$$\text{Q} = 858.6 \pm 1.9 \text{ kJ/kg}$$ [eq 3.19-62]
+
+The heat of vaporization correlation implemented in SAS4A/SASSYS-1 uses a temperature-dependent polynomial to compute this quantity:
+
+$$\lambda = A_1 + A_2 T + A_3 T^{2} + A_4 T^{3}$$ [eq 3.19-63]
+
+Lead’s latent heat is a constant and, therefore, only ${A}_{1}$ is specified. The corresponding values for the coefficients of Eq. (3.19-63) are provided in Section 3.19.4.6.
+
+[anchor: lead-saturation-pressure]
+
+#### 3.19.4.3.3. Lead Saturation Pressure
+
+The lead saturation pressure as a function of temperature is an important property of coolants.
+It determines the dependence of the boiling temperature on pressure and heat-mass transfer in the cover gas space.
+It is directly related to the latent heat (enthalpy) of vaporization. [A3.4-1] provides two correlations for the saturation pressure.
+The expression chosen for the latent heat of vaporization for pure lead at the normal boiling point is:
+
+$$P_{S} = 1.88 × 10^{13} T^{-0.985} e^{\left ( \frac{-23325}{T} \right )}$$ [eq 3.19-64]
+
+The saturated vapor pressure is defined within a temperature range of $[\text{T}_{M,0(Pb)}-\text{T}_{B,0(Pb)} ]$ where $\text{T}_{M,0(Pb)}$ represents the normal melting point $(600.6\text{ K})$ and $\text{T}_{B,0(Pb)}$ is the normal boiling point $(2021 \pm 3 \text{ K})$ .
+Per [A3.4-1], the standard deviation with respect to the data is:
+
+15% for temperatures within the range $[\text{T}_{M,0(Pb)} - 1100\text{ K}]$ 
+
+5% for temperatures within the range $[1100\text{ K} - \text{T}_{B,0(Pb)}]$ 
+
+The calculation of the saturation pressure in SAS4A/SASSYS-1 correlates the natural logarithm of the saturation pressure to a temperature-dependent polynomial.
+
+$$ln(P_{S}) = A_5 - \frac{A_6}{T} - \frac{A_7}{T^2}$$ [eq 3.19-65]
+
+The constant coefficients in the SAS4A/SASSYS-1 second order correlation were evaluated using a least squares equal weighted residual minimization fit to the OECD compressibility correlation. The corresponding values for the coefficients of Eq. (3.19-65) are provided in Section 3.19.4.6.
+
+The temperature range provided in [A3.4-1] was maintained when performing the least square fit to adapt to the form of Eq. (3.19-65). Uncertainties for this correlation are not determined. However, absolute and relative errors with respect to the OECD correlation were calculated. The relative error is provided in the plot below.
+
+[anchor: lead-saturation-temperature]
+
+#### 3.19.4.3.4. Lead Saturation Temperature
+
+SAS4A/SASSYS-1 requires an expression for temperature as a function of pressure. This expression is obtained by inverting Eq. (3.19-65). Direct inversion yields:
+
+$$T_{S} = \frac{A_8}{A_9+\sqrt{A_{10}+A_{11}ln \left( P_S\right)}}$$ [eq 3.19-66]
+
+The corresponding values for the coefficients of Eq. (3.19-66) are provided in Section 3.19.4.6.
+
+[anchor: lead-liquid-density]
+
+#### 3.19.4.3.5. Lead Liquid Density
+
+The lead density depends on temperature and pressure.
+The expression recommended in [A3.4-1] for the lead density defines a linear temperature dependence of the form:
+
+$$\rho_{l} = 11441 - 1.2795 T$$ [eq 3.19-67]
+
+The accuracy with which this correlation reproduces selected literature sources is discussed in [A3.4-1].
+The maximum difference does not exceed 1% within the temperature range from the normal melting point $\text{T}_{M,0(Pb)}$ to $1500 \text{ K}$ .
+This difference becomes about 2% when temperature increases up to the normal boiling point (defined as $\text{T}_{B,0(Pb)} = 2021 \pm 3 \text{ K}$ ).
+
+The SAS4A/SASSYS-1 mathematical expression correlating the coolant density to the temperature is a second order polynomial:
+
+$$\rho_{l} = A_{12} + A_{13} T + A_{14} T^2$$ [eq 3.19-68]
+
+The corresponding values for the coefficients of Eq. (3.19-68) are provided in Section 3.19.4.6. The correlation accuracy and temperature range of [A3.4-1] is consistent with Eq. (3.19-68) since the correlation mathematical form is maintained.
+
+[anchor: lead-vapor-density]
+
+#### 3.19.4.3.6. Lead Vapor Density
+
+Discussion of lead vapor density is not available in [A3.4-1], and alternative literature/experimental sources are not widely available.
+
+The calculation of the vapor density in SAS4A/SASSYS-1 uses a temperature-dependent polynomial which is multiplied by the saturation temperature:
+
+$$\rho_{v} = P_{S} \left ( \frac{A_{15}}{T} + A_{16} + A_{17} T + A_{18} T^2 + A_{19} T^3 + A_{20} T^4 \right )$$ [eq 3.19-69]
+
+The corresponding values for the coefficients of Eq. (3.19-69) are provided in Section 3.19.4.6. For the current implementation, a value for $A_{15} = 0.01$ is assumed, and all other coefficients are assumed to be zero. The temperature range over which this correlation is applicable is unknown, but it is assumed that it applies to temperatures above $\text{T}_{B,0(Pb)} = 2021 \pm 3 \text{ K}$ where lead vapor is anticipated to be present.
+
+[anchor: lead-liquid-specific-heat]
+
+#### 3.19.4.3.7. Lead Liquid Specific Heat
+
+Calculation of the coolant enthalpy change as a function of temperature requires knowledge of the isobaric heat capacity. To account for large uncertainties in the data, [A3.4-1] proposes the following expression for liquid lead specific heat:
+
+$$C_{l} = 176.2 - 4.923 \times 10^{-2} T + 1.544 \times 10^{-5} T^2 - \frac{1.524 \times 10^{6}}{T^2}$$ [eq 3.19-70]
+
+[A3.4-1] identifies a 1991 correlation, which was later refined, as a reasonable choice for the isobaric heat capacity of pure liquid lead in the temperature range of $[\text{T}_{B,0(Pb)} - 2000 \text{ K}]$ . The accuracy with which this refined correlation reproduces selected literature sources is discussed in [A3.4-1]. The estimated uncertainty is 5-7% within $[\text{T}_{B,0(Pb)} - 1500 \text{ K}]$ and 7-15% at higher temperatures where no experimental data is available in literature.
+
+In SAS4A/SASSYS-1, the liquid specific heat is approximated by a polynomial that considers the difference between coolant temperature and critical temperature Eq. (3.19-61):
+
+$$C_{l} = \frac{A_{28}}{\left( T_{C} - T \right)^2} + \frac{A_{29}}{\left( T_{C} - T \right)} + A_{30} + A_{31} (T_{C} - T) + A_{32} \left ( T_{C} - T \right )^{2}$$ [eq 3.19-71]
+
+The mathematical expressions in [A3.4-1] and that of SAS4A/SASSYS-1 have different forms. The constant coefficients in the SAS4A/SASSYS-1 correlation were evaluated using a least squares equal weighted residual minimization fit to the [A3.4-1] specific heat correlation. The temperature range over which this correlation was determined in [A3.4-1] is maintained as the least square fit to Eq. (3.19-71) was applied over the range outlined above. The corresponding values for the coefficients of Eq. (3.19-71) are provided in Section 3.19.4.6.
+
+Absolute and relative errors with respect to the OECD correlation were calculated, with relative error provided in the plot below.
+
+[anchor: lead-vapor-specific-heat]
+
+#### 3.19.4.3.8. Lead Vapor Specific Heat
+
+Reference [A3.4-1] does not discuss vapor specific heat. No experimental data related to the specific heat of lead vapor could be found.
+
+Lead boiling is not expected to occur within the temperature ranges typically considered for lead fast reactors in the design basis analysis envelope. Moreover, in the unlikely event that lead boiling were to occur, this phenomenon will likely be localized for these particular scenarios. Due to the lack of literature on this subject, its limited relevance the typical SAS4A/SASSYS-1 analysis scope, and unavailability of a two-phase lead coolant model in SAS4A/SASSYS-1, vapor specific heat is ignored. The corresponding values for the related coefficients are provided in Section 3.19.4.6.
+
+It should be noted that this assumption is not applicable for severe accidents where coolant boiling occurs at a larger scale.
+
+[anchor: lead-adiabatic-compressibility]
+
+#### 3.19.4.3.9. Lead Adiabatic Compressibility
+
+Reference [A3.4-1] assumes compressibility is a reversible adiabatic process. As such, the isentropic compressibility of the coolant at normal pressure is calculated as the inverse of the bulk elastic modulus.
+The bulk elastic modulus discussed in [A3.4-1] uses a polynomial as a function of temperature.
+As such, the expression for the compressibility becomes:
+
+$$\beta_{s} = \left( \left( 43.50 - 1.552 \times 10^{-2}T + 1.622 \times 10^{-6}T^2 \right) \times 10^{9} \right)^{-1}$$ [eq 3.19-72]
+
+The accuracy with which this correlation predicts compressibility is not directly discussed in [A3.4-1].
+The report outlines how both compressibility and sound velocity are basic thermodynamic properties of molten lead.
+The Dreyfus thermodynamic relationship is used to infer the sound celerity from the bulk elastic modulus, and compressibility.
+Per [A3.4-1], the correlation is applicable for sound celerity of the longitudinal sound waves in molten lead for temperatures up to 1400K (i.e. $[\text{T}_{M,0(Pb)} - 1400 \text{ K}]$ ).
+This range is assumed to be the same for compressibility.
+
+The compressibility coefficient is calculated in SAS4A/SASSYS-1 by a polynomial expression based on the inverse of the coolant temperature subtracted from the critical temperature Eq. (3.19-61).
+
+$$\beta_{s} = A_{40} + \frac{A_{41}}{\left( T_{C} - T \right)}$$ [eq 3.19-73]
+
+The mathematical expressions in [A3.4-1] and SAS4A/SASSYS-1 have different forms.
+The constant coefficients in the SAS4A/SASSYS-1 correlation were evaluated using a least squares equal weighted residual minimization fit to Eq. (3.19-72). The corresponding values for the coefficients of Eq. (3.19-73) are provided in Section 3.19.4.6.
+
+Uncertainties for this correlation were not determined. However, absolute and relative errors with respect to Eq. (3.19-72) were calculated. The relative error is provided in the plot below.
+
+[anchor: lead-thermal-expansion]
+
+#### 3.19.4.3.10. Lead Thermal Expansion
+
+The density of liquid metals changes with temperature due to thermal expansion related to anharmonicity of interatomic forces. As outlined in [A3.4-1], the relationship between the density and the coefficient of volumetric thermal expansion (CVTE) at constant pressure $p$ is defined by the following formula:
+
+$$\alpha_{p} = -\frac{1}{\rho} \left ( \frac{\partial \rho}{\partial T} \right )_{p}$$ [eq 3.19-74]
+
+Substituting the correlations for density recommended by [A3.4-1] yields:
+
+$$\alpha_{p} = \frac{1}{8942-T}$$ [eq 3.19-75]
+
+Since the thermal expansion correlation is defined from that of the density, the same temperature range of $[\text{T}_{M,0(Pb)} - 1400 \text{ K}]$ ) applies.
+The uncertainty of this quantity can be derived from the thermal expansion expression and the coolant density uncertainty.
+
+The thermal expansion coefficient is calculated in SAS4A/SASSYS-1 by a polynomial expression based on the inverse of the coolant temperature subtracted to the critical temperature:
+
+$$\alpha_{p} = A_{42} + \frac{A_{43}}{\left( T_{C} - T \right)} + \frac{A_{44}}{\left( T_{C} - T \right)^2} + \frac{A_{45}}{\left( T_{C} - T \right)^3} + \frac{A_{46}}{\left( T_{C} - T \right)^4} + \frac{A_{47}}{\left( T_{C} - T \right)^5}$$ [eq 3.19-76]
+
+A simple polynomial form matching between equations in Eq. (3.19-75) and Eq. (3.19-76) does not allow the SAS4A/SASSYS-1 expression to match that of [A3.4-1] with a reasonably small variation.
+Therefore, additional terms had to be included in the SAS4A/SASSYS-1 correlation. The correlation implemented includes terms from Eq. (3.19-76) up to the third order.
+The constant coefficients in the SAS4A/SASSYS-1 correlation were evaluated using a least squares equal weighted residual minimization fit to the OECD thermal expansion correlation. The corresponding values for the coefficients of Eq. (3.19-76) are provided in Section 3.19.4.6.
+
+Uncertainties for this correlation were not determined. However, absolute and relative errors with respect to Eq. (3.19-75) were calculated. The relative error is provided in the plot below.
+
+[anchor: lead-thermal-conductivity]
+
+#### 3.19.4.3.11. Lead Thermal Conductivity
+
+Thermal conductivity is the fundamental thermophysical parameter of liquid metal coolants, which is used in all heat transfer calculations.
+The accuracy of its determination for liquid metals is poor and usually large discrepancies exist among different sets of data.
+Per [A3.4-1], the following linear correlation was used as the thermal conductivity of the technically pure liquid lead at normal pressure:
+
+$$k_{l} = 9.2 + 0.011 T$$ [eq 3.19-77]
+
+The accuracy with which this correlation reproduces selected literature sources is discussed in [A3.4-1].
+The correlation is applicable from the lead melting temperature at normal atmospheric pressure up to 1300K (i.e. $[\text{T}_{M,0(Pb)} - 1300 \text{ K}]$ ) with an estimated standard deviation of 15%.
+The SAS4A/SASSYS-1 mathematical expression correlating the coolant density to the temperature is a third order polynomial as defined below:
+
+$$k_{l} = A_{48} + A_{49} T + A_{50} T^2 + A_{51} T^3$$ [eq 3.19-78]
+
+The corresponding values for the coefficients of Eq. (3.19-78) are provided in Section 3.19.4.6. The correlation accuracy and temperature ranges of Eq. (3.19-77) and Eq. (3.19-78) are consistent since the mathematical correlation form is maintained.
+
+[anchor: lead-viscosity]
+
+#### 3.19.4.3.12. Lead Viscosity
+
+Viscosity is a measure of friction among atoms of liquids. Because there is very little data on the impact of impurities on viscosity, the correlations below are for pure lead.
+Lead is believed to be a Newtonian liquid. Therefore, the temperature dependence of their dynamic viscosity is usually described by an Arrhenius-type equation as described in [A3.4-1].
+
+$$\mu_{l} = 4.55 \times 10^{-4}e^{\left ( \frac{1069}{T}\right )}$$ [eq 3.19-79]
+
+This correlation is valid in the temperature range from $T_{\text{M,0(Pb)}}$ to $1473 \text{K}$ with an estimated uncertainty of $\pm 5\%$ .
+Coolant dynamic viscosity is calculated in SAS4A/SASSYS-1 by a polynomial expression based on the inverse of the coolant temperature.
+
+$$\mu_{l} = A_{52} + \frac{A_{53}}{T} + \frac{A_{54}}{T^2} + \frac{A_{55}}{T^3}$$ [eq 3.19-80]
+
+The mathematical expressions in Eq. (3.19-79) and Eq. (3.19-80) have different forms.
+The constant coefficients in the SAS4A/SASSYS-1 correlation were evaluated using a least squares equal weighted residual minimization fit to the OECD viscosity correlation. The corresponding values for the coefficients of Eq. (3.19-80) are provided in Section 3.19.4.6.
+
+The temperature range over which this correlation was determined in [A3.4-1] is maintained because the least square fit to Eq. (3.19-79) was performed over the applicability range outlined above. Uncertainties for this correlation were not determined. However, absolute and relative errors with respect to Eq. (3.19-79) were calculated. The relative error is provided in the plot below.
+
+[anchor: lbe-coolant-physical-properties]
+
+### 3.19.4.4. LBE Coolant Physical Properties
+
+The LBE coolant properties are derived from the data and correlations available in
+[A3.4-1]. The mathematical expressions in [A3.4-1] are not directly implemented for some properties, but rather a least-squares approximation to these correlations was generated for coolant properties to match the existing sodium-derived forms implemented within SAS4A/SASSYS-1. The error introduced by this approach, which is largely considered negligible, has been quantified and documented in the sections below.
+
+[anchor: lbe-critical-temperature]
+
+#### 3.19.4.4.1. LBE Critical Temperature
+
+The critical temperature (Tc) is an important parameter for the development of an equation of state (EOS) and the extension of information on the available thermophysical data to higher temperatures and pressures.
+
+A very large uncertainty still exists in the critical temperature for LBE as indicated in [A3.4-1], as no measurement data is available in public literature. Critical parameters are only available through theoretical estimations. The literature review performed in [A3.4-1] takes into account the three available estimations of the critical temperature. The value recommended by [A3.4-1], bounded by the uncertainties of lead and bismuth, is:
+
+$$\text{T}_{Crit} = 4800.0 \pm 500 \text{ K}$$ [eq 3.19-81]
+
+[anchor: lbe-heat-of-vaporization]
+
+#### 3.19.4.4.2. LBE Heat of Vaporization
+
+The heat of vaporization at the normal boiling point is also referred to the latent heat (enthalpy) of vaporization in the literature. It quantifies the energy required to break the atomic binding in LBE. The literature review in [A3.4-1] indicates limited availability of information. The recommended value in [A3.4-1] for the latent heat of vaporization of pure LBE at the normal boiling point is:
+
+$$\text{Q} = 856 \pm 5 \text{ kJ/kg}$$ [eq 3.19-82]
+
+The heat of vaporization correlation implemented in SAS4A/SASSYS-1 uses a temperature-dependent polynomial to compute this quantity:
+
+$$\lambda = A_1 + A_2 T + A_3 T^{2} + A_4 T^{3}$$ [eq 3.19-83]
+
+The latent heat of LBE is a constant and, therefore, only ${A}_{1}$ is specified. The corresponding values for the coefficients of Eq. (3.19-83) are provided in Section 3.19.4.6.
+
+[anchor: lbe-saturation-pressure]
+
+#### 3.19.4.4.3. LBE Saturation Pressure
+
+Vapor pressure as a function of temperature is an important property of coolants. It determines the dependence of the boiling temperature on pressure and heat-mass transfer in the cover gas space. It is directly related to the latent heat (enthalpy) of vaporization. The expression recommended by [A3.4-1] for the saturation pressure for pure LBE is:
+
+$$P_{S} = 1.22 \times 10^{10} e^{\left ( \frac{-22552}{T} \right )}$$ [eq 3.19-84]
+
+The literature review in [A3.4-1] indicates very large uncertainties exist at low temperatures $\left( < ~773 \text{K} \right)$ . Experimental data used to develop the above correlation is defined within a temperature range of $[500 - 1943 \text{K}]$ . The OECD correlation standard deviation with respect to the data is, per [A3.4-1]:
+
+ $\pm 60\%$ for temperatures within the range $[673 - 1927 \text{K}]$ , and
+
+No agreement below 673 K.
+
+The calculation of the saturation pressure in SAS4A/SASSYS-1 correlates the natural logarithm of the saturation pressure to a temperature-dependent polynomial.
+
+$$ln(P_{S}) = A_5 - \frac{A_6}{T} - \frac{A_7}{T^2}$$ [eq 3.19-85]
+
+The constant coefficients in the SAS4A/SASSYS-1 second order correlation were evaluated using a least squares equal weighted residual minimization fit to the OECD correlation. The corresponding values for the coefficients for saturation pressure are provided in Section 3.19.4.6.
+
+The temperature range provided in [A3.4-1] was maintained when performing the least square fit to adapt to the form of Eq. (3.19-85). Uncertainties for this correlation are not determined. However, absolute and relative errors with respect to the OECD correlation were calculated. The relative error is provided in the plot below.
+
+[anchor: lbe-saturation-temperature]
+
+#### 3.19.4.4.4. LBE Saturation Temperature
+
+SAS4A/SASSYS-1 requires an expression for temperature as a function of pressure. This expression is obtained by inverting Eq. (3.19-85). Direct inversion yields:
+
+$$T_{S} = \frac{A_8}{A_9+\sqrt{A_{10}+A_{11}ln \left( P_S\right)}}$$ [eq 3.19-86]
+
+The corresponding values for the coefficients of Eq. (3.19-86) are provided in Section 3.19.4.6.
+
+[anchor: lbe-liquid-density]
+
+#### 3.19.4.4.5. LBE Liquid Density
+
+The LBE density depends on temperature and pressure.
+The expression recommended in [A3.4-1] for the lead density defines a linear temperature dependence of the form:
+
+The coolant density depends on temperature and pressure. This quantity is essential to the development of an EOS. The expression recommended for the LBE density defines a linear temperature dependence of the form [A3.4-1]:
+
+$$\rho_{l} = 11065 - 1.293 T$$ [eq 3.19-87]
+
+The accuracy with which this correlation reproduces selected literature sources is discussed in [A3.4-1]. The maximum difference does not exceed 0.8% within the temperature range of $[673 - 1927 \text{K}]$ .
+
+The SAS4A/SASSYS-1 mathematical expression correlating the coolant density to the temperature is a second order polynomial:
+
+$$\rho_{l} = A_{12} + A_{13} T + A_{14} T^2$$ [eq 3.19-88]
+
+The corresponding values for the coefficients of Eq. (3.19-88) are provided in Section 3.19.4.6. The correlation accuracy and temperature range of [A3.4-1] is consistent with Eq. (3.19-88) since the correlation mathematical form is maintained.
+
+[anchor: lbe-vapor-density]
+
+#### 3.19.4.4.6. LBE Vapor Density
+
+Reference [A3.4-1] does not discuss vapor density. No experimental data related to this property could be found. Boiling is not expected to occur within the temperature range anticipated for design basis accidents in LBE-cooled fast reactors. However, in the unlikely event that coolant boiling were to occur, this phenomenon will likely be localized. Because of degraded heat transfer to vapor form coolant, coolant vapor temperature is not expected to raise significantly above saturation temperature.
+
+The calculation of the vapor density in SAS4A/SASSYS-1 uses a temperature-dependent polynomial which is multiplied by the saturation pressure:
+
+$$\rho_{v} = P_{S} \left ( \frac{A_{15}}{T} + A_{16} + A_{17} T + A_{18} T^2 + A_{19} T^3 + A_{20} T^4 \right )$$ [eq 3.19-89]
+
+The corresponding values for the coefficients of Eq. (3.19-89) are provided in Section 3.19.4.6. For the current implementation, a value for $A_{15} = 0.01$ is assumed, and all other coefficients are assumed to be zero. The temperature range over which this correlation is applicable is unknown, but it is assumed that it applies to temperatures above $\text{T}_{B,0(LBE)} = 1927 \pm 16 \text{ K}$ where LBE vapor is anticipated to be present.
+
+[anchor: lbe-liquid-specific-heat]
+
+#### 3.19.4.4.7. LBE Liquid Specific Heat
+
+Heat capacity is one of the most important properties of a coolant. Calculation of the coolant enthalpy change as a function of temperature requires knowledge of the isobaric heat capacity.
+
+Discussion in [A3.4-1] indicates a limited availability of independent data on liquid specific heat. Leveraging the similarity of Pb-Bi to its components, available experimental data, and Kopp’s law (typically used to derive heat capacities of binary systems), a single polynomial was developed in [A3.4-1]. As such, the expression for the molten coolant specific heat becomes:
+
+$$C_{l} = 164.8 - 3.94 \times 10^{-2} T + 1.25 \times 10^{-5} T^2 - \frac{4.56 \times 10^{5}}{T^2}$$ [eq 3.19-90]
+
+The OECD correlation uncertainty with respect to the data is, per [A3.4-1]:
+
+< 5% for temperatures within the range $[400 – 1100 \text{K}]$ , and
+
+1 – 2% within the range $[1100 - \text{T}_{B,0(LBE)} = 1927 \pm 16 \text{K}$ , where the validity of Kopp’s law is most effective.
+
+In SAS4A/SASSYS-1, the liquid specific heat is approximated by a polynomial that considers the difference between coolant temperature and critical temperature Eq. (3.19-61):
+
+$$C_{l} = \frac{A_{28}}{\left( T_{C} - T \right)^2} + \frac{A_{29}}{\left( T_{C} - T \right)} + A_{30} + A_{31} (T_{C} - T) + A_{32} \left ( T_{C} - T \right )^{2}$$ [eq 3.19-91]
+
+The mathematical expressions in [A3.4-1] and that of SAS4A/SASSYS-1 have different forms. The constant coefficients in the SAS4A/SASSYS-1 correlation were evaluated using a least squares equal weighted residual minimization fit to the [A3.4-1] specific heat correlation. The temperature range over which this correlation was determined in [A3.4-1] is maintained as the least square fit to Eq. (3.19-91) was applied over the range outlined above. The corresponding values for the coefficients of Eq. (3.19-91) are provided in Section 3.19.4.6.
+
+Absolute and relative errors with respect to the OECD correlation were calculated, with relative error provided in the plot below.
+
+[anchor: lbe-vapor-specific-heat]
+
+#### 3.19.4.4.8. LBE Vapor Specific Heat
+
+Reference [A3.4-1] does not discuss vapor specific heat. No experimental data related to this property could be found. Boiling is not expected to occur within the temperature range anticipated for design basis accidents in LBE-cooled fast reactors. However, in the unlikely event that coolant boiling were to occur, this phenomenon will likely be localized. Because of degraded heat transfer to vapor form coolant, coolant vapor temperature is not expected to raise significantly above saturation temperature.
+
+Specific heat is ignored until more information becomes available. This is not applicable for severe accidents where coolant boiling occurs at a larger scale and for higher temperatures.
+
+[anchor: lbe-adiabatic-compressibility]
+
+#### 3.19.4.4.9. LBE Adiabatic Compressibility
+
+No direct measurement of compressibility are available in literature, as per the discussion in [A3.4-1]. Reference [A3.4-1] assumes compressibility in this case as a reversible adiabatic process. As such, the isentropic compressibility of the coolant at normal pressure is calculated as the inverse of the bulk elastic modulus. Compressibility is then found from direct measurements of sound velocity, $u_{s}$ , and density:
+
+$$\beta_{s} = \left( \rho u_{s}^{2} \right)^{-1}$$
+
+The bulk elastic modulus discussed in [A3.4-1] uses a polynomial as a function of temperature. As such, the expression for the compressibility becomes:
+
+$$\beta_{s} = \left( 3.8075 \times 10^{10} - 1.3152 \times 10^{7}T + 1.5143 \times 10^{3}T^2 - 5.8113 \times 10^{-2}T^3 \right)^{-1}$$ [eq 3.19-92]
+
+Reference [A3.4-1] indicates limited availability of sound velocity measurements in molten LBE, with tests conducted for temperatures $[430 – 1100 \text{K}]$ . Hence, applicability of the above correlation is considered to be $[430 – 1100 \text{K}]$ , where the deviation from measured data is less than 1% in this temperature range as per [A3.4-1].
+
+The compressibility coefficient is calculated in SAS4A/SASSYS-1 by a polynomial expression based on the inverse of the coolant temperature subtracted from the critical temperature Eq. (3.19-61).
+
+$$\beta_{s} = A_{40} + \frac{A_{41}}{\left( T_{C} - T \right)}$$ [eq 3.19-93]
+
+The mathematical expressions in [A3.4-1] and SAS4A/SASSYS-1 have different forms. The constant coefficients in the SAS4A/SASSYS-1 correlation were evaluated using a least squares equal weighted residual minimization fit to Eq. (3.19-92). The corresponding values for the coefficients of Eq. (3.19-93) are provided in Section 3.19.4.6.
+
+Uncertainties for this correlation were not determined. However, absolute and relative errors with respect to Eq. (3.19-92) were calculated. The relative error is provided in the plot below.
+
+[anchor: lbe-thermal-expansion]
+
+#### 3.19.4.4.10. LBE Thermal Expansion
+
+The density of liquid metals changes with temperature due to thermal expansion related to anharmonicity of interatomic forces. As outlined in [A3.4-1], the relationship between the density and the coefficient of volumetric thermal expansion (CVTE) at constant pressure $p$ is defined by the following formula:
+
+$$\alpha_{p} = -\frac{1}{\rho} \left ( \frac{\partial \rho}{\partial T} \right )_{p}$$ [eq 3.19-94]
+
+Substituting the correlations for density recommended by [A3.4-1] yields:
+
+$$\alpha_{p} = \frac{1}{8558-T}$$ [eq 3.19-95]
+
+Since the thermal expansion correlation is defined from that of the density, the same temperature range of $[400 - 1273 \text{K}]$ applies. The uncertainty of this quantity can be derived from the thermal expansion expression and the coolant density uncertainty.
+
+The thermal expansion coefficient is calculated in SAS4A/SASSYS-1 by a polynomial expression based on the inverse of the coolant temperature subtracted to the critical temperature:
+
+$$\alpha_{p} = A_{42} + \frac{A_{43}}{\left( T_{C} - T \right)} + \frac{A_{44}}{\left( T_{C} - T \right)^2} + \frac{A_{45}}{\left( T_{C} - T \right)^3} + \frac{A_{46}}{\left( T_{C} - T \right)^4} + \frac{A_{47}}{\left( T_{C} - T \right)^5}$$ [eq 3.19-96]
+
+A simple polynomial form matching between equations in Eq. (3.19-95) and Eq. (3.19-96) does not allow the SAS4A/SASSYS-1 expression to match that of [A3.4-1] with a reasonably small variation.
+Therefore, additional terms had to be included in the SAS4A/SASSYS-1 correlation. The correlation implemented includes terms from Eq. (3.19-96) up to the third order.
+The constant coefficients in the SAS4A/SASSYS-1 correlation were evaluated using a least squares equal weighted residual minimization fit to the OECD thermal expansion correlation. The corresponding values for the coefficients of Eq. (3.19-96) are provided in Section 3.19.4.6.
+
+Uncertainties for this correlation were not determined. However, absolute and relative errors with respect to Eq. (3.19-95) were calculated. The relative error is provided in the plot below.
+
+[anchor: lbe-thermal-conductivity]
+
+#### 3.19.4.4.11. LBE Thermal Conductivity
+
+Thermal conductivity is the fundamental thermophysical parameter of liquid metal coolants, which is used in all heat transfer calculations. The accuracy of its determination for liquid metals is poor and usually large discrepancies exist among different sets of data.
+Per [A3.4-1], the following linear correlation was used as the thermal conductivity of the technically pure liquid LBE at normal pressure:
+
+$$k_{l} = 3.284 + 1.617 \times 10^{-2}T - 2.305 \times 10^{-6}T^2$$ [eq 3.19-97]
+
+The correlation is applicable over the range [400 – 1100 K] with a maximum deviation of 10-15%.
+
+The SAS4A/SASSYS-1 mathematical expression correlating the thermal conductivity to the temperature is a third order polynomial as defined below:
+
+$$k_{l} = A_{48} + A_{49} T + A_{50} T^2 + A_{51} T^3$$ [eq 3.19-98]
+
+The corresponding values for the coefficients of Eq. (3.19-98) are provided in Section 3.19.4.6. The correlation accuracy and temperature ranges of Eq. (3.19-97) and Eq. (3.19-98) are consistent since the mathematical correlation form is maintained.
+
+[anchor: lbe-viscosity]
+
+#### 3.19.4.4.12. LBE Viscosity
+
+Viscosity is a measure of friction among atoms of liquids. Because there is very little data on the impact of impurities on viscosity, the correlations below are for pure LBE.
+LBE is believed to be a Newtonian liquid. Therefore, the temperature dependence of their dynamic viscosity is usually described by an Arrhenius-type equation as described in [A3.4-1].
+
+$$\mu_{l} = 4.94 \times 10^{-4}e^{\left ( \frac{754.1}{T}\right )}$$ [eq 3.19-99]
+
+This correlation is valid in the temperature range of $[400 – 1200 \text{K}]$ and an estimated deviation of 6-8%.
+
+Coolant dynamic viscosity is calculated in SAS4A/SASSYS-1 by a polynomial expression based on the inverse of the coolant temperature.
+
+$$\mu_{l} = A_{52} + \frac{A_{53}}{T} + \frac{A_{54}}{T^2} + \frac{A_{55}}{T^3}$$ [eq 3.19-100]
+
+The mathematical expressions in Eq. (3.19-99) and Eq. (3.19-100) have different forms.
+The constant coefficients in the SAS4A/SASSYS-1 correlation were evaluated using a least squares equal weighted residual minimization fit to the OECD viscosity correlation. The corresponding values for the coefficients of Eq. (3.19-100) are provided in Section 3.19.4.6.
+
+The temperature range over which this correlation was determined in [A3.4-1] is maintained because the least square fit to Eq. (3.19-99) was performed over the applicability range outlined above. Uncertainties for this correlation were not determined. However, absolute and relative errors with respect to Eq. (3.19-99) were calculated. The relative error is provided in the plot below.
+
+[anchor: physical-properties-of-other-coolants]
+
+### 3.19.4.5. Physical Properties of Other Coolants
+
+The mathematical expressions utilized for the physical properties of sodium-potassium and heavy water coolants are identical to those described in Lead Properties and Sodium Properties.
+The corresponding coefficients utilized for all available built-in coolant properties are provided in Section 3.19.4.6. Additional details on formulation of these coefficients is not provided here.
+
+[anchor: sas-coolant-physical-properties]
+
+### 3.19.4.6. SAS4A/SASSYS-1 Coolant Physical Properties
+
+Table 3.19.24 Coolant Thermophysical Property Coefficients for SAS4A/SASSYS-1
+ | 
+
+ | 
+Coefficient Name
+ | 
+ | 
+Na
+ | 
+ | 
+NaK
+ | 
+ | 
+D2O
+ | 
+ | 
+Pb
+ | 
+ | 
+Pb-Bi
+ | 
+
+ | 
+
+ | 
+Heat of Vaporization
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+
+ | 
+A1
+ | 
+ | 
+5.3139E6
+ | 
+ | 
+5.3139E6
+ | 
+ | 
+3.5271E6
+ | 
+ | 
+858600.0E0
+ | 
+ | 
+8.560E5
+ | 
+
+ | 
+A2
+ | 
+ | 
+-2.0296E3
+ | 
+ | 
+-2.0296E3
+ | 
+ | 
+-7.3309E3
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+
+ | 
+A3
+ | 
+ | 
+1.0625E0
+ | 
+ | 
+1.0625E0
+ | 
+ | 
+15.229E0
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+
+ | 
+A4
+ | 
+ | 
+-3.3163E-4
+ | 
+ | 
+-3.3163E-4
+ | 
+ | 
+-.016126E0
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+
+ | 
+Saturation Vapor Pressure
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+
+ | 
+A5
+ | 
+ | 
+2.169E01
+ | 
+ | 
+2.169E01
+ | 
+ | 
+22.979E0
+ | 
+ | 
+2.21678E+01
+ | 
+ | 
+2.32247E1
+ | 
+
+ | 
+A6
+ | 
+ | 
+1.14846E4
+ | 
+ | 
+1.14846E4
+ | 
+ | 
+3504.1E0
+ | 
+ | 
+2.11935E+04
+ | 
+ | 
+2.25520E4
+ | 
+
+ | 
+A7
+ | 
+ | 
+3.41769E5
+ | 
+ | 
+3.41769E5
+ | 
+ | 
+2.9432E5
+ | 
+ | 
+5.35186E+05
+ | 
+ | 
+7.04644E2
+ | 
+
+ | 
+Saturation Temperature
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+
+ | 
+A8
+ | 
+ | 
+[16]
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+
+ | 
+A9
+ | 
+ | 
+[17]
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+
+ | 
+A10
+ | 
+ | 
+[18]
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+
+ | 
+A11
+ | 
+ | 
+[19]
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+
+ | 
+Liquid Density
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+
+ | 
+A12
+ | 
+ | 
+1.00423E3
+ | 
+ | 
+946.9E0
+ | 
+ | 
+9.1568E2
+ | 
+ | 
+11.441E+03
+ | 
+ | 
+11.065E+03
+ | 
+
+ | 
+A13
+ | 
+ | 
+-0.2139E0
+ | 
+ | 
+-0.2393E0
+ | 
+ | 
+1.5447E0
+ | 
+ | 
+-1.2795E0
+ | 
+ | 
+-1.293E0
+ | 
+
+ | 
+A14
+ | 
+ | 
+-1.1046E-5
+ | 
+ | 
+0.0E0
+ | 
+ | 
+-3.0790E-3
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+
+ | 
+Vapor Density
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+
+ | 
+A15
+ | 
+ | 
+4.1444E-3
+ | 
+ | 
+4.1444E-3
+ | 
+ | 
+7.0429E-3
+ | 
+ | 
+1.0E-02
+ | 
+ | 
+1.0E-02
+ | 
+
+ | 
+A16
+ | 
+ | 
+-7.4461E-6
+ | 
+ | 
+-7.4461E-6
+ | 
+ | 
+-6.4776E-5
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+
+ | 
+A17
+ | 
+ | 
+1.3768E-8
+ | 
+ | 
+1.3768E-8
+ | 
+ | 
+3.5815E-7
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+
+ | 
+A18
+ | 
+ | 
+-1.0834E-11
+ | 
+ | 
+-1.0834E-11
+ | 
+ | 
+-9.7688E-10
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+
+ | 
+A19
+ | 
+ | 
+3.8903E-15
+ | 
+ | 
+3.8903E-15
+ | 
+ | 
+1.3034E-12
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+
+ | 
+A20
+ | 
+ | 
+-4.922E-19
+ | 
+ | 
+-4.922E-19
+ | 
+ | 
+-6.6481E-16
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+
+ | 
+Saturation Pressure as function of Density
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+
+ | 
+A21
+ | 
+ | 
+1.02801E3
+ | 
+ | 
+1.02801E3
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+
+ | 
+A22
+ | 
+ | 
+4.3248E3
+ | 
+ | 
+4.3248E3
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+
+ | 
+A23
+ | 
+ | 
+-1.5010E2
+ | 
+ | 
+-1.5010E2
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+
+ | 
+A24
+ | 
+ | 
+2.8996E1
+ | 
+ | 
+2.8996E1
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+
+ | 
+A25
+ | 
+ | 
+-2.9061E0
+ | 
+ | 
+-2.9061E0
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+
+ | 
+A26
+ | 
+ | 
+1.4332E-1
+ | 
+ | 
+1.4332E-1
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+
+ | 
+A27
+ | 
+ | 
+-2.7431E-3
+ | 
+ | 
+-2.7431E-3
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+
+ | 
+Liquid Heat Capacity
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+
+ | 
+A28
+ | 
+ | 
+7.3898E5
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+ | 
+1.0E0
+ | 
+ | 
+1.04319E0
+ | 
+
+ | 
+A29
+ | 
+ | 
+3.1514E5
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+
+ | 
+A30
+ | 
+ | 
+1.1340E3
+ | 
+ | 
+1834.0E0
+ | 
+ | 
+5.1937E3
+ | 
+ | 
+2.45422E+02
+ | 
+ | 
+2.44470E2
+ | 
+
+ | 
+A31
+ | 
+ | 
+-2.2153E-1
+ | 
+ | 
+-1.143E0
+ | 
+ | 
+-7.1933E0
+ | 
+ | 
+-6.67240E-02
+ | 
+ | 
+-6.90385E-2
+ | 
+
+ | 
+A32
+ | 
+ | 
+1.1156E-4
+ | 
+ | 
+3.391E-4
+ | 
+ | 
+1.2557E-2
+ | 
+ | 
+1.01474E-05
+ | 
+ | 
+1.075363E-05
+ | 
+
+ | 
+Vapor Heat Capacity
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+
+ | 
+A33
+ | 
+ | 
+2.1409E3
+ | 
+ | 
+2.1409E3
+ | 
+ | 
+3.4488E4
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+
+ | 
+A34
+ | 
+ | 
+-2.2401E1
+ | 
+ | 
+-2.2401E1
+ | 
+ | 
+-2.8580E2
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+
+ | 
+A35
+ | 
+ | 
+7.9787E-2
+ | 
+ | 
+7.9787E-2
+ | 
+ | 
+9.4491E-1
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+
+ | 
+A36
+ | 
+ | 
+-1.0618E-4
+ | 
+ | 
+-1.0618E-4
+ | 
+ | 
+-1.1398E-3
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+
+ | 
+A37
+ | 
+ | 
+6.7874E-8
+ | 
+ | 
+6.7874E-8
+ | 
+ | 
+7.8111E-7
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+
+ | 
+A38
+ | 
+ | 
+-2.1127E-11
+ | 
+ | 
+-2.1127E-11
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+
+ | 
+A39
+ | 
+ | 
+2.5834E-15
+ | 
+ | 
+2.5834E-15
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+
+ | 
+Liquid Adiabatic Compressibility
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+
+ | 
+A40
+ | 
+ | 
+-5.4415E-11
+ | 
+ | 
+-5.4415E-11
+ | 
+ | 
+4.4329E-12
+ | 
+ | 
+-2.22038E-11
+ | 
+ | 
+-1.82656E-11
+ | 
+
+ | 
+A41
+ | 
+ | 
+0.47663E-6
+ | 
+ | 
+0.47663E-6
+ | 
+ | 
+3.9575E-11
+ | 
+ | 
+2.24037E-07
+ | 
+ | 
+2.13456E-7
+ | 
+
+ | 
+Liquid Thermal Expansion Coefficient
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+
+ | 
+A42
+ | 
+ | 
+2.5156E-6
+ | 
+ | 
+2.5156E-6
+ | 
+ | 
+-4.8485E-2
+ | 
+ | 
+1.79185E-05
+ | 
+ | 
+1.50349E-5
+ | 
+
+ | 
+A43
+ | 
+ | 
+0.79919E0
+ | 
+ | 
+0.79919E0
+ | 
+ | 
+5.0206E1
+ | 
+ | 
+6.63012E-01
+ | 
+ | 
+7.05629E-1
+ | 
+
+ | 
+A44
+ | 
+ | 
+-6.9716E2
+ | 
+ | 
+-6.9716E2
+ | 
+ | 
+-1.9478E4
+ | 
+ | 
+-1.13530E+03
+ | 
+ | 
+-1.24294E3
+ | 
+
+ | 
+A45
+ | 
+ | 
+3.3140E5
+ | 
+ | 
+3.3140E5
+ | 
+ | 
+3.3867E6
+ | 
+ | 
+8.44635E+05
+ | 
+ | 
+9.69014E5
+ | 
+
+ | 
+A46
+ | 
+ | 
+-7.0502E7
+ | 
+ | 
+-7.0502E7
+ | 
+ | 
+-2.2082E8
+ | 
+ | 
+1.0E0
+ | 
+ | 
+1.0E0
+ | 
+
+ | 
+A47
+ | 
+ | 
+5.4920E9
+ | 
+ | 
+5.4920E9
+ | 
+ | 
+0.0E0
+ | 
+ | 
+1.0E0
+ | 
+ | 
+1.0E0
+ | 
+
+ | 
+Liquid Thermal Conductivity
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+
+ | 
+A48
+ | 
+ | 
+1.1045E2
+ | 
+ | 
+14.18E0
+ | 
+ | 
+-2.8088E-1
+ | 
+ | 
+9.2E0
+ | 
+ | 
+3.284E0
+ | 
+
+ | 
+A49
+ | 
+ | 
+-6.5112E-2
+ | 
+ | 
+.03272E0
+ | 
+ | 
+5.0999E-3
+ | 
+ | 
+0.011E0
+ | 
+ | 
+1.617E-2
+ | 
+
+ | 
+A50
+ | 
+ | 
+1.5430E-5
+ | 
+ | 
+-2.202E-5
+ | 
+ | 
+-8.0711E-6
+ | 
+ | 
+0.0E0
+ | 
+ | 
+-2.305E-6
+ | 
+
+ | 
+A51
+ | 
+ | 
+-2.4617E-9
+ | 
+ | 
+0.0E0
+ | 
+ | 
+2.5964E-9
+ | 
+ | 
+0.0E0
+ | 
+ | 
+0.0E0
+ | 
+
+ | 
+Liquid Viscosity
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+
+ | 
+A52
+ | 
+ | 
+3.6522E-5
+ | 
+ | 
+-0.17049E-4
+ | 
+ | 
+-5.8232E-3
+ | 
+ | 
+3.48056E-04
+ | 
+ | 
+3.86922E-4
+ | 
+
+ | 
+A53
+ | 
+ | 
+1.6626E-1
+ | 
+ | 
+0.13434E0
+ | 
+ | 
+7.9819161E0
+ | 
+ | 
+8.67601E-01
+ | 
+ | 
+6.54251E-1
+ | 
+
+ | 
+A54
+ | 
+ | 
+-4.56877E1
+ | 
+ | 
+24.114E0
+ | 
+ | 
+-3585.3469E0
+ | 
+ | 
+-2.16495E+02
+ | 
+ | 
+-1.15328E2
+ | 
+
+ | 
+A55
+ | 
+ | 
+2.8733E4
+ | 
+ | 
+0.0E0
+ | 
+ | 
+5.4455172E5
+ | 
+ | 
+3.25911E+05
+ | 
+ | 
+1.24838E5
+ | 
+
+ | 
+Critical Temperature
+ | 
+ | | 
+ | | 
+ | | 
+ | | 
+ | | 
+
+ | 
+TCRIT
+ | 
+ | 
+2.5033E3
+ | 
+ | 
+2503.0E0
+ | 
+ | 
+644.5E0
+ | 
+ | 
+5000.0E0
+ | 
+ | 
+4800.0E0
+ | 
+
+[16]
+
+Coefficient A8, used in [A3.4-2.4], is independent of the coolant type. It is defined as a function of the saturation pressure coefficients as: $A8 = 2 \times A7$ .
+
+[17]
+
+Coefficient A9, used in [A3.4-2.4], is independent of the coolant type. It is defined as a function of the saturation pressure coefficients as: $A9 = -A6$ .
+
+[18]
+
+Coefficient A10, used in [A3.4-2.4], is independent of the coolant type. It is defined as a function of the saturation pressure coefficients as: $A10 =A6^2+4 \times A5 \times A7$ .
+
+[19]
+
+Coefficient A11, used in [A3.4-2.4], is independent of the coolant type. It is defined as a function of the saturation pressure coefficients as: $A11 = -4 \times A7$ .
+
+[anchor: section-a3-4-7]
+
+### 3.19.4.7. References
+
+“Handbook on Lead-bismuth Eutectic Alloy and Lead Properties, Materials Compatibility, Thermal-hydraulics and Technologies”, Nuclear Science,
+OECD/NEA, 2015.

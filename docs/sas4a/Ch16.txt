@@ -1723,6 +1723,3064 @@ component $j$ in cell $i$
 
 [J/(m2 - s - K)]
 
+ $A_{\text{fu,j,i}}$ = heat-transfer area between fuel and component $j$ in
+cell $i$ [m2]
+
+After dividing by $\text{AXMX} \cdot \Delta z_{\text{i}}$ and using the definition of
+generalized densities, we obtain:
+
+$$\begin{split} \frac{\partial}{\partial \text{t}}\left( {\rho'}_{\text{fu,i}} \cdot h_{\text{fu,i}} \right) = - \left\lbrack \left( {\rho'} h u \right)_{\text{i+1/2,fu}} - \left( {\rho'} h u \right)_{\text{i-1/2,fu}} \right\rbrack \cdot \frac{1}{\Delta z_{\text{i}}} \\
+ + Q_{\text{fu,i}} \cdot {\rho'}_{\text{fu,i}} - \sum_{\text{j}}{{H'}_{\text{fu,j,i}} \cdot \Delta T_{\text{fu,j,i}}} \\\end{split}$$ [eq 16.4-16]
+
+where
+
+$${H'}_{\text{fu,j,i}} = H_{\text{fu,j,i}} \cdot \frac{A_{\text{fu,j,i}}}{\text{AXMX} \cdot \Delta z_{\text{i}}}$$ [eq 16.4-17]
+
+Integrating over $\Delta t$ and using the identity:
+
+$$\Delta \left( {\rho'} h \right) = {\rho'}^{n + 1} \cdot \Delta h + h^{n} \cdot \Delta{\rho'}$$ [eq 16.4-18]
+
+we obtain:
+
+$$\begin{split} {\rho'}_{\text{fu,i}}^{n + 1} \Delta h_{\text{fu,i}} = - \left\lbrack \left( {\rho'} h u \right)_{\text{i+1/2,fu}} - \left( {\rho'} h u \right)_{\text{i-1/2,fu}} \right\rbrack \cdot \frac{\Delta t}{\Delta z_{\text{i}}} \\
+ - h_{\text{fu,i}}^{n} \cdot \Delta{\rho'}_{\text{fu,i}} + {Q'}_{\text{fu,i}} \cdot {\rho'}_{\text{fu,i}} \cdot \Delta t \\
+ - \sum_{\text{j}}{{H'}_{\text{fu,j,i}} \cdot \Delta T_{\text{fu,j,i}} \cdot \Delta t} \\\end{split}$$ [eq 16.4-19]
+
+Finally, dividing Eq. (16.4-19) by ${\rho'}_{\text{fu,i}}^{n + 1}$ 
+and expressing $\Delta{\rho'}_{\text{fu,i}}$ as:
+
+$$\Delta {\rho'}_{\text{fu,i}} = - \left\lbrack \left( {\rho'} u \right)_{\text{fu,i+1/2}} \
+ - \left( {\rho'} u \right)_{\text{fu,i-1/2}} \right\rbrack \cdot \frac{\Delta t}{\Delta z_{\text{i}}}$$ [eq 16.4-20]
+
+from the continuity Eq. (16.4-4), we obtain the change in the fuel
+enthalpy:
+
+$$\begin{split} \Delta h_{\text{fu,i}} = \left\{ - \left\lbrack \left( {\rho'} h u \right)_{\text{fu,i+1/2}} - \left( {\rho'} h u \right)_{\text{fu,i-1/2}} \right\rbrack \cdot \frac{1}{\Delta z_{\text{i}}} \right. \\ \left.
+ + h_{\text{fu,i}}^{n} \left\lbrack \left( {\rho'} u \right)_{\text{fu,i+1/2}} - \left( {\rho'} u \right)_{\text{fu,i-1/2}} \right\rbrack \cdot \frac{1}{\Delta z_{\text{i}}} \right. \\ \left.
+ + Q_{\text{fu,i}} \cdot {\rho'}_{\text{fu,i}} - \sum_{\text{j}}{{H'}_{\text{fu,j,i}} \cdot \Delta T_{\text{fu,j,i}}} \right\} \cdot \frac{\Delta t}{{\rho'}_{\text{fu,i}}^{n + 1}}\end{split}$$ [eq 16.4-21]
+
+The new fuel enthalpy is obtained as:
+
+$$h_{\text{fu,i}}^{n + 1} = h_{\text{fu,i}}^{n} + \Delta h_{\text{fu,i}}$$ [eq 16.4-22]
+
+The energy convective terms in Eq. (16.4-21) are calculated using an
+upstream differencing approach, i.e.;
+
+$$\begin{split} \left( {\rho'} h u \right)_{\text{fu,i-1/2}} = \begin{cases}
+ {\rho'}_{\text{fu,i-1}} \cdot h_{\text{fu,i-1}} \cdot {u'}_{\text{fu,i}} & \text{if } {u'}_{\text{fu,i}} \geq 0 \\
+ {\rho'}_{\text{fu,i}} \cdot h_{\text{fu,i}} \cdot {u''}_{\text{fu,i}} & \text{if } {u'}_{\text{fu,i}} < 0
+ \end{cases}\end{split}$$ [eq 16.4-23]
+
+These fluxes are based on the fuel densities, enthalpies and velocities
+at the beginning of the time step. They are calculated in the routine LEMACO,
+before the calculation of the new densities, and stored in the array
+ $\text{COFUOS} \left( I \right)$ . The sum of the heat-transfer contributions,
+ $\sum_{\text{j}}{{H'}_{\text{fu,j,i}} \cdot \Delta T_{\text{fu,j,i}}}$ is
+presented in detail in Eq. (16.4-24).
+
+In the code, Eq. (16.4-21) is written as:
+
+$$\begin{split} \text{DEGEOS} = \left\lbrack - \text{COFUOA} + \text{COFUOB} + \text{HSFU} \left( I \right) * \text{DEFUCH} \left( I \right) \right. \\ \left.
+ - \text{HTFUNA}\left( I \right) * \left( \text{TEFUOS}\left( I \right) - \text{TENA} \left( I \right) \right) \right. \\ \left.
+ - \text{HTFUCL}\left( I \right) * \left( \text{TEFUOS}\left( I \right) - \text{TECLOS}\left( I \right) \right) \right. \\ \left.
+ - \text{HTFUFL}\left( I \right) * \left( \text{TEFUOS}\left( I \right) - \text{TELUCH}\left( I \right) \right) \right. \\ \left.
+ - \text{HTFUSL}\left( I \right) * \left( \text{TEFUOS}\left( I \right) - \text{TESELU}\left( I \right) \right) \right. \\ \left.
+ - \text{HTFUSR}\left( I \right) * \left( \text{TEFUOS}\left( I \right) - \text{TESROS}\left( I \right) \right) \right. \\ \left.
+ - \text{HTSEFU}\left( I \right) * \left( \text{TEFUOS}\left( I \right) - \text{TESECH}\left( I \right) \right) \right\rbrack
+ * \text{DTPLU} \big/ \text{DEFUCH}\left( I \right)\end{split}$$ [eq 16.4-24]
+
+where
+
+$$\text{COFUOA} = \left\lbrack \left( {\rho'} h u \right)_{\text{fu,i+1/2}} - \left( {\rho'} h u \right)_{\text{fu,i-1/2}} \right\rbrack \cdot \frac{1}{\Delta z_{\text{i}}}$$ [eq 16.4-25]
+
+$$\text{COFUOB} = h_{\text{fu,i}}^{n} \cdot \left\lbrack \left( {\rho'} u \right)_{\text{fu,i+1/2}} \
+ - \left( {\rho'} u \right)_{\text{fu,i-1/2}} \right\rbrack \cdot \frac{1}{\Delta z_{\text{i}}}$$ [eq 16.4-26]
+
+ $\text{HTFUNA} \left( I \right) = {H'}_{\text{fu,mi,i}}$ = generalized heat-transfer coefficient
+between fuel and gas mixture in cell $i$ 
+
+ $\text{HTFUCL} \left( I \right) = {H'}_{\text{fu,cl,i}}$ = generalized heat-transfer coefficient
+between fuel and cladding in cell $i$ 
+
+ $\text{HTFUFL} \left( I \right) = {H'}_{\text{fu,fl,i}}$ = generalized heat-transfer coefficient
+between fuel and fuel chunks in cell $i$ 
+
+ $\text{HTFUSL} \left( I \right) = {H'}_{\text{fu,sl,i}}$ = generalized heat-transfer coefficient
+between fuel and steel chunks in cell $i$ 
+
+ $\text{HTFUSR} \left( I \right) = {H'}_{\text{fu,sr,i}}$ = generalized heat-transfer coefficient
+between fuel and hexcan wall in cell $i$ 
+
+ $\text{HTSEFU} \left( I \right) = {H'}_{\text{fu,se,i}}$ = generalized heat-transfer coefficient
+between fuel and molten steel in cell $i$ 
+
+The generalized transfer coefficients ${H'}_{\text{fu,j,i}}$ are related to
+the heat-transfer coefficients $H_{\text{fu,j,i}}$ and the transfer areas
+ $A_{\text{fu,j,i}}$ by Eq. (16.4-17). These transfer coefficients are
+calculated prior to the energy equation solution in the routine LETRAN
+(LEVITATE TRANSFER). Depending on the flow regime, some of those
+coefficients can be zero, as illustrated in the decision arrays Figure 16.4.3 through Figure 16.4.6.
+
+After the energy change is calculated, and the new energy is obtained
+according to Eq. (16.4-22), the temperature of the fuel is calculated by
+using an external function, $\text{TEFUEG}$ , which uses the enthalpy as argument
+
+$$T_{\text{fu,i}}^{n + 1} = T \left( h_{\text{fu,i}}^{n + 1} \right)$$ [eq 16.4-27]
+
+Several checks are performed on the final temperature in order to avoid
+numerical difficulties. Thus, if only small amounts of fuel are present
+(fuel volume less than .1% of the cell volume) the temperature of the
+fuel is set equal to the cladding temperature or, if the fuel is
+surrounded by molten steel, to the molten steel temperature.
+
+The condensation/vaporization energy sources/sinks are not included
+here. They will be introduced later in this chapter, when presenting the
+energy conservation calculation for fuel vapor.
+
+[anchor: liquid-steel-energy-conservation-equation]
+
+### 16.4.3.3. Liquid Steel Energy Conservation Equation
+
+The liquid steel energy equation is solved in the routine LESOEN, for
+all cells in the molten steel region, i.e. $\text{IFSEBT} \leq I \leq \text{IFSETP}$ . The
+energy conservation equation is similar to the molten fuel equation, but
+does not include a fission source term. Thus, the change in the steel
+enthalpy is:
+
+$$h_{\text{se,i}} = \left\{ - \left\lbrack \left( {\rho'} h u \right)_{\text{se,i+1/2}} \
+ - \left( {\rho'} h u \right)_{\text{se,i-1/2}} \right\rbrack \cdot \frac{1}{z_{\text{i}}} \
+ + h_{\text{se,i}}^{n} \left\lbrack \left( {\rho'} u \right)_{\text{se,i+1/2}} \
+ - \left( {\rho'} u \right)_{\text{se,i-1/2}} \right\rbrack \cdot \frac{1}{z_{\text{i}}} \
+ - \sum_{\text{j}}{{H'}_{\text{se,j,i}} \cdot T_{\text{se,j,i}}} \right\} \cdot \frac{t}{{\rho'}_{\text{se,i}}^{n + 1}}$$ [eq 16.4-28]
+
+The new steel enthalpy is obtained as:
+
+$$h_{\text{se,i}}^{n + 1} = h_{\text{se,i}}^{n} + \Delta h_{\text{se,i}}$$ [eq 16.4-29]
+
+The energy convective terms in Eq. (16.4-28) are calculated using an
+upstream differencing approach, similar to Eq. (16.4-21). They are
+calculated in routine $\text{LEMACO}$ and stored under the name $\text{COSEOS} \left( I \right)$ . These
+fluxes are based on steel densities enthalpies and velocities at the
+beginning of the time step.
+
+If ${u'}_{\text{se,i}} \geq 0$ ,
+
+$$\left( {\rho'} h u \right)_{\text{se,i-1/2}} = {\rho'}_{\text{se,i-1}} \cdot h_{\text{se,i-1}} \cdot {u'}_{\text{se,i}}$$ [eq 16.4-30]
+
+If ${u'}_{\text{se,i}} < 0$ , then
+
+$$\left( {\rho'} h u \right)_{\text{se,i-1/2}} = {\rho'}_{\text{se,i}} \cdot h_{\text{se,i}} \cdot {u''}_{\text{se,i}}$$ [eq 16.4-31]
+
+As previously explained, the molten steel and molten fuel share the same
+velocity field. Thus ${u'}_{\text{se,i}}$ and ${u'}_{\text{fu,i}}$ have the same
+value, stored in the array $\text{UFCH} \left( I \right)$ .
+
+In the code, Eq. (16.4-28) is written as:
+
+$$\begin{split} \text{DEEGSE} = \left\lbrack - \text{COSEOA} + \text{COSEOB} \right. \\ \left.
+ - \text{HTSEFU} \left( I \right) * \left( \text{TESECH} \left( I \right) - \text{TEFUOL} \left( I \right) \right) \right. \\ \left.
+ - \text{HTSECL} \left( I \right) * \left( \text{TESECH} \left( I \right) - \text{TECLOS} \left( I \right) \right) \right. \\ \left.
+ - \text{HTSESR} \left( I \right) * \left( \text{TESECH} \left( I \right) - \text{TESROS} \left( I \right) \right) \right. \\ \left.
+ - \text{HTSEFL} \left( I \right) * \left( \text{TESECH} \left( I \right) - \text{TELUCH} \left( I \right) \right) \right. \\ \left.
+ - \text{HTSESL} \left( I \right) * \left( \text{TESECH} \left( I \right) - \text{TESELU} \left( I \right) \right) \right. \\ \left.
+ - \text{HTSENA} \left( I \right) * \left( \text{TESECH} \left( I \right) - \text{TENA} \left( I \right) \right) \right\rbrack \\
+ * \text{DTPLU} \big/ \text{DESECH} \left( I \right) \\\end{split}$$ [eq 16.4-32]
+
+where
+
+$$\text{COSEOA} = \left\lbrack \left( {\rho'} h u \right)_{\text{se,i+1/2}} \
+ - \left( {\rho'} h u \right)_{\text{se,i-1/2}} \right\rbrack \cdot \frac{1}{\Delta z_{\text{i}}}$$ [eq 16.4-33]
+
+$$\text{COSEOB} = h_{\text{se,i}}^{n} \cdot \left\lbrack \left( {\rho'} u \right)_{\text{se,i+1/2}} \
+ - \left( {\rho'} u \right)_{\text{se,i-1/2}} \right\rbrack \cdot \frac{1}{\Delta z_{\text{i}}}$$ [eq 16.4-34]
+
+ $\text{HTSEFU} \left( I \right) = {H'}_{\text{se,fu,i}}$ = transfer coefficient between steel and
+fuel in cell $i$ 
+
+ $\text{HTSECL} \left( I \right) = {H'}_{\text{se,cl,i}}$ = transfer coefficient between steel and
+cladding in cell $i$ 
+
+ $\text{HTSESR} \left( I \right) = {H'}_{\text{se,sr,i}}$ = transfer coefficient between steel and
+hexcan wall in cell $i$ 
+
+ $\text{HTSEFL} \left( I \right) = {H'}_{\text{se,fl,i}}$ = transfer coefficient between steel and
+fuel chunks in cell $i$ 
+
+ $\text{HTSESL} \left( I \right) = {H'}_{\text{se,sl,i}}$ = transfer coefficient between steel and
+steel chunks in cell $i$ 
+
+ $\text{HTSENA} \left( I \right) = {H'}_{\text{se,mi,i}}$ = transfer coefficient between steel and
+gas mixture in cell $i$ 
+
+The generalized heat-transfer coefficients are defined by:
+
+$${H'}_{\text{se,j,i}} = H_{\text{se,j,i}} \cdot \frac{A_{\text{se,j,i}}}{\text{AXMX} \cdot \Delta z_{\text{i}}}$$ [eq 16.4-35]
+
+and are described in detail in Section 16.4.3.10.
+
+After the energy change is calculated, the new energy of the steel is
+calculated according to Eq. (16.4-29), and the temperature of the steel is
+obtained by using an external function, TESEEG, which uses the enthalpy
+as argument:
+
+$$T_{\text{se,i}} = T \left( h_{\text{se,i}}^{n + 1} \right)$$ [eq 16.4-36]
+
+Several checks are performed during the steel temperature calculation in
+order to avoid numerical difficulties. Thus, if only small amounts of
+molten steel are present (steel volume less than .1% of the cell volume)
+the temperature of the steel is set equal to the cladding temperature
+or, if the steel is surrounded by molten fuel, to the molten fuel
+temperature.
+
+The condensation/vaporization energy sources/sinks are not included
+here. They will be introduced later in this chapter, when the energy
+conservation calculation for steel vapor is presented.
+
+[anchor: fuel-and-steel-chunk-energy-conservation-equations]
+
+### 16.4.3.4. Fuel and Steel Chunk Energy Conservation Equations
+
+These equations are solved in the routine LESOEN. Separate equations are
+solved for the fuel and steel solid chunks, as described below.
+
+[anchor: the-energy-conservation-equation-for-the-fuel-chunks]
+
+#### 16.4.3.4.1. The Energy Conservation Equation for the Fuel Chunks
+
+The energy equation is written in conservative form as follows:
+
+$$\begin{split} \frac{\partial}{\partial \text{t}}\left( \rho_{\text{f} l \text{,i}} \cdot h_{\text{f} l \text{,i}} A_{\text{f} l \text{,i}} \cdot \Delta z \right) + \left\lbrack \left( \rho A h u \right)_{\text{f} l \text{,i+1/2}} - \left( \rho A h u \right)_{\text{fl,i-1/2}} \right\rbrack \\
+ = Q_{\text{f} l \text{,i}} \cdot \rho_{\text{f} l \text{,i}} \cdot A_{\text{f} l \text{,i}} \cdot \Delta z_{\text{i}} - \sum_{\text{j}}{H_{\text{f} l \text{,j,i}} \cdot A_{\text{f} l \text{,j,i}} \cdot \Delta T_{\text{f} l \text{,j,i}}} \\\end{split}$$ [eq 16.4-37]
+
+where
+
+ $Q_{\text{fl,i}}$ = fission power source in the fuel in cell $i$ [J/kg-s]
+
+ $A_{\text{fl,i}}$ = area covered by chunks in cell $i$ , when imagined as a
+continuum with density $\rho_{\text{fl}}$ .
+
+Following the same steps as outlined in Eq. (16.4-16) through Eq. (16.4-21), we
+obtain:
+
+$$\begin{split} h_{\text{f} l \text{,i}} = \left\{ - \left\lbrack \left( {\rho'} h u \right)_{\text{f} l \text{,i+1/2}}
+ - \left( {\rho'} \text{hu} \right)_{\text{f} l \text{,i-1/2}} \right\rbrack \cdot \frac{1}{z_{\text{i}}}
+ + h_{\text{f} l \text{,i}}^{n} \cdot \left\lbrack \left( {\rho'} u \right)_{\text{f} l \text{,i+1/2}}
+ - \left( {\rho'} u \right)_{\text{f} l \text{,i-1/2}} \right\rbrack \cdot \frac{1}{z_{\text{i}}} \right. \\ \left.
+ + Q_{\text{f} l \text{,i}} \cdot {\rho'}_{\text{f} l \text{,i}}
+ - \sum_{\text{j}}{{H'}_{\text{f} l \text{,j,i}} \cdot {T}_{\text{f} l \text{,j,i}}} \right\}
+ \cdot \frac{t}{{\rho'}_{\text{f} l \text{,i}}^{n + 1}}\end{split}$$ [eq 16.4-38]
+
+where
+
+$$\begin{split} \sum_{\text{j}}{{H'}_{\text{f} l \text{,j,i}} \cdot \Delta T_{\text{f} l \text{,j,i}} = {H'}_{\text{fu,f} l \text{,i}} \cdot \left( T_{\text{f} l \text{,i}} - T_{\text{fu,i}} \right) + {H'}_{\text{se,f} l \text{,i}} \cdot \left( T_{\text{f} l \text{,i}} - T_{\text{se,i}} \right)} \\
+ + {H'}_{\text{Na,f} l \text{,i}} \cdot \left( T_{\text{f} l \text{,i}} - T_{\text{Na,i}} \right) + {H'}_{\text{cl,f} l \text{,i}} \cdot \left( T_{\text{f} l \text{,i}} - T_{\text{cl,i}} \right) \\
+ + {H'}_{\text{sr,f} l \text{,i}} \cdot \left( T_{\text{f} l \text{,i}} - T_{\text{sr,i}} \right) + {H'}_{\text{ffc,f} l \text{,i}} \cdot \left( T_{\text{f} l \text{,i}} - T_{\text{ffc,i}} \right) \\
+ + {H'}_{\text{ffs,f} l \text{,i}} \cdot \left( T_{\text{f} l \text{,i}} - T_{\text{ffs,i}} \right) + {H'}_{\text{f} l \text{,sl,i}} \cdot \left( T_{\text{f} l \text{,i}} - T_{\text{s} l \text{,i}} \right) \\\end{split}$$ [eq 16.4-39]
+
+The energy convective terms in Eq. (16.4-38) are calculated using an
+upstream differencing approach, similar to that used for Eq. (16.4-23).
+The convective fluxes are calculated in the routine LEMACO, before the
+calculation of the new fuel chunk densities, and stored in the array
+ $\text{COLVOS} \left( I \right)$ . The new fuel chunk enthalpy and temperature are then
+calculated:
+
+$$h_{\text{f} l \text{,i}}^{n + 1} = h_{\text{f} l \text{,i}}^{n} + \Delta h_{\text{f} l \text{,i}}^{n}$$ [eq 16.4-40]
+
+$$T_{\text{f} l \text{,i}}^{n + 1} = T \left( h_{\text{f} l \text{,i}}^{n + 1} \right)$$ [eq 16.4-41]
+
+[anchor: the-energy-conservation-for-the-steel-chunks]
+
+#### 16.4.3.4.2. The Energy Conservation for the Steel Chunks
+
+This equation is very similar to the equation used for the fuel chunks,
+but the fission energy source is not present anymore. Only the final
+form of the equation is presented here:
+
+$$\begin{split} \Delta h_{\text{s} l \text{,i}} = \left\{ - \left\lbrack \left( {\rho'} h u \right)_{\text{s} l \text{,i+1/2}} - \left( {\rho'} h u \right)_{s l \text{,i-1/2}} \right\rbrack \cdot \frac{1}{\Delta z_{\text{i}}} \right. \\ \left.
+ + h_{\text{s} l \text{,i}}^{n} \cdot \left\lbrack \left( {\rho'} u \right)_{\text{s} l \text{,i+1/2}} - \left( {\rho'} u \right)_{\text{s} l \text{,i-1/2}} \right\rbrack \cdot \frac{1}{\Delta z_{\text{i}}} \right. \\ \left.
+ - \sum_{\text{j}}{{H'}_{\text{s} l \text{,j,i}} \cdot \Delta T_{\text{s} l \text{,j,i}}} \right\} \cdot \frac{\Delta t}{{\rho'}_{\text{s} l \text{,i}}^{n + 1}} \\\end{split}$$ [eq 16.4-42]
+
+where
+
+$$\begin{split} \sum_{\text{j}}{{H'}_{\text{s} l \text{,j,i}} \cdot \Delta T_{\text{s} l \text{,j,i}} = {H'}_{\text{fu,s} l \text{,i}} \cdot \left( T_{\text{s} l \text{,i}} - T_{\text{fu,i}} \right) + {H'}_{\text{se,s} l \text{,i}} \cdot \left( T_{\text{s} l \text{,i}} - T_{\text{se,i}} \right)} \\
+ + {H'}_{\text{Na,s} l \text{,i}} \cdot \left( T_{\text{s} l \text{,i}} - T_{\text{Na,i}} \right) + {H'}_{\text{cl,s} l \text{,i}} \cdot \left( T_{\text{s} l \text{,i}} - T_{\text{cl,i}} \right) \\
+ + {H'}_{\text{sr,s} l \text{,i}} \cdot \left( T_{\text{s} l \text{,i}} - T_{\text{sr,i}} \right) + {H'}_{\text{ffc,s} l \text{,i}} \cdot \left( T_{\text{s} l \text{,i}} - T_{\text{ffc,i}} \right) \\
+ + {H'}_{\text{ffs,s} l \text{,i}} \cdot \left( T_{\text{s} l \text{,i}} - T_{\text{ffs,i}} \right) + {H'}_{\text{f} l \text{,s} l \text{,i}} \cdot \left( T_{\text{s} l \text{,i}} - T_{\text{f} l \text{,i}} \right)\end{split}$$ [eq 16.4-43]
+
+The new steel chunk enthalpy and temperature are then calculated as
+follows:
+
+$$h_{\text{s} l \text{,i}}^{n + 1} = h_{\text{s} l \text{,i}}^{n} + \Delta h_{\text{s} l \text{,i}}^{n}$$ [eq 16.4-44]
+
+$$T_{\text{s} l \text{,i}}^{n + 1} = T \left( h_{\text{s} l \text{,i}}^{n + 1} \right)$$ [eq 16.4-45]
+
+[anchor: sodium-and-fission-gas-energy-conservation-equation]
+
+### 16.4.3.5. Sodium and Fission-gas Energy Conservation Equation
+
+The sodium and the fission gas are assumed in LEVITATE to be in
+equilibrium at the same temperature $T_{\text{Na,i}}$ . The sodium can exist
+in the form of superheated vapor or as a two-phase, vapor-liquid
+mixture. When required by the thermodynamic conditions the two-phase
+sodium component can become subcooled sodium. The two-phase sodium is
+assumed to be in thermodynamic equilibrium. The energy conservation
+equation is solved simultaneously for sodium and fission gas for all
+cells in the LEVITATE interaction region, i.e., $\text{IFMIBT} \leq I \leq \text{IFMITP}$ .
+Because the fission-gas region extends only between $\text{IFFIBT} \leq I \leq \text{IFFITP}$ ,
+it is possible that some cells contain only sodium, without any fission
+gas. In these cells, the energy equation for the sodium-fission-gas
+mixture reduces to a sodium-only equation. Because significant
+differences exist between the behavior of superheated and two phase
+sodium, two separate equations are used.
+
+[anchor: the-energy-conservation-equation-for-superheated-sodium-and-fission-gas]
+
+#### 16.4.3.5.1. The Energy Conservation Equation for Superheated Sodium and Fission Gas
+
+The energy equation used for superheated sodium and fission gas is
+written in conservative form as:
+
+$$\begin{split} \frac{\partial}{\partial \text{t}} \left( \rho_{\text{Na,i}} h_{\text{Na,i}} + \rho_{\text{fi,i}} h_{\text{fi,i}} \right) \cdot A_{\text{Mi,i}} \cdot \Delta z_{\text{i}} + \left\lbrack \left( \rho A h u \right)_{\text{Na,i+1/2}} \right. \\ \left.
+ + \left( \rho \text{Ahu} \right)_{\text{fi,i+1/2}} - \left( \rho A h u \right)_{\text{Na,1-1/2}} - \left( \rho A h u \right)_{\text{fi,i-1/2}} \right\rbrack \\
+ = A_{\text{Mi,i}} \left( \frac{\partial \text{P}_{\text{Na,i}}}{\partial \text{t}} + \frac{\partial \text{P}_{\text{fi,i}}}{\partial \text{t}} \right) \cdot \Delta z_{\text{i}} + A_{\text{Mi,i}} \cdot \left\lbrack u_{\text{Mi,i}} \cdot 0.5 \cdot \left( P_{\text{Na,i}} + P_{\text{fi,i}} \right. \right. \\ \left. \left.
+ - P_{\text{Na,i-1}} - P_{\text{fi,i-1}} \right) + U_{\text{Mi,i+1}} \cdot 0.5 \cdot \left( P_{\text{Na,i+1}} + P_{\text{fi,i+1}} - P_{\text{Na,i}} - P_{\text{fi,i}} \right) \right\rbrack \\
+ + \sum_{\text{j}}{H_{\text{j,Mi,i}} \cdot A_{\text{j,Mi,i}} \cdot \Delta T_{\text{j,Mi,i}}}\end{split}$$ [eq 16.4-46]
+
+where:
+
+ $H_{\text{j,Mi,i}}$ = heat-transfer coefficient between component $j$ and
+sodium-fission gas mixture in cell $i$ [J/m2 - s- K]
+
+ $A_{\text{j,Mi,i}}$ = heat-transfer area between component $j$ and the gas
+mixture in cell $i$ [m2]
+
+ $\Delta T_{\text{j,Mi,I}}$ = temperature difference between component $j$ and the
+gas mixture in cell $i$ [K]
+
+After dividing by $\text{AXMX} \cdot \Delta z_{\text{i}}$ and using the definition of
+generalized densities, we obtain:
+
+$$\begin{split} \frac{\partial}{\partial \text{t}} \left( {\rho'}_{\text{Na,i}} h_{\text{Na,i}} + {\rho'}_{\text{fi,i}} h_{\text{fi,i}} \right) = - \left\lbrack \left( {\rho'} h u \right)_{\text{Na,i+1/2}} + \left( {\rho'} h u \right)_{\text{fi,i+1/2}} \right. \\ \left.
+ - \left( {\rho'} h u \right)_{\text{Na,i-1/2}} - \left( {\rho'} h u \right)_{\text{fi,i-1/2}} \right\rbrack \cdot \frac{1}{\Delta z_{\text{i}}} + \theta_{\text{Mi,i}} \cdot \left( \frac{\partial \text{P}_{\text{Na,i}}}{\partial \text{t}} + \frac{\partial \text{P}_{\text{fi,i}}}{\partial \text{t}} \right) \\
+ + \theta_{\text{Mi,i}} \cdot \frac{0.5}{\Delta z_{\text{i}}} \cdot \left\lbrack u_{\text{Mi,i}} \cdot \left( P_{\text{Na,i}} + P_{\text{fi,i}} - P_{\text{Na,i-1}} - P_{\text{fi,i-1}} \right) \right. \\ \left.
+ + u_{\text{Mi,i+1}} \cdot \left( P_{\text{Na,i+1}} + P_{\text{fi,i+1}} - P_{\text{Na,i}} - P_{\text{fi,i}} \right) \right\rbrack + \sum_{\text{j}}{{H'}_{\text{j,Mi,i}} \cdot \Delta T_{\text{j,Mi,i}}} \\\end{split}$$ [eq 16.4-47]
+
+where the generalized heat-transfer coefficients are defined by:
+
+$${H'}_{\text{j,Mi,i}} = H_{\text{j,Mi,i}} \cdot \frac{A_{\text{j,Mi,i}}}{\text{AXMX} \cdot \Delta z_{\text{i}}}$$ [eq 16.4-48]
+
+and the sum of the heat-transfer terms
+ $\sum_{\text{j}}{{H'}_{\text{j,Mi,i}} \cdot \Delta T_{\text{j,Mi,i}}}$ is
+presented in Eq. (16.4-60). Integrating over $\Delta t$ and using the identity
+shown in Eq. (16.4-18) to express the quantity $\Delta \left( {\rho'} h \right)$ , we obtain:
+
+$$\begin{split} {\rho'}_{\text{Na,i}}^{n + 1} \cdot \Delta h_{\text{Na,i}} + {\rho'}_{\text{fi,i}}^{n + 1} \cdot \Delta h_{\text{fi,i}} \\
+ = - \left\lbrack \left( {\rho'} h u \right)_{\text{Na,i+1/2}} + \left( {\rho'} h u \right)_{\text{fi,i+1/2}} \right. \\ \left.
+ - h_{\text{Na,i}} \cdot \Delta {\rho'}_{\text{Na,i}} - h_{\text{fi,i}} \cdot \Delta {\rho'}_{\text{fi,i}} \right. \\ \left.
+ - \left( {\rho'} h u \right)_{\text{Na,i-1/2}} - \left( {\rho'} h u \right)_{\text{fi,i-1/2}} \right\rbrack \cdot \frac{\Delta t}{\Delta z_{\text{i}}} \\
+ + \theta_{\text{Mi,i}} \cdot \left( \Delta P_{\text{Na,i}} + \Delta P_{\text{fi,i}} \right) + \theta_{\text{Mi,i}} \cdot \frac{0.5 \cdot \Delta t}{\Delta z_{\text{i}}} \cdot \left\lbrack u_{\text{Mi,i}} \cdot \left( P_{\text{Na,i}} + P_{\text{fi,i}} \right. \right. \\ \left. \left.
+ - P_{\text{Na,i-1}} - P_{\text{fi,i-1}} \right) + u_{\text{Mi,i+1}} \cdot \left( P_{\text{Na,i+1}} + P_{\text{fi,i+1}} - P_{\text{Na,i}} - P_{\text{fi,i}} \right) \right\rbrack \\
+ + \sum_{\text{j}}{{H'}_{\text{j,Mi,i}} \cdot \Delta T_{\text{j,Mi,i}} \cdot \Delta t}\end{split}$$ [eq 16.4-49]
+
+Two sets of equation relating the thermodynamic characteristics of a gas
+are used to refine Eq. (16.4-49). These are:
+
+$$h_{\text{Na,i}} = 2.5 R_{\text{Na}} \cdot \left( T_{\text{Na}} - T_{\text{sat}} \right) + h_{\text{Na,vap}}$$ [eq 16.4-50]
+
+$$h_{\text{fi,i}} = 2.5 R_{\text{fi}} \cdot T_{\text{fi}}$$ [eq 16.4-51]
+
+and
+
+$$P_{\text{Na,i}} = R_{\text{Na}} \cdot {\rho'}_{\text{Na,i}} \cdot T_{\text{Na,i}} \cdot \frac{1}{\theta_{\text{Na,i}}}$$ [eq 16.4-52]
+
+$$P_{\text{fi,i}} = R_{\text{fi}} \cdot {\rho'}_{\text{fi,i}} \cdot T_{\text{fi,i}} \cdot \frac{1}{\theta_{\text{fi,i}}}$$ [eq 16.4-53]
+
+where the constant $R_{\text{j}}$ is defined as:
+
+$$P_{\text{j}} = \frac{R}{M_{\text{j}}}$$ [eq 16.4-54]
+
+with
+
+ $R$ = universal gas constant [J/mol - K]
+
+ $M_{\text{j}}$ = molar mass of gas $j$ [kg/mol]
+
+ $T_{\text{sat}} = T_{\text{sat}} \left( P_{\text{Na,i}} \right)$ ;
+ $h_{\text{Na,vap}} = h_{\text{Na,vap}} \left( P_{\text{Na,i}} \right)$ .
+
+With $T_{\text{Na,i}} = T_{\text{fi,i}}$ and $\theta_{\text{Na,i}} = \theta_{\text{fi,i}} = \theta_{\text{Mi,i}}$ ,
+after expressing the quantity $\Delta T_{\text{j,Mi,i}}$ as:
+
+$$\Delta T_{\text{j,Mi,i}} = T_{\text{j,i}} - T_{\text{Mi,i}}^{n + 1} = T_{\text{j,i}} - T_{\text{Mi,i}} - \Delta T_{\text{Mi,i}}$$ [eq 16.4-55]
+
+and differencing Eq. (16.4-50) and Eq. (16.4-51) to obtain $\Delta h_{\text{Na,i}}$ 
+and $\Delta h_{\text{fi,i}}$ , Eq. (16.4-49) becomes:
+
+$$\begin{split} \Delta T_{\text{Mi,i}} \left\lbrack 2.5 {\rho'}_{\text{Na,i}}^{n + 1}R_{\text{Na}}
+ + 2.5 {\rho'}_{\text{fi,i}}^{n + 1} R_{\text{fi}} \right\rbrack + \sum_{\text{j}}{{H'}_{\text{j,Mi,i}}
+ \Delta T_{\text{Mi,i}} \Delta t} \\
+ = - \left\lbrack \left( {\rho'} h u \right)_{\text{Na,i+1/2}}
+ + \left( {\rho'} h u \right)_{\text{fi,i+1/2}}
+ - \left( {\rho'} h u \right)_{\text{Na,i-1/2}}
+ - \left( {\rho'} h u \right)_{\text{fi,i-1/2}} \right\rbrack \frac{\Delta t}{\Delta z_{\text{i}}} \\
+ - h_{\text{Na,i}} \Delta {\rho'}_{\text{Na,i}} - h_{\text{fi,i}} \Delta {\rho'}_{\text{fi,i}}
+ + R_{\text{Na}} \Delta \left( {\rho'}_{\text{Na,i}} T_{\text{Na,i}} \right) + R_{\text{fi}}
+ \Delta\left( {\rho'}_{\text{fi,i}} T_{\text{fi,i}} \right) \\
+ + \theta_{\text{Mi,i}} \frac{0.5 \Delta t}{\Delta z_{\text{i}}}
+ \left\lbrack u_{\text{Mi,i}} \left( P_{\text{Na,i}}
+ + P_{\text{fi,i}} - P_{\text{Na,i-1}} - P_{\text{fi,i-1}} \right) + u_{\text{Mi,i+1}}
+ \left( P_{\text{Na,i+1}} + P_{\text{fi,i+1}} - P_{\text{Na,i}} - P_{\text{fi,i}} \right) \right\rbrack \\
+ + \sum_{\text{j}}{{H'}_{\text{j,Mi,i}} \left( T_{\text{j,i}} - T_{\text{Mi,i}} \right) \Delta t}\end{split}$$ [eq 16.4-56]
+
+After using the identity:
+
+$$\Delta \left( {\rho'} T \right) = T^{n} \Delta {\rho'} + {\rho'}^{n + 1} \cdot \Delta T$$ [eq 16.4-57]
+
+and replacing $\Delta {\rho'}_{\text{Na,i}}$ and $\Delta {\rho'}_{\text{fi,i}}$ by using the
+continuity equation, Eq. (16.4-56) becomes:
+
+$$\begin{split} T_{\text{Mi,i}} \cdot \left\lbrack 2.5 {\rho'}_{\text{Na,i}}^{n + 1} R_{\text{Na}}
+ + 2.5 {\rho'}_{\text{fi,i}}^{n + 1} R_{\text{fi}} + \sum_{\text{j}}{{H'}_{\text{j,Mi,i}} \cdot t}
+ - R_{\text{Na}} {\rho'}_{\text{Na,i}}^{n + 1} - R_{\text{fi}} \cdot {\rho'}_{\text{fi,i}}^{n + 1} \right\rbrack \\
+ = - \left\lbrack \left( {\rho'} h u \right)_{\text{Na,i+1/2}} + \left( {\rho'} h u \right)_{\text{fi,i+1/2}}
+ - \left( {\rho'} h u \right)_{\text{Na,i-1/2}} - \left( {\rho'} h u \right)_{\text{fi,i-1/2}} \right\rbrack \cdot \\
+ \frac{t}{z_{\text{i}}} + \left( h_{\text{Na,i}} - T_{\text{Na,i}} \cdot R_{\text{Na}} \right)
+ \cdot \left\lbrack \left( {\rho'} u \right)_{\text{Na,i+1/2}} - \left( {\rho'} u \right)_{\text{Na,i-1/2}} \right\rbrack
+ \frac{t}{z_{\text{i}}} + \left( h_{\text{fi,i}} - T_{\text{fi,i}} R_{\text{fi}} \right) \\
+ \cdot \left\lbrack \left( {\rho'} u \right)_{\text{fi,i+1/2}} - \left( {\rho'} u \right)_{\text{fi,i-1/2}} \right\rbrack
+ \frac{t}{z_{\text{i}}} + \theta_{\text{Mi,i}} \cdot \frac{0.5 \cdot t}{z_{\text{i}}} \cdot \left\lbrack u_{\text{Mi,i}}
+ \cdot \left( P_{\text{Na,i}} + P_{\text{fi,i}} - P_{\text{Na,i-1}} - P_{\text{fi,i-1}} \right) \right. \\ \left.
+ + u_{\text{Mi,i+1}} \cdot \left( P_{\text{Na,i+1}} + P_{\text{fi,i+1}} - P_{\text{Na,i}} - P_{\text{fi,i}} \right) \right\rbrack
+ + \sum_{\text{j}}{{H'}_{\text{j,Mi,i}} \cdot \left( T_{\text{j,i}} - T_{\text{Mi,i}} \right) \cdot t}\end{split}$$ [eq 16.4-58]
+
+The terms derived from the original
+ $\frac{\partial \text{P}}{\partial \text{t}}$ and,
+ $u \cdot \frac{\partial \text{P}}{\partial \text{z}}$ terms in Eq. (16.4-46) make
+a negligible contribution to the right hand side of Eq. (16.4-45). The
+terms are neglected in the initial release version, but have been added,
+for completeness, in the chunk development version. The left-hand-side
+coefficient is replaced by:
+
+$$\begin{split} \text{AUXLR} = 2.5 {\rho'}_{\text{Na,i}}^{n + 1} R_{\text{Na}} + 2.5 {\rho'}_{\text{fi,i}}^{n + 1} \cdot R_{\text{fi}} \cdot \sum_{\text{j}}{{H'}_{\text{j,mi,i}} \Delta t} \\
+ - R_{\text{Na}} {\rho'}_{\text{Na,i}}^{n + 1} - R_{\text{fi}} {\rho'}_{\text{fi,i}}^{n + 1} \\\end{split}$$ [eq 16.4-59]
+
+After dividing Eq. (16.4-58) by AUXLR, the new mixture temperature is
+calculated as follows:
+
+$$\begin{split} \text{TENA}\left( I \right) = \text{TENA}\left( I \right) + \left( - \text{COENCH} + \text{COHELP} + \text{DTPLU} \right) \\
+ *\left( \text{HTNACL}\left( I \right)*\left( \text{TECLOL}\left( I \right) - \text{TENA}\left( I \right) \right) + \text{HTSENA}\left( I \right)*\left( \text{TESEOL}\left( I \right) - \text{TENA}\left( I \right) \right) \right) \\
+ + \text{HTNASR}\left( I \right)*\left( \text{TESROL}\left( I \right) - \text{TENA}\left( I \right) \right) + \text{HTFUNA}\left( I \right)*\left( \text{TEFUOL}\left( I \right) = \text{TENA}\left( I \right) \right) \\
+ + \text{HTNAFL}\left( I \right)*\left( \text{TEFLOL}\left( I \right) - \text{TENA}\left( I \right) \right) + \text{HTNASL}\left( I \right)*\left( \text{TESLOL}\left( I \right) = \text{TENA}\left( I \right) \right) \\
+ + \text{HTFCNA}*\left( \text{TEFFCO}\left( I \right) - \text{TENA}\left( I \right) \right) + \text{HTFSNA}*\left( \text{TEFFSO}\left( I \right) - \text{TENA}\left( I \right) \right) \big/ \text{AUXLR} \\\end{split}$$ [eq 16.4-60]
+
+where:
+
+$$\begin{split} \text{COENCH} = \left\lbrack \left( {\rho'} h u \right)_{\text{Na,i+1/2}} + \left( {\rho'} h u \right)_{\text{fi,i+1/2}} - \left( {\rho'} h u \right)_{\text{Na,i-1/2}} \right. \\ \left.
+ - \left( {\rho'} h u \right)_{\text{fi,i-1/2}} \right\rbrack \cdot \frac{\Delta t}{\Delta z_{\text{i}}}\end{split}$$ [eq 16.4-61]
+
+$$\begin{split} \text{COHELP} = h_{\text{Na,i}} \cdot \left\lbrack \left( {\rho'} u \right)_{\text{Na,i+1/2}} - \left( {\rho'} u \right)_{\text{Na,i-1/2}} \right\rbrack \cdot \frac{\Delta t}{\Delta z_{\text{i}}} \\
+ + h_{\text{fi,i}} \cdot \left\lbrack \left( {\rho'} u \right)_{\text{fi,i+1/2}} - \left( {\rho'} u \right)_{\text{fi,i-1/2}} \right\rbrack \cdot \frac{\Delta t}{\Delta z_{\text{i}}} \\\end{split}$$ [eq 16.4-62]
+
+ $\text{HTNACL} \left( I \right) = {H'}_{\text{cl,Na,i}}$ = transfer coefficient between cladding
+and mixture in cell $i$ 
+
+ $\text{HTSENA} \left( I \right) = {H'}_{\text{se,Na,i}}$ = transfer coefficient between steel
+and gas mixture in cell $i$ 
+
+ $\text{HTNASR} \left( I \right) = {H'}_{\text{sr,Na,i}}$ = transfer coefficient between hexcan wall
+and gas mixture in cell $i$ 
+
+ $\text{HTFUNA} \left( I \right) = {H'}_{\text{fu,Na,i}}$ = transfer coefficient between molten fuel
+and gas mixture in cell $i$ 
+
+ $\text{HTNAFL} \left( I \right) = {H'}_{\text{fl,Na,i}}$ = transfer coefficient between steel chunks
+and mixture in cell $i$ 
+
+ $\text{HTFCNA} = {H'}_{\text{ffc,Na,i}}$ = transfer coefficient between frozen fuel on cladding
+and gas mixture in cell $i$ 
+
+ $\text{HTFSNA} = {H'}_{\text{ffs,Na,i}}$ = transfer coefficient between frozen fuel on can wall
+and gas mixture in cell $i$ 
+
+The convective enthalpy fluxes used in Eq. (16.4-59) are calculated using
+an upstream differencing approach:
+
+If ${u'}_{\text{Na,i}} \geq 0$ 
+
+$$\left( {\rho'} h u \right)_{\text{Na,i-1/2}} = {\rho'}_{\text{Na,i-1}} \cdot h_{\text{Na,i-1}} \cdot {u'}_{\text{Na,i}}$$ [eq 16.4-63]
+
+If ${u'}_{\text{Na,i}} < 0$ 
+
+$$\left( {\rho'} h u \right)_{\text{Na,i-1/2}} = {\rho'}_{\text{Na,i}} \cdot h_{\text{Na,i}} \cdot {u'}_{\text{Na,i}}$$ [eq 16.4-64]
+
+The enthalpy $h_{\text{Na,i}}$ is calculated as follows
+
+If $X_{\text{Na,i}} \geq 1$ (single-phase sodium vapor),
+
+$$h_{\text{Na,i}} = h_{\text{Na,vap}}\left( P_{\text{Na,i}} \right) + 2.5 \cdot R_{\text{Na}} \
+ \cdot \left( T_{\text{Na,i}} - T_{\text{sat}} \left( P_{\text{Na,i}} \right) \right)$$ [eq 16.4-65]
+
+If $0 \leq X < 1$ (two-phase sodium), then
+
+$$h_{\text{Na,i}} = h_{\text{Na,liq}} \left( T_{\text{Na,i}} \right) \
+ + h_{\text{Na,fg}} \left( T_{\text{Na,i}} \right) \cdot X_{\text{Na,i}}$$ [eq 16.4-66]
+
+where
+
+ $h_{\text{Na,fg}} \left( T_{\text{Na,i}} \right)$ = the heat of vaporization of sodium at
+the temperature $T_{\text{Na,i}}$ 
+
+ $h_{\text{Na,liq}} \left( T_{\text{Na,i}} \right)$ = enthalpy of liquid sodium on the
+saturation curve at $T_{\text{Na,i}}$ 
+
+ $h_{\text{Na,vap}} \left( P_{\text{Na,i}} \right)$ = enthalpy of sodium vapor on the
+saturation curve at pressure $P_{\text{Na,i}}$ 
+
+If injection of fission gas has taken place in the previous time step, a
+correction of the temperature is made to account for the enthalpy of the
+injected gas. When the injection is calculated, this gas is assumed to
+be at the same temperature as the sodium-fission gas mixture in the
+channel in order to avoid recalculating the mixture temperature.
+
+$$T_{\text{na,i}} = T_{\text{Na,i}} + \left( T_{\text{fi,ejected,i}} - T_{\text{Na,i}} \right) \
+ \cdot \Delta {\rho'}_{\text{fi,ejected,i}} \cdot 2.5 \frac{R_{\text{fi}}}{\text{AUXLR}}$$ [eq 16.4-67]
+
+The pressure of the mixture is then calculated as:
+
+$$P_{\text{ch,i}} = P_{\text{Na,i}} + P_{\text{fi,i}}$$ [eq 16.4-68]
+
+where $P_{\text{Na,i}}$ and $P_{\text{fi,i}}$ are calculated using
+Eq. (16.4-52) and Eq. (16.4-53). In using this equation for sodium, it is
+recognized that in the neighborhood of the saturation curve the behavior
+of the sodium vapor will deviate from the perfect-gas behavior. Thus,
+the constant $R_{\text{Na,i}}$ is allowed to vary so that the pressure
+calculated by Eq. (16.4-52) will match the saturation pressure when the
+mixture is right on the saturation curve. The parameter used to decide
+if this procedure is necessary is the ratio:
+
+$$r_{\text{i}} = \frac{\rho_{\text{Na,i}}}{\rho_{\text{Na,vap}} \left( T_{\text{Na,i}} \right)}$$ [eq 16.4-69]
+
+where
+
+ $\rho_{\text{Na,i}}$ = physical density of the sodium vapor
+
+ $\rho_{\text{Na,vap}}$ = physical density of the saturated sodium vapor
+
+If $r_{\text{i}} < r_{\text{min}}$ the sodium vapor is far enough from
+saturation and the perfect-gas law is satisfactory. Otherwise, the
+constant ${R'}_{\text{Na,i}}$ is defined as:
+
+$${R'}_{\text{Na,i}} = \frac{\left\lbrack R_{\text{Na,i}} \cdot \left( 1 - r \right) \
+ + R_{\text{Na,sat,i}} \cdot \left( r - r_{\text{min}} \right) \right\rbrack}{\left( 1 - r_{\text{min}} \right)}$$ [eq 16.4-70]
+
+where
+
+$$R_{\text{Na,sat,i}} = \frac{P_{\text{Na,sat}} \left( T_{\text{Na,i}} \right) \
+ \cdot \theta_{\text{Na,i}}}{{\rho'}_{\text{Na,i}} \cdot T_{\text{Na,i}}}$$ [eq 16.4-71]
+
+and $r_{\text{min}}$ is the ratio obtained from the sodium thermodynamic
+properties tables for a wide range of interest; currently $r_{\text{min}} = .067$ .
+
+This derivation assumes that the sodium is in the superheated vapor
+region for the entire duration of the time step $\Delta t$ . Occasionally,
+however, the sodium vapor might become saturated and this assumption
+would no longer hold. In the two-phase region the temperature changes
+are smaller than those in the single-phase region, since much of the
+energy lost will lead to condensation, rather than to a change in
+temperature. Thus, where necessary, a correction is performed which
+reduces the temperature drop in the two-phase region by bringing the
+final sodium temperature close to the saturation curve. The correction
+is considered necessary whenever the following condition is satisfied:
+
+$$P_{\text{Na,i}} - P_{\text{Na,sat,i}} > \Delta P_{\text{constant}}$$ [eq 16.4-72]
+
+where $\Delta P_{\text{constant}}$ is a built-in constant, currently set to
+ $0.05 \cdot 10^{5}$ Pa. This procedure is illustrated in Figure 16.4.13. The
+corrected sodium temperature is calculated as follows:
+
+$$T_{\text{Na,i}} = \frac{\left( T_{1} \cdot \Delta P_{\text{o}} - T_{\text{o}} \
+ \cdot \Delta P_{1} \right)}{\left( \Delta P_{\text{o}} - \Delta P_{1} \right)}$$ [eq 16.4-73]
+
+where
+
+ $T_{\text{o}}$ = sodium temperature at the beginning of the time step
+
+ $T_{1}$ = calculated new sodium temperature, from Eq. (16.4-67)
+
+ $\Delta P_{\text{o}}, \Delta P_{1} = P_{\text{Na,sat,i}} - P_{\text{Na,i}}$ at
+the beginning and end of time step, respectively.
+
+Figure 16.4.13 Correction for Sodium Vapor Transition to a Two-phase Mixture
+
+[anchor: the-energy-equation-for-two-phase-sodium-and-fission-gas]
+
+#### 16.4.3.5.2. The Energy Equation for Two-phase Sodium and Fission Gas
+
+The same considerations as before are made to arrive at the Eq. (16.4-49),
+but the compressible term, $\theta \frac{\partial \text{P}}{\partial \text{t}}$ ,
+is not included for the two-phase component. To express the quantity
+ $\Delta h_{\text{Na,i}}$ , we use the identity:
+
+$$h_{\text{Na,i}} = h_{\text{Na,liq,i}} \cdot \left( 1 - X_{\text{Na,i}} \right) + h_{\text{Na,vap,i}} \cdot X_{\text{Na,i}}$$ [eq 16.4-74]
+
+Thus:
+
+$$\begin{split} \Delta h_{\text{Na,i}} = \left( 1 - X_{\text{Na,i}} \right) \cdot \frac{\text{dh}_{\text{liq}}}{\text{dT}} \
+ \cdot \Delta T_{\text{Na,i}} + X_{\text{Na,i}} \cdot \frac{\text{dh}_{\text{vap}}}{\text{dT}} \cdot \Delta T_{\text{Na,i}} \\
+ + \left( h_{\text{vap,i}} - h_{\text{liq,i}} \right) \cdot \Delta X_{\text{Na,i}} \\\end{split}$$ [eq 16.4-75]
+
+Using the definitions:
+
+$$C_{\text{liq}} = \frac{\text{dh}_{\text{liq}}}{\text{dT}}$$ [eq 16.4-76]
+
+$$C_{\text{vap}} = \frac{\text{dh}_{\text{vap}}}{\text{dT}}$$ [eq 16.4-77]
+
+$$X = \frac{v - v_{\text{liq}}}{v_{\text{vap}} - v_{\text{liq}}}$$ [eq 16.4-78]
+
+$$h_{\text{lv,i}} = h_{\text{vap,i}} - h_{\text{liq,i}}$$ [eq 16.4-79]
+
+Eq. (16.4-74) becomes:
+
+$$\begin{split} \Delta h_{\text{Na,i}} = \left( 1 - X_{\text{Na,i}} \right) C_{\text{liq}} \cdot \Delta T_{\text{Na,i}} + X_{\text{Na,i}} C_{\text{vap}} \cdot \Delta T_{\text{Na,i}} + h_{\text{lv,i}} \frac{\partial \text{X}}{\partial \text{t}} \cdot \Delta t \\
+ = \left( 1 - X_{\text{Na},i} \right)\ \ \cdot \ \ C_{\text{liq}}\ \ \cdot \ \ \Delta T_{\text{Na},i} + X_{\text{Na},i}C_{\text{vap}}\ \ \cdot \ \ \Delta T_{\text{Na},i} \\
+ + h_{\text{lv},i} \cdot \frac{1}{v_{\text{vap}} - v_{\text{liq}}}\frac{\partial v}{\partial t} \cdot \Delta t - h_{\text{lv},i}\frac{v - v_{\text{liq}}}{\left( v_{\text{vap}} - v_{\text{liq}} \right)^{2}} \cdot \frac{dv_{v}}{\text{dT}}\Delta T_{\text{Na},i}\end{split}$$ [eq 16.4-80]
+
+By substituting:
+
+$$v = \frac{1}{\rho} = \frac{1}{\left( \frac{{\rho'}}{\theta} \right)}$$ [eq 16.4-81]
+
+in Eq. (16.4-80), we obtain:
+
+$$\begin{split} \Delta h_{\text{Na,i}} = \left( 1 - X_{\text{Na,i}} \right) \cdot C_{\text{liq}} \cdot \Delta T_{\text{Na,i}} + X_{\text{Na,i}} \cdot C_{\text{vap}} \cdot \Delta T_{\text{Na,i}} \\
+ + h_{\text{lv,i}} \cdot \frac{1}{v_{\text{vap}} - v_{\text{liq}}} \cdot \frac{\theta^{2}}{{\rho'}^{2}}\left\lbrack \frac{1}{\theta} \cdot \frac{\partial {\rho'}}{\partial \text{t}} \cdot \Delta t - \frac{\partial\theta}{\partial \text{t}} \cdot \Delta t \right\rbrack \\
+ + h_{\text{lv,i}} \cdot X_{\text{Na,i}} \cdot \frac{1}{v_{\text{vap}} - v_{\text{liq}}} \cdot \frac{\partial v_{\text{v}}}{\partial \text{T}} \cdot \Delta T \\\end{split}$$ [eq 16.4-82]
+
+Finally, substituting Eq. (16.4-82) into Eq. (16.4-49) and keeping the terms
+containing $\Delta T$ on the left-hand side, we have:
+
+$$\begin{split} T_{\text{Mi,i}}\left\{ {\rho'}_{\text{Na,i}}^{n + 1} \cdot \left\lbrack \left( 1 - X_{\text{na,i}} \right) \
+ \cdot C_{\text{liq}} + X_{\text{Na,i}} \cdot C_{\text{vap}} + h_{\text{lv,i}} \cdot \frac{1}{\nu_{\text{vap}} \
+ - \nu_{\text{liq}}} \cdot \frac{\partial\nu_{\text{v}}}{\partial \text{T}} \cdot X_{\text{Na,i}} \right\rbrack \
+ + 2.5 {\rho'}_{\text{fi,i}}^{n + 1} R_{\text{fi}} \right\} = \\
+ - \left\lbrack \left( {\rho'} h u \right)_{\text{Na,i+1/2}} + \left( {\rho'} h u \right)_{\text{fi,i+1/2}} \
+ - \left( {\rho'} h u \right)_{\text{Na,i-1/2}} - \left( {\rho'} h u \right)_{\text{fi,i-1/2}} \right\rbrack \
+ \cdot \frac{t}{z_{\text{i}}} \\
+ + h_{\text{lv,i}} \cdot \frac{1}{\nu_{\text{vap}} - \nu_{\text{liq}}}\left\lbrack \
+ \frac{\theta_{\text{Mi}}^{n + 1}}{{\rho'}_{\text{Na,i}}^{n + 1}} \cdot {\rho'}_{\text{Na,i}} - \theta_{\text{Mi}} \right\rbrack \\
+ - h_{\text{Na,i}} \cdot {\rho'}_{\text{Na,i}} - h_{\text{fi}} \cdot {\rho'}_{\text{fi,i}} \
+ + \sum_{\text{j}}{{H'}_{\text{j,Mi,i}} \cdot T_{\text{j,Mi,i}} \cdot t}\end{split}$$ [eq 16.4-83]
+
+We now rewrite:
+
+$$\Delta T_{\text{j,Mi,i}} = T_{\text{j,i}} - \left( T_{\text{Mi,i}} + \Delta T_{\text{Mi,i}} \right)$$ [eq 16.4-84]
+
+$$\Delta T_{\text{j,Mi,i}} = T_{\text{j,i}} - \left( T_{\text{Mi,i}} + \Delta T_{\text{Mi,i}} \right)$$ [eq 16.4-85]
+
+$$\Delta {\rho'}_{\text{fi,i}} = - \left\lbrack \left( \rho u \right)_{\text{fi,i+1/2}} \
+ - \left( \rho u \right)_{\text{fi,i-1/2}} \right\rbrack \cdot \frac{\Delta t}{\Delta z_{\text{i}}}$$ [eq 16.4-86]
+
+and, after some regrouping following the same procedure as in the case
+in the single-phase sodium, we obtain:
+
+$$\begin{split} T_{\text{Mi,i}}^{n + 1} = T_{\text{Mi,i}}^{n} + \left\{ - \text{COENCH} + h_{\text{lv,i}} \cdot \frac{1}{\nu_{\text{vap}}
+ - \nu_{\text{liq}}} \cdot \frac{\theta_{\text{Mi,i}}^{n + 1}}{{\rho'}_{\text{Mi,i}}^{n + 1}} \cdot {\rho'}_{\text{Na,i}}
+ - \theta_{\text{Mi,i}} + \text{COHELP} \right. \\ \left.
+ + T \cdot \left\lbrack {H'}_{\text{cl,Mi,i}} \cdot \left( T_{\text{cl,OS,i}} - T_{\text{Mi,i}} \right)
+ + {H'}_{\text{sr,Mi,i}} \left( T_{\text{sr,OS,i}} - T_{\text{Mi,i}} \right) + {H'}_{\text{fu,Mi,i}} \left( T_{\text{fu,i}}
+ - T_{\text{Mi,i}} \right) \right. \right. \\ \left. \left.
+ + {H'}_{\text{se,Mi,i}} \left( T_{\text{se,i}} - T_{\text{Mi,i}} \right)+{H'}_{\text{f} l \text{,Mi,i}}
+ \left( T_{\text{f} l \text{,i}} - T_{\text{Mi,i}} \right) + {H'}_{\text{s} l \text{,Mi,i}}
+ \left( T_{\text{s} l \text{,i}} - T_{\text{Mi,i}} \right) \right. \right. \\ \left. \left.
+ + {H'}_{\text{ffc,Mi,i}} \left( T_{\text{ffc,i}} - T_{\text{Mi,i}} \right) + {H'}_{\text{ffs,Mi,i}}
+ \left( T_{\text{ffs,i}} - T_{\text{Mi,i}} \right) \right\rbrack \right\} \big/ \text{AUXLR}\end{split}$$ [eq 16.4-87]
+
+where
+
+$$\begin{split} \text{COENCH} = \left\lbrack \left( {\rho'} h u \right)_{\text{Na,i+1/2}} + \left( {\rho'} h u \right)_{\text{fi,i+1/2}} \right. \\ \left.
+ - \left( {\rho'} h u \right)_{\text{Na,i-1/2}} - \left( {\rho'} h u \right)_{\text{fi,i-1/2}} \right\rbrack \cdot \frac{\Delta t}{\Delta z_{\text{i}}}\end{split}$$ [eq 16.4-88]
+
+$$\begin{split} \text{COHELP} = h_{\text{Na,i}} \cdot \left\lbrack \left( {\rho'} u \right)_{\text{Na,i+1/2}} - \left( {\rho'} u \right)_{\text{Na,i-1/2}} \right\rbrack \cdot \frac{\Delta t}{\Delta z_{\text{i}}} \\
+ + h_{\text{fi,i}} \cdot \left\lbrack \left( {\rho'} u \right)_{\text{fi,i+1/2}} - \left( {\rho'} u \right)_{\text{fi,i-1/2}} \right\rbrack \cdot \frac{\Delta t}{\Delta z_{\text{i}}}\end{split}$$ [eq 16.4-89]
+
+$$\begin{split} \text{AUXLR} = {\rho'}_{\text{Na,i}}^{n + 1} \cdot \left\lbrack \left( 1 - X_{\text{Na,i}} \right) \cdot C_{\text{liq}} + X_{\text{Na,i}} \cdot C_{\text{vap}} - h_{\text{vi,i}}\frac{1}{v_{\text{vap}} - v_{\text{liq}}} \right. \\ \left.
+ \cdot \frac{\text{dv}_{\text{v}}}{\text{dT}} \cdot X_{\text{Na,i}} \right\rbrack + 2.5 {\rho'}_{\text{fi,i}}^{n + 1} R_{\text{fi}} + \sum_{\text{j}}{{H'}_{\text{j,Mi,i}}} \cdot \Delta t\end{split}$$ [eq 16.4-90]
+
+The heat-transfer coefficients are the same as those used in the
+single-phase energy equation. The pressure of the mixture is then
+calculated as follows:
+
+$$P_{\text{ch,i}} = P_{\text{Na,i}} + P_{\text{fi,i}}$$ [eq 16.4-91]
+
+where
+
+$$P_{\text{Na,i}} = P_{\text{sat}}\left( T_{\text{Na,i}} \right)$$ [eq 16.4-92]
+
+$$P_{\text{fi,i}} = R_{\text{fi}} \cdot {\rho'}_{\text{fi,i}} \cdot \frac{T_{\text{fi,i}}}{\theta_{\text{Mi,i}}}$$ [eq 16.4-93]
+
+However, if significant amounts of liquid sodium are present (more than
+30% of the volume fraction), the compressibility of the liquid sodium is
+taken into account in calculating the partial fission-gas pressure.
+Eq. (16.4-93) is written in the form:
+
+$$P_{\text{fi,i}} = \frac{R_{\text{fi}} \cdot {\rho'}_{\text{fi,i}} \cdot T_{\text{fi,i}}}{\theta_{\text{Mi,i}} \
+ + \Delta\theta_{\text{Na,liq}}} = \frac{R_{\text{fi}} \cdot {\rho'}_{\text{fi,i}} \cdot T_{\text{fi,i}}}{\theta_{\text{Mi,i}} \
+ + \theta_{\text{Na,liq}} \cdot P_{\text{fi,i}} \cdot C_{\Delta P,\text{Na}}}$$ [eq 16.4-94]
+
+where
+
+$$C_{\Delta \text{P,Na}} = \frac{\left( \frac{\Delta V}{V} \right)_{\text{Na,liq}}}{\Delta P}$$ [eq 16.4-95]
+
+The value of $C_{\Delta \text{P,Na}}$ is given by the input constant CMNL. By
+solving Eq. (16.4-94) and retaining only the positive root, we obtain:
+
+$$P_{\text{fi,i}} = \frac{- \theta_{\text{Mi,i}} + \sqrt{\theta_{\text{Mi,i}}^{2} \
+ + 4\theta_{\text{Na,liq}} + C_{\Delta \text{P,Na}} \cdot R_{\text{fi}} \cdot {\rho'}_{\text{fi,i}} \
+ \cdot T_{\text{fi,i}}}}{2 \cdot \theta_{\text{Na,liq}} \cdot C_{\Delta \text{P,Na}}}$$ [eq 16.4-96]
+
+[anchor: fuel-vapor-energy-conservation-equation]
+
+### 16.4.3.6. Fuel Vapor Energy Conservation Equation
+
+The fuel vapor energy conservation equation is solved in the routine
+LEFUVA, which also models the fuel vaporization/condensation processes.
+These processes are not included in the formulation of the liquid fuel
+energy conservation equation, which is solved in the LESOEN routine.
+Thus, the mass and temperature of the liquid fuel is corrected in the
+routine LEFUVA, when necessary, to account for the mass and energy
+sources/sinks due to condensation and vaporization. Because the fuel
+vapor effects become dominant only during high-power transients that are
+associated with very short time periods, the fuel vapor is assumed not
+to be in equilibrium with the liquid fuel. The treatment of the
+vaporization and condensation processes will be described in detail
+later in this chapter.
+
+[anchor: energy-conservation-for-superheated-fuel-vapor]
+
+#### 16.4.3.6.1. Energy Conservation for Superheated Fuel Vapor
+
+First, the energy equation is solved by assuming that all fuel vapor is
+initially superheated. This assumption is consistent with the method of
+solution, as all condensation and vaporization events are calculated in
+the routine LEFUVA, and the fuel vapor remaining in each cell at the end
+of this routine is always superheated, or, in the limit, saturated dry.
+Condensation or vaporization effects that might occur during the current
+time step are ignored during this first step. The energy equation is
+written in conservative form:
+
+$$\begin{split} \frac{\partial}{\partial \text{t}} \left( \rho_{\text{fv,i}} h_{\text{fv,i}} \cdot A_{\text{Mi,i}} \cdot \Delta z_{\text{i}} \right) + \left\lbrack \left( \rho A h u \right)_{\text{fv,i+1/2}} - \left( \rho A h u \right)_{\text{fv,i-1/2}} \right\rbrack \\
+ = A_{\text{Mi,i}} \frac{\partial \text{P}_{\text{fv,i}}}{\partial \text{t}} \cdot \Delta z_{\text{i}} + A_{\text{Mi,i}} \cdot 0.5 \cdot \left\lbrack u_{\text{Mi,i}} \cdot \left( P_{\text{fv,i}} - P_{\text{fv,i-1}} \right) \right. \\ \left.
+ + u_{\text{Mi,i+1}} \cdot \left( P_{\text{fv,i+1}} - P_{\text{fv,i}} \right) \right\rbrack + \sum_{\text{j}}{ H_{\text{j,fv,i}} A_{\text{j,fv,i}} \cdot \Delta T_{\text{j,fv,i}}} \\
+ + Q_{\text{fu,i}} \cdot \rho_{\text{fu,i}} \cdot A_{\text{Mi,i}} \cdot \Delta z_{\text{i}} \\\end{split}$$ [eq 16.4-97]
+
+After dividing by $\text{AXMX} \cdot \Delta z_{\text{i}}$ and using the definition of
+generalized densities, we obtain:
+
+$$\begin{split} \frac{\partial}{\partial \text{t}} \left( {\rho'}_{\text{fv,i}} h_{\text{fv,i}} \right) = - \left\lbrack \left( {\rho'} h u \right)_{\text{fv,i+1/2}} - \left( {\rho'} h u \right)_{\text{fv,i-1/2}} \right\rbrack \cdot \frac{1}{\Delta z_{\text{i}}} \\
+ + \theta_{\text{Mi,i}} \cdot \frac{\partial \text{P}_{\text{fv,i}}}{\partial \text{t}} + \sum_{\text{j}}{{H'}_{\text{j,fv,i}}} \cdot \Delta T_{\text{j,fv,i}} + Q_{\text{fu,i}} \cdot {\rho'}_{\text{fv}} \\
+ + \theta_{\text{Mi,i}} \cdot \frac{0.5}{\Delta z_{\text{i}}}\left\lbrack U_{\text{Mi,i}} \cdot \left( P_{\text{fv,i}} - P_{\text{fv,i-1}} \right) + U_{\text{Mi,i+1}} \cdot \left( P_{\text{fv,i+1}} - P_{\text{fv,i}} \right) \right\rbrack \\\end{split}$$ [eq 16.4-98]
+
+Integrating over $\Delta t$ and using the identity in Eq. (16.4-18) to express the
+quantity $\Delta \left( {\rho'} h \right)$ , we obtain:
+
+$$\begin{split} {\rho'}_{\text{fv,i}}^{n + 1} \cdot \Delta h_{\text{fv,i}} = - \left\lbrack \left( {\rho'} h u \right)_{\text{fv,i+1/2}} - \left( {\rho'} h u \right)_{\text{fv,i-1/2}} \right\rbrack \cdot \frac{\Delta t}{\Delta z_{\text{i}}} - h_{\text{fv,i}} \cdot \Delta {\rho'}_{\text{fv,i}} \\
+ + \theta_{\text{Mi,i}} \cdot \Delta P_{\text{fv,i}} + \sum_{\text{j}}{{H'}_{\text{j,fv,i}} \cdot \Delta T_{\text{j,fv,i}} \cdot \Delta t} + Q_{\text{fu,i}} \cdot {\rho'}_{\text{fv}} \cdot \Delta t \\
+ + \theta_{\text{Mi,i}} \cdot \frac{0.5 \cdot \Delta t}{\Delta z_{\text{i}}} \cdot \left\lbrack u_{\text{Mi,i}} \cdot \left( P_{\text{fv,i}} - P_{\text{fv,i-1}} \right) \right. \\ \left.
+ + u_{\text{Mi,i+1}} \cdot \left( P_{\text{fv,i+1}} - P_{\text{fv,i}} \right) \right\rbrack\end{split}$$ [eq 16.4-99]
+
+The fuel vapor is only present in calculations for short periods of time
+during high overpower transients. In addition, the gas-gas heat transfer
+is generally much more efficient than the gas-liquid or gas-surface heat
+transfer. For these reasons the only heat-transfer term maintained in
+Eq. (16.4-97) is the heat transfer between the fuel vapor and the
+sodium-fission gas mixture. Furthermore, because of the lack of
+experimental data on the gas-gas heat transfer, this term has been
+formulated such that it represents a sizable fraction of the
+transferable energy, i.e., the temperatures of the fuel vapor and gas
+mixture will equilibrate quite fast, within 10-50 time steps. The
+enthalpy of the fuel vapor at a certain temperature is:
+
+$$h_{\text{fv,i}} = h_{\text{fv,sat}} \left( P_{\text{fv,i}} \right) + 2.5 \cdot R_{\text{fv}} \
+ \cdot \left\lbrack T_{\text{fv,i}} - T_{\text{fv,sat,i}} \left( P_{\text{fv,i}} \right) \right\rbrack$$ [eq 16.4-100]
+
+A measure of the transferable enthalpy is obtained by assuming the
+lowest final temperature to be the temperature of the sodium-fission gas
+mixture. Thus:
+
+$$\Delta h_{\text{fv,i}} = 2.5 \cdot R_{\text{fv}} \left\lbrack T_{\text{fv,i}} - T_{\text{Na,i}}^{n + 1} \right\rbrack$$ [eq 16.4-101]
+
+The total transferable enthalpy in cell $i$ , during the time $\Delta t$ is:
+
+$$\Delta h_{\text{fv,i}} \cdot \rho_{\text{fv,i}} \cdot A_{\text{Mi,i}} \cdot \Delta z_{\text{i}} \
+ = 2.5 \cdot R_{\text{fv}} \cdot \left\lbrack T_{\text{fv,i}} - T_{\text{Na,i}}^{n + 1} \right\rbrack \
+ \cdot \rho_{\text{fv,i}} \cdot A_{\text{Mi,i}} \cdot \Delta z_{\text{i}}$$ [eq 16.4-102]
+
+The fraction transferred is $\text{CFHTAX}$ , which is defined as follows:
+
+When $\Delta t \cdot 10^{3} \leq 0.1$ 
+
+$$\text{CFHTAX} = \Delta t \cdot 10^{3}$$ [eq 16.4-103]
+
+When $\Delta t \cdot 10^{3} > 0.1$ 
+
+$$\text{CFHTAX} = 0.1$$ [eq 16.4-104]
+
+After multiplying by $\text{CFHTAX}$ and dividing by $\text{AXMX} \cdot \Delta z_{\text{i}}$ , which
+was done for the original equation, the heat-transfer term in
+Eq. (16.4-99) is replaced by:
+
+$$\sum_{\text{j}}{{H'}_{\text{j,f,i}} \cdot \Delta T_{\text{j,fv,i}} \cdot \Delta t \rightarrow \
+ - 2.5 \cdot R_{\text{fv,i}} \cdot \text{CFHTAX} \cdot \left\lbrack T_{\text{fv,i}} \
+ - T_{\text{Na,i}}^{n + 1} \right\rbrack \cdot {\rho'}_{\text{fv,i}}}$$ [eq 16.4-105]
+
+Substituting Eq. (16.4-105) in Eq. (16.4-99) and rewriting the
+ $\theta_{\text{Mi,i}} \cdot \Delta P_{\text{fv,i}}$ and $\rho_{\text{fv,i}}^{n + 1}$ terms
+in a manner similar to that used for the sodium-gas mixture, in
+Eq. (16.4-50) through Eq. (16.4-56), we obtain:
+
+$$\begin{split} \Delta T_{\text{fv,i}}\left\lbrack 2.5\left( {\rho'} \right)_{\text{fv,i}}^{n + 1} R_{\text{fv}} - \left( {\rho'} \right)_{\text{fv,i}}^{n + 1}R_{\text{fv}} \right\rbrack = \\
+ - \left\lbrack \left( {\rho'} h u \right)_{\text{fv,i+1/2}} - \left( {\rho'} h u \right)_{\text{fv,i-1/2}} \right\rbrack \frac{\Delta t}{\Delta z_{\text{i}}} \\
+ + \left( h_{\text{fv,i}} - T_{\text{fv,i}} R_{\text{fv}} \right)\left\lbrack \left( {\rho'} u \right)_{\text{fv,i+1/2}} - \left( {\rho'} u \right)_{\text{fv,i-1/2}} \right\rbrack \frac{\Delta t}{\Delta z_{\text{i}}} \\
+ + \theta_{\text{Mi,i}}\frac{0.5\Delta t}{\Delta z_{\text{i}}}\left\lbrack u_{\text{Mi,i}}\left( P_{\text{fv,i}} - P_{\text{fv,i-1}} \right) + u_{\text{Mi,i+1}}\left( P_{\text{fv,i+1}} - P_{\text{fv,i}} \right) \right\rbrack \\
+ - 2.5 R_{\text{fv}} \text{CHFTAX} \left( T_{\text{fv,i}} - T_{\text{Na,i}}^{n + 1} \right) {\rho'}_{\text{fv,i}} + Q_{\text{fu}} {\rho'}_{\text{fv}} \Delta t\end{split}$$ [eq 16.4-106]
+
+The terms derived from the original
+ $\frac{\partial \text{P}}{\partial \text{t}}$ and
+ $\frac{\partial \text{P}}{\partial \text{z}}$ terms in Eq. (16.4-97) make a
+negligible contribution to the right hand side of Eq. (16.4-106). These
+terms were neglected in the initial release version, but have been added
+for completeness, in the chunk development version. The left-hand-side
+coefficient is replaced by:
+
+$$\text{AUXLR} = 2.5 \cdot {\rho'}_{\text{fv,i}}^{n + 1} \cdot R_{\text{fv}} - {\rho'}_{\text{fv,i}}^{n + 1} \cdot R_{\text{fv}}$$ [eq 16.4-107]
+
+The terms in Eq. (16.4-107) have not been combined because the term
+ ${\rho'}_{\text{fv,i}}^{n + 1} \cdot R_{\text{fv}}$ originates
+from the $\frac{\partial \text{P}}{\partial \text{t}}$ term and was dropped
+in the initial release version, together with the terms originating from
+the u $\frac{\partial \text{P}}{\partial \text{u}}$ term. The new fuel vapor
+temperature is calculated as follows:
+
+$$\begin{split} \text{TEFUVA} \left( I \right) = \text{TEFUVA} \left( I \right) + \left( - \text{COENCH} \
+ + \text{COHELP} + \text{HSFU} \left( I \right) * \text{DEFVCH} \left( I \right) * \right. \\ \left.
+ \text{DTPL} - \text{DEFVCH} \left( I \right) * \text{CFHTFN} * \left( \text{TEFUVA} \left( I \right) \
+ - \text{TENA} \left( I \right) \right) \right) \big/ \text{AUXLR}\end{split}$$ [eq 16.4-108]
+
+where
+
+$$\text{COENCH} = \left\lbrack \left( {\rho'} h u \right)_{\text{fv,i+1/2}} \
+ - \left( {\rho'} h u \right)_{\text{fv,i-1/2}} \right\rbrack \cdot \frac{\Delta t}{\Delta z_{\text{i}}}$$ [eq 16.4-109]
+
+$$\text{COHELP} = h_{\text{fv,i}} \cdot \left\lbrack \left( {\rho'} u \right)_{\text{fv,i+1/2}} \
+ - \left( {\rho'} u \right)_{\text{fv,i-1/2}} \right\rbrack \cdot \frac{\Delta t}{\Delta z_{\text{i}}}$$ [eq 16.4-110]
+
+and
+
+$$\text{DEFVCH} \left( I \right) = {\rho'}_{\text{fv,i}}$$ [eq 16.4-111]
+
+$$\text{CFHTFN} = 2.5 \cdot R_{\text{fv}} \cdot \text{CFHTAX}$$ [eq 16.4-112]
+
+The new fuel vapor pressure is then calculated using the new
+temperatures:
+
+$$P_{\text{fv,i}}^{n + 1} = R_{\text{fv}} \cdot {\rho'}_{\text{fv,i}}^{n + 1} \cdot T_{\text{fv,i}}^{n + 1} \big/ \theta_{\text{Mi,i}}^{n + 1}$$ [eq 16.4-113]
+
+[anchor: condensation-of-the-fuel-vapor]
+
+#### 16.4.3.6.2. Condensation of the Fuel Vapor
+
+Under certain circumstances the fuel vapor will enter the two-phase
+region and begin to condense. The decision that such a situation has
+occurred is made by comparing the pressure
+ $P_{\text{fv,i}}^{n + 1}$ with the saturation pressure in cell $i$ .
+If:
+
+$$P_{\text{fv,i}}^{n + 1} < P_{\text{fv,sat,i}} \left( T_{\text{fv,i}}^{n + 1} \right)$$ [eq 16.4-114]
+
+no condensation will occur during the current time step. Otherwise, some
+condensation will take place, and the calculation proceeds as outlined
+below.
+
+First, we determine the temperature $T_{\text{fv,sat,i}}$ where the fuel
+vapor first reaches saturation. This temperature is obtained using the
+same method described in Section 16.4.3.5 to correct the sodium
+temperature where it crosses over from the single phase to the two-phase
+region. The formula used is similar to Eq. (16.4-73). The enthalpy change
+between the original temperature $T_{\text{fv,i}}^{n}$ and the
+saturation temperature is, by Eq. (16.4-106):
+
+$$\Delta {h'}_{\text{fv,i}} = \left( T_{\text{fv,sat,i}} - T_{\text{fv,i}}^{n} \right) * \text{AUXLR}$$ [eq 16.4-115]
+
+The total enthalpy change originally calculated is:
+
+$$\Delta h_{\text{fv,i}} = \left( T_{\text{fv,i}}^{n + 1} - T_{\text{fv,i}}^{n} \right) * \text{AUXLR}$$ [eq 16.4-116]
+
+The enthalpy which still has to be removed via condensation once the
+vapor has reached the temperature $T_{\text{fv,sat,i}}$ is given by:
+
+$$\Delta h_{\text{fv,i}}^{\text{cond}} = \Delta h_{\text{fv,i}} - \Delta {h'}_{\text{fv,i}} \
+ = \left( T_{\text{fv,i}}^{n + 1} - T_{\text{fv,sat}} \right) * \text{AUXLR}$$ [eq 16.4-117]
+
+In order to find the temperature change leading to the enthalpy change
+ $\Delta h_{\text{fv,i}}^{\text{cond}}$ , we observe that at the
+final temperature we have to satisfy the condition for dry vapor:
+
+$$P_{\text{fv,sat}} \left( T_{\text{fv,i}} \right) = R_{\text{fv}} \cdot {\rho'}_{\text{fv}} \
+ \cdot T_{\text{fv,i}} \cdot \frac{1}{\theta_{\text{Mi,i}}}$$ [eq 16.4-118]
+
+Also, with the assumption that the heat of vaporization for fuel
+ $h_{\text{fv,lg}}$ is approximately constant for the range of temperatures
+of interest, the total enthalpy change due to condensation and
+temperature change can be written as:
+
+$$\Delta h_{\text{fv}} = - \Delta {\rho'}_{\text{fv,i}} h_{\text{fv,lg}} \
+ + 2.5 {\rho'}_{\text{fv,i}} R_{\text{fv}} \cdot \Delta T_{\text{fv}}$$ [eq 16.4-119]
+
+where $\Delta {\rho'}_{\text{fv,i}}$ is the decrease in generalized density due to
+condensation. Because Eq. (16.4-118) and Eq. (16.4-119) cannot be solved
+directly for the temperature, we use a trial and error approach to find
+the solution. First, assuming the final temperature if
+ $T_{\text{fv}}^{1} = T_{\text{fv,i}}^{n + 1}$ , i.e., the
+temperature originally calculated, and the amount to condense
+ $\Delta {\rho'}_{\text{fv}}^{1}$ , Eq. (16.4-118) becomes:
+
+$$P_{\text{fv,sat}} \left( T_{\text{fv}}^{1} \right) = R_{\text{fv}} \cdot \left( {\rho'}_{\text{fv,i}} \
+ - \Delta {\rho'}_{\text{fv}} \right) \cdot T_{\text{fv}}^{1} \cdot \frac{1}{\theta_{\text{Mi}} \
+ - \frac{\Delta {\rho'}_{\text{fv}}}{\rho_{\text{fu,liq}}}}$$ [eq 16.4-120]
+
+and, after solving for $\Delta {\rho'}_{\text{fv}}$ :
+
+$$\Delta {\rho'}_{\text{fv}}^{1} = \frac{\left( {\rho'}_{\text{fv,i}} \cdot R_{\text{fv}} \cdot T_{\text{fv}}^{1} \
+ - \theta_{\text{Mi,i}} \cdot P_{\text{fv,sat}} \left( T_{\text{fv}}^{1} \right) \right)}{R_{\text{fv}} \cdot T_{\text{fv}}^{1} \
+ - \frac{P_{\text{fv,sat}} \left( T_{\text{fv}}^{1} \right)}{\rho_{\text{fu,liq}}}}$$ [eq 16.4-121]
+
+The enthalpy change in Eq. (16.4-119) becomes:
+
+$$\Delta h_{\text{fv}}^{1} = - \Delta \rho_{\text{fv,i}}^{1} \cdot h_{\text{hv,lg}} \
+ + 2.5 \cdot {\rho'}_{\text{fv,i}} \cdot R_{\text{fv}} \cdot \left( T_{\text{fv,i}}^{n + 1} - T_{\text{fv,sat}} \right)$$ [eq 16.4-122]
+
+Then, we assume that the final temperature of the fuel vapor is
+ $T_{\text{fv}}^{2} = T_{\text{fv,sat}}$ , and obtain the new
+amount of condensate $\Delta {\rho'}_{\text{fv}}^{2}$ and the
+energy change:
+
+$$\Delta h_{\text{fv}}^{2} = - \Delta {\rho'}_{\text{fv}}^{2} \cdot h_{\text{fv,lg}}$$ [eq 16.4-123]
+
+These two situations generally will bracket the actual final temperature
+of the fuel vapor, because the first assumption is practically
+equivalent to very little or no condensation, while the second assumes
+maximum condensation with no temperature change. The actual temperature
+is obtained by interpolating between
+ $T_{\text{fv}}^{1}$ and $T_{\text{fv}}^{2}$ , with the
+condition that the final enthalpy change has to be
+ $\Delta h_{\text{fv,i}}^{\text{cond}}$ , calculated before from
+Eq. (16.4-117). Thus:
+
+$$T_{\text{fv,i}}^{n + 1} = T_{\text{fv,i}}^{1} + T_{\text{fv,i}}^{2} \cdot \frac{\Delta h_{\text{fv,i}}^{\text{cond}} \
+ - \Delta h_{\text{fv}}^{1}}{\Delta h_{\text{fv}}^{2} - \Delta h_{\text{fv}}^{1}}$$ [eq 16.4-124]
+
+Using this temperature, the actual condensation is calculated from
+Eq. (16.4-121) and the generalized density of the fuel vapor is updated:
+
+$${\rho'}_{\text{fv,i}} = {\rho'}_{\text{fv,i}} - \Delta {\rho'}_{\text{fu,i}}^{\text{cond}}$$ [eq 16.4-125]
+
+The temperature and generalized density of the liquid fuel is also
+modified to account for the addition of
+ $\Delta {\rho'}_{\text{fv,i}}^{\text{cond}}$ at the temperature
+ $T_{\text{fv,i}}^{n + 1}$ :
+
+$$T_{\text{fu,i}} = \frac{\left\lbrack T_{\text{fu,i}} {\rho'}_{\text{fu,i}} \
+ + T_{\text{fv,i}}^{n + 1} \cdot \Delta \rho_{\text{fv,i}} \right\rbrack}{\left( {\rho'}_{\text{fu,i}} \
+ + \Delta {\rho'}_{\text{fv,i}}^{\text{cond}} \right)}$$ [eq 16.4-126]
+
+$${\rho'}_{\text{fu,i}} = {\rho'}_{\text{fu,i}} + \Delta {\rho'}_{\text{fv,i}}^{\text{cond}}$$ [eq 16.4-127]
+
+[anchor: vaporization-of-liquid-fuel]
+
+#### 16.4.3.6.3. Vaporization of Liquid Fuel
+
+The vaporization model used is a quasi-equilibrium model [16-13] which
+allows the fuel and fuel vapor to have different temperatures at the
+same location. Bulk boiling of fuel is assumed to occur whenever the
+local total pressure is lower than the vapor pressure of the liquid
+fuel. This process is fast enough to allow a quasi-equilibrium to be
+established each time step, and is illustrated in Figure 16.4.14 by the
+original sharp increase in pressure. Thus, the total pressure, including
+the partial pressure of the fuel vapor becomes equal to the fuel vapor
+pressure corresponding to the liquid-fuel temperature. When the total
+pressure exceeds the liquid-fuel vapor pressure, fuel vaporization can
+occur only by surface vaporization, which is generally a significantly
+slower process than bulk boiling. The efficiency of surface vaporization
+is a function of the local flow regime and time-step length. In the
+limit, if the surface vaporization is assumed to be very efficient, the
+partial pressure of the fuel vapor can become equal, in each time step,
+to the liquid-fuel pressure. In this case, the quasi-equilibrium model
+becomes equivalent to a thermal-equilibrium model.
+
+Figure 16.4.14 Time Variation of Fuel Vapor Partial Pressure
+
+This calculation is performed for all cells $I$ , with $\text{IFFUBT} < I < \text{IFFUTP}$ .
+First, we calculate $P_{\text{fu,sat,i}} = P_{\text{sat}} \left( T_{\text{fu,i}} \right)$ .
+Further vaporization of the liquid fuel in cell I will occur only if:
+
+$$P_{\text{fv,i}} + \left( P_{\text{Na,i}} + P_{\text{fi,i}} + P_{\text{sv,i}} \right) \cdot C_{\text{Pr,fu}} < P_{\text{fu,sat,i}}$$ [eq 16.4-128]
+
+where $C_{\text{Pr,fu}}$ is a coefficient dependent on the local
+configuration and the length of the time step as follows:
+
+If the fuel is the continuous component, i.e., in the annular or bubbly
+fuel flow regimes
+
+$$C_{Pr,\text{fu}} = 1$$ [eq 16.4-129]
+
+If the fuel is in the form of droplets, i.e. in the annular and bubbly
+steel flow regimes,
+
+$$\begin{split} C_{\text{Pr,fu}} = \begin{cases}
+ 1 - \Delta t \cdot 10^{4} & \text{if } 1 - \Delta t \cdot 10^{4} > 0 \\
+ 0 & \text{if } 1 - \Delta t \cdot 10^{4} < 0 \\
+ \end{cases}\end{split}$$ [eq 16.4-130]
+
+The case $C_{\text{Pr,fu}} = 0$ corresponds to full thermal equilibrium
+between liquid and fuel vapor.
+
+The vaporization of liquid fuel will take place until the following
+condition is satisfied:
+
+$$P_{\text{fv,i}} + \left( P_{\text{Na,i}} + P_{\text{fi,i}} + P_{\text{sv,i}} \right) \cdot C_{\text{Pr,fu}} = P_{\text{fu,sat,i}}$$ [eq 16.4-131]
+
+Note that all pressures change during vaporization, including
+ $P_{\text{fu,sat,i}}$ . Thus, Eq. (16.4-131) cannot be solved directly, and we
+need to use a trial-and-error approach. First, it is assumed that the
+final fuel temperature is:
+
+$$T_{\text{fu,i}}^{1} = T_{\text{fu,i}}$$ [eq 16.4-132]
+
+and
+
+$$P_{\text{fu,sat,i}}^{1} = P_{\text{fu,sat}} \left( T_{\text{fu,j}}^{1} \right)$$ [eq 16.4-133]
+
+We can now calculate the amount of new fuel vapor generated from
+Eq. (16.4-131):
+
+$$\Delta {\rho'}_{\text{fv,i}} = \frac{\theta_{\text{Mi,i}} \left\lbrack P_{\text{fu,sat,i}}^{1} \
+ - P_{\text{fv,i}} - \left( P_{\text{Na,i}} + P_{\text{fi,i}} + P_{\text{fv,i}} \right) \
+ \cdot C_{\text{p,vap,fu}} \right\rbrack}{\left\lbrack R_{\text{fv}} \cdot T_{\text{fv}}^{1} \
+ - P_{\text{fu,sat,i}}^{1} \cdot \frac{1}{\rho_{\text{fu,liq}}} \right\rbrack}$$ [eq 16.4-134]
+
+The new fuel enthalpy is:
+
+$${h'}_{\text{fu,i}} = - \frac{\left( h_{\text{fu,i}} \cdot {\rho'}_{\text{fu,i}} \
+ - h_{\text{fu,lq}} \cdot \Delta {\rho'}_{\text{fv,i}} \right)}{{\rho'}_{\text{fu,i}} - \Delta {\rho'}_{\text{fv,i}}}$$ [eq 16.4-135]
+
+and the new fuel temperature and vapor pressure are:
+
+$${T'}_{\text{fu,i}} = {T'}_{\text{fu}} \left( {h'}_{\text{fu,i}} \right)$$ [eq 16.4-136]
+
+$${P'}_{\text{fu,sat,i}} = {P'}_{\text{fu,sat}} \left( T_{\text{fu,i}} \right)$$ [eq 16.4-137]
+
+A new guess is now made about the final fuel temperature
+ $T_{\text{fu,i}}^{2} = {T'}_{\text{fu,i}}$ , and the above
+procedure is repeated, obtaining $P_{\text{fu,sat,i}}^{2}$ ,
+ $\Delta {\rho''}_{\text{fu,i}}$ , ${T''}_{\text{fu,i}}$ and ${P''}_{\text{fu,sat,i}}$ . We can now
+obtain the real $P_{\text{fu,sat,i}}$ , by imposing the condition that the
+final saturation pressure should be equal to the assumed saturation
+pressure:
+
+$$P_{\text{fu,sat,i}}^{n + 1} = P_{\text{fu,sat,i}}^{i} - \left( P_{\text{fu,sat,i}}^{2} \
+ - P_{\text{fu,sat,i}}^{1} \right) \cdot \frac{\Delta P^{1}}{\Delta P^{2} - \Delta P^{1}}$$ [eq 16.4-138]
+
+where
+
+$$\Delta P^{1} = {P'}_{\text{fu,sat,i}} - P_{\text{fu,sat,i}}^{1}$$ [eq 16.4-139]
+
+$$\Delta P^{2} = {P''}_{\text{fu,sat,i}} - P_{\text{fu,sat,i}}^{2}$$ [eq 16.4-140]
+
+Using $P_{\text{fu,sat,i}}^{n + 1}$ in Eq. (16.4-134), we
+can calculate the new $\Delta {\rho'}_{\text{fv,i}}$ . Then, the generalized densities
+and enthalpies of the fuel vapor and liquid fuel are updated:
+
+$$T_{\text{fv,i}}^{n + 1} = \frac{\left( \Delta {\rho'}_{\text{fv,i}} \cdot T_{\text{fu,i}} \
+ + {\rho'}_{\text{fv,i}} \cdot T_{\text{fv,i}} \right)}{\left( {\rho'}_{\text{fv,i}} + \Delta {\rho'}_{\text{fv,i}} \right)}$$ [eq 16.4-141]
+
+$$h_{\text{fu,i}}^{n + 1} = \frac{\left( h_{\text{fu,i}} \cdot {\rho'}_{\text{fu,i}} \
+ - h_{\text{lq}} \cdot \Delta {\rho'}_{\text{fv,i}} \right)}{\left( {\rho'}_{\text{fu,i}} \
+ - \Delta {\rho'}_{\text{fv,i}} \right)}$$ [eq 16.4-142]
+
+$${\rho'}_{\text{fv,i}}^{n + 1} = {\rho'}_{\text{fv,i}} + \Delta {\rho'}_{\text{fv,i}}$$ [eq 16.4-143]
+
+$${\rho'}_{\text{fu,i}} = {\rho'}_{\text{fu,i}} - \Delta {\rho'}_{\text{fv,i}}$$ [eq 16.4-144]
+
+Finally, the new pressure due to fuel vapor is calculated:
+
+$$P_{\text{fv,i}}^{n + 1} = R_{\text{fv}} \cdot {\rho'}_{\text{fv,i}}^{n + 1} \
+ \cdot T_{\text{fv,i}}^{n + 1} \cdot \frac{1}{\theta_{\text{Mi,i}}^{n + 1}}$$ [eq 16.4-145]
+
+and is added to the total channel pressure:
+
+$$P_{\text{ch,i}}^{n + 1} = P_{\text{ch,i}}^{n + 1} + P_{\text{fv,i}}^{n + 1}$$ [eq 16.4-146]
+
+[anchor: steel-vapor-energy-conservation-equation]
+
+### 16.4.3.7. Steel Vapor Energy Conservation Equation
+
+The steel vapor energy conservation equation is solved in the routine
+LESEVA. This routine is practically identical to the LEFUVA routine,
+which solves the fuel vapor energy equation and was described in detail
+in Section 16.4.3.6. At the end of the LESEVA routine, the new pressure
+due to steel vapor is calculated
+
+$$P_{\text{sv,i}}^{n + 1} = R_{\text{sv}} \cdot {\rho'}_{\text{sv,i}}^{n + 1} \
+ \cdot T_{\text{sv,i}}^{n + 1} \cdot \frac{1}{\theta_{\text{Mi,i}}^{n + 1}}$$ [eq 16.4-147]
+
+and is added to the total channel pressure:
+
+$$P_{\text{ch,i}}^{n + 1} = P_{\text{ch,i}}^{n + 1} + P_{\text{sv,i}}^{n + 1}$$ [eq 16.4-148]
+
+[anchor: momentum-conservation-equation]
+
+### 16.4.3.8. Momentum Conservation Equation
+
+The momentum conservation equations are solved in the routine LEMOCO. As
+indicated previously, the channel hydrodynamic model in LEVITATE
+calculates three velocity fields, each of them describing the motion of
+a group of material components, as follows:
+
+ | 
+ $u'_{Mi,i}, u''_{Mi,i}$ 
+ | 
+ | 
+the velocity of the gas mixture; described the motion of the two-phase (or superheated) sodium, fission gas, fuel vapor and steel vapor. The code symbol is UMCH.
+ | 
+
+ | 
+ $u'_{fu,i}, u''_{fu,i}$ 
+ | 
+ | 
+the velocity of the liquid fuel and/or liquid steel components. The code symbol is UFCH.
+ | 
+
+ | 
+ $u_{lu,i}$ 
+ | 
+ | 
+the velocity of the solid fuel and/or steel chunks. The code symbol is ULCH.
+ | 
+
+One is reminded that LEVITATE uses dual velocities to model the motion
+of the gas mixture and liquid components. Thus, ${u'}_{\text{Mi,i}}$ 
+represents the velocity of the gas mixture before the $i-1/2$ boundary
+and ${u''}_{\text{Mi,i}}$ represents the velocity of the mixture after the
+same boundary. (Before and after velocities are ordered here by the
+positive sense of the axial coordinate). As already shown in Section 16.4.3.1, the dual velocities at the boundary $i-1/2$ are related by:
+
+$$C_{\text{Mo,fu,i}} = \frac{{u'}_{\text{fu,i}}}{{u''}_{\text{fu,i}}} = \frac{{\rho'}_{\text{fu,i}}}{{\rho'}_{\text{fu,i-1}}}$$ [eq 16.4-149]
+
+In the code, only the velocity ${u''}_{\text{fu,i}}$ is stored in the array
+ $\text{UFCH} \left( I \right)$ . The velocity ${u'}_{\text{fu,i}}$ is always obtained from
+Eq. (16.4-149), using the coefficient $C_{\text{Mo,fu,i}}$ , which is stored in
+the array $\text{CCFU} \left( I \right)$ . A similar approach is used for the gas mixture dual
+velocities, which are related at the boundary $i-1/2$ by the
+coefficients $C_{\text{Mo,Mi,i}}$ , stored in the array $\text{CCMI} \left( I \right)$ .
+
+The three momentum equations are solved simultaneously to avoid
+numerical instabilities due to the generally low inertia of the gas
+mixture. In cells where only two velocity fields are necessary (e.g., no
+fuel/steel chunks are present) a system of only two momentum equations
+is solved. Finally, in cells where the gas mixture only is present, the
+corresponding momentum equation is solved, while the other two velocity
+fields remain zero. We first present the derivation of the momentum
+equations.
+
+[anchor: the-momentum-conservation-equation-for-the-gas-mixture]
+
+#### 16.4.3.8.1. The Momentum Conservation Equation for the Gas Mixture
+
+We begin with the equation written in conservative form for the control
+volume illustrated in Figure 16.4.15:
+
+$$\begin{split} \frac{\partial}{\partial \text{T}}\left\lbrack \rho_{\text{Mi,i-1}} \cdot \frac{z_{\text{i-1}}}{2} \
+ \cdot A_{\text{Mi,i-1}} \cdot {u'}_{\text{Mi,i}} + \rho_{\text{Mi,i}} \cdot \frac{z_{i}}{2} \cdot A_{\text{Mi,i}} \
+ \cdot {u''}_{\text{Mi,i}} \right\rbrack + \left\lbrack \left( \rho A u^{2} \right)_{\text{Mi,i}} \
+ - \left( \rho A u^{2} \right)_{\text{Mi,i-1}} \right\rbrack = \\
+ - A_{\text{Mi,i-1/2}} \cdot \left( P_{\text{i}} - P_{\text{i-1}} \right) + \sum_{l}\left( \Gamma_{\text{Mo,i-1}}^{l} \
+ \cdot \frac{z_{\text{i-1}}}{2} + \Gamma_{\text{Mo,i}}^{l} \cdot \frac{z_{\text{i}}}{2} \right) \\
+ - \rho_{\text{Mi,i-1}} \cdot \frac{z_{\text{i-1}}}{2} A_{\text{Mi,i-1}} \cdot g - {\rho'}_{\text{Mi,i}} \cdot \frac{z_{\text{i}}}{2} \
+ \cdot A_{\text{Mi,i}} \cdot g\end{split}$$ [eq 16.4-150]
+
+where $\sum{\Gamma_{\text{Mo,i-1}}^{l}}$ represents the
+momentum sources and sinks for the mixture and will be presented in
+detail later in this chapter. We now divide Eq. (16.4-150) by $\text{AXMX}$ and
+using the definition of the generalized density, the notation:
+
+$$\begin{aligned}
+ \frac{\Delta z_{\text{i}}}{2} = \Delta z_{2} && ; && \frac{\Delta z_{\text{i-1}}}{2} = \Delta z_{1}
+ \end{aligned}$$ [eq 16.4-151]
+
+and the correlation of ${u'}_{\text{Mi,i}}$ and ${u''}_{\text{Mi,i}}$ , obtain
+
+$$\begin{split} \frac{\partial}{\partial \text{t}}\left\lbrack {\rho'}_{\text{Mi,i-1}} \cdot \Delta z_{\text{i}} \cdot u_{\text{Mi,i}} \cdot C_{\text{Mo,Mi,i}} + {\rho'}_{\text{Mi,i}} \cdot \Delta z_{2} \cdot u_{\text{Mi,i}} \right\rbrack \\
+ = - \left\lbrack \left( {\rho'} u^{2} \right)_{\text{Mi,i}} - \left( {\rho'} u^{2} \right)_{\text{Mi,i-1}} \right\rbrack - \theta_{\text{Mi,i-1/2}} \cdot \left( P_{\text{i}} - P_{\text{i-1}} \right) \\
+ + \sum\left( {\Gamma'}_{\text{Mo,i-1}}^{l} \cdot \Delta z_{\text{i}} + {{\Gamma'}^{l}}_{\text{Mo,i}} \cdot \Delta z_{2} \right) - {\rho'}_{\text{Mi,i-1}} \cdot \Delta z_{1} \cdot g - {\rho'}_{\text{Mi,i}} \cdot \Delta z_{2} g \\\end{split}$$ [eq 16.4-152]
+
+Figure 16.4.15 Control Volume Used for the Solution of the Momentum Equation
+
+where we used
+
+$$u_{\text{mi,i}} = {u''}_{\text{Mi,i}}$$ [eq 16.4-153]
+
+in order to simplify the notation and:
+
+$${\Gamma'}_{\text{Mo,i}}^{l} = \frac{\Gamma_{\text{Mo,i}}^{l}}{\text{AXMX}}$$ [eq 16.4-154]
+
+The convective fluxes in Eq. (16.4-152) are defined as follows:
+
+$$\left( {\rho'} u^{2} \right)_{\text{Mi,i}} = {\rho'}_{\text{Mi,i}} \
+ \cdot \frac{\left( {u''}_{\text{Mi,i}} + {u'}_{\text{Mi,i+1}} \right)^{2}}{4}$$ [eq 16.4-155]
+
+An optional formulation of the convective fluxes can be obtained by
+setting the input parameter $\text{IMOMEN} = 1$ , in which case:
+
+$$\left( {\rho'} u^{2} \right)_{\text{Mi,i}} = {\rho'}_{\text{Mi,i}} \cdot u_{\text{Mo,Mi,i}}^{2}$$ [eq 16.4-156]
+
+where
+
+$$\begin{split} u_{\text{Mo,Mi,i}} = \begin{cases}
+ {u''}_{\text{Mi,i}} & \text{if } {u''}_{\text{Mi,i}} \geq 0 \text{ and } {u'}_{\text{Mi,i+1}} \geq 0 \\
+ \sqrt{{u''}_{\text{Mi,i}}^{2} + {u'}_{\text{Mi,i+1}}^{2}} & \text{if } {u''}_{\text{Mi,i}} \geq 0 \text{ and } {u'}_{\text{Mi,i+1}} \leq 0 \\
+ 0 & \text{if } {u''}_{\text{Mi,i}} < 0 \text{ and } {u'}_{\text{Mi,i+1}} \geq 0 \\
+ {u'}_{\text{Mi,i+1}} & \text{if } {u''}_{\text{Mi,i}} < 0 \text{ and } {u'}_{\text{Mi,i+1}} < 0
+ \end{cases}\end{split}$$ [eq 16.4-157]
+
+This option has been added only recently and has not been tested
+extensively. It is expected that in future release versions this
+formulation will become the basic option. The quantity
+ $\theta_{\text{Mi,i-1/2}}$ is defined differently for expansions and
+contractions [16-5]. For an expansion:
+
+$$\begin{split} \theta_{\text{Mi,i-1/2}} = \begin{cases}
+ \theta_{\text{Mi,i}} & \text{if } {u'}_{\text{mi,i}} \geq 0 \\
+ \theta_{\text{Mi,i-1}} & \text{if } {u''}_{\text{Mi,i}} < 0
+ \end{cases}\end{split}$$ [eq 16.4-158]
+
+and for contraction:
+
+$$\theta_{\text{Mi,i-1/2}} = C_{\Delta \text{p}} \cdot \frac{\theta_{\text{Mi,i-1}}
+ \cdot \theta_{\text{Mi,i}}}{\theta_{\text{Mi,i-1}} + \theta_{\text{Mi,i}}}$$ [eq 16.4-159]
+
+with $C_{\Delta \text{p}}$ currently having the value of 1.67. Eq. (16.4-152)
+is integrated over the time interval and then divided by $\Delta t$ . Using the
+identities:
+
+$$\Delta\left( {\rho'} u \right) = {\rho'}^{n + 1} \cdot \Delta u + u^{n} \cdot \Delta {\rho'}$$ [eq 16.4-160]
+
+$$\Delta \left( {\rho'} u C_{\text{Mo}} \right) = {\rho'}^{n + 1} C_{\text{Mo}}^{n + 1} \Delta u
+ + {\rho'}^{n + 1} \cdot u^{n} \cdot \Delta C_{\text{Mo}} + u^{n} C^{n} \cdot \Delta {\rho'}$$ [eq 16.4-161]
+
+we obtain:
+
+$$\begin{split} \Delta u_{\text{Mi,i}} \cdot \left( {\rho'}_{\text{Mi,i-1}}^{n + 1} \cdot C_{\text{Mo,Mi,i}}^{n + 1} \cdot \Delta z_{\text{i}} + {\rho'}_{\text{Mi,i}}^{n + 1} \cdot \Delta z_{2} \right) \cdot \frac{1}{\Delta t} \\
+ = - \left\lbrack \left( {\rho'} u^{2} \right)_{\text{Mi,i}} - \left( {\rho'} u^{2} \right)_{\text{Mi,i-1}} \right\rbrack - \theta_{\text{Mi,i-1/2}} \cdot \left( P_{\text{i}} - P_{\text{i-1}} \right) \\
+ - u_{\text{Mi,i}} \cdot C_{\text{Mo,Mi,i}} \cdot \Delta z_{\text{i}} \cdot \frac{\Delta{\rho'}_{\text{Mi,i}}}{\Delta t} - u_{\text{Mi,i}} \cdot \Delta z_{2} \cdot \frac{\Delta{\rho'}_{\text{Mi,i}}}{\Delta t} \\
+ - {\rho'}_{\text{Mi,i-1}}^{n + 1} \cdot u_{\text{Mi,i}} \cdot \Delta z_{\text{i}} \cdot \frac{\Delta C_{\text{Mo,Mi,i}}}{\Delta t} + \sum_{l} \left( {\Gamma'}_{\text{Mo,Mi,i-1}}^{l} \cdot \Delta z_{1} + {\Gamma'}_{\text{Mo,Mi,i}}^{l} \cdot \Delta z_{2} \right) \\
+ - {\rho'}_{\text{Mi,i-1}} \cdot \Delta z_{\text{i}} \cdot g - {\rho'}_{\text{Mi,i}} \cdot \Delta z_{2} \cdot g \\\end{split}$$ [eq 16.4-162]
+
+We will now present the term
+ $\sum_{l}{{\Gamma'}_{\text{Mo,i}}^{l}}$ in
+more detail:
+
+$$\begin{split} \sum_{l}{{\Gamma'}_{\text{Mo,Mi,i}}^{l}} = {\Gamma'}_{\text{Mo,Mi,i}}^{\text{cond}} + {\Gamma'}_{\text{Mo,Mi,i}}^{\text{vap}} + {\Gamma'}_{\text{Mo,Mi,i}}^{\text{friction wall}} + {\Gamma'}_{\text{Mo,Mi,i}}^{\text{drag fuel}} \\
+ + {\Gamma'}_{\text{Mo},\text{Mi},i}^{\text{drag chunks}} + {\Gamma'}_{\text{Mo},\text{Mi},i}^{\text{inertial}} \\\end{split}$$ [eq 16.4-163]
+
+The momentum sink
+ ${\Gamma'}_{\text{Mo,Mi,i}}^{\text{cond}}$ is due to
+possible condensation of steel and/or fuel vapor:
+
+$${\Gamma'}_{\text{Mo,Mi,i}}^{\text{cond}} = - \frac{\Delta{\rho'}_{\text{sv,i}}^{\text{cond}}}{\Delta t} u_{\text{Mi,i}} \
+ - \frac{\Delta{\rho'}_{\text{fv,i}}^{\text{cond}}}{\Delta t} \cdot u_{\text{Mi,i}}$$ [eq 16.4-164]
+
+Similarly, the vaporization source is defined as:
+
+$${\Gamma'}_{\text{Mo,Mi,i}}^{\text{vap}} = \frac{\Delta {\rho'}_{\text{sv,i}}^{\text{vap}}}{\Delta t} \cdot u_{\text{fu,i}} \
+ + \frac{\Delta{\rho'}_{\text{fv,i}}^{\text{vap}}}{\Delta t} \cdot u_{\text{fu,i}}$$ [eq 16.4-165]
+
+The quantities $\Delta {\rho'}_{\text{fv}}^{\text{cond}}$ and
+ $\Delta {\rho'}_{\text{fv}}^{\text{vap}}$ are calculated in the
+routine $\text{LEFUVA}$ . These calculations are presented in Section 16.4.3.6.
+The quantities $\Delta {\rho'}_{\text{sv}}^{\text{cond}}$ and
+ $\Delta {\rho'}_{\text{sv}}^{\text{vap}}$ are obtained in the
+ $\text{LESEVA}$ routine in the same manner.
+
+The momentum sink due to the wall friction has the form:
+
+$$\begin{split} {\Gamma'}_{\text{Mo,Mi,i}}^{\text{friction wall}} = - f_{\text{Mi,i}} \cdot \frac{{\rho'}_{\text{Mi,i}}}{2D_{\text{H,Mi,i}}} \cdot u_{\text{Mi,i}}^{n + 1} \cdot \left| u_{\text{Mi,i}}^{n} \right| \\
+ = - f_{\text{Mi,i}} \cdot \frac{{\rho'}_{\text{Mi,i}}}{2D_{\text{H,Mi,i}}} \cdot \left( u_{\text{Mi,i}}^{n} + \Delta u_{\text{Mi,i}} \right) \cdot \left| u_{\text{Mi,i}}^{n} \right| \\\end{split}$$ [eq 16.4-166]
+
+The wall friction factor $f_{\text{Mi,i}}$ will be described in Section 16.4.3.10. The hydraulic diameter of the gas mixture $D_{\text{H,Mi,i}}$ 
+will be described in Section 16.4.3.9. The fuel/steel-gas mixture drag
+source has the form
+
+$$\begin{split} {\Gamma'}_{\text{Mo,Mi,i}}^{\text{drag fuel}} = {C'}_{\text{D,Mi,fu,i}} \left( u_{\text{fu,i}}^{n + 1} - u_{\text{Mi,i}}^{n + 1} \right) \cdot \left| u_{\text{fi,i}} - u_{\text{Mi,i}} \right| \\
+ = {C'}_{\text{D,Mi,fu,i}} \cdot \left( u_{\text{fu,i}} + \Delta u_{\text{fu,i}} - u_{\text{Mi,i}} - \Delta u_{\text{Mi,i}} \right) \cdot \left| u_{\text{fu,i}} - u_{\text{Mi,i}} \right| \\\end{split}$$ [eq 16.4-167]
+
+The drag coefficient between fuel and mixture has different forms,
+depending on the local flow regime, as shown below:
+
+For the annular fuel and steel flow regimes:
+
+$${C'}_{\text{D,Mi,fu,i}} = f_{\text{Mi,fu,i}} \cdot \frac{{\rho'}_{\text{Mi,i}}}{2 \cdot D_{\text{H,Mi,i}}}$$ [eq 16.4-168]
+
+$${C'}_{\text{D,Mi,se,i}} = f_{\text{Mi,se,i}} \cdot \frac{{\rho'}_{\text{Mi,i}}}{2 \cdot D_{\text{H,Mi,i}}}$$ [eq 16.4-169]
+
+For the bubbly fuel flow regime:
+
+$${C'}_{\text{D,Mi,fu,i}} = \theta_{\text{Mi,i}} \cdot \rho_{\text{fu,i}} \cdot \text{CIA6} \
+ \cdot \sqrt{\frac{g}{\sigma_{\text{fu}}} \cdot \left( \frac{{\rho'}_{\text{fu,i}} \
+ + {\rho'}_{\text{se,i}}}{\theta_{\text{fu,i}} + \theta_{\text{se,i}}} \
+ - \frac{{\rho'}_{\text{Mi,i}}}{\theta_{\text{Mi,i}}} \right)} \cdot \left( \frac{\theta_{\text{fu,i}} \
+ + \theta_{\text{se,i}}}{\theta_{\text{ch,op,i}}} \right)^{2}$$ [eq 16.4-170]
+
+where CIA6 is an input constant, currently equal to 0.107. This form of
+ ${C'}_{\text{D,Mi,fu,i}}$ is explained in more detail in Ch. 14.0, Section 14.4.6.1, which describes the PLUTO2 model.
+
+For the bubbly steel flow regime:
+
+$${C'}_{\text{D,Mi,se,i}} = \theta_{\text{Mi,i}} \cdot \rho_{\text{se,i}} \cdot \text{CIA6} \
+ \cdot \sqrt{\frac{g}{\sigma_{\text{se}}} \cdot \left( \frac{{\rho'}_{\text{fu,i}} \
+ + {\rho'}_{\text{se,i}}}{\theta_{\text{fu,i}} + \theta_{\text{se,i}}} \
+ - \frac{{\rho'}_{\text{Mi,i}}}{\theta_{\text{Mi,i}}} \right)} \cdot \left( \frac{\theta_{\text{fu}} \
+ + \theta_{\text{se}}}{\theta_{\text{ch,op,i}}} \right)^{2}$$ [eq 16.4-171]
+
+The factor $f_{\text{Mi,fu,i}}$ which appears in Eq. (16.4-168) will be
+described in Section 16.4.3.10.
+
+The chunk-mixture drag source has the form:
+
+$$\begin{split} {\Gamma'}_{\text{Mo,Mi,i}}^{\text{drag chunk}} = {C'}_{\text{D,Mi,} l \text{u,i}} \cdot \left( u_{l \text{u,i}}^{n + 1} - u_{\text{Mi,i}}^{n + 1} \right) \cdot \left| u_{l \text{u,i}} - u_{\text{Mi,i}} \right| \\
+ = {C'}_{\text{D,Mi,lu,i}} \cdot \left( u_{l \text{u,i}} + \Delta u_{l \text{u,i}} - u_{\text{Mi,i}} - \Delta u_{\text{Mi,i}} \right) \cdot \left| u_{l \text{u,i}} - u_{\text{Mi,i}} \right| \\\end{split}$$ [eq 16.4-172]
+
+The drag coefficient ${C'}_{\text{D,Mi,lu,i}}$ is defined as follows:
+
+For the annular steel or fuel flow regime:
+
+$${C'}_{\text{D,Mi,} l \text{u,i}} = \theta_{l \text{u,i}} \cdot \rho_{\text{Mi,i}} \
+ \cdot \frac{1}{R_{l \text{u,i}}} \cdot \left( \frac{\theta_{\text{Mi,i}}}{\theta_{\text{ch,i}}} \right)^{\text{CIA5}} \
+ \cdot C_{\text{DRAG}} \cdot C_{\text{AREA,Mi,} l \text{u,i}}$$ [eq 16.4-173]
+
+where CIA4 and CIA5 are input constants, with the values 0.375 and -2.7,
+respectively. The coefficient $C_{\text{DRAG}}$ is defined as follows:
+
+If $\text{Re}_{\text{lu,i}} > 500$ ,
+
+$$C_{\text{DRAG}} = 0.44$$ [eq 16.4-174]
+
+If $\text{Re}_{\text{lu,i}} \leq 500$ , then
+
+$$C_{\text{DRAG}} = 18.5 \cdot \left( \text{Re}_{l \text{u,i}} \right)^{- 6}$$ [eq 16.4-175]
+
+The chunk Reynolds number $\text{Re}_{\text{lu,i}}$ used in Eq. (16.4-174) is
+defined as follows:
+
+$$\text{Re}_{l \text{u,i}} = 2 \cdot R_{l \text{u,i}} \cdot \left| u_{\text{Mi,i}} \
+ - u_{l \text{u,i}} \right| \cdot \rho_{\text{Mi,i}} \cdot \frac{1}{\mu_{\text{Mi,i}}}$$ [eq 16.4-176]
+
+The coefficient $C_{\text{AREA,Mi,} l \text{u,i}}$ is used to take into account the
+fact that the chunks are in contact not only with the gas mixture, but
+with other components too, such as molten fuel or steel and cladding.
+This coefficient will be described in Section 16.4.3.10.
+
+For the bubbly steel and fuel flow regimes:
+
+$${C'}_{\text{D,Mi,} l \text{u,i}} = 0$$ [eq 16.4-177]
+
+Finally, the inertial (or apparent mass) momentum source term has the
+form:
+
+$${\Gamma'}_{\text{Mo,Mi,i}}^{\text{inertial}} = {C'}_{\text{IN,Mi,fu,i}} \cdot \left\lbrack \
+ \frac{\Delta\left( u_{\text{fu,i}} - u_{\text{Mi,i}} \right)}{\Delta t} + u_{\text{Mi,i}}\frac{\Delta\left( u_{\text{fu}} \
+ - u_{\text{Mi}} \right)}{\Delta t} \right\rbrack$$ [eq 16.4-178]
+
+where
+
+$$\begin{split} \frac{\Delta\left( u_{\text{fu}} - u_{\text{Mi}} \right)}{\Delta z} = \begin{cases}
+ \frac{\left( {u'}_{\text{fu,i}} - {u'}_{\text{Mi,i}} \right) - \left( {u''}_{\text{fu,i-1}} - {u''}_{\text{Mi,i-1}} \right)}{2\Delta z_{1}} & \text{if } u_{\text{Mi,i}} > 0 \\
+ \frac{\left( {u'}_{\text{fu,i+1}} - {u'}_{\text{Mi,i+1}} \right) - \left( {u''}_{\text{fu,i}} - {u''}_{\text{Mi,i}} \right)}{2\Delta z_{2}} & \text{if } u_{\text{Mi,i}} < 0
+ \end{cases}\end{split}$$ [eq 16.4-179]
+
+and the generalized inertial coefficient is defined as follows:
+
+For annular steel or fuel flow, no inertial effects are present:
+
+$${C'}_{\text{IN,Mi,fu,i}} = 0~.$$ [eq 16.4-180]
+
+For bubbly steel flow:
+
+$${C'}_{\text{IN,Mi,fu,i}} = 0.5 \cdot \rho_{\text{se,i}} \cdot \theta_{\text{Mi,i}}~.$$ [eq 16.4-181]
+
+For bubbly fuel flow:
+
+$${C'}_{\text{IN,Mi,fu,i}} = 0.5 \cdot \rho_{\text{fu,i}} \cdot \theta_{\text{Mi,i}}~.$$ [eq 16.4-182]
+
+The source terms
+ $\sum{{\Gamma'}_{\text{Mo,i-1}}^{l}}$ in
+Eq. (16.4-163) are similar to the
+ $\sum{{\Gamma'}_{\text{Mo,i}}^{l}}$ terms that
+have been presented in detail, but they cannot be obtained from
+ ${\Gamma'}_{\text{Mo,i}}^{\mathcal{l}}$ by simply replacing the
+subscript $i$ by $i-1$ . The velocity $u_{\text{Mi,i}}$ in these terms has to be
+replaced by ${u'}_{\text{Mi,i}}$ , i.e., $C_{\text{Mo,Mi,i}} \cdot u_{\text{Mi,i}}$ .
+The components of
+ $\sum{{\Gamma'}_{\text{Mo,i-1}}^{l}}$ are presented below:
+
+$${\Gamma'}_{\text{Mo,Mi,i}}^{\text{cond}} = - \frac{\Delta{\rho'}_{\text{sv,i-1}}^{\text{cond}}}{\Delta t} \
+ \cdot C_{\text{Mo,Mi,i}}^{n + 1} \cdot u_{\text{Mi,i}} - \frac{\Delta{\rho'}_{\text{fv,i-1}}^{\text{cond}}}{\Delta t} \
+ \cdot C_{\text{Mo,Mi,i}}^{n + 1} \cdot u_{\text{Mi,i}}$$ [eq 16.4-183]
+
+$${\Gamma'}_{\text{Mo,Mi,i-1}}^{\text{vap}} = \frac{\Delta\rho_{\text{sv,i-1}}^{\text{vap}}}{\Delta t} \
+ C_{\text{Mo,fu,i}}^{n + 1} u_{\text{fu,i}} + \frac{\Delta\rho_{\text{fv,i-1}}^{\text{vap}}}{\Delta t} \
+ C_{\text{Mo,fu,i}}^{n + 1} \cdot u_{\text{fu,i}}$$ [eq 16.4-184]
+
+$$\begin{split} {\Gamma'}_{\text{Mo,Mi,i-1}}^{\text{friction wall}} = - f_{\text{Mi,i-1}} \cdot \frac{{\rho'}_{\text{Mi,i-1}}}{2 \cdot D_{\text{H,Mi,i-1}}} \cdot \left( u_{\text{Mi,i}} + \Delta u_{\text{Mi,i}} \right) \\
+ \cdot \left| u_{\text{MI,i}} \right| \cdot \left( C_{\text{Mo,Mi,i}}^{n + 1} \right)^{2} \\\end{split}$$ [eq 16.4-185]
+
+$$\begin{split} {\Gamma'}_{\text{Mo,Mi,i-1}}^{\text{drag fuel}} = {C'}_{\text{D,Mi,fu,i-1}} \left\lbrack \left( u_{\text{fu,i}} + \Delta u_{\text{fu,i}} \right) \cdot C_{\text{Mo,fu,i}}^{n + 1} - \left( u_{\text{Mi,i}} + \Delta u_{\text{Mi,i}} \right) \right. \\ \left.
+ \cdot C_{\text{Mo,Mi,i}}^{n + 1} \right\rbrack \cdot \left| u_{\text{fu,i}} \cdot C_{\text{Mo,fu,i}} - u_{\text{Mi,i}} \cdot C_{\text{Mo,Mi,i}} \right|\end{split}$$ [eq 16.4-186]
+
+$$\begin{split} {\Gamma'}_{\text{Mo,Mi,i-1}}^{\text{drag chunk}} = {C'}_{\text{D,Mi,} l \text{u,i-1}} \cdot \left\lbrack \left( u_{l \text{u,i}} + \Delta u_{l \text{u,i}} \right) - \left( u_{\text{Mi,i}} + \Delta u_{\text{Mi,i}} \right) \right. \\ \left.
+ \cdot C_{\text{Mo,Mi,i}}^{n + 1} \right\rbrack \cdot \left| u_{l \text{u,i}} - u_{\text{Mi,i}} \cdot C_{\text{Mo,Mi,i}} \right|\end{split}$$ [eq 16.4-187]
+
+$$\begin{split} {\Gamma'}_{\text{Mo,Mi,i-1}}^{\text{inertial}} = {C'}_{\text{IN,Mi,fu,i}} \cdot \frac{\Delta\left\lbrack \left( u_{\text{fu,i}} \cdot C_{\text{Mo,fu,i}} \right) - \left( u_{\text{Mi,i}} \cdot C_{\text{Mo,Mi,i}} \right) \right\rbrack}{\Delta t} \\
+ + u_{\text{Mi,i}} \cdot C_{\text{Mo,Mi,i}}^{n + 1} \cdot \frac{\Delta\left( u_{\text{fu}} - u_{\text{Mi}} \right)}{\Delta z}\end{split}$$ [eq 16.4-188]
+
+where the definition of
+ $\frac{\Delta\left( u_{\text{fu}} - u_{\text{Mi}} \right)}{\Delta z}$ 
+is the same as Eq. (16.4-179). It should be noted that, in the definition
+of the source terms, we used the assumption that changes in the
+coefficients $C_{\text{Mo,fu,i}}$ can be neglected during one time step,
+and thus only the new coefficients at time $n+1$ have been used.
+
+We can now replace the expression
+ $\sum_{l}{\left( {\Gamma'}_{\text{Mo,i-1}}^{l} \cdot \Delta z_{\text{i}} + {\Gamma'}_{\text{Mo,i}}^{l} \cdot \Delta z_{2} \right)}$ in
+Eq. (16.4-163) using Eq. (16.4-164) through Eq. (16.4-186). We then rearrange
+Eq. (16.4-163) in the form:
+
+$$\text{DMX} \cdot \Delta u_{\text{Mi,i}} = \text{AMX} + \text{BMX} \cdot \Delta u_{\text{fu,i}} + \text{CMX} \cdot \Delta u_{l \text{u,i}}$$ [eq 16.4-189]
+
+All terms containing the time change of the gas mixture velocity
+ $\Delta u_{\text{Mi,i}}$ were moved to the left-hand side of the Eq. (16.4-189),
+and after factoring $\Delta u_{\text{Mi,i}}$ , put in the form $\text{DMX} \cdot \Delta u_{\text{Mi,i}}$ .
+Similarly, all terms containing $\Delta u_{\text{fu,i}}$ and
+ $\Delta u_{l \text{u,i}}$ were grouped together on the right-hand side. All other
+terms were grouped under the coefficient $\text{AMX}$ . It should be observed that
+the term
+ $\frac{\Delta\left( u_{\text{fu}} - u_{\text{Mi}} \right)}{\Delta z}$ 
+which appears in Eq. (16.4-178) and Eq. (16.4-188) does not contain time
+changes and thus will be included in the $\text{AMX}$ coefficient.
+
+[anchor: the-momentum-conservation-equation-for-the-molten-fuel-steel-component]
+
+#### 16.4.3.8.2. The Momentum Conservation Equation for the Molten Fuel/Steel Component
+
+Using an integration procedure similar to that used for the gas-mixture
+equation, we obtain the following equation:
+
+$$\begin{split} \Delta u_{\text{fu,i}} \left\lbrack \left( {\rho'}_{\text{fu,i-1}}^{n + 1} + {\rho'}_{\text{se,i-1}}^{n + 1} \right) \cdot C_{\text{Mo,fu,i}}^{n + 1} \cdot \Delta z_{1} + \left( {\rho'}_{\text{fu},i}^{n + 1} + {\rho'}_{\text{se}}^{n + 1} \right) \cdot \Delta z_{2} \right\rbrack \cdot \frac{1}{\Delta t} \\
+ = - \left\lbrack \left( {\rho'} u^{2} \right)_{\text{fu,i}} - \left( {\rho'} u^{2} \right)_{\text{fu,i}} \right\rbrack - \theta_{\text{fu,i-1/2}} \cdot \left( P_{\text{I}} - P_{\text{i-1}} \right) \\
+ - u_{\text{fu,i}} \cdot C_{\text{Mo,fu,i}} \cdot \Delta z_{\text{i}} \cdot \left( \frac{\Delta{\rho'}_{\text{fu,i-1}}}{\Delta t} + \frac{\Delta{\rho'}_{\text{se,i-1}}}{\Delta t} \right) \\
+ - u_{\text{fu,i}} \cdot \Delta z_{2} \cdot \left( \frac{\Delta{\rho'}_{\text{fu,i}}}{\Delta t} + \frac{\Delta{\rho'}_{\text{se,i}}}{\Delta t} \right) - \left( {\rho'}_{\text{fu,i-1}}^{n + 1} + {\rho'}_{\text{se,i-1}}^{n + 1} \right) \cdot u_{\text{fu,i}} \cdot \Delta z_{\text{i}} \cdot \frac{\Delta C_{\text{Mo,fu,i}}}{\Delta t} \\
+ + \sum_{\text{m}} \left( {\Gamma'}_{\text{Mo,fu,i-1}}^{m} \cdot \Delta z_{1} + {\Gamma'}_{\text{Mo,fu,i}} \cdot \Delta z_{2} \right) - \left( {\rho'}_{\text{fu,i-1}} + {\rho'}_{\text{se,i-1}} \right) \cdot \Delta z_{1} \cdot g \\
+ - \left( {\rho'}_{\text{fu,i}} + {\rho'}_{\text{se,i}} \right) \cdot \Delta z_{2} \cdot g \\\end{split}$$ [eq 16.4-190]
+
+where
+
+$$\left( {\rho'} u^{2} \right)_{\text{fu,i}} = \left( {\rho'}_{\text{fu,i}} + {\rho'}_{\text{se,i}} \right) \
+ \cdot \left( {u''}_{\text{fu,i}} + {u'}_{\text{fu,i+1}} \right)^{2} \cdot .25$$ [eq 16.4-191]
+
+The optional formulation, which can be obtained using $\text{IMOMEN} = 1$ is:
+
+$$\left( {\rho'} u^{2} \right)_{\text{fu,i}} = \left( {\rho'}_{\text{fu,i}} + {\rho'}_{\text{se,i}} \right) \cdot u_{\text{Mo,fu,i}}^{2}$$ [eq 16.4-192]
+
+where
+
+$$\begin{split} u_{\text{Mo,Mi,i}} = \begin{cases}
+ {u''}_{\text{fu,i}} & \text{if } {u''}_{\text{fu,i}} \geq 0 \text{ and } {u'}_{\text{fu,i+1}} \geq 0 \\
+ \sqrt{{u''}_{\text{fu,i}}^{2} + {u'}_{\text{fu,i+1}}^{2}} & \text{if } {u''}_{\text{fu,i}} \geq 0 \text{ and } {u'}_{\text{fu,i+1}} \leq 0 \\
+ 0 & \text{if } {u''}_{\text{fu,i}} < 0 \text{ and } {u'}_{\text{fu,i+1}} \geq 0 \\
+ {u'}_{\text{fu,i+1}} & \text{if } {u'}_{\text{fu,i}} < 0 \text{ and } {u'}_{\text{fu,i+1}} < 0
+ \end{cases}\end{split}$$ [eq 16.4-193]
+
+The quantity $\theta_{\text{fu,i-1/2}}$ is defined by Eq. (16.4-157) and
+16.4-143, where the $\theta_{\text{Mi,i}}$ is replaced by $\left( \theta_{\text{fu,i}} + \theta_{\text{se,i}} \right)$ .
+The source/sink terms in
+ $\sum_{\text{m}}{{\Gamma'}_{\text{Mo,fu,i}}^{m}}$ are defined
+in detail below:
+
+The condensation term:
+
+$${\Gamma'}_{\text{Mo,fu,i}}^{\text{cond}} = \frac{\Delta{\rho'}_{\text{fv,i}}^{\text{cond}}}{\Delta t} \cdot u_{\text{Mi,i}}$$ [eq 16.4-194]
+
+The vaporization term:
+
+$${\Gamma'}_{\text{Mo,fu,i}}^{\text{vap}} = - \frac{\Delta{\rho'}_{\text{fv,i}}}{\Delta t} \cdot u_{\text{fu,i}}$$ [eq 16.4-195]
+
+The wall friction term is dependent on the flow regime:
+
+For the annular or bubbly fuel flow regimes:
+
+$$\begin{split} {\Gamma'}_{\text{Mo,fu,i}}^{\text{friction wall}} = - f_{\text{se,i}} \cdot \frac{\rho_{\text{se,i}} \cdot \left( \theta_{\text{fu,i}} + \theta_{\text{se,i}} \right)}{2 \cdot D_{\text{H,se,i}}} \cdot C_{\text{AREA,se,i}} \cdot u_{\text{fu,i}}^{n + 1} \cdot \left| u_{\text{fu,i}}^{n} \right| \\
+ - f_{\text{se,i}}\frac{\rho_{\text{se,i}} \left( \theta_{\text{fu,i}} + \theta_{\text{se,i}} \right)}{2 D_{\text{H,se,i}}} \cdot C_{\text{AREA,se,i}} \cdot \left( u_{\text{fu,i}} + \Delta u_{\text{fu,i}} \right) \cdot \left| u_{\text{fu,i}} \right|\end{split}$$ [eq 16.4-196]
+
+For the annular or bubbly fuel flow regimes:
+
+$${\Gamma'}_{\text{Mo,fu,i}}^{\text{friction wall}} = - f_{\text{fu,i}} \cdot \frac{\rho_{\text{fu,i}} \left( \theta_{\text{fu,i}} \
+ + \theta_{\text{se,i}} \right)}{2 D_{\text{H,fu,i}}} \cdot C_{\text{AREA,fu,i}} \cdot \left( u_{\text{fu,i}} \
+ + \Delta u_{\text{fu,i}} \right) \cdot \left| u_{\text{fu,i}} \right|$$ [eq 16.4-197]
+
+where
+
+the $D_{\text{H,se,i}}$ and $D_{\text{H,fu,i}}$ are the hydraulic diameters
+for steel and fuel, respectively, and are described in Section 16.4.3.9.
+
+the contact coefficients $C_{\text{AREA,se,i}}$ and $C_{\text{AREA,fu,i}}$ 
+account for the fact that only a fraction of the steel or fuel perimeter
+is in contact with the stationary walls; they are described in Section 16.4.3.10; and the friction coefficients $f_{\text{se,i}}$ and
+ $f_{\text{fu,i}}$ are defined below:
+
+$$\begin{split} f_{\text{se,i}} = \begin{cases}
+ \text{CIFRFU} & \text{if } \text{Re}_{\text{se,i}} \geq \text{CIREFU} \\
+ \frac{80}{Re_{\text{se,i}}} & \text{if } \text{Re}_{\text{se,i}} < \text{CIREFU} \\
+ \end{cases}\end{split}$$ [eq 16.4-198]
+
+$$\begin{split} f_{\text{fu,i}} = \begin{cases}
+ \text{CIFRFU} & \text{if } \text{Re}_{\text{fu,i}} \geq \text{CIREFU} \\
+ \frac{80}{\text{Re}_{\text{fu,i}}} & \text{if } \text{Re}_{\text{fu,i}} < \text{CIREFU} \\
+ \end{cases}\end{split}$$ [eq 16.4-199]
+
+where $\text{CIFRFU}$ and $\text{CIREFU}$ are input constants. Currently, $\text{CIFRFU} = .03$ and
+ $\text{CIREFU} = 2100$ .
+
+The fuel/steel-gas mixture drag source is similar, but of opposite sign,
+to the term already presented for the gas mixture.
+
+$$\begin{split} {\Gamma'}_{\text{Mo,fu,i}}^{\text{drag mixture}} = - {C'}_{\text{D,Mi,fu,i}} \cdot \left( u_{\text{fu,i}} + \Delta u_{\text{fu,i}} - u_{\text{Mi,i}} - \Delta u_{\text{Mi,i}} \right) \\
+ \cdot \left| u_{\text{fu,i}} - u_{\text{Mi,i}} \right| \\\end{split}$$ [eq 16.4-200]
+
+The drag coefficient ${C'}_{\text{D,Mi,fu,i}}$ is defined by Eq. (16.4-168)
+and Eq. (16.4-170).
+
+The fuel/steel - chunk drag source is defined as follows:
+
+$$\begin{split} {\Gamma'}_{\text{Mo,fu,i}}^{\text{drag chunk}} = {C'}_{\text{D,fu,} l \text{u,i}} \cdot \left( u_{l \text{u,i}}^{n + 1} - u_{\text{fu,i}}^{n + 1} \right) \cdot \left| u_{l \text{u,i}}^{n} - u_{\text{fu,i}}^{n} \right| \\
+ = {C'}_{\text{D,fu,} l \text{u,i}} \cdot \left( u_{l \text{u,i}} + \Delta u_{l \text{u,i}} - u_{\text{fu,i}} - \Delta u_{\text{fu,i}} \right) \cdot \left| u_{l \text{u,i}} - u_{\text{fu,i}} \right| \\\end{split}$$ [eq 16.4-201]
+
+The generalized drag coefficient ${C'}_{\text{D,fu,}l \text{u,i}}$ is flow regime
+dependent and is defined below:
+
+For the steel annular and bubbly flow regimes:
+
+$${C'}_{\text{D,fu,} l \text{u,i}} = \theta_{l \text{u,i}} \cdot \rho_{\text{se,i}} \cdot \text{CIA4} \
+ \cdot \frac{1}{R_{l \text{u,i}}} \cdot \left\lbrack \frac{\theta_{\text{Mi,i}}}{\theta_{\text{Mi,i}} \
+ + \theta_{l \text{u,i}}} \right\rbrack^{\text{CIA5}} \cdot C_{\text{DRAG}} \cdot C_{\text{AREA,se,} l \text{u,i}}$$ [eq 16.4-202]
+
+For the fuel annular and bubbly flow regimes:
+
+$${C'}_{\text{D,fu,} l \text{u,i}} = \theta_{l \text{u,i}} \cdot \rho_{\text{fu,i}} \cdot \text{CIA4} \
+ \cdot \frac{1}{R_{l \text{u,i}}} \cdot \left\lbrack \frac{\theta_{\text{Mi,i}}}{\theta_{\text{Mi,i}} \
+ + \theta_{l \text{u,i}}} \right\rbrack^{\text{CIA5}} \cdot C_{\text{DRAG}} \cdot C_{\text{AREA,fu,} l \text{u,i}}$$ [eq 16.4-203]
+
+In the above equations, the drag coefficient $C_{\text{DRAG}}$ is defined
+by 16.4-156. The area coefficients, which account for the fact that only
+a fraction of the chunk lateral area is in contact with the molten fuel
+or steel, are defined below:
+
+$$\begin{split} C_{\text{AREA,se,} l \text{u,i}} = \begin{cases}
+ \left( 1 - C_{\text{AREA,Mi,} l \text{u,i}} \right) \cdot C_{\text{AREA,se,c} l \text{,i}} & \text{for annular steel flow} \\
+ 1 & \text{for bubbly steel flow} \\
+ \end{cases}\end{split}$$ [eq 16.4-204]
+
+where $C_{\text{AREA,Mi,}l \text{u,i}}$ indicates the fraction of the lateral chunk
+area in contact with the gas mixture. The quantity $1 - C_{\text{AREA,Mi,} l \text{u,i}}$ 
+thus represents the fraction of the chunk area in
+contact with the molten fuel/steel and cladding/hexcan wall. The
+coefficient $C_{\text{AREA,se,cl}}$ represents the fraction of the
+cladding/hexcan wall area covered by molten steel/fuel. Both these area
+coefficients will be explained in more detail in Section 16.4.3.9.
+
+The momentum source due to fuel injection from the pin
+
+$${\Gamma'}_{\text{Mo,fu,i}}^{\text{injection}} = \frac{\Delta{\rho'}_{\text{fu,injection,i}}}{\Delta t} \
+ \cdot u_{\text{fu,ca,i}} \cdot C_{\text{Mo,injection,i}}$$ [eq 16.4-205]
+
+The quantity $\Delta {\rho'}_{\text{fu,injection,i}}$ represents the change in the
+fuel generalized density due to injection via the pin rip or via the end
+of the pin stubs, as explained in Section 16.3. The velocity of the
+injected material is $u_{\text{fu,ca,i}}$ , which is also explained in
+Section 16.3. The coefficient $C_{\text{Mo,injection,i}}$ accounts for the
+axial momentum loss due to lateral acceleration and mixing during the
+injection process, and is defined as follows:
+
+$$\begin{split} C_{\text{Mo,injection,i}} = \begin{cases}
+ 1, & \text{if injection is taking place via the pin stubs} \\
+ \text{CIFUMO}, & \text{if injection is taking place via the pin rip} \\
+ \end{cases}\end{split}$$ [eq 16.4-206]
+
+where $\text{CIFUMO}$ is an input constant, with values between 0 and 1.
+
+To summarize, the term
+ $\sum_{\text{m}}{{\Gamma'}_{\text{Mo,fu,i}}^{m}}$ , which appears
+in Eq. (16.4-190), has the form,
+
+$$\begin{split} \sum_{\text{m}}{{\Gamma'}_{\text{Mo,fu,i}}^{m}} = {\Gamma'}_{\text{Mo,fu,i}}^{\text{cond}} + {\Gamma'}_{\text{Mo,fu,i}}^{\text{vap}} + {\Gamma'}_{\text{Mo,fu,i}}^{\text{friction wall}} + {\Gamma'}_{\text{Mo,fu,i}}^{\text{drag mixture}} \\
+ + {\Gamma'}_{\text{Mo,fu,i}}^{\text{drag chunk}} + {\Gamma'}_{\text{Mo,fu,i}}^{\text{injection}} \\\end{split}$$ [eq 16.4-207]
+
+The term $\sum_{\text{m}}{{\Gamma'}_{\text{Mo,fu,i-1}}^{m}}$ 
+has a similar composition, and its terms are presented below:
+
+$${\Gamma'}_{\text{Mo,fu,i-1}}^{\text{cond}} = \frac{\Delta{\rho'}_{\text{fv,i-1}}^{\text{cond}}}{\Delta t} \
+ u_{\text{Mi,i}} \cdot C_{\text{Mo,Mi,i}}$$ [eq 16.4-208]
+
+$${\Gamma'}_{\text{Mo,fu,i-1}}^{\text{vap}} = - \frac{\Delta{\rho'}_{\text{fv,i-1}}}{\Delta t} \cdot u_{\text{fu,i}} \cdot C_{\text{Mo,fu,i}}$$ [eq 16.4-209]
+
+For the steel flow regimes,
+
+$$\begin{split} {\Gamma'}_{\text{Mo,fu,i-1}}^{\text{friction}} = - f_{\text{se,i-1}} \cdot \frac{\rho_{\text{se,i-1}} \cdot \left( \theta_{\text{fu,i-1}} + \theta_{\text{se,i-1}} \right)}{2 D_{\text{H,se,i-1}}} \cdot C_{\text{AREA,se,i-1}} \\
+ \cdot C_{\text{Mo,fu,i}}^{2} \cdot \left( u_{\text{fu,i}} + \Delta u_{\text{fu,i}} \right) \left| u_{\text{fu,i}} \right| \\\end{split}$$ [eq 16.4-210]
+
+For the fuel flow regimes:
+
+$$\begin{split} {\Gamma'}_{\text{Mo,fu,i-1}}^{\text{friction}} = - f_{\text{fu,i-1}} \cdot \frac{\rho_{\text{fu,i-1}} \cdot \left( \theta_{\text{fu,i-1}} + \theta_{\text{se,i-1}} \right)}{2 D_{\text{H,fu,i-1}}} \cdot C_{\text{AREA,fu,i-1}} \\
+ \cdot C_{\text{Mo,fu,i}}^{2} \cdot \left( u_{\text{fu,i}} + \Delta u_{\text{fu,i}} \right) \left| u_{\text{fu,i}} \right| \\\end{split}$$ [eq 16.4-211]
+
+$${\Gamma'}_{\text{Mo,fu,i-1}}^{\text{drag mixture}} = - {C'}_{\text{D,Mi,fu,i-1}} \cdot \left\lbrack \left( u_{\text{fu,i}} \
+ + u_{\text{fu,i}} \right) \cdot C_{\text{Mo,fu,i}}^{n + 1} - \left( u_{\text{Mi,i}} + u_{\text{Mi,i}} \right) \
+ \cdot C_{\text{Mo,Mi,i}}^{n + 1} \right\rbrack \cdot \left| u_{\text{fu,i}} \cdot C_{\text{Mo,fu,i}} \
+ - u_{\text{Mi,i}} C_{\text{Mo,fu,i}} \right|$$ [eq 16.4-212]
+
+$$\begin{split} {\Gamma'}_{\text{Mo,fu,i-1}}^{\text{drag chunk}} = {C'}_{\text{D,fu,} l \text{u,i-1}} \left\lbrack \left( u_{l \text{u,i}} + \Delta u_{l \text{u,i}} \right) - \left( u_{\text{fu,i}} + \Delta u_{\text{fu,i}} \right) \right. \\ \left.
+ \cdot C_{\text{Mo,fu,i}}^{n + 1} \right\rbrack \cdot \left| u_{l \text{u,i}} - u_{\text{fu,i}} \cdot C_{\text{Mo,fu,i}} \right|\end{split}$$ [eq 16.4-213]
+
+$${\Gamma'}_{\text{Mo,fu,i-1}}^{\text{injection}} = \frac{\Delta{\rho'}_{\text{fu,injection,i-1}}}{\Delta t} \
+ \cdot u_{\text{fu,ca,i-1}} \cdot C_{\text{Mo,injection,i-1}}$$ [eq 16.4-214]
+
+The source terms, as given by Eq. (16.4-194) through Eq. (16.4-214) are
+substituted in Eq. (16.4-190), and, after rearranging, the fuel momentum
+equation is written in the form
+
+$$\text{DFX} \cdot \Delta u_{\text{fu}} = \text{AFX} + \text{BFX} \cdot \Delta u_{\text{Mi}} + \text{CFX} \cdot \Delta u_{\text{fu}}$$ [eq 16.4-215]
+
+[anchor: the-momentum-conservation-equation-for-the-fuel-steel-chunks]
+
+#### 16.4.3.8.3. The Momentum Conservation Equation for the Fuel/Steel Chunks
+
+Using an integration procedure similar to that used for the gas mixture,
+we obtain the following equation in finite difference form:
+
+$$\begin{split} \Delta u_{l \text{u,i}}\left\lbrack \left( {\rho'}_{\text{f} l \text{,i-1}}^{n + 1} + {\rho'}_{\text{s} l \text{,i-1}}^{n + 1} \right) \cdot \Delta z_{\text{i}} + \left( {\rho'}_{\text{f} l \text{,i-1}}^{n + 1} + {\rho'}_{\text{s} l \text{,i-1}}^{n + 1} \right) \cdot \Delta z_{2} \right\rbrack \cdot \frac{1}{\Delta t} \\
+ = - \left\lbrack \left( {\rho'} u^{2} \right)_{l \text{u,i}} - \left( {\rho'} u^{2} \right)_{l \text{u,i-1}} \right\rbrack - \theta_{l \text{u,i-1/2}} \cdot \left( P_{\text{i}} - P_{\text{i-1}} \right) \\
+ - u_{l \text{u,i}} \cdot \Delta z_{1} \cdot \left( \frac{\Delta{\rho'}_{\text{f} l \text{,i-1}}}{\Delta t} + \frac{\Delta{\rho'}_{\text{s} l \text{,i-1}}}{\Delta t} \right) - u_{l \text{u,i}} \cdot \Delta z_{2} \cdot \left( \frac{\Delta{\rho'}_{\text{f} l \text{,i}}}{\Delta t} + \frac{\Delta{\rho'}_{\text{s} l \text{,i}}}{\Delta t} \right) \\
+ + \sum_{\text{n}}{ \left( {\Gamma'}_{\text{Mo,}l \text{u,i}}^{n} \cdot \Delta z_{\text{i}} + {\Gamma'}_{\text{Mo,} l \text{u,i}}^{n} \cdot \Delta z_{2} \right)} - \left( {\rho'}_{\text{f} l \text{,i-1}} + {\rho'}_{\text{s} l \text{,i-1}} \right) \cdot \Delta z_{1} \cdot g \\
+ - \left( {\rho'}_{\text{f} l \text{,i}} + {\rho'}_{\text{s} l \text{,i}} \right) \cdot \Delta z_{2} \cdot g \\\end{split}$$ [eq 16.4-216]
+
+where
+
+$$\left( {\rho'} u^{2} \right)_{l \text{u,i}} = \left( {\rho'}_{\text{f} l \text{,i}} \
+ + {\rho'}_{\text{s} l \text{,i}} \right) \cdot \left( u_{l \text{u,i}} + u_{l \text{u,i+1}} \right)^{2} \cdot 0.25$$ [eq 16.4-217]
+
+The optimal formulation of the convective terms can be obtained by using
+the input variable $\text{IMOMEN} = 1$ and is similar to Eq. (16.4-193), where
+ ${u''}_{\text{fu,i}}$ and ${u'}_{\text{fu,i}}$ are replaced
+by $u_{l \text{u,i}}$ and $u_{l \text{u,i}}$ and $u_{l \text{u,i+1}}$ , respectively.
+The quantity $\theta_{l \text{u,i-1/2}}$ is defined by Eq. (16.4-158) and
+16.4-144, where $\theta_{\text{Mi,i}}$ is replaced by $\theta_{l \text{u,i}}$ . The source
+terms are defined below:
+
+$$\sum_{\text{n}}{ {\Gamma'}_{\text{Mo,} l \text{u,i}}^{n} = {\Gamma'}_{\text{Mo,} l \text{u,i}}^{\text{drag mixture}}} \
+ + {\Gamma'}_{\text{Mo,} l \text{u,i}}^{\text{drag fuel}} + {\Gamma'}_{\text{Mo,lu,i}}^{\text{friction wall}} \
+ + {\Gamma'}_{\text{Mo,} l \text{u,i}}^{\text{contraction}}$$ [eq 16.4-218]
+
+No momentum sources due to chunk formation or remelting are present in
+Eq. (16.4-218), because the routines modeling these processes are called
+after the LEMOCO routine, and thus these effects will be considered
+later. The individual sources are presented below:
+
+The term due to the gas mixture/chunk drag:
+
+$$\begin{split} {\Gamma'}_{\text{Mo,} l \text{u,i}}^{\text{drag mixture}} = - {C'}_{\text{D,Mi,lu,i}} \cdot \left( u_{l \text{u,i}} + \Delta u_{l \text{u,i}} - u_{\text{Mi,i}} - \Delta u_{\text{Mi,i}} \right) \\
+ \cdot \left| u_{l \text{u,i}} + u_{\text{Mi,i}} \right|\end{split}$$ [eq 16.4-219]
+
+The generalized drag coefficient
+ ${C'}_{\text{D,Mi,}l \text{u,i}}$ has been presented in
+Eq. (16.4-201).
+
+The term due to the molten fuel/steel-chunk drag is as follows:
+
+$$\begin{split} {\Gamma'}_{\text{Mo,} l \text{u,i}}^{\text{drag fuel}} = - {C'}_{\text{D,fu,} l \text{u,i}} \cdot \left( u_{l \text{u,i}} + \Delta u_{l \text{u,i}} - u_{\text{fu,i}} - \Delta u_{\text{fu,i}} \right) \\
+ \cdot \left| u_{l \text{u,i}} + u_{\text{fu,i}} \right| \\\end{split}$$ [eq 16.4-220]
+
+The generalized drag coefficient
+ ${C'}_{\text{D,fu,} l \text{u,i}}$ has been presented in
+Eq. (16.4-201).
+
+The momentum sink due to wall friction is:
+
+$${\Gamma'}_{\text{Mo,} l \text{u,i}}^{\text{friction wall}} = - 0.5 \cdot 10^{-3} \cdot P_{\text{i}} \cdot {A'}_{l \text{u,cl,i}} \cdot \text{SIGN} \left( u_{l \text{u,i}} \right)$$
+
+where the generalized area of contact between chunks and clad/hexcan
+wall, ${A'}_{l \text{u,cl,i}}$ is defined as:
+
+$${A'}_{l \text{u,cl,i}} = \frac{A_{l \text{u,cl,i}}}{\Delta z_{\text{i}} \cdot \text{AXMX}}$$ [eq 16.4-221]
+
+and is presented in Section 16.4.3.9. Eq. (16.4-220) was obtained
+assuming that the frictional force between chunks and wall is due to the
+normal force generated by the pressure $P_{\text{i}}$ and that the friction
+coefficient between the two solid surfaces is $0.5 \cdot 10^{-3}$ .
+
+The momentum sink due to jumbling at the contraction at the boundary $i$ 
+is due to chunks arriving at an abrupt contraction, where they lose
+momentum upon hitting the wall normal to the flow path:
+
+If $u_{l \text{u,i}} < 0$ and $A_{\text{i}} > A_{\text{i-1}}$ ,
+
+$${\Gamma'}_{\text{Mo,} l \text{u,i}}^{\text{jumbling}} = \left( {\rho'}_{\text{f} l \text{,i}} \
+ + {\rho'}_{\text{s} l \text{,i}} \right) \cdot u_{l \text{u,i}}^{2} \cdot \frac{A_{\text{i}} - A_{\text{i-1}}}{A_{\text{i}}}$$ [eq 16.4-222]
+
+Otherwise,
+
+$${\Gamma'}_{\text{Mo,} l \text{u,i}}^{\text{jumbling}} = 0$$ [eq 16.4-223]
+
+The sources
+ $\sum_{\text{n}}{\Gamma'}_{\text{Mo,} l \text{u,i-1}}^{n}$ are
+defined in a similar way, as shown below:
+
+$$\begin{split} {\Gamma'}_{\text{Mo,} l \text{u,i-1}}^{\text{drag mixture}} = - {C'}_{\text{D,Mi,} l \text{u,i-1}} \cdot \left\lbrack \left( u_{l \text{u,i}} + \Delta u_{l \text{u,i}} \right) - \left( u_{\text{Mi,i}} + \Delta u_{\text{Mi,i}} \right) \right. \\ \left.
+ \cdot C_{\text{Mo,Mi,i}}^{n + 1} \right\rbrack \cdot \left| u_{l \text{u,i}} - u_{\text{Mi,i}} \cdot C_{\text{Mo,Mi,i}} \right|\end{split}$$ [eq 16.4-224]
+
+$$\begin{split} {\Gamma'}_{\text{Mo,} l \text{u,i-1}}^{\text{drag fuel}} = - {C'}_{\text{D,fu,} l \text{u,i-1}} \cdot \left\lbrack \left( u_{l \text{u,i}} + \Delta u_{l \text{u,i}} \right) - \left( u_{\text{fu,i}} + \Delta u_{\text{fu,i}} \right) \right. \\ \left.
+ \cdot C_{\text{Mo,fu,i}}^{n + 1} \right\rbrack \cdot \left| u_{l \text{u,i}} - u_{\text{fu,i}} \cdot C_{\text{Mo,fu,i}} \right|\end{split}$$ [eq 16.4-225]
+
+$${\Gamma'}_{\text{Mo,} l \text{u,i-1}}^{\text{friction wall}} = - 0.5 \cdot 10^{- 3} \
+ \cdot P_{\text{i-1}} \cdot {A'}_{l \text{u,cl,i-1}} \cdot \text{SIGN} \left( u_{l \text{u,i}} \right)$$ [eq 16.4-226]
+
+If $u_{l \text{u,i}} \geq 0$ and $A_{\text{i-1}} > A_{\text{i}}$ ,
+
+$${\Gamma'}_{\text{Mo,} l \text{u,i-1}}^{\text{contraction}} = \left( {\rho'}_{\text{f} l \text{,i-1}} \
+ + {\rho'}_{\text{s} l \text{,i-1}} \right) \cdot u_{l \text{u,i}}^{2} \cdot \frac{A_{\text{i-1}} - A_{\text{i}}}{A_{\text{i-1}}}$$ [eq 16.4-227]
+
+Otherwise,
+
+$${\Gamma'}_{\text{Mo,} l \text{u,i-1}}^{\text{contraction}} = 0$$ [eq 16.4-228]
+
+The source terms given by Eq. (16.4-219) through Eq. (16.4-227) are substituted
+in Eq. (16.4-216) and after rearranging, we obtain the chunk momentum
+equation
+
+$$\text{DLX} \cdot \Delta u_{l \text{u,i}} = \text{ALX} + \text{BLX} \cdot \Delta u_{\text{fu,i}} + \text{CLX} \cdot \Delta u_{\text{Mi,i}}$$ [eq 16.4-229]
+
+[anchor: the-simultaneous-solution-of-the-momentum-conservation-equations]
+
+#### 16.4.3.8.4. The Simultaneous Solution of the Momentum Conservation Equations
+
+The calculation of the new velocities in momentum cell i begins by
+calculating the coefficients AMX and DMX for the gas-mixture
+Eq. (16.4-189). The terms due to the mixture interaction with the molten
+fuel/steel and chunks are not included in AMX and DMX at this time. A
+check is then performed to verify if the momentum cell I contains only
+the gas mixture. If this is the case, the only equations solved is
+
+$$\text{DMX} \cdot \Delta u_{\text{Mi,i}} = \text{AMX}$$ [eq 16.4-230]
+
+and only the gas-mixture velocity is updated:
+
+$$u_{\text{Mi,i}}^{n + 1} = u_{\text{Mi,i}}^{n} + \Delta u_{\text{Mi,i}}$$ [eq 16.4-231]
+
+If either half of the momentum cell $i$ contains molten fuel and/or steel,
+the coefficients are calculated for the momentum equations:
+
+$$\text{DMX} \cdot \Delta u_{\text{Mi,i}} = \text{AMX} + \text{BMX} \cdot \Delta u_{\text{fu,i}}$$ [eq 16.4-232]
+
+$$\text{DFX} \cdot \Delta u_{\text{fu,i}} = \text{AFX} + \text{BFX} \cdot \Delta u_{\text{Mi,i}}$$ [eq 16.4-233]
+
+If the momentum cell does not contain fuel/steel chunks, these equations
+are solved simultaneously for $\Delta u_{\text{Mi,i}}$ and $\Delta u_{\text{fu,i}}$ and
+the new velocities are calculated:
+
+$$u_{\text{Mi,i}}^{n + 1} = u_{\text{Mi,i}}^{n} + \Delta u_{\text{Mi,i}}$$ [eq 16.4-234]
+
+$$u_{\text{fu,i}}^{n + 1} = u_{\text{fu,i}}^{n} + \Delta u_{\text{fu,i}}$$ [eq 16.4-235]
+
+It is noted that the coefficients AMX and DMX in Eq. (16.4-232) are
+obtained by adding to the values calculated for Eq. (16.4-230) the
+additional terms due to the gas mixture-fuel interaction. If either half
+of the momentum cell contains fuel/steel chunks, the coefficients are
+calculated for the momentum equations in the form below:
+
+$$\text{DMX} \cdot \Delta u_{\text{Mi,i}} = \text{AMX} + \text{BMX} \cdot \Delta u_{\text{fu,i}} + \text{CMX} \cdot \Delta u_{l \text{u,i}}$$ [eq 16.4-236]
+
+$$\text{DFX} \cdot \Delta u_{\text{fu,i}} = \text{AFX} + \text{BFX} \cdot \Delta u_{\text{Mi,i}} + \text{CFX} \cdot \Delta u_{l \text{u,i}}$$ [eq 16.4-237]
+
+$$\text{DLX} \cdot \Delta u_{l \text{u,i}} = \text{ALX} + \text{BLX} \cdot \Delta u_{\text{fu,i}} + \text{CLX} \cdot \Delta u_{\text{Mi,i}}$$ [eq 16.4-238]
+
+The coefficients that have been calculated using for Eq. (16.4-234) are
+updated by adding the terms due to the presence of chunks.
+Eq. (16.4-236) are solved simultaneously for $\Delta u_{\text{Mi,i}}, \Delta_{\text{fu,i}}, \Delta u_{l \text{u,i}}$ ,
+by using a substitution method and the new velocities
+are calculated:
+
+$$u_{\text{Mi,i}}^{n + 1} = u_{\text{Mi,i}}^{n} + \Delta u_{\text{Mi,i}}$$ [eq 16.4-239]
+
+$$u_{\text{fu,i}}^{n + 1} = u_{\text{fu,i}}^{n} + \Delta u_{\text{fu,i}}$$ [eq 16.4-240]
+
+$$u_{l \text{u,i}}^{n + 1} = u_{l \text{u,i}}^{n} + \Delta u_{l \text{u,i}}$$ [eq 16.4-241]
+
+[anchor: description-of-the-local-geometry]
+
+### 16.4.3.9. Description of the Local Geometry
+
+In order to fully define the energy and momentum source terms used in
+the conservation equations, we must supply the areas of contact between
+various components. These areas are obtained in LEVITATE by defining the
+local geometry in the routine LEGEOM. The definition of the geometry is
+based on the local flow regime and the configuration of the stationary
+elements, i.e., presence of fuel pins, presence of cladding, presence of
+frozen fuel crusts, etc.
+
+[anchor: local-flow-regime-definition]
+
+#### 16.4.3.9.1. Local Flow Regime Definition
+
+Because the flow regimes are important in defining the local geometry,
+the decision about the local flow regime is made before the geometry
+definition in the LEVOFR routine. The physical models for the flow
+regimes are described in Section 16.4.1.4, and this section will
+describe only the decision process used to select the appropriate flow
+regime. The total flow regime is dependent on the local volumetric
+fraction of various components in the cell and on the previously
+established flow regime. The volumetric fraction for component $i$ ,
+ $\alpha_{\text{i}}$ , is defined as follows:
+
+$$\alpha_{\text{i}} = \frac{A_{\text{i}} \cdot \Delta z_{\text{i}}}{A_{\text{ch,op,i}} \
+ \cdot \Delta z_{\text{i}}} = \frac{\theta_{\text{i}}}{\theta_{\text{ch,op}}}$$ [eq 16.4-242]
+
+where $A_{\text{ch,op}}$ is the local cross sectional area of the open flow
+channel. The flow regime in each cell is determined in the following
+manner:
+
+If the previously established flow regime is bubbly fuel flow and
+
+(a) if
+ $\frac{\theta_{\text{fu,i}} + \theta_{\text{se,i}}}{\theta_{\text{ch,op,i}} - \theta_{l \text{u,i}}} > \text{CIBBLY} \cdot 0.7$ and
+
+if $\theta_{\text{fu,i}} \geq \theta_{\text{se,i}} \cdot 0.9$ → bubbly fuel flow regime
+
+if $\theta_{\text{fu,i}} < \theta_{\text{se,i}} \cdot 0.9$ → bubbly steel flow regime
+
+(b) if
+ $\frac{\theta_{\text{fu,i}} + \theta_{\text{se,i}}}{\theta_{\text{ch,op,i}} - \theta_{l \text{u,i}}} \leq \text{CIBBLY} \cdot 0.7$ and
+
+if $\theta_{\text{fu,i}} \geq \theta_{\text{se,i}}$ → annular fuel flow regime
+
+if $\theta_{\text{fu,i}} < \theta_{\text{se,i}}$ → annular steel flow regime
+
+If the previously established flow regime is bubbly steel flow and
+
+(a) if
+ $\frac{\theta_{\text{fu,i}} + \theta_{\text{se,i}}}{\theta_{\text{ch,op,i}} - \theta_{l \text{u,i}}} > \text{CIBBLY} \cdot 0.7$ and
+
+if $\theta_{\text{se,i}} > \theta_{\text{fu,i}} \cdot 0.9$ → bubbly steel flow regime
+
+if $\theta_{\text{se,i}} \leq \theta_{\text{fu,i}} \cdot 0.9$ → bubbly fuel flow regime
+
+(b) if
+ $\frac{\theta_{\text{fu,i}} + \theta_{\text{se,i}}}{\theta_{\text{ch,op,i}} - \theta_{l \text{u,i}}} \leq \text{CIBBLY} \cdot 0.7$ and
+
+if $\theta_{\text{se,i}} \geq \theta_{\text{fu,i}}$ → annular steel flow regime
+
+if $\theta_{\text{se,i}} < \theta_{\text{fu,i}}$ → annular fuel flow regime
+
+If the previously established flow regime is annular fuel or steel
+flow and
+
+(a) if
+ $\frac{\theta_{\text{fu,i}} + \theta_{\text{se,i}}}{\theta_{\text{ch,op,i}} - \theta_{l \text{u,i}}} < \text{CIBBLY}$ and
+
+if $\theta_{\text{fu,i}} \geq \theta_{\text{se,i}}$ → annular fuel flow regime
+
+if $\theta_{\text{fu,i}} < \theta_{\text{se,i}}$ → annular steel flow regime
+
+(b) if
+ $\frac{\theta_{\text{fu,i}} + \theta_{\text{se,i}}}{\theta_{\text{ch,op,i}} - \theta_{l \text{u,i}}} \geq \text{CIBBLY}$ and
+
+if $\theta_{\text{fu,i}} \geq \theta_{\text{se,i}}$ → bubbly fuel flow regime
+
+if $\theta_{\text{fu,i}} < \theta_{\text{se,i}}$ → bubbly steel fuel flow regime
+
+The input constant CIBBLY defines the threshold for the transition from
+the annular to the bubbly flow regime. In the axial cells where the pins
+have not yet been disrupted the value of CIBBLY is given by the input
+constant CIBBIN. In disrupted nodes the value of CIBBLY is given the
+input constant CIBBDI. The recommended value for CIBBIN is 0.7, and for
+CIBBDI the recommended value is 0.2. Once a bubbly flow regime has been
+established, a hysteresis effect is assumed to exist and the transition
+threshold back to annular flow is CIBBLY $\cdot$ 0.7. Similar hysteresis
+effects are used for the transitions from steel to fuel and vice versa
+within the bubbly flow regime. Finally, it is noted that the volume
+fractions used in the flow regime decision are based on the newly
+calculated densities and thus are consistent with the conditions at the
+end of the current time step.
+
+[anchor: description-of-the-local-geometry-of-the-stationary-and-moving-components]
+
+#### 16.4.3.9.2. Description of the Local Geometry of the Stationary and Moving Components
+
+The definition of the local geometry of both stationary and moving
+components is performed by the LEGEOM routine. The physical boundaries
+of the rod bundle channel modeled in LEVITATE are the pin cladding and
+the hexcan wall. Because of the different behavior of these boundaries,
+the channel is visualized as being divided into two separate channels,
+one associated with the fuel pins and another associated with the hexcan
+wall, as shown in Figure 16.4.16. The flow area is partitioned between
+these two channels in proportion to the wetted perimeter of the
+boundaries:
+
+$$A_{\text{ch,cl,i}} = \frac{A_{\text{ch,i}}}{L_{\text{cl,i}} + L_{\text{sr,i}}} \cdot L_{\text{cl,i}}$$ [eq 16.4-243]
+
+$$A_{\text{ch,sr,i}} = \frac{A_{\text{ch,i}}}{L_{\text{cl,i}} + L_{\text{sr,i}}} \cdot L_{\text{sr,i}}$$ [eq 16.4-244]
+
+where $L_{\text{cl,i}}$ and $L_{\text{sr,i}}$ represent the perimeter of
+the pins and hexcan wall in cell $i$ , respectively. It is
+emphasized that LEVITATE models the whole subassembly, and not one pin
+representing the subassembly. Thus, $L_{\text{cl,i}}$ represents the
+perimeter of all the pins in the bundle. In the special situation when
+no pins are present at a certain axial location due to pin disruption,
+the perimeter $L_{\text{cl,i}} = 0$ , and the area of the channel
+associated with the cladding, $A_{\text{ch,cl,i}}$ becomes zero. Each of
+the two channel is treated, for the purpose of defining the geometry, as
+a rectangular channel, with one dimension being the perimeter $L$ 
+and the other a characteristic length, $l$ . This characteristic
+length is defined as follows:
+
+$$l_{sr,i} = \frac{A_{\text{ch,sr,i}}}{L_{\text{sr,i}}}$$ [eq 16.4-245]
+
+Figure 16.4.16 Partition of Subassembly Flow Area into Two Distinct Channels
+
+The characteristics length $l$ characterizes the width of the
+channel and serves as an indicator for the maximum thickness of the fuel
+crusts that can form on the pins and/or the hexcan wall. The conceptual
+representation of these channels is presented in Figure 16.4.17. The fuel
+crust, when present, is characterized by length $L_{\text{ff,cl,i}}$ (and
+ $L_{\text{ff,sv,i}}$ ) and thickness $l_{\text{ff,cl,i}}$ (and
+ $l_{\text{ff,sv,i}}$ ). However, instead of storing the crust
+ $L_{\text{ff}}$ , two area coefficient are used:
+
+$$C_{\text{ff,cl,i}} = \frac{L_{\text{ff,cl,i}}}{L_{\text{cl,i}}}$$ [eq 16.4-246]
+
+and
+
+$$C_{\text{ff,sr,i}} = \frac{L_{\text{ff,sr,i}}}{L_{\text{sr,i}}}$$ [eq 16.4-247]
+
+As explained in Section 16.5, the fuel crust can occasionally contain
+molten or frozen steel, which is taken into account when the crust size
+is calculated. The crust growth is dependent on the initial conditions,
+the amount of new frozen fuel, and the local flow regime. This process
+will be presented later in this chapter.
+
+Figure 16.4.17 Conceptual Representation of the Pin and Hexcan Wall Channels
+
+The configuration of the molten material, fuel and/or steel, is
+characterized by the length $L_{\text{fu,cl,i}} \left( L_{\text{fu,sr,i}} \right)$ 
+and thickness $l_{\text{fu,cl,i}} \left( l_{\text{fu,sr,i}} \right)$ . However,
+instead of storing the length $L_{\text{fu}}$ , two are
+coefficients are used:
+
+$$C_{\text{fu,cl,i}} = \frac{L_{\text{fu,cl,i}}}{L_{\text{cl,i}}}$$ [eq 16.4-248]
+
+$$C_{\text{ff,sr,i}} = \frac{L_{\text{ff,sr,i}}}{L_{\text{sr,i}}}$$ [eq 16.4-249]
+
+Note that the coefficient $C_{\text{fu,cl,i}}$ represents the fraction of
+clading area covered by molten fuel and fuel crust. The same applies to
+ $C_{\text{fu,sr,i}}$ . All the contact areas required for the energy and
+momentum equations are defined by using the lateral area of the clad
+ $A_{\text{cl,i}}^{L}$ and hexcan wall
+ $A_{\text{sr,i}}^{L}$ and the appropriate area coefficients.
+Other area conditions used are:
+
+ $C_{\text{fu,f} l \text{,cl,i}}$ - fraction of cladding crust area covered by molten
+fuel in cell $i$ 
+
+ $C_{\text{fu,ff,sr,i}}$ - fraction of structure crust area covered by
+molten fuel in cell $i$ 
+
+ $C_{\text{se,cl,i}}$ - fraction of cladding area covered by molten steel
+and fuel crust in cell $i$ 
+
+ $C_{\text{se,sr,i}}$ - fraction of hexcan wall area covered by molten
+steel and fuel crust in cell $i$ 
+
+ $C_{\text{se,ff,cl,i}}$ - fraction of cladding crust area covered by molten
+steel in cell $i$ 
+
+ $C_{\text{se,ff,sr,i}}$ - fraction of hexcan wall crust area covered by
+molten steel in cell $i$ 
+
+To each of these coefficients is attributed a specific value in the
+routine LEGEOM, depending on the flow regime and the initial conditions.
+Most of these values are self-explanatory and can be understood by
+looking a Figure 16.4.1, which illustrates the material configuration in
+each LEVITATE flow regime. Some additional comments are required for the
+partial annual fuel flow regime. To fully describe this flow regime, the
+following assumptions were made:
+
+The molten fuel film maintains a constant ratio
+ $\frac{l_{\text{fu,i}}}{L_{\text{fu,i}}}$ both for the clad and the hexcan
+wall. This ratio is defined by:
+
+$$\frac{l_{\text{fu,i}}}{L_{\text{fu,i}}} = \frac{A_{\text{ch,op,i}} \cdot \text{CIANLR}}{\left( L_{\text{cl,i}} + L_{\text{sr,i}} \right)^{2}}$$ [eq 16.4-250]
+
+when no fuel crusts are present. It is built into the Eq. (16.4-252)
+and the user can affect it value only by changing the input
+constant CIANLR. This assumption leads to a gradual increase of the
+film-covered perimeter, together with a film thickness increase,
+whenever the amount of molten fuel increases.
+
+The partial annual flow becomes fully annular when the volume
+fraction of the molten fuel/steel reaches a certain input value,
+i.e., when
+
+$$\frac{\theta_{\text{fu,i}} + \theta_{\text{sc,i}}}{\theta_{\text{ch,op,i}}} = \text{CIANLR}$$ [eq 16.4-251]
+
+The existing fuel crust should be taken into account when calculating
+the coefficients $C_{\text{fu,cl,i}}$ and $C_{\text{fu,sr,i}}$ .
+
+These assumptions lead to the following definition for the area
+coefficient $C_{\text{fu,cl,i}}$ in the annular fuel flow regime
+
+$$\begin{split} C_{\text{fu,cl,i}} = \begin{cases}
+ \frac{\theta_{\text{fu,i}} + \theta_{\text{sc,i}}}{\theta_{\text{ch,op}}} + \frac{A_{\text{ff,cl,i}}}{A_{\text{ch,cl,i}}} \big/ \text{CIANLR} \\
+ 1, & \text{if the above expression} > 1 \\
+ \end{cases}\end{split}$$ [eq 16.4-252]
+
+For nodes where the fuel pins are undisrupted, CIANLR is set equal to
+the input value CIANIN, currently 0.5. For disrupted nodes, CIANLR is
+equal CIANDI. A similar formula applies to $C_{\text{fu,sr,i}}$ .
+
+Another aspect treated in LEGEOM, which will be discussed in this
+section, is the change in the fuel crust geometry due to additional fuel
+freezing. It is noted that other aspects such as steel freezing, crust
+breakup and remelting are treated in the routine LEFREZ and will be
+discussed in Section 16.5. Also, other aspects related to the chunk
+geometry are treated in the LETRAN routine and will be introduced in
+Section 16.4.3.10.
+
+The amounts of fuel/steel which have to be added to the fuel crusts due
+to freezing are calculated in the LEFREZ routine in the previous time
+step. In the routine LEGEOM, these amounts are converted to
+corresponding are changes $\Delta A_{\text{ff,cl,i}}$ and $\Delta A_{\text{ff,se,i}}$ . The
+decision on how to modify the crust parameters $L_{\text{ff,cli,i}}$ ,
+ $l_{\text{ff,cl,i}}$ , $L_{\text{ff,sr,i}}$ and $l_{\text{ff,sr,i}}$ is made
+in the following way (we will refer to the crust on the cladding only):
+
+If no previous fuel crest is present and if the local fuel flow regime
+is partially annular flow, the original crust has the same thickness as
+the molten fuel film; however, if the local fuel flow regime is bubbly,
+the original crust is rather thin and the area coefficient
+ $C_{\text{ff,cl,i}}$ is obtained as follows:
+
+$$\begin{split} C_{\text{ff,cl,i}} = \begin{cases}
+ \sqrt{\frac{A_{\text{ff,cl,i}}}{A_{\text{ch,cl,i}}} \big/ \text{CIBBFZ}} \\
+ 1, & \text{if above expression} > 1 \\
+ \end{cases}\end{split}$$ [eq 16.4-253]
+
+where CIBBFZ is a constant, which is currently set equal to the input
+constant CIBBDI. If a previously formed crust is present the thickness
+of the crust is first increased until it reaches the thickness of he
+fuel film or the channel characteristic size $l_{\text{cl,i}}$ , whichever
+comes first. Then the length of the crust $L_{\text{ff,cl,i}}$ is
+increased until $C_{\text{ff,cl,i}} = 1$ .
+
+[anchor: description-of-the-fuel-steel-chunk-geometry]
+
+#### 16.4.3.9.3. Description of the Fuel/Steel Chunk Geometry
+
+The chunks modeled in LEVITATE have a cylindrical geometry, as shown in
+Figure 16.4.18. They are characterized by the radius $R$ , which is different
+in each axial cell. The length is related to the radius by the input
+constant ASRALU, which defines the ratio $L/2R$ and has currently the
+recommended value 1. Each chunk can contain either fuel, or steel or
+both. The density of the steel chunks is constant and determined by the
+input variable RHSESO. The fuel chunks, however, have a variable
+density, which accounts for the possible porosity of the frozen fuel.
+
+Figure 16.4.18 Fuel/Steel Chunk Geometry
+
+The original geometry of the chunks depends on their origin. Several
+mechanisms have been identified which lead to the formation of solid
+fuel/steel chunks:
+
+A. Disruption of the original fuel pins, which can occur when the
+cladding is locally molten, leading to the formation of relatively large
+fuel chunks. In this case the characteristic radius of the chunks is
+determined from:
+
+$$R_{\text{fu,i}}^{\text{NEW}} = \sqrt{\Delta R_{\text{pin,i}} \cdot \Delta L_{\text{perimeter,pin,i}}}$$ [eq 16.4-254]
+
+where
+
+ $\Delta R_{\text{pin,i}}$ - is the thickness of the solid fuel pin wall which
+separate the pin cavity from the coolant channel
+
+ $\Delta L_{\text{perimeter,pin,i}}$ - is the characteristic size of the chunks
+which is obtained by dividing the pin perimeter by the number of radial
+cracks present at any axial location. The number of radial crack
+currently used is 8.
+
+If the input variable RALUDI is zero, the code will use the above
+formula to determine the radius of the new chunks. However, this
+calculation can be overridden by setting RALUDI to a non-zero value. The
+radius of the newly formed chunks will be set equal to RALUDI.
+
+B. Breakup of the frozen fuel crust that was formed previously on
+the cladding and hexcan wall. The characteristic radius of these chunks
+is determined from:
+
+$$R_{l \text{u,i}}^{\text{NEW}} = \sqrt{\Delta A_{\text{ffc,i}}}$$ [eq 16.4-255]
+
+or
+
+$$R_{l \text{u,i}}^{\text{NEW}} = \sqrt{\Delta A_{\text{ffs,i}}}$$ [eq 16.4-256]
+
+where
+
+ $\Delta A_{\text{ffc,i}}$ - is the cross sectional area of the frozen fuel crust
+which breaks up during the current time step, in the axial cell $i$ 
+
+ $\Delta A_{\text{ffs,I}}$ - is similar to $\Delta A_{\text{ffc,i}}$ , but applies to the
+fuel crust associated with the hexcan wall.
+
+C. Local bulk freezing of the fuel when no solid support for crust
+formation is present. The characteristic radius of the chunks is
+obtained from:
+
+$$R_{\text{fu,i}}^{\text{NEW}} = \sqrt{\Delta A_{\text{fu,i}}}$$ [eq 16.4-257]
+
+where
+
+ $\Delta A_{\text{fu,I}}$ - is the change in the cross sectional area of the
+molten fuel component due to removal of frozen fuel.
+
+The volume of all the newly formed chunks in the axial cell $i$ is
+calculated as follows:
+
+$$\Delta V_{l \text{u,i}} = \left( \frac{\Delta{\rho'}_{\text{f} l \text{,i}}}{\rho_{\text{fl,i}}} \
+ + \frac{\Delta{\rho'}_{\text{s}l \text{,i}}}{\rho_{\text{s} l \text{,i}}} \right) \cdot \Delta z_{\text{i}} \cdot \text{AXMX}$$ [eq 16.4-258]
+
+where
+
+ $\Delta {\rho'}_{\text{fl,i}}$ - is the generalized density of the fuel component in
+the newly formed chunks
+
+ $\Delta {\rho'}_{\text{sl,i}}$ - is the generalized density of the fuel component in
+the newly formed chunks
+
+The number of new chunks is obtained by dividing the total volume
+ $\Delta V_{l \text{u,i}}$ by the volume of a single chunk:
+
+$$\Delta N_{\text{fu,i}} = \frac{\Delta V_{\text{fu,i}} \cdot \text{ASRALU}}{2 \cdot \pi \cdot \left( R_{\text{lu,i}}^{\text{NEW}} \right)^{3}}$$ [eq 16.4-259]
+
+The new chunks will generally have different characteristics from the
+chunks already present in a cell. Because only one type of chunks can
+exist in one cell, the two categories are merged in one chunk population
+with properties reflecting the characteristics of both original
+components. This process is outlined below. Note that the same problem
+can arise in any cell even without the formation of new chunks due to
+the flux of chunk from neighboring cells. The first step in the merging
+of the two chunk categories is to define the radius of the resulting
+chunks.
+
+$$R_{l \text{u,i}}^{n + 1} = \frac{R_{l \text{u,i}} \cdot \left\lbrack N_{l \text{u,i}} \
+ \cdot R_{\text{lu,i}}^{\text{ILUMER}} \right\rbrack + R_{l \text{u,i}}^{\text{NEW}} \
+ \cdot \left\lbrack \Delta N_{l \text{u,i}} \cdot \left( R_{l \
+ \text{u,i}}^{\text{NEW}} \right)^{\text{ILUMBER}} \right\rbrack}{N_{l \text{u,i}} \cdot R_{l \text{u,i}}^{\text{ILUMER}} \
+ + \Delta N_{l \text{u,i}} \cdot \left( R_{l \text{u,i}}^{\text{NEW}} \right)^{\text{ILUMBER}}}$$ [eq 16.4-260]
+
+The new chunk radius is a weighted average of the radii of the two chunk
+categories. The weights can be selected b the user, by changing the
+input integer $\text{ILUMER}$ , which can have the values 0, 1, 2, or 3. For
+ $\text{ILUMER} = 0$ , the weights are equal to the number of chunks in the two
+populations. The recommended value is 3, for which the weights are
+proportional to the total volume. The number of resulting chunks is
+given by:
+
+$$N_{l \text{u,i}} = \frac{V_{l \text{u,i}} + \Delta V_{l \text{u,i}}}{2 \pi \left( R_{l \text{u,i}}^{n + 1} \right)^{3}} \text{ASRALU}$$ [eq 16.4-261]
+
+where the radius $R_{l \text{,u,i}}^{n + 1}$ is defined by
+16.4-224-7. Finally the fraction of steel in the chunks is given by:
+
+$$\begin{split} \text{FR}_{\text{s} l, l \text{u,i}}^{n + 1} = \frac{L_{\text{STEEL,} l \text{u,i}}}{L_{\text{STEEL,} l \text{u,i}} + L_{\text{FUEL,} l \text{u,i}}} \\
+ = \frac{\left( {\rho'}_{\text{s} l \text{,i}} + \Delta{\rho'}_{\text{s} l \text{,i}} \right) \text{AXMX} \Delta z_{\text{i}}}{2 \pi \text{ASRALU} N_{l \text{u,i}} R_{l \text{u,i}}^{n + 1} \rho_{\text{s} l}} \\\end{split}$$ [eq 16.4-262]
+
+The quantities $L_{\text{FUEL}}$ and $L_{\text{STEEL}}$ are introduced in Figure 16.4.18.
+
+If the input variable RALUFZ is zero, then the code will use the above
+formulas to determine the radius of the new chunks formed by crust
+break-up and/or bulk freezing. However, if RALUFZ is not zero, the
+radius of the newly formed chunks will be set equal to RALUFZ.
+
+[anchor: source-terms-in-the-energy-and-momentum-equations]
+
+### 16.4.3.10. Source Terms in the Energy and Momentum Equations
+
+This section completes the description of the channel hydrodynamic
+model. It presents in detail the formulation of the source terms used in
+the energy equations, as introduced previously. It also presents some
+components of the source terms used in the momentum equations. The
+description of these source terms has been delayed until now for two
+reasons: first, the geometry elements introduced in Section 16.4.3.9 are
+needed for the definition of the source terms; second, all the elements
+described below are calculated in the routine LETRAN, and thus it was
+deemed preferable to describe them separately from the energy and
+momentum equations which are solved elsewhere.’
+
+[anchor: source-terms-in-the-energy-equations]
+
+#### 16.4.3.10.1. Source Terms in the Energy Equations
+
+In the energy conservation equations, we introduced the source terms in
+the following form:
+
+For the fuel energy Eq. (16.4-16):
+
+$$\begin{split} \sum_{\text{k}}{{H'}_{\text{fu,k,i}} \cdot \Delta T_{\text{fu,k,i}} = {H'}_{\text{fu,Na,i}} \cdot \Delta T_{\text{fu,Na,i}} + {H'}_{\text{fu,cl,i}} \cdot \Delta T_{\text{fu,cl,i}}} \\
+ + {H'}_{\text{fu,f} l \text{,i}} \cdot \Delta T_{\text{fu,f} l \text{,i}} + {H'}_{\text{fu,s} l \text{,i}} \cdot \Delta T_{\text{fu,s} l \text{,i}} \\
+ + {H'}_{\text{fu,sr,i}} \cdot \Delta T_{\text{fu,sr,i}} + {H'}_{\text{se,fu,i}} \cdot \Delta T_{\text{fu,se,i}} \\
+ + {H'}_{\text{fu,ffc,i}} \cdot \Delta T_{\text{fu,ffc,i}} + {H'}_{\text{fu,ffs,i}} \cdot \Delta T_{\text{fu,ffs,i}} \\\end{split}$$ [eq 16.4-263]
+
+For the steel energy Eq. (16.4-28):
+
+$$\begin{split} \sum_{\text{k}}{{H'}_{\text{se,k,i}} \cdot \Delta T_{\text{se,k,i}} = {H'}_{\text{se,fu,i}} \cdot \Delta T_{\text{fu,se,i}} + {H'}_{\text{se,cl,i}} \cdot \Delta T_{\text{se,cl,i}}} \\
+ + {H'}_{\text{se,sr,i}} \cdot \Delta T_{\text{se,sr,i}} + {H'}_{\text{se,f} l \text{,i}} \cdot \Delta T_{\text{se,f} l \text{,i}} \\
+ + {H'}_{\text{se,s} l \text{,i}} \cdot \Delta T_{\text{se,s} l \text{,i}} + {H'}_{\text{se,Na,i}} \cdot \Delta T_{\text{se,Na,i}} \\
+ + {H'}_{\text{se,ffc,i}} \cdot \Delta T_{\text{se,ffc,i}} + {H'}_{\text{se,ffs,i}} \cdot \Delta T_{\text{se,ffs,i}} \\\end{split}$$ [eq 16.4-264]
+
+For the fuel chunk energy
+
+$$\begin{split} \sum_{\text{k}}{{H'}_{\text{f} l \text{,k,i}} \cdot \Delta T_{\text{f} l \text{,k,i}} = {H'}_{\text{fu,f} l \text{,i}} \cdot \Delta T_{\text{f} l \text{,fu,i}} + {H'}_{\text{se,f} l \text{,i}} \cdot \Delta T_{\text{f} l \text{,se,i}}} \\
+ + {H'}_{\text{Na,f} l \text{,i}} \cdot \Delta T_{\text{f} l \text{,Na,i}} + {H'}_{\text{c} l \text{,f} l \text{,i}} \cdot \Delta T_{\text{f} l \text{,cl,i}} \\
+ + {H'}_{\text{sr,f} l \text{,i}} \cdot \Delta T_{\text{f} l \text{,sr,i}} + {H'}_{\text{ffc,f} l \text{,i}} \cdot \Delta T_{\text{f} l \text{,ffc,i}} \\
+ + {H'}_{\text{ffs,f} l \text{,i}} \cdot \Delta T_{\text{f} l \text{,ffs,i}} + {H'}_{\text{f} l \text{,s} l \text{,i}} \cdot \Delta T_{\text{f} l \text{,s} l \text{,i}} \\\end{split}$$ [eq 16.4-265]
+
+For the steel chunk energy equation:
+
+$$\begin{split} \sum_{\text{k}}{{H'}_{\text{s} l \text{,k,i}} \cdot \Delta T_{\text{s} l \text{,k,i}} = {H'}_{\text{fu,s} l \text{,i}} \cdot \Delta T_{\text{s} l \text{,fu,i}} + {H'}_{\text{se,s} l \text{,i}} \cdot \Delta T_{\text{s} l \text{,se,i}}} \\
+ + {H'}_{\text{Na,s} l \text{,i}} \cdot \Delta T_{\text{s} l \text{,Na,i}} + {H'}_{\text{cl,s} l \text{,i}} \cdot \Delta T_{\text{s} l \text{,cl,i}} \\
+ + {H'}_{\text{sr,s} l \text{,i}} \cdot \Delta T_{\text{s} l \text{,sr,i}} + {H'}_{\text{ffc,s} l \text{,i}} \cdot \Delta T_{\text{s} l \text{,ffc,i}} \\
+ + {H'}_{\text{ffs,s} l \text{,i}} \cdot \Delta T_{\text{s} l \text{,ffs,i}} + {H'}_{\text{f} l \text{,s} l \text{,i}} \cdot \Delta T_{\text{s} l \text{,f} l \text{,i}} \\\end{split}$$ [eq 16.4-266]
+
+For the gas-mixture equation
+
+$$\begin{split} \sum_{\text{k}}{{H'}_{\text{k,Mi,i}} \cdot \Delta T_{\text{k,Mi,i}} = {H'}_{\text{Na,c} l \text{,i}} \cdot \Delta T_{\text{cl,Na,i}}} + {H'}_{\text{se,Na,i}} \cdot \Delta T_{\text{se,Na,i}} \\
+ + {H'}_{\text{Na,sr,i}} \cdot \Delta T_{\text{sr,Na,i}} + {H'}_{\text{fu,Na,i}} \cdot \Delta T_{\text{fu,Na,i}} \\
+ + {H'}_{\text{Na,f} l \text{,i}} \cdot \Delta T_{\text{f} l \text{,Na,i}} + {H'}_{\text{Na,s} l \text{,i}} \cdot \Delta T_{\text{s} l \text{,Na,i}} \\
+ + {H'}_{\text{ffc,Na,i}} \cdot \Delta T_{\text{ffc,Na,i}} + {H'}_{\text{ffs,Na,i}} \cdot \Delta T_{\text{ffs,Na,i}} \\\end{split}$$ [eq 16.4-267]
+
+where
+
+$${H'}_{\text{j,k,i}} = H_{\text{j,k,i}} \cdot \frac{A_{\text{j,k,i}}^{L}}{\Delta z_{\text{i}} \cdot \text{AXMX}}$$ [eq 16.4-268]
+
+We will now proceed to define all generalized heat-transfer coefficients
+that appear in Eq. (16.4-263) through Eq. (16.4-268). As shown in Eq. (16.4-268)
+both $H_{\text{j,k,i}}$ and $A_{\text{j,k,i}}$ will have to be defined.
+Special reference will be made to each flow regime, and a short
+description of the physical model will be included.
+
+[anchor: heat-transfer-coefficient-between-fuel-and-sodium]
+
+16.4.3.10.1.1. Heat-transfer Coefficient between Fuel and Sodium
+
+For the annular and bubbly steel flow regimes, there is no contact
+between the fuel and sodium. Therefore, the heat-transfer coefficient
+is zero:
+
+$${H'}_{\text{fu,Na,i}} = 0$$ [eq 16.4-269]
+
+For the annular fuel flow regime, the heat-transfer coefficient is
+defined as follows:
+
+$$H_{\text{fu,Na,i}} = \frac{1}{\frac{1}{H_{\text{fu,i}}} + \frac{1}{H_{\text{Na,i}}}}$$ [eq 16.4-270]
+
+where $H_{\text{fu,i}}$ is a convection-type transfer coefficient on the
+fuel side:
+
+$$H_{\text{fu,i}} = \frac{1}{D_{\text{H,fu,i}}} \cdot \text{CIA3} \cdot \mu_{\text{fu}} \
+ \cdot c_{\text{p,fu}} \cdot \text{Re}_{\text{fu,i}}^{0.8}$$ [eq 16.4-271]
+
+and the sodium heat-transfer coefficient in the two-phase region is
+defined as:
+
+$$\begin{split} H_{\text{Na,i}} = \begin{cases}
+ 10^{5}, & \text{if } \alpha_{\text{Na,i}} < 0.5 \\
+ \left\lbrack 10^{5} \cdot \left( 1 - \alpha_{\text{na,i}} \right) + H_{\text{Na,i}}^{\text{Single Phase}} \cdot \left( \alpha_{\text{Na,i}} - 0.5 \right) \right\rbrack \cdot 2, & \text{ if } 0.5 \leq \alpha_{\text{Na,i}} < 1 \\
+ \end{cases}\end{split}$$ [eq 16.4-272]
+
+where $H_{\text{Na,i}}^{\text{Single,Phase}}$ is defined
+in Eq. (16.4-273).
+
+The convective sodium heat-transfer coefficient in the single-phase
+region is defined below:
+
+$$\begin{split} H_{\text{Na,i}}^{\text{Single Phase}} = \left\{ \text{C1} \cdot \left\lbrack D_{\text{H,Mi,i}} \
+ \cdot \rho_{\text{Mi,i}} \cdot \left| u_{\text{Mi,i}} - u_{\text{fu,i}} \right| \cdot C_{\text{p,Mi,i}} \
+ \cdot \frac{1}{k_{\text{Mi,i}}} \right\rbrack^{\text{C2}} \right. \\ \left.
+ + \text{C3} \right\} \cdot \frac{k_{\text{Mi,i}}}{D_{\text{H,Mi,i}}} \text{ for } \alpha_{\text{Na,i}} > 1\end{split}$$ [eq 16.4-273]
+
+The area of contact between sodium and molten fuel is defined as
+follows:
+
+$$\begin{split} A_{\text{fu,Na,i}}^{L} = A_{\text{cl,i}}^{L} \cdot \left\lbrack \left( C_{\text{fu,cl,i}} - C_{\text{ff,cli,i}} \right) + C_{\text{ff,cl,i}} \cdot C_{\text{fu,ff,cl,i}} \right\rbrack \\
+ + A_{\text{sr,i}}^{L} \cdot \left\lbrack \left( C_{\text{fu,sr,i}} - C_{\text{ff,sr,i}} \right) + C_{\text{ff,sr,i}} \cdot C_{\text{fu,ff,sr,i}} \right\rbrack \\\end{split}$$ [eq 16.4-274]
+
+For the bubbly fuel flow regime, the heat-transfer between sodium and
+fuel is described as taking place between a continuous fuel component
+and spherical sodium bubbles. The number of sodium bubbles (and thus
+their radius) varies from one bubble at the transition boundary between
+annular and bubbly flow to a maximum number determined by a maximum
+number determined by a minimum radius of the bubble:
+
+$$R_{\text{min,bubble,i}} = 0.05 R_{\text{max,bubble,i}}$$ [eq 16.4-275]
+
+$$\begin{split} R_{\text{max,bubble,i}} = \begin{cases}
+ R_{1} = \left( \frac{3 \cdot V_{\text{Na,i}}}{4 \cdot \pi} \right)^{1/3} & \text{if } R_{1} < D_{\text{H,Mi,i}} \cdot 0.5 \\
+ D_{\text{H,Mi,i}} \cdot 0.5 & \text{if } R_{1} \geq D_{\text{H,Mi,i}} \cdot 0.5 \\
+ \end{cases}\end{split}$$ [eq 16.4-276]
+
+The actual radius of the bubbles is obtained by assuming an exponential
+variation between $R_{\text{max}}$ and $R_{\text{min}}$ , dependent on how far
+from the flow regime transition we are in the cell $i$ :
+
+$$\begin{split} R_{\text{bubble,i}} = R_{\text{min,bubble,i}} + \left( R_{\text{max,bubble,i}} - R_{\text{min,bubble,i}} \right) \\
+ \cdot \exp\left\lbrack \frac{- \left( \theta_{\text{Mi,bubbly}} - \theta_{\text{Mi,i}} \right)}{\theta_{\text{Mi,i}}} \right\rbrack \\\end{split}$$ [eq 16.4-277]
+
+where $\theta_{\text{Mi,bubbly}}$ is the mixture volume fraction required for
+the transition from the annular to bubbly flow.
+
+The number of bubbles is defined by:
+
+$$N_{\text{bubble,i}} = \frac{3 \cdot V_{\text{Na,i}}}{4 \cdot \pi \cdot R_{\text{bubbles,i}}^{3}}$$ [eq 16.4-278]
+
+and the heat-transfer area becomes:
+
+$$A_{\text{fu,Na,i}}^{L} = N_{\text{bubble,i}} \cdot 4\pi \cdot R_{\text{bubble,i}}^{2}$$ [eq 16.4-279]
+
+The heat-transfer coefficient is determined by the heat-transfer
+resistance on the fuel side and the resistance of the bubble:
+
+$$H_{\text{fu,Na,i}} = \frac{1}{\frac{1}{H_{\text{fu,i}}} + \frac{1}{H_{\text{Na,i}}}}$$ [eq 16.4-280]
+
+where $H_{\text{fu,i}} = 3 \cdot 10^{4}$ J/m2 K-s and wad determined
+by analyzing the transient solution describing the propagation of a step
+change in temperature in a semi-infinite medium. For a typical LEVITATE
+time step $\Delta t$ and a temperature change $\Delta T, H_{\text{fu,i}}$ was determined
+from:
+
+$$H_{\text{fu,i}} = \frac{1}{\Delta T \cdot \Delta t} \int_{0}^{\Delta t}{Q \left( x = 0 \right) \text{dt}}$$ [eq 16.4-281]
+
+Where $Q \left( x = 0 \right)$ is the heat flux at the boundary of the semi-infinite
+medium, in J/m2·s.
+
+The heat-transfer coefficient in the bubble, $H_{\text{Na,i}}$ is defined
+by Eq. (16.4-272) for the two-phase sodium region. For single-phase sodium:
+
+$$\begin{aligned}
+ H_{\text{Na,i}} = \frac{k_{\text{Mi,i}}}{R_{\text{bubble,i}}} && \text{if } \alpha_{\text{Na,i}} = 1
+ \end{aligned}$$ [eq 16.4-282]
+
+[anchor: heat-transfer-coefficient-between-fuel-and-cladding-or-fuel-and-structure]
+
+16.4.3.10.1.2. Heat-transfer Coefficient between Fuel and Cladding or Fuel and Structure
+
+For the annular and bubbly steel flow regimes the fuel is in contact
+with neither the cladding nor the structure. Therefore, the heat transfer
+coefficients are zero:
+
+$${H'}_{\text{fu,cl,i}} = {H'}_{\text{fu,sr,i}} = 0$$ [eq 16.4-283]
+
+For the annular fuel flow regime, the heat-transfer coefficient from
+fuel to cladding and structure is defined as:
+
+$$H_{\text{fu,cl,i}} = H_{\text{fu,sr,i}} = \frac{1}{D_{\text{H,fu,i}}} \cdot \text{CIA3} \
+ \cdot \mu_{\text{fu,i}} \cdot C_{\text{p,fu}} \cdot \text{Re}_{\text{fu,i}}^{0.8}$$ [eq 16.4-284]
+
+and the respective heat-transfer areas are:
+
+$$\begin{split} A_{\text{fu,cl,i}}^{L} = A_{\text{cl,i}}^{L} \cdot \left( C_{\text{fu,cl,i}} - C_{\text{ff,cl,i}} \right) \\
+ \\
+ A_{\text{fu,sr,i}}^{L} = A_{\text{sr,i}}^{L} \cdot \left( C_{\text{fu,sr,i}} - C_{\text{ff,sr,i}} \right) \\\end{split}$$ [eq 16.4-285]
+
+For the bubbly fuel flow regime, the heat-transfer coefficients are
+defined as follows:
+
+$$H_{\text{fu,cl,i}} = H_{\text{fu,sr,i}} = \frac{1}{D_{\text{H,fu,i}}} \cdot \text{CIA3} \cdot \mu_{\text{fu}} \
+ \cdot C_{\text{p,fu}} \cdot \text{Re}_{\text{fu,i}}^{0.8} + \frac{4 \cdot k_{\text{fu}}}{D_{\text{H,fu,i}}}$$ [eq 16.4-286]
+
+and the respective heat-transfer areas are:
+
+$$\begin{aligned}
+ A_{\text{fu,cl,i}}^{L} = A_{\text{cl,i}}^{L} ; && A_{\text{fu,sr,i}}^{L} = A_{\text{sr,i}}^{L}
+ \end{aligned}$$ [eq 16.4-287]
+
+[anchor: heat-transfer-between-fuel-and-frozen-fuel-crusts-on-cladding-and-structure]
+
+16.4.3.10.1.3. Heat Transfer between Fuel and Frozen Fuel Crusts on Cladding and Structure
+
+The heat transfer coefficients between the fuel and frozen fuel crusts on either cladding or structure
+are zero in the annular and bubbly steel flow regimes:
+
+$${H'}_{\text{fu,ffc,i}} = {H'}_{\text{fu,ffs,i}} = 0$$ [eq 16.4-288]
+
+For the annual fuel flow regime, the heat-transfer coefficients are
+defined as:
+
+$$H_{\text{fu,ffc,i}} = \frac{1}{\frac{1}{H_{\text{fu,i}}} + \frac{0.5 \cdot l_{\text{ff,cl,i}}}{k_{\text{fu}}}}$$ [eq 16.4-289]
+
+$$H_{\text{fu,ffs,i}} = \frac{1}{\frac{1}{H_{\text{fu,i}}} + \frac{0.5 \cdot l_{\text{ff,sr,i}}}{k_{\text{fu}}}}$$ [eq 16.4-290]
+
+where $H_{\text{fu,i}}$ is given by Eq. (16.4-284) and $l_{\text{ff,cl,i}}$ 
+and $l_{\text{ff,sr,i}}$ have been defined in Section 16.4.3.9, which
+describes the local geometry. The respective heat-transfer areas are:
+
+$$A_{\text{fu,ffc,i}} = A_{\text{cl,i}}^{L} \cdot C_{\text{ff,cl,i}} \cdot C_{\text{fu,ff,cl,i}}$$ [eq 16.4-291]
+
+and
+
+$$A_{\text{fu,ffs,i}} = A_{\text{sr,i}}^{L} \cdot C_{\text{ff,sr,i}} \cdot C_{\text{fu,ff,sr,i}}$$ [eq 16.4-292]
+
+For the bubbly fuel flow regime, the heat-transfer coefficients are
+given by Eq. (16.4-289) and Eq. (16.4-290), but $H_{\text{fu,i}}$ in these is
+given by Eq. (16.4-286) rather than Eq. (16.4-284). The heat-transfer areas
+are given by:
+
+$$A_{\text{fu,ffc,i}} = A_{\text{cl,i}}^{L} \cdot C_{\text{ff,cl,i}}$$ [eq 16.4-293]
+
+$$A_{\text{fu,ffs,i}} = A_{\text{sr,i}}^{L} \cdot C_{\text{ff,sr,i}}$$ [eq 16.4-294]
+
+[anchor: heat-transfer-coefficient-between-fuel-and-steel]
+
+16.4.3.10.1.4. Heat-transfer Coefficient between Fuel and Steel
+
+In the annular and bubbly steel flow regimes, the fuel exists in the
+form of droplets imbedded in the continuous molten steel. The radius of
+the fuel droplets varies between $R_{\text{fu,droplet,min,i}} = 1 \cdot 10^{-4}$ m
+and $R_{\text{fu,droplet,max,i}} = l_{\text{fu,cl,i}}$ .
+The actual radius is calculated as follows:
+
+If $1 \geq \frac{\theta_{\text{fu,i}}}{\theta_{\text{se,i}}} \geq 0.5$ 
+
+$$R_{\text{fu,droplet,i}} = \left\lbrack R_{\text{fu,droplet,min,i}} \cdot \left( 1 - \frac{\theta_{\text{fu,i}}}{\theta_{\text{se,i}}} \right) \
+ + R_{\text{fu,droplet,max,i}} \cdot \left( \frac{\theta_{\text{fu,i}}}{\theta_{\text{se,i}}} - 0.5 \right) \right\rbrack \cdot 2$$ [eq 16.4-295]
+
+If $\frac{\theta_{\text{fu,i}}}{\theta_{\text{se,i}}} < 0.5$ , then
+
+$$R_{\text{fu,droplet,i}} = R_{\text{fu,droplet,min,i}}$$ [eq 16.4-296]
+
+The number of fuel droplets and heat-transfer area are calculated from:
+
+$$N_{\text{fu,droplets,i}} = \frac{3 V_{\text{fu,i}}}{4 \pi \cdot R_{\text{fu,droplet,i}}^{3}}$$ [eq 16.4-297]
+
+and
+
+$$A_{\text{se,fu,i}}^{L} = N_{\text{fu,droplets,i}} \cdot 4 \pi \cdot R_{\text{fu,droplet,i}}^{3}$$ [eq 16.4-298]
+
+The heat-transfer coefficient is obtained as follows:
+
+$$H_{\text{se,fu,i}} = \frac{1}{\frac{R_{\text{fu,droplet,i}}}{k_{\text{fu}}} + \frac{1}{H_{\text{se,i}}}}$$ [eq 16.4-299]
+
+where $H_{\text{se,i}} = 4 \cdot 10^{4}$ and is obtained in a manner
+similar to Eq. (16.4-281).
+
+For the annual and bubbly fuel flow regimes, the situation is reversed,
+and the steel exists in the form of droplets imbedded in the continuous
+molten fuel. The radius of the steel droplet is defined as follows:
+
+For $\frac{\theta_{\text{se,i}}}{\theta_{\text{fu,i}}} > 0.5$ 
+
+$$\begin{split} R_{\text{se,droplet,i}} = \left\lbrack R_{\text{se,droplet,min,i}} \cdot \left( 1 - \frac{\theta_{\text{se,i}}}{\theta_{\text{fu,i}}} \right) + R_{\text{se,droplet,max,i}} \right. \\ \left.
+ \cdot \left( \frac{\theta_{\text{se,i}}}{\theta_{\text{fu,i}}} - 0.5 \right) \right\rbrack \cdot 2\end{split}$$ [eq 16.4-300]
+
+For $\frac{\theta_{\text{se,i}}}{\theta_{\text{fu,i}}} \leq 0.5$ 
+
+$$R_{\text{se,droplet,i}} = R_{\text{se,droplet,min,i}}$$ [eq 16.4-301]
+
+Note that the definitions 16.4-257 and 16.4-261 lead to a continuous
+change in $R_{\text{droplet,i}}$ across the transition from a fuel to a
+steel flow regime. The number of steel droplets and the heat-transfer
+area are obtained from formulas similar to 16.4-258 and 16.4-259. The
+heat-transfer coefficient is defined by:
+
+$$H_{\text{se,fu,i}} = \frac{1}{\frac{R_{\text{se,droplet,i}}}{k_{\text{se}}} + \frac{1}{H_{\text{fu,i}}}}$$ [eq 16.4-302]
+
+where $H_{\text{fu,i}} = 3 \cdot 10^{4}$ and has already been explained
+in Eq. (16.4-281).
+
+[anchor: heat-transfer-coefficients-between-fuel-and-fuel-and-steel-chunks]
+
+16.4.3.10.1.5. Heat-transfer Coefficients between Fuel and Fuel and Steel Chunks
+
+As explained in 16.4.3.9.2, the fuel and steel chunks have a cylindrical
+geometry and the aspect ratio R/L can be varied via the input. Thus, it
+is necessary to distinguish between the heat transfer across the surface
+normal to the flow $A_{\text{f} l \text{,i}}^{N}$ and that across the
+surface parallel to the flow direction, $A_{\text{f} l \text{,i}}^{L}$ .
+Note that the chunks are always assumed to be parallel to the flow
+direction, and that the total surface of the fuel chunks is given by
+ $A_{\text{f} l \text{,i}}^{L} + A_{\text{f} l \text{,i}}^{N}$ . Thus, the
+generalized heat-transfer coefficient between the fuel and the fuel and
+steel chunks can be written as:
+
+$${H'}_{\text{fu,f} l \text{,i}} = H_{\text{fu,f} l \text{,i}}^{L} \cdot \
+ \frac{A_{\text{fu,f} l \text{,i}}^{L}}{\text{AXMX} \cdot \Delta z_{\text{i}}} \
+ + H_{\text{fu,f} l \text{,i}}^{N} \cdot \frac{A_{\text{fu,f} l \text{,i}}^{N}}{\text{AXMX} \cdot \Delta z_{\text{i}}}$$ [eq 16.4-303]
+
+$${H'}_{\text{fu,s} l \text{,i}} = H_{\text{fu,s} l \text{,i}}^{L} \cdot \frac{A_{\text{fu,s} l \text{,i}}^{L}}{\text{AXMX} \
+ \cdot \Delta z_{\text{i}}} + H_{\text{fu,s} l \text{,i}}^{N} \cdot \frac{A_{\text{fu,s} l \text{,i}}^{N}}{\text{AXMX}
+ \cdot \Delta z_{\text{i}}}$$ [eq 16.4-304]
+
+For the steel flow regimes, both bubbly and annular, no contact is
+present between the molten fuel and chunks:
+
+$${H'}_{\text{fu,f} l \text{,i}} = {H'}_{\text{fu,s} l \text{,i}} = 0$$ [eq 16.4-305]
+
+For the bubbly fuel flow regime, the heat-transfer coefficients are
+defined as follows:
+
+$$\begin{aligned}
+ H_{\text{fu,f} l \text{,i}}^{L} = \frac{1}{\frac{1}{H_{\text{fu,i}}} \
+ + \frac{R_{\text{f} l \text{,i}}}{k_{\text{fu}}}}; && H_{\text{fu,f} l \text{,i}}^{N} \
+ = \frac{1}{\frac{1}{H_{\text{fu,i}}} + \frac{L_{\text{f} l \text{,i}}}{2k_{\text{fu}}}}
+ \end{aligned}$$ [eq 16.4-306]
+
+and
+
+$$\begin{aligned}
+ H_{\text{fu,s} l \text{,i}}^{L} = \frac{1}{\frac{1}{H_{\text{fu,i}}} \
+ + \frac{R_{\text{s} l \text{,i}}}{k_{\text{se}}}}; && H_{\text{fu,s} l \text{,i}}^{N} \
+ = \frac{1}{\frac{1}{H_{\text{fu,i}}} + \frac{L_{\text{s} l \text{,i}}}{2k_{\text{se}}}}
+ \end{aligned}$$ [eq 16.4-307]
+
+where $H_{\text{fu,i}}$ has been defined in Eq. (16.4-281). The corresponding
+heat-transfer areas are:
+
+$$\begin{aligned}
+ A_{\text{fu,f} l \text{,i}}^{L} = A_{\text{f} l \text{,i}}^{L} ; && A_{\text{fu,f} l \text{,i}}^{N} = 0.5 A_{\text{f} l \text{,i}}^{N}~.
+ \end{aligned}$$ [eq 16.4-308]
+
+$$\begin{aligned}
+ A_{\text{fu,s} l \text{,i}}^{L} = A_{\text{s} l \text{,i}}^{L} ; && A_{\text{fu,s} l \text{,i}}^{N} = 0.5 A_{\text{s} l \text{,i}}^{N}~.
+ \end{aligned}$$ [eq 16.4-309]
+
+For the annular fuel flow regime, the chunks can have velocities quite
+different from those of the molten fuel, and convective effects must be
+taken into account. The heat-transfer coefficients are still defined by
+Eq. (16.4-306) and Eq. (16.4-307), but $H_{\text{fu,i}}$ is replaced by
+ $H_{\text{fu,i}} + H_{\text{fu,convective,i}}$ , where
+ $H_{\text{fu,convective,i}}$ is defined as:
+
+$$H_{\text{fu,convective,i}} = \frac{1}{D_{\text{H,fu,i}}} \cdot \text{CIA3} \cdot \mu_{\text{fu}} \
+ \cdot C_{\text{p,fu}} \cdot \text{Re}_{\text{fu,i}}^{0.8}$$ [eq 16.4-310]
+
+where
+
+$$\text{Re}_{l \text{u,i}} = \rho_{\text{fu}} \cdot \left| u_{\text{fu,i}} \
+ - u_{l \text{u,i}} \right| \cdot \frac{2 R_{l \text{u,i}}}{\mu_{\text{fu}}}$$ [eq 16.4-311]
+
+The heat-transfer areas for the annular flow are significantly different
+from those used for the bubbly fuel flow. The normal surface is not in
+contact with the molten fuel, thus:
+
+$$A_{\text{fu,f} l \text{,i}}^{N} = A_{\text{fu,s} l \text{,i}}^{L} = 0$$ [eq 16.4-312]
+
+The lateral heat transfer areas are defined as follows:
+
+$$\begin{split} A_{\text{fu,f} l \text{,i}}^{L} = A_{\text{f} l \text{,i}}^{L} \cdot F_{\text{area,bd,} l \text{u,i}} \cdot C_{\text{fu,cl,i}} \cdot \frac{A_{\text{cl,i}}^{L}}{A_{\text{cl,i}}^{L} + A_{\text{sr,i}}^{L}} \\
+ + C_{\text{fu,sr,i}} \cdot \frac{A_{\text{sr,i}}^{L}}{A_{\text{cl,i}}^{L} + A_{\text{sr,i}}^{L}} \\\end{split}$$ [eq 16.4-313]
+
+where $F_{\text{area,bd,} l \text{u,i}}$ is the fraction of the area of the chunks
+in contact with the channel boundaries. It is obtained by assuming that
+chunks are uniformly distributed across the channel area and defining
+the contact area for the chunks near the boundary (currently the contact
+area is equal to $0.5 \cdot A_{\text{fl,i}}^{L}$ ).
+ $A_{\text{fu,s} l \text{,i}}^{L}$ is defined similarly to
+Eq. (16.4-313), but $A_{\text{f} l \text{,i}}^{L}$ is replaced by
+ $A_{\text{s} l \text{,i}}^{L}$ .
+
+[anchor: heat-transfer-coefficients-between-the-molten-steel-and-fuel-and-steel-chunks]
+
+16.4.3.10.1.6. Heat-transfer Coefficients between the Molten Steel and Fuel and Steel Chunks
+
+For the annular and bubbly fuel flow regimes, these coefficients are
+zero because the steel and the chunks are not in contact.
+
+For the annular and bubbly steel flow regimes, the considerations made
+in Section 16.4.3.10.1.5 still apply and the Eq. (16.4-303) through
+16.4-272 can be used, but $H_{\text{fu,i}}$ is replaced by $H_{\text{se,i}}$ ,
+defined similarly for steel, and $H_{\text{fu,convective,i}}$ is replaced
+by $H_{\text{se,convective,i}}$ defined below:
+
+$$H_{\text{se,convective,i}} = \frac{1}{D_{\text{H,se,i}}} \cdot \text{CIA3} \cdot \mu_{\text{se}} \
+ \cdot C_{\text{p,se}} \cdot \text{Re}_{l \text{u,i}}^{0.8}$$ [eq 16.4-314]
+
+[anchor: heat-transfer-coefficients-between-molten-steel-and-cladding-and-structure]
+
+16.4.3.10.1.7. Heat-transfer Coefficients between Molten Steel and Cladding and Structure
+
+The coefficients are zero for the fuel flow regimes, both annular and
+bubbly:
+
+$${H'}_{\text{se,cl,i}} = {H'}_{\text{se,sr,i}} = 0$$ [eq 16.4-315]
+
+For the annular steel flow regime, heat-transfer coefficients are
+defined as follows:
+
+$$H_{\text{se,cl,i}} = H_{\text{se,sr,i}} = \frac{1}{D_{\text{H,se,i}}} \cdot \text{CIA3} \
+ \cdot \mu_{\text{se}} \cdot C_{\text{p,se}} \cdot \text{Re}_{\text{se,i}}^{0.8}$$ [eq 16.4-316]
+
+and the respective areas, $A_{\text{se,c} l \text{,i}}$ and $A_{\text{se,sr,i}}$ are
+identical to Eq. (16.4-285).
+
+For the bubbly steel regime, the heat-transfer is given by:
+
+$$H_{\text{se,cl,i}} = H_{\text{se,sr,i}} = \frac{1}{D_{\text{H,se,i}}} \cdot \text{CIA3} \
+ \cdot \mu_{\text{se}} \cdot C_{\text{p,se}} \cdot \text{Re}_{\text{se,i}}^{0.8} + \frac{4k_{\text{se}}}{D_{\text{H,se,i}}}$$ [eq 16.4-317]
+
+and the heat-transfer areas
+ $A_{\text{se,cl,i}}^{L}$ and $A_{\text{se,sr,i}}^{L}$ 
+are defined by Eq. (16.4-287).
+
+[anchor: heat-transfer-coefficients-between-steel-and-the-frozen-fuel-on-cladding-structure]
+
+16.4.3.10.1.8. Heat-transfer Coefficients between Steel and the Frozen Fuel on Cladding Structure
+
+These coefficients are zero for the fuel annular and bubbly flow
+regimes:
+
+$${H'}_{\text{se,ffc,i}} = {H'}_{\text{se,ffs,i}} = 0$$ [eq 16.4-318]
+
+For the steel regimes, the considerations made in Section 16.4.3.10.1.3
+for the fuel regimes apply. Thus, Eq. (16.4-288) through Eq. (16.4-294) can be
+used to define the corresponding heat-transfer coefficients and transfer
+areas if one replaces $H_{\text{fu,i}}$ by $H_{\text{se,i}}$ , defined as
+follows:
+
+$$H_{\text{se,i}} = \frac{1}{D_{\text{H,se,i}}} \cdot \text{CIA3} \cdot \mu_{\text{se}} \cdot C_{\text{p,se}} \cdot \text{Re}_{\text{se,i}}^{0.8}$$ [eq 16.4-319]
+
+[anchor: heat-transfer-between-steel-and-sodium-fission-gas]
+
+16.4.3.10.1.9. Heat Transfer between Steel and Sodium/Fission Gas
+
+The coefficient is zero for the fuel flow regimes:
+
+$${H'}_{\text{se},\text{Na},i} = 0$$ [eq 16.4-320]
+
+All considerations made for the fuel flow regimes in Section 16.4.3.10.1.1 apply here and Eq. (16.4-270) through Eq. (16.4-282) should be
+used, if $h_{\text{fu,i}}$ is replaced by $H_{\text{se,i}}$ , as appropriate.
+Thus, the heat-transfer coefficient for the annual steel regime becomes
+from Eq. (16.4-270):
+
+$$H_{\text{se,Na,i}} = \frac{1}{\frac{1}{H_{\text{se,i}}} + \frac{1}{H_{\text{Na,i}}}}$$ [eq 16.4-321]
+
+where $H_{\text{se,i}}$ is defined by Eq. (16.4-319). The same formula
+applies for the bubbly steel regime from Eq. (16.4-280), but
+ $H_{\text{se,i}}$ is defined in a manner similar to Eq. (16.4-281).
+
+[anchor: heat-transfer-coefficients-between-fuel-steel-chunks-and-cladding-and-structure]
+
+16.4.3.10.1.10. Heat-transfer Coefficients between Fuel Steel Chunks and Cladding and Structure
+
+The chunks can be in contact with the cladding and structure only in the
+partial annular fuel flow regime (this is also the default when neither
+fuel nor steel is present in the channel). For all other regimes, the
+heat-transfer coefficients are equal to zero:
+
+$$\begin{split}{H'}_{\text{cl,f} l \text{,i}} &= 0 \\
+{H'}_{\text{cl,s} l \text{,i}} &= 0 \\
+{H'}_{\text{sr,f} l \text{,i}} &= 0 \\
+{H'}_{\text{sr,s} l \text{,i}} &= 0\end{split}$$
+
+For the partial annular fuel flow regime, the heat-transfer coefficients
+are defined below:
+
+$$H_{\text{cl,f} l \text{,i}} = H_{\text{sr,f} l \text{,i}} = \frac{k_{\text{fu}}}{R_{l \text{u,i}}}$$ [eq 16.4-322]
+
+$$H_{\text{cl,s} l \text{,i}} = H_{\text{sr,s} l \text{,i}} = \frac{k_{\text{se}}}{R_{l \text{u,i}}}$$ [eq 16.4-323]
+
+The definition of the heat-transfer areas accounts for the fact that
+only the chunks close to the boundaries not covered by molten fuel
+exchange energy directly with the cladding and structure.
+
+$$A_{\text{cl,f} l \text{,i}} = A_{\text{f} l \text{,i}}^{L} \cdot F_{\text{area,bd,} l \text{u,i}} \
+ \cdot \frac{A_{\text{c} l \text{,i}}^{L}}{A_{\text{cl,i}}^{L} + A_{\text{sr,i}}^{L}} \cdot \left( 1 - C_{\text{fu,cl,i}} \right)$$ [eq 16.4-324]
+
+$$A_{\text{sr,f} l \text{,i}} = A_{\text{f} l \text{,i}}^{L} \cdot F_{\text{area,bd,} l \text{u,i}} \
+ \cdot \frac{A_{\text{sr,i}}^{L}}{A_{\text{cl,i}}^{L} + A_{\text{sr,i}}^{L}} \cdot \left( 1 - C_{\text{fu,sr,i}} \right)$$ [eq 16.4-325]
+
+$$A_{\text{cl,s} l \text{,i}} = A_{\text{s} l \text{,i}}^{L} \cdot F_{\text{area,bd,} l \text{u,i}} \
+ \cdot \frac{A_{\text{c} l \text{,i}}^{L}}{A_{\text{cl,i}}^{L} + A_{\text{sr,i}}^{L}} \cdot \left( 1 - C_{\text{fu,cl,i}} \right)$$ [eq 16.4-326]
+
+$$A_{\text{sr,s} l \text{,i}} = A_{\text{s} l \text{,i}}^{L} \cdot F_{\text{area,bd,} l \text{u,i}} \
+ \cdot \frac{A_{\text{sr,i}}}{A_{\text{cl,i}}^{L} + A_{\text{sr,i}}^{L}} \cdot \left( 1 - C_{\text{fu,sr,i}} \right)$$ [eq 16.4-327]
+
+[anchor: heat-transfer-between-sodium-fission-gas-mixture-and-the-fuel-steel-chunks]
+
+16.4.3.10.1.11. Heat-transfer between Sodium/Fission Gas Mixture and the Fuel/Steel Chunks
+
+These coefficients are zero in the bubbly flow regimes when there is no
+contact between sodium and chunks.
+
+$${H'}_{\text{Na,f} l \text{,i}} = {H'}_{\text{Na,s} l \text{,i}} = 0$$ [eq 16.4-328]
+
+For the annular fuel and steel regimes the generalized coefficients are
+defined as follows:
+
+$${H'}_{\text{Na,f} l \text{,i}} = H_{\text{Na,f} l \text{,i}}^{L} \
+ \cdot \frac{A_{\text{Na,f} l \text{,i}}^{L}}{\Delta z_{\text{i}} \cdot \text{AXMX}} \
+ + H_{\text{Na,f} l \text{,i}}^{N} \cdot \frac{A_{\text{Na,f} l \text{,i}}^{N}}{\Delta z_{\text{i}} \cdot \text{AXMX}}$$ [eq 16.4-329]
+
+$${H'}_{\text{Na,s} l \text{,i}} = H_{\text{Na,s} l \text{,i}}^{L} \
+ \cdot \frac{A_{\text{Na,s} l \text{,i}}^{L}}{\Delta z_{\text{i}} \cdot \text{AXMX}} \
+ + H_{\text{Na,s} l \text{,i}}^{N} \cdot \frac{A_{\text{Na,s} l \text{,i}}^{N}}{\Delta z_{\text{i}} \cdot \text{AXMX}}$$ [eq 16.4-330]
+
+The heat-transfer coefficients in Eq. (16.4-329) and Eq. (16.4-331) are defined
+below:
+
+$$\begin{aligned}
+ H_{\text{Na,f} l \text{,i}}^{L} = \frac{1}{\frac{1}{H_{\text{Na,i}}} + \frac{R_{l \text{u,i}}}{k_{\text{fu}}}}; && H_{\text{Na,f} l \text{,i}}^{N} = \frac{1}{\frac{1}{H_{\text{Na,i}}} + \frac{L_{\text{f} l \text{,i}}}{2k_{\text{fu}}}}~ ;
+ \end{aligned}$$ [eq 16.4-331]
+
+$$\begin{aligned}
+ H_{\text{Na,s} l \text{,i}}^{L} = \frac{1}{\frac{1}{H_{\text{Na,i}}} + \frac{R_{l \text{u,i}}}{k_{\text{se}}}} ; && H_{\text{Na,s} l \text{,i}}^{N} = \frac{1}{\frac{1}{H_{\text{Na,i}}} + \frac{L_{\text{s} l \text{,i}}}{2k_{\text{se}}}}~ ;
+ \end{aligned}$$ [eq 16.4-332]
+
+The respective heat-transfer areas are defined as follow:
+
+$$\begin{aligned}
+ A_{\text{Na,f} l \text{,i}}^{L} = A_{\text{f} l \text{,i}}^{L} \cdot \left( 1 - F_{\text{area,bd,} l \text{u,i}} \right) ; && A_{\text{Na,f} l \text{,i}}^{N} = 0.5 \cdot A_{\text{f} l \text{,i}}^{N}
+ \end{aligned}$$ [eq 16.4-333]
+
+$$\begin{aligned}
+ A_{\text{Na,s} l \text{,i}}^{L} = A_{\text{s} l \text{,i}}^{L} \cdot \left( 1 - F_{\text{area,bd,} l \text{u,i}} \right) ; && A_{\text{Na,s} l \text{,i}}^{N} = 0.5 \cdot A_{\text{s} l \text{,i}}^{N}
+ \end{aligned}$$ [eq 16.4-334]
+
+[anchor: heat-transfer-between-the-fuel-and-steel-solid-chunks]
+
+16.4.3.10.1.12. Heat-transfer between the Fuel and Steel Solid Chunks
+
+The coefficient $H_{fl,sl,i}^{'}$ is different from zero only when both fuel and steel
+chunks are present in a cell. Given the geometry of the chunks presented
+in Section 16.4.3.9, the heat-transfer coefficient is defined by:
+
+$$H_{\text{f} l \text{,s} l \text{,i}} = \frac{1}{\frac{L_{\text{f} l \text{,i}}}{2k_{\text{fu}}} \
+ + \frac{L_{\text{s} l \text{,i}}}{2k_{\text{se}}}}$$ [eq 16.4-335]
+
+and the heat-transfer area by:
+
+$$A_{\text{f} l \text{,s} l \text{,i}} = 0.5 \cdot A_{\text{f} l \text{,i}}^{N}$$ [eq 16.4-336]
+
+[anchor: heat-transfer-between-fuel-steel-chunks-and-the-frozen-fuel-on-cladding-and-structure]
+
+16.4.3.10.1.13. Heat Transfer between Fuel/Steel Chunks and the Frozen Fuel on Cladding and Structure
+
+The coefficients ${H'}_{\text{f} l \text{,ffc,i}}$ , ${H'}_{\text{f} l \text{,ffs,i}}$ , ${H'}_{\text{s} l \text{,ffc,i}}$ , and ${H'}_{\text{s} l \text{,ffs,i}}$ 
+are non-zero only if there is little molten fuel
+and/or steel present, i.e.:
+
+$$\frac{\theta_{\text{fu,i}} + \theta_{\text{se,i}}}{\theta_{\text{ch,op,i}} - \theta_{l \text{u,i}}} \leq 0.1$$ [eq 16.4-337]
+
+and the frozen fuel crust covers a significant fraction of the channel
+perimeter, i.e.:
+
+$$C_{\text{ff,cl,i}} \geq 0.1 \text{ or } C_{\text{ff,sr,i}} \geq 0.1$$ [eq 16.4-338]
+
+If the above conditions are satisfied, the heat-transfer coefficients
+are defined as follows:
+
+$$\begin{aligned}
+ H_{\text{f} l \text{,ffc,i}} = \frac{1}{\frac{l_{\text{ff,cl,i}}}{2k_{\text{fu}}} \
+ + \frac{R_{l \text{u,i}}}{k_{\text{fu}}}} ; && H_{\text{s} l \text{,ffc,i}} \
+ = \frac{1}{\frac{l_{\text{ff,cl,i}}}{2k_{\text{fu}}} + \frac{R_{l \text{u,i}}}{k_{\text{se}}}}
+ \end{aligned}$$ [eq 16.4-339]
+
+$$\begin{aligned}
+ H_{\text{f} l \text{,ffs,i}} = \frac{1}{\frac{l_{\text{ff,sr,i}}}{2k_{\text{fu}}} \
+ + \frac{R_{l \text{u,i}}}{k_{\text{fu}}}}; && H_{\text{s} l \text{,ffs,i}} \
+ = \frac{1}{\frac{l_{\text{ff,sr,i}}}{2k_{\text{fu}}} + \frac{R_{l \text{u,i}}}{k_{\text{se}}}}
+ \end{aligned}$$ [eq 16.4-340]
+
+The respective heat-transfer areas are defined below:
+
+$$A_{\text{f} l \text{,ffc,i}} = A_{\text{f} l \text{,i}}^{L} \cdot F_{\text{area,bd,} l \text{u,i}} \
+ \cdot \frac{A_{\text{cl,i}}^{L}}{A_{\text{cl,i}}^{L} + A_{\text{sr,i}}^{L}} \cdot C_{\text{ff,cl,i}}$$ [eq 16.4-341]
+
+$$A_{\text{f} l \text{,ffs,i}} = A_{\text{f} l \text{,i}}^{L} \cdot F_{\text{area,bd,} l \text{u,i}} \
+ \cdot \frac{A_{\text{sr,i}}^{L}}{A_{\text{cl,i}}^{L} + A_{\text{sr,i}}^{L}} \cdot C_{\text{ff,sr,i}}$$ [eq 16.4-342]
+
+The areas for the steel chunks, $A_{\text{s} l \text{,ffc,i}}$ and $A_{\text{s} l \text{,ffs,i}}$ 
+can be obtained from the above definitions by replacing
+ $A_{\text{f} l \text{,i}}^{L}$ with $A_{\text{s} l \text{,i}}^{L}.$ 
+
+[anchor: heat-transfer-coefficients-between-sodium-fission-gas-and-cladding-or-structure]
+
+16.4.3.10.1.14. Heat-transfer Coefficients between Sodium/Fission Gas and Cladding or Structure
+
+The coefficients ${H'}_{\text{Na,cl,i}}$ and ${H'}_{\text{Na,sr,i}}$ 
+are non-zero only for the partial annular fuel flow
+regime. In all other regimes, the sodium/fission gas mixture is not in
+direct contact with the cladding and structure. The heat-transfer
+coefficient is calculated as follows:
+
+If $\alpha_{\text{Na,i}} \leq 0.15$ ,
+
+$$H_{\text{Na,cl,i}} = H_{\text{Na,sr,i}} = \left\lbrack \text{C1} \left( D_{\text{H,Mi,i}} \
+ \cdot \rho_{\text{N1}} \cdot \left| u_{\text{Mi,i}} + u_{\text{Mi,i+1}} \cdot C_{\text{Mo,Mi,i+1}} \right| \
+ \cdot 0.5 \cdot \frac{C_{\text{p,N1}}}{k_{\text{N1}}} \right)^{\text{C2}} \
+ + \text{C3} \right\rbrack \cdot \frac{k_{\text{N1}}}{D_{\text{H,Mi,i}}}$$ [eq 16.4-343]
+
+The value of $k_{\text{N1}}$ is given by the input constant $\text{CDNL}$ . The
+constants $C1$ , $C2$ and $C3$ are the source input constants used in the
+preboiling model.
+
+If $\alpha_{\text{Na,i}} > 0.15$ and
+
+ $T_{\text{Na,i}} \leq T_{\text{cl,i}}$ (boiling situation)
+
+$$\begin{split} H_{\text{Na,cl,i}} = \begin{cases}
+ H_{\text{Na,boiling}} = \text{CFNAEV} & \text{for } 1.5 < \alpha < 0.5 \\
+ \left\lbrack H_{\text{Na,boiling}} \cdot \left( 1 - \alpha_{\text{Na,i}} \right) + H_{\text{Nv,i}} \right. \\ \left.
+ \cdot \left( \alpha_{\text{Na,i}} - 0.5 \right) \right\rbrack \cdot 2 & \text{for } 0.5 \leq \alpha < 1 \\
+ H_{\text{NV,i}} = \left\lbrack \text{C1} \cdot \left( D_{\text{H,Mi,i}} \cdot \rho_{\text{Mi,i}} \cdot \left| u_{\text{Mi,i}} \right| \cdot \frac{C_{\text{p,Mi}}}{k_{\text{Mi}}} \right)^{\text{C2}} + \text{C3} \right\rbrack \cdot \frac{k_{\text{Mi}}}{D_{\text{H,Mi,i}}} & \text{for } \alpha = 1
+ \end{cases}\end{split}$$ [eq 16.4-344]
+
+The value of $k_{\text{Mi}}$ is given by the input constant CDVG.
+
+ $T_{\text{Na,i}} > T_{\text{cl,i}}$ (condensation situation)
+
+$$\begin{split} H_{\text{Na,cl,i}} = \begin{cases}
+ H_{\text{Nv,i}} \text{ as defined in Eq.16.4-303c} & \text{for } \alpha_{\text{Na,i}} = 1 \\
+ & \text{and } {T}_{\text{cl,i}} < T_{\text{sat,Na}} \left( P_{\text{Na,i}} \right) \\
+ \text{CFNACN} \cdot \frac{{\rho'}_{\text{Na}}}{{\rho'}_{\text{Na}} + {\rho'}_{\text{fi}}} + H_{\text{Nv}} & \text{for } \alpha_{\text{Na,i}} = 1 \\
+ \cdot \frac{{\rho'}_{\text{fi}}}{{\rho'}_{\text{Na}} + {\rho'}_{\text{fi}}} & \text{and } T_{\text{cl,i}} \geq T_{\text{sat,Na}} \left( P_{\text{Na,i}} \right) \\
+ H_{\text{Na,cond}} = \text{CFNACN} & \text{for } 0.5 \leq \alpha_{\text{Na,i}} < 1 \\
+ \left\lbrack H_{\text{Na,cond}} \cdot \alpha_{\text{Na,i}} + H_{\text{Na,cond}} \cdot 10^{- 2} \right. \\ \left.
+ \cdot \left( 0.5 - \alpha_{\text{Na,i}} \right) \right\rbrack \cdot 2 & \text{for } 0.15 < \alpha < 0.5 \\
+ \end{cases}\end{split}$$ [eq 16.4-345]
+
+It is noted that the branch Eq. (16.4-345) has not been implemented in the
+initial release version but exists in the chunk version.
+
+For $\alpha_{\text{Na,i}} > .15$ , the heat-transfer coefficient between sodium
+and structure is obtained from Eq. (16.4-344) for $T_{\text{Na,i}} \leq T_{\text{sr,i}}$ 
+and from Eq. (16.4-345) for $T_{\text{Na,i}} > T_{\text{sr,i}}$ .
+
+The respective heat-transfer areas are defined as follows:
+
+$$A_{\text{Na,cl,i}}^{L} = A_{\text{cl,i}}^{L} \cdot \left( 1 - C_{\text{fu,cl,i}} \right) \cdot \left( 1 - C_{l \text{u,cl,i}} \right)$$ [eq 16.4-346]
+
+and
+
+$$A_{\text{Na,sr,i}}^{L} = A_{\text{sr,i}}^{L} \cdot \left( 1 - C_{\text{fu,sr,i}} \right) \cdot \left( 1 - C_{l \text{u,sr,i}} \right)$$ [eq 16.4-347]
+
+[anchor: heat-transfer-coefficients-between-sodium-and-frozen-fuel-on-cladding-and-structure]
+
+16.4.3.10.1.15. Heat-transfer Coefficients between Sodium and Frozen Fuel on Cladding and Structure
+
+The coefficients ${H'}_{\text{ffc,Na,i}}$ and ${H'}_{\text{ffs,Na,i}}$ 
+are non-zero only in the partial annular flow regime.
+For this regime, the heat transfer coefficients are defined below:
+
+$$H_{\text{ffc,Na,i}} = \frac{1}{\frac{1}{H_{\text{Na,i}}} + \frac{0.5 \cdot l_{\text{ff,cl,i}}}{k_{\text{fu}}}}$$ [eq 16.4-348]
+
+$$H_{\text{ffs,Na,i}} = \frac{1}{\frac{1}{H_{\text{Na,i}}} + \frac{0.5 \cdot l_{\text{ff,sr,i}}}{k_{\text{fu}}}}$$ [eq 16.4-349]
+
+where $H_{\text{Na,i}}$ is defined by Eq. (16.4-272).
+
+The respective heat-transfer areas are defined as follows:
+
+$$A_{\text{ffc,Na,i}}^{L} = A_{\text{cl,i}}^{L} \cdot C_{\text{ff,cl,i}} \cdot \left( 1 - C_{\text{fu,ff,cl,i}} \right)$$ [eq 16.4-350]
+
+$$A_{\text{ffs,Na,i}}^{L} = A_{\text{sr,i}}^{L} \cdot C_{\text{ff,sr,i}} \cdot \left( 1 - C_{\text{fu,ff,sr,i}} \right)$$ [eq 16.4-351]
+
+[anchor: friction-coefficients-used-in-the-momentum-equations]
+
+#### 16.4.3.10.2. Friction Coefficients Used in the Momentum Equations
+
+In Section 16.4.3.8, which describes the momentum equations, several
+friction coefficients used in the momentum source terms were left
+undefined. These coefficients are calculated in the routine LETRAN and
+are presented in this section.
+
+[anchor: friction-factor-between-mixture-and-cladding-structure]
+
+16.4.3.10.2.1. Friction Factor Between Mixture and Cladding/Structure
+
+The friction factor $f_{\text{Mi,i}}$ is referenced in Eq. (16.4-166). It is zero for all flow
+regimes except the partial annual fuel flow regime. For this flow
+regime, it is defined as follows:
+
+$$f_{\text{Mi,i}} = \text{AFRV} \cdot \text{Re}_{\text{Mi,i}}^{\text{BFRV}} \cdot C_{\text{Mi,bd,i}}$$ [eq 16.4-352]
+
+where AFRV, BFRV are input constants and $C_{\text{Mi,bd,i}}$ is the
+fraction of the channel boundary (cladding + structure + crust) which is
+in direct contact with the gas mixture in cell $i$ . It is defined as:
+
+$$\begin{split} C_{\text{Mi,bd,i}} = \left\lbrack A_{\text{cl,i}}^{L} \cdot \left( 1 - C_{\text{mfu,cl,i}} - Cf_{\text{ff,cl,i}} \cdot C_{\text{fu,ff,cl,i}} \right) \right. \\ \left.
+ + A_{\text{sr,i}}^{L} \cdot \left( 1 - C_{\text{mfu,sr,i}} - C_{\text{ff,sr,i}} \cdot C_{\text{fu,ff,sr,i}} \right) \right\rbrack \\
+ \big/ \left( A_{\text{cl,i}}^{L} + A_{\text{sr,i}}^{L} \right)\end{split}$$ [eq 16.4-353]
+
+where
+
+$$C_{\text{mfu,cl,i}} = C_{\text{fu,cl,i}} - C_{\text{ff,cl,i}}$$ [eq 16.4-354]
+
+and
+
+$$C_{\text{mfu,sr,i}} = C_{\text{fu,sr,i}} - C_{\text{ff,sr,i}}$$ [eq 16.4-355]
+
+[anchor: friction-factors-between-mixture-and-fuel]
+
+16.4.3.10.2.2. Friction Factors Between Mixture and Fuel
+
+The friction factors $f_{\text{Mi,fu,i}}$ and $f_{\text{Mi,se,i}}$ 
+are referenced in Eq. (16.4-168). The factor
+ $f_{\text{Mi,fu,i}}$ is used only in the partial annular fuel flow regime
+and is defined below:
+
+$$f_{\text{Mi,fu,i}} = \text{AFRV} \cdot \text{Re}_{\text{Mi,fu,i}}^{\text{BFRV}} \cdot C_{\text{Mi,fu,i}}$$ [eq 16.4-356]
+
+ $\text{Re}_{\text{Mi,fu,i}}$ is defined as:
+
+$$\text{Re}_{\text{Mi,fu,i}} = D_{\text{H,Mi,i}} \cdot \left| u_{\text{MI,i}} \
+ - u_{\text{fu,i}} \right| \cdot \rho_{\text{Mi,i}} \cdot \frac{1}{\mu_{\text{Mi,i}}}$$ [eq 16.4-357]
+
+and $C_{\text{Mi,fu,i}}$ , the fraction of the mixture perimeter in contact
+with the molten fuel is given by:
+
+$$\begin{split} C_{\text{Mi,fu,i}} = \left\lbrack A_{\text{cl}}^{L} \cdot \left( C_{\text{mfu,cl,i}} + C_{\text{ff,cl,i}} \cdot C_{\text{fu,ff,cl,i}} \right) \right. \\ \left.
+ + A_{\text{sr}}^{L} \cdot \left( C_{\text{mfu,sr,i}} + C_{\text{ff,sr,i}} \cdot C_{\text{fu,ff,sr,i}} \right) \right\rbrack \big/ \left( A_{\text{cl,i}}^{L} + A_{\text{sr,i}}^{L} \right)\end{split}$$ [eq 16.4-358]
+
+The factor $f_{\text{Mi,se,i}}$ is used in the annular steel flow regime
+and takes into account the possibility of flooding. It is defined as
+follows:
+
+$$f_{\text{Mi,se,i}} = \text{AFRV} \cdot \text{Re}_{\text{Mi,fu,i}}^{\text{BRFV}} \cdot C_{\text{FLOOD,i}}$$ [eq 16.4-359]
+
+Where the flooding coefficient depends on the velocity ratio
+ $V_{\text{RATIO}}$ :
+
+$$V_{\text{RATIO,i}} = \frac{\left( U_{\text{Mi,i}} + u_{\text{Mi,i+1}} \cdot C_{\text{Mo,Mi,i+1}} \right) \cdot 0.5}{u_{\text{FLOOD,i}}}$$ [eq 16.4-360]
+
+$$u_{\text{FLOOD,i}} - 2.3\sqrt{\frac{\rho_{\text{se,i}}}{\rho_{\text{Mi,i}}} \cdot \frac{2g \
+ \cdot l_{\text{se,ch,i}}}{\text{AFRV} \cdot \text{Re}_{\text{Mi,fu,i}}^{\text{BFRV}} \
+ \cdot F_{\text{FLOOD}} \left( \alpha_{\text{Na,i}} \right)}}$$ [eq 16.4-361]
+
+$$\begin{split} F_{\text{FLOOD}}\left( \alpha_{\text{Na,i}} \right) = \begin{cases}
+ 1 + 75 \cdot \left( 1 - \alpha_{\text{Na,i}} \right) & 0.5 < \alpha \leq 1 \\
+ 38.5 & \alpha \leq 0.5 \\
+ \end{cases}\end{split}$$ [eq 16.4-362]
+
+The value of $C_{\text{FLOOD,i}}$ is also dependent on the previous
+flooding history as shown below:
+
+If $C_{\text{FLODD,i}}^{n} \leq 1:$ 
+
+$$\begin{split} C_{\text{FLODD,i}}^{n} = \begin{cases}
+ F_{\text{FLOOD}} \left( \alpha_{\text{Na,i}} \right) & \text{if } V_{\text{RATIO,i}} \geq 1.1 \\
+ C_{\text{FLODD,i}}^{n} & \text{otherwise} \\
+ \end{cases}\end{split}$$ [eq 16.4-363]
+
+If $C_{\text{FLODD,i}}^{n} > 1$ 
+
+$$\begin{split} C_{\text{FLODD,i}}^{n + 1} = \begin{cases}
+ 1 & \text{if } V_{\text{RATIO}} < 0.9 \\
+ C_{\text{FLODD,i}}^{n} & \text{otherwise} \\
+ \end{cases}\end{split}$$ [eq 16.4-364]
+
+[anchor: area-coefficients-used-in-the-momentum-source-terms]
+
+16.4.3.10.2.3. Area Coefficients Used in the Momentum Source Terms
+
+The area coefficient $C_{\text{AREA,Mi,fu,i}}$ has been introduced in
+Eq. (16.4-173). It defines the fraction of the lateral area of chunks in
+contract with the mixture and is zero for the fuel and steel bubbly flow
+regimes. For the annular flow regimes, it is calculated as follows:
+
+$$C_{\text{AREA,Mi,fu,i}} = \left( 1 - F_{\text{area,bd,fu,i}} \right)$$ [eq 16.4-365]
+
+The area coefficients $C_{\text{AREA,se,i}}$ and $C_{\text{AREA,fu,i}}$ have
+been introduced in Eq. (16.4-196) and Eq. (16.4-197). They account for the fact
+that only a fraction of the fuel steel perimeter is in contact with the
+stationary walls. They are defined below:
+
+For the fuel bubbly flow regime:
+
+$$\begin{aligned}
+ C_{\text{AREA,fu,i}} = 1 ; && C_{\text{AREA,se,i}} = 0
+ \end{aligned}$$ [eq 16.4-366]
+
+For the steel bubbly flow regime:
+
+$$\begin{aligned}
+ C_{\text{AREA,fu,i}} = 0 ; && C_{\text{AREA,se,i}} = 1
+ \end{aligned}$$ [eq 16.4-367]
+
+For the annular steel flow regime:
+
+$$\begin{aligned}
+ C_{\text{AREA,fu,i}} = 0 ; && C_{\text{AREA,se,i}} = 1
+ \end{aligned}$$ [eq 16.4-368]
+
+For the partial annular fuel flow regime:
+
+$$\begin{split} C_{\text{AREA,fu,i}} = \left\lbrack A_{\text{cl,i}}^{L} \cdot \left( C_{\text{mfu,cl,i}} + C_{\text{ff,cl,i}} \cdot C_{\text{fu,ff,cl,i}} \right) \right. \\ \left.
+ + A_{\text{sr,i}}^{L} \cdot \left( C_{\text{mfu,sr,i}} + C_{\text{ff,sr,i}} \cdot C_{\text{fu,ff,sr,i}} \right) \right\rbrack \big/ \left( A_{\text{cl,i}}^{L} + A_{\text{sr,i}}^{L} \right)\end{split}$$ [eq 16.4-369]
+
+$$C_{\text{AREA,se,i}} = 0$$
+
+[anchor: time-step-determination-for-the-channel-hydrodynamic-model]
+
+### 16.4.3.11. Time Step Determination for the Channel Hydrodynamic Model
+
+This section describes the calculation of the maximum time step for the
+coolant channel hydrodynamic model. This time step will be used in the
+determination of the LEVITATE time step as outlined in Section 16.7.3.
+The maximum channel time step is calculated using the sonic Courant
+condition for the multicomponent channel flow. Only a fraction of the
+Courant calculated time is used, to account for inaccuracies in the
+sonic velocity calculation. Thus:
+
+$$\Delta t_{\text{LE,ch}} = 0.4 \cdot \min\left\lbrack \frac{\Delta z_{\text{i}}}{\left( u_{\text{sonic,i}} \
+ + \left| u_{\text{Mi,i}} \right| \right)} \right\rbrack_{\text{i=IFMIBT,IFMITP}}$$ [eq 16.4-370]
+
+The minimum in Eq. (16.4-370) is evaluated over all axial cells of the
+interaction region. The sonic velocity in each cell is calculated using
+an expression [16-14] for an adiabatic homogeneous two-phase mixture of
+liquid sodium and fission gas/sodium vapor. The compressibility of
+liquid fuel is much smaller than that of liquid sodium and thus the fuel
+is assumed to be incompressible in the calculation of the sonic velocity
+in the channel. The effect of fuel and steel vapor is not included.
+
+$$\begin{split} u_{\text{sonic,i}}^{2} = \gamma_{\text{vg}} \cdot \left( P_{\text{fi,i}} + P_{\text{Na,i}} \right) \big/ \left\{ \alpha_{\text{vg,i}}^{2} \left( \rho_{\text{fi}} + \rho_{\text{Nv}} \right) + \alpha_{\text{vg,i}} \cdot \left( 1 - \alpha_{\text{vg,i}} \right) \right. \\ \left.
+ \cdot \rho_{\text{N1}} + \left\lbrack \alpha_{\text{vg,i}} \cdot \left( 1 - \alpha_{\text{vg,i}} \right) \cdot \left( \rho_{\text{fi}} + \rho_{\text{Nv}} \right) + \left( 1 - \alpha_{\text{vg,i}} \right)^{2} \right. \right. \\ \left. \left.
+ \cdot \rho_{\text{N1}} \right\rbrack \cdot \gamma_{\text{vg}} \cdot \left( P_{\text{fi}} + P_{\text{Na}} \right) \cdot \text{CMNL} \right\}\end{split}$$ [eq 16.4-371]
+
+where:
+
+$$\alpha_{\text{vg,i}} = \frac{\theta_{\text{vg,i}}}{\theta_{\text{ch,op,i}} \
+ - \theta_{\text{fu,i}} - \theta_{\text{se,i}} - \theta_{l \text{u,i}}}$$ [eq 16.4-372]
+
+ $\gamma_{\text{vg}}$ = ratio of specific heat at constant pressure to that at
+constant volume for the fission gas/sodium vapor mixture. A value of 1.4
+is used in the LEVITATE code
+
+ $\text{CMNL}$ = compressibility of liquid sodium, an input constant
+
+The fission-gas pressure $P_{\text{fi}}$ and the sodium pressure
+ $P_{\text{Na}}$ are obtained as explained in Section 16.4.3.5.
+
 
 ------------------------------------------------------------------------------
 [page: Part04/Ch16/freezing-melting.html]
