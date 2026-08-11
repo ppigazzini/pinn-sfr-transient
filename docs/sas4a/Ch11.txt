@@ -3063,7 +3063,1368 @@ LDBOTC (IC)
  | | 
  | 
 Clad radial debug print vector (0=no-print, 1=print)
- |
+ | 
+
+ | 
+
+ | 
+BLOCK 63 * PMATCH
+ | 
+ | | 
+ | | 
+
+ | 
+
+ | 
+Location
+ | 
+ | 
+Symbol
+ | 
+ | 
+Definition/Comments
+ | 
+
+ | 
+105
+ | 
+ | 
+XEUTHR
+ | 
+ | 
+Liquid eutectic threshold temperature (K) (Default=988.) (See FSPEC for consistent input)
+ | 
+
+ | 
+106
+ | 
+ | 
+XGBFRA
+ | 
+ | 
+(Not currently used)
+ | 
+
+ | 
+107-130
+ | 
+ | 
+XCLDHR(J)
+ | 
+ | 
+Pre-transient hardness parameter used in clad flow stress calculation. (Default value is 0.223, the value appropriate for 20% CW unirradiated stainless steel.)
+ | 
+
+ | 
+131
+ | 
+ | 
+XFPLC0
+ | 
+ | 
+Fuel power law creep constant C0 (when LDBFPL=1)
+ | 
+
+ | 
+132
+ | 
+ | 
+XFDVC1
+ | 
+ | 
+Fuel power law creep constant C1 (when LDBFPL=1)
+ | 
+
+ | 
+133
+ | 
+ | 
+XFDVC0
+ | 
+ | 
+Fuel power law swelling constant C0 (when LDBFDV=2)
+ | 
+
+ | 
+134
+ | 
+ | 
+XFDVC1
+ | 
+ | 
+Fuel power law swelling constant C1 (when LDBFDV=2)
+ | 
+
+ | 
+135
+ | 
+ | 
+XCIPL0
+ | 
+ | 
+Clad idealized flow stress constant C0 (when LDBCPL=1 or 3)
+ | 
+
+ | 
+136
+ | 
+ | 
+XCIPL1
+ | 
+ | 
+Clad idealized flow stress constant C0 (when LDBCPL=1 or 3)
+ | 
+
+ | 
+137
+ | 
+ | 
+XHTERR
+ | 
+ | 
+Relative convergence criterion for heat transfer calculation (when IHTFLG=1) (Default=0.0005)
+ | 
+
+ | 
+138
+ | 
+ | 
+XEPSCA
+ | 
+ | 
+Relative convergence criterion for cavity pressure (Default=0.001)
+ | 
+
+ | 
+139
+ | 
+ | 
+XEPSFE
+ | 
+ | 
+Relative convergence criterion for finite element analysis (Default=0.0005)
+ | 
+
+ | 
+140
+ | 
+ | 
+XEPTES
+ | 
+ | 
+Relative convergence criterion for plastic-creep strains (Default=0.0005)
+ | 
+
+ | 
+141
+ | 
+ | 
+XEVTES
+ | 
+ | 
+Relative convergence criterion for swelling strains (Default=0.0005)
+ | 
+
+Table 11.4.3 FPIN2 Input Variables that are Provided by SAS4A/SASSYS-1 Calculations and/or Interpreted from SAS4A/SASSYS-1 Input.
+
+ | 
+
+ | 
+Description
+ | 
+ | 
+FPIN2
+
+Variable
+
+ | 
+ | 
+SAS
+
+Counterpart
+
+ | 
+
+ | 
+
+ | 
+Metal fuel type (U-Fs, binary, or ternary)
+ | 
+ | 
+IFTYPE
+ | 
+ | 
+IMETAL
+ | 
+
+ | 
+Cladding type (Type 316, D9, or HT9)
+ | 
+ | 
+ICTYPE
+ | 
+ | 
+ICTYPE
+ | 
+
+ | 
+Number of axial segments in fuel column
+ | 
+ | 
+NDZ
+ | 
+ | 
+MZ
+ | 
+
+ | 
+Number of radial elements in fuel
+ | 
+ | 
+NDRF
+ | 
+ | 
+NT
+ | 
+
+ | 
+Number of radial elements in cladding
+ | 
+ | 
+NDRC
+ | 
+ | 
+3
+ | 
+
+ | 
+Transient initiation time (s)
+ | 
+ | 
+TZERO
+ | 
+ | 
+
+ | 
+
+ | 
+Computation time step size (s)
+ | 
+ | 
+DTIME
+ | 
+ | 
+DTP
+ | 
+
+ | 
+Initial height of axial segments
+ | 
+ | 
+DZ(J)
+ | 
+ | 
+AXHI(J)
+ | 
+
+ | 
+Initial length of plenum (cm)
+ | 
+ | 
+ZPLENM
+ | 
+ | 
+PLENL
+ | 
+
+ | 
+Initial length of bond sodium in plenum (cm)
+ | 
+ | 
+ZPLNA
+ | 
+ | 
+BONDNA, pin geometry
+ | 
+
+ | 
+Gas constant for plenum gases
+
+(Bar-cm3/gm-K)
+
+ | 
+ | 
+PLGASR
+ | 
+ | 
+RGASSI, HEMM, FGMM, P0GAS, FGFI
+ | 
+
+ | 
+Gas constant for central cavity gases
+
+(Bar-cm3/gm-K)
+
+ | 
+ | 
+GASCON
+ | 
+ | 
+RGASSI, HEMM, FGMM
+ | 
+
+ | 
+Initial pin pressure (Bar)
+ | 
+ | 
+PINT
+ | 
+ | 
+P0GAS
+ | 
+
+ | 
+Reference temperature at which PINT is specified (K)
+ | 
+ | 
+PLTREF
+ | 
+ | 
+TR
+ | 
+
+ | 
+External (channel) pressure (Bar)
+ | 
+ | 
+PEXT
+ | 
+ | 
+PCOOL2(J)
+ | 
+
+ | 
+Plenum gas temperature (K)
+ | 
+ | 
+PGASTM
+ | 
+ | 
+TGASP2
+ | 
+
+ | 
+Description
+ | 
+ | 
+FPIN2
+
+Variable
+
+ | 
+ | 
+SAS4A/SASSYS-1
+
+Counterpart
+
+ | 
+
+ | 
+Peak fuel burnup (at.%)
+ | 
+ | 
+BURNUP
+ | 
+ | 
+BURNFU
+ | 
+
+ | 
+Fuel radial mesh array (cm)
+ | 
+ | 
+RADF(I,J)
+ | 
+ | 
+R(I,J)
+ | 
+
+ | 
+Clad radial mesh array (cm)
+ | 
+ | 
+RADC(I,J)
+ | 
+ | 
+R(NE,J), R(NEP,J)
+ | 
+
+ | 
+Distribution of fission gas in closed porosity or in solution (gm/cm3)
+ | 
+ | 
+FISGAS(I,J)
+ | 
+ | 
+ROGSPI, BURNFU, FIFNGB
+ | 
+
+ | 
+Fraction of FISGAS on grain boundaries (Default=0.10)
+ | 
+ | 
+GBFRAC
+ | 
+ | 
+FIFNGB
+ | 
+
+ | 
+Distribution of total fuel porosity
+ | 
+ | 
+PORES(I,J)
+ | 
+ | 
+PRSTY2(I,J)
+(based on PRSTY(IFUELV))
+ | 
+
+ | 
+Axial profile of cladding fluence (1022 n/cm2)
+ | 
+ | 
+CLDFLU(J)
+ | 
+ | 
+BURNFU, FPDAYS, PBAR(J), FLTPOW, AXHI(J)
+ | 
+
+ | 
+Effective cladding inner surface wastage thickness (cm)
+ | 
+ | 
+WASTE
+ | 
+ | 
+TWASTI, TWASTO
+ | 
+
+ | 
+Mass of fuel elements (gm)
+ | 
+ | 
+FMASS(I,J)
+ | 
+ | 
+FUELMS(I,J)
+ | 
+
+ | 
+Mass of cladding elements (gm)
+ | 
+ | 
+CMASS(I,J)
+ | 
+ | 
+DENSS, cladding geometry.
+ | 
+
+ | 
+Distribution of Pu in ternary fuel
+ | 
+ | 
+FRACPU(I,J)
+ | 
+ | 
+FUPUMS(I,J), FUELMS(I,J) (based on PUZRTP(IFUELV))
+ | 
+
+ | 
+Distribution of Zr in ternary fuel
+ | 
+ | 
+FRACZR(I,J)
+ | 
+ | 
+FUZRMS(I,J), FUELMS(I,J)
+
+(based on PUZRTP(IFUELV))
+
+ | 
+
+ | 
+Fuel solidus temperature (node-by-node) (K)
+ | 
+ | 
+FTSOL(I,J)
+ | 
+ | 
+TSOLIJ(I,J)
+ | 
+
+ | 
+Fuel liquidus temperature (node-by-node) (K)
+ | 
+ | 
+FTLIQ(I,J)
+ | 
+ | 
+TLIQIJ(I,J)
+ | 
+
+ | 
+Normalized time dependent reactor power (when IHTFLG=1)
+ | 
+ | 
+POWNEW
+ | 
+ | 
+QMULT
+ | 
+
+ | 
+Pin power coupling factor (when IHTFLG=1)
+ | 
+ | 
+QCONST
+ | 
+ | 
+1.0
+ | 
+
+ | 
+Axial profile of energy generation rate (normalized) (when IHTFLG=1)
+ | 
+ | 
+QAX(J)
+ | 
+ | 
+PSHAPE(J)
+ | 
+
+ | 
+Radial profile of energy generation rate (W/gm) (when IHTFLG=1)
+ | 
+ | 
+QR(I,J)
+ | 
+ | 
+RADPRS(I,J), POW, GAMTNE, GAMTNC, GAMSS, FUELMS
+ | 
+
+ | 
+Cladding outer surface temperature (K) (when IHTFLG=1 and IHTOPT=1)
+ | 
+ | 
+TCSURF(J)
+ | 
+ | 
+T2(NEP,J)
+ | 
+
+[anchor: pre-transient-fuel-element-characterization]
+
+## 11.4.3. Pre-transient Fuel Element Characterization
+
+The steady-state fuel element characterization forms the initial
+conditions from which the transient calculations begin. The FPIN2
+mechanics calculation is initiated from a stress-free state for hot and
+irradiated (swollen) fuel elements. Prior irradiation of fast reactor
+fuel elements influences their thermal and mechanical response during
+accident transients significantly. The pre-transient features that are
+more important for metallic fuels are fuel geometry, fission product,
+alloy, and porosity distributions, fuel elongation, and the effects of
+fast neutron fluence on transient cladding properties. These initial
+conditions can be obtained from the in-reactor fuel performance database
+or from a fuel performance computer code. In this section, the methods
+that are suggested to determine the fuel element pre-transient
+characterization are outlined.
+
+[anchor: zone-formation]
+
+### 11.4.3.1. Zone Formation
+
+Post-irradiation destructive examinations of ternary fuel pins
+irradiated in EBR-II reveal significant migration of plutonium and
+zirconium. This redistribution produces distinct zones that are
+associated with different metallurgical phases. Micrographs from
+irradiated ternary fuel pins typically show a three-ring structure that
+could be separated physically for examination [11-19]. Analysis of these
+rings reveals that the intermediate zone is depleted in zirconium while
+the inner and outer zones are enriched in zirconium. The weight fraction
+of plutonium, on the other hand, remains nearly uniform. The Zr
+deficient central zone generally consist of the high temperature γ phase
+in which all constituents are mutually soluble in the solid sate as
+described in Section 11.3.4. The primary influence of alloy
+redistribution and zone formation on transient fuel response is through
+the changes in fuel material properties with alloy content. The most
+dramatic change is in the fuel solidus temperature where zirconium
+depletion may lead to initial fuel melting at a radial location other
+than the hotter axial centerline.
+
+SAS4A/SASSYS-1 provides capabilities to model this fuel composition
+variation by zone in metallic fuels (IMETAL=2)
+as discussed in Section 10.3.5. This multiple radial fuel zone option is
+invoked by setting IFUELC=1. The distributions
+are determined by fixing the zone boundaries and the alloy content of
+the each zone (see input variables IZNC,
+IZNM, and MFTZN). The representative alloy distributions that are chosen to
+characterize ternary fuel to be analyzed are specified in the input as
+weight fractions for each fuel type (PUZRTP). These distributions are used in the fuel material property
+routines to determine variations in properties with alloy content.
+
+SAS4A/SASSYS-1 converts this zone information to internal arrays that
+describe metal fuel composition and composition-dependent quantities on
+a node-by-node basis. In the integrated SAS-FPIN2 model, FPIN2
+interfaces with these internal SAS4A/SASSYS-1 arrays to initialize
+variable FRACPU(I,J), FRACZR(I,J), FTSOL(I,J), FTLIQ(I,J) and
+FMASS(I,J).
+
+[anchor: fission-gas-distribution]
+
+### 11.4.3.2. Fission Gas Distribution
+
+Fission gas plays an important role in transient fuel element response.
+The gas that is retained in the fuel during steady-state irradiation
+provides a source for expansion of both solid and liquid fuel during
+overheating. The quantity of fission gas in the plenum is also important
+since the plenum pressure is a major contributor to cladding loading.
+The distribution of fission gas retained in the fuel matrix is specified
+as input in FPIN2 (FISGAS(I,J)). Part of this gas is assigned to grain
+boundary bubbles (GBFRAC) and the remainder of the gas is assumed to be
+in solution or in small bubbles within the fuel grains. A number of
+models that address the various aspects of fission gas behavior are
+available. One of these, the STARS code gives a detailed self-consistent
+picture of the distribution of the gas between the fuel matrix, grain
+boundaries, edge tunnels, large pores, and the plenum [11-6].
+
+The fraction of the retained gas on the grain boundaries increases with
+burnup as more gas is released and as the plenum pressure becomes
+significant compared to surface tension constraint on the grain boundary
+bubbles. In the integrated model, the distribution of fission gas in
+fuel closed porosity and in solution is calculated from SAS4A/SASSYS-1
+input variables according to following formula
+
+$$\text{FISGAS} \left( \text{I,J} \right) = \text{ROGSPI} \cdot \text{BURNFU} \cdot \left( 1 - \text{FIFNGB} \right) \cdot 1 \cdot 10^{- 3}$$ [eq 11.4-1]
+
+where the fraction of fission gas on grain boundaries is simply
+
+$$\text{GNFRAC} = \text{FIFNGB}$$ [eq 11.4-2]
+
+The unit of FISGAS(I,J) in Eq. (11.4-1) is gm/cm3. The default
+value of GBFRAC is 0.10.
+
+The two other relevant input information required by FPIN2 are the
+plenum and cavity gas constants, PLGASR and GASCON, in
+Bar-cm3/gm-K. For fresh fuel pins (BURNFU=0) these constants
+are simply calculated from
+
+$$\text{GASCON} = \text{PLGASR} = \frac{\text{RGASSI}}{\text{HEMM}} 1 \cdot 10^{1}$$ [eq 11.4-3]
+
+For irradiated pins (BURNFU≠0) the following formulas are used
+
+$$\text{GASCON} = \frac{\text{RGASSI}}{\text{FGMM}} 1 \cdot 10^{1}$$ [eq 11.4-4]
+
+$$\text{PLGASR} = \frac{\text{RGASSI} \cdot \text{POGAS} \cdot 1 \cdot 10^{1}}{\text{POGAS} \cdot \text{FGMM} - \left( 1 - \text{FGFI} \right) \cdot 1.0133 \cdot 10^{5} \cdot \left( \text{FGMM} - \text{HEMM} \right)}$$ [eq 11.4-5]
+
+[anchor: porosity-distribution]
+
+### 11.4.3.3. Porosity Distribution
+
+The porosity distribution is also input into FPIN2 (through PORES(I,J)
+variable). As given in the input description in Table 11.4.3, these
+values are the total porosity of the nodes, exclusive of the volume of
+any macroscopic cracks (crack volumes are specified separately as
+input). The difference between the total porosity and the grain boundary
+bubble porosity is equal to the porosity of the large pores that are
+free of surface tension restraint. These large pores may be
+interconnected (open) or closed. In FPIN2, however, all large pores are
+assumed to be open and fission gas residing in the open porosity after
+steady-state irradiation is calculated from the local open pore volume
+and temperature assuming that the pore pressure is in equilibrium with
+the plenum pressure. This gas is assumed to be trapped in the fuel
+during transient heating.
+
+Few measurements of porosity distributions are available for the
+metallic fuels. Therefore, the fractional porosity is generally
+determined from the fuel geometry, the fuel mass, and the fuel and
+fission product densities assuming a uniform distribution. In
+SAS4A/SASSYS-1, porosity distribution is specified on a zone-by-zone basis
+using the porosity values for eight fuel types (PRSTY) as described in Section 11.4.3.1. Integrated model
+interfaces with an internal SAS4A/SASSYS-1 array variable (PRSTY2(I,J) to
+get final distribution on a node-by-node basis.
+
+The magnitude and distribution of the total porosity do not play a large
+role in mechanics calculation as long as there is sufficient volume to
+accommodate the grain boundary bubbles so that the resultant open
+porosity is greater than zero. The FPIN2 models assume that the open
+porosity does not contribute to solid fuel swelling or to hot pressing
+because.
+
+Sodium logging may partially fill the pores,
+
+Driving pressures for swelling are small since the voids are
+connected to the plenum,
+
+Most of the voids are probably large enough so that the time
+constants for their growth are long compared to the span of the
+accident transient [11-14].
+
+The distribution of open porosity does not significantly influence the
+mechanics results either. Although fission gas in the open pores is
+trapped at the time of fuel melting, its pressure is in equilibrium with
+the plenum pressure so that this gas contributes little to molten fuel
+expansion. Most of the expansion comes from the grain boundary gas or
+the gas in solution in the fuel matrix that has significant swelling
+potential when it collects into large bubbles following fuel melting.
+Coalescence of small bubbles into large bubbles is very rapid in liquid
+fuel [11-20] and is assumed to occur instantaneously in the FPIN2
+calcualtion of molten fuel extrusion.
+
+[anchor: cladding-fluence]
+
+### 11.4.3.4. Cladding Fluence
+
+The axial distribution of the cladding fluence is needed in life
+fraction correlation evaluations. In the integrated SAS-FPIN2 model,
+this variable is determined from the following formula
+
+$$\text{CLDFLU}\left( J \right) = 8.64 \cdot 10^{- 22} \frac{\text{FPDAYS} \cdot \text{FLTPOW} \cdot \text{PBAR} \left( J \right)}{\text{AXHI}\left( J \right)}$$ [eq 11.4-6]
+
+Were FPDAYS, FLTPOW, and AXHI(J) are SAS4A/SASSYS-1 input variables, and
+PBAR(J) is an internal SAS4A/SASSYS-1 array variable. The unit of
+CLDFLU(J) in this equation is 1022 neutrons/cm2. For
+applications where fast-flux to linear-power ratio (FLTPOW)
+is not available, cladding fluence is approximately set
+equal to the burnup in at.% (i.e., BURNFU). [2]
+
+[anchor: length-of-sodium-in-plenum]
+
+### 11.4.3.5. Length of Sodium in Plenum
+
+The initial length of sodium in the pin plenum is expected to be
+specified for hot and irradiated conditions in FPIN2. In the integrated
+model, this value is calculated internally using SAS4A/SASSYS-1 subroutine
+NABOND. This subroutine evaluates the gap thickness for each axial
+segment and determines the amount sodium in the plenum from initial mass
+of sodium added to produce the fuel-cladding bound (BONDNA). The length in sodium in the plenum then is calculated from
+plenum geometry consistent with the steady-state temperature
+distribution.
+
+[anchor: effective-cladding-inner-surface-wastage]
+
+### 11.4.3.6. Effective Cladding Inner Surface Wastage
+
+The integrated SAS-FPIN2 model provides an extended capability to
+include the effects of cladding wastage on fuel element mechanics that
+is not an original part of the FPIN2 code. The SAS-FPIN2 interface has
+been modified to include two SAS4A/SASSYS-1 input variables describing
+initial wastage thicknesses on the cladding inner and outer surfaces
+(TWASTI and TWASTO, respectively.)
+
+Cladding wastage is typically considered in design-basis safety
+assessments. The bases of the wastage in metallic fuel elements are the
+scratches on the cladding surfaces, diffusion of fuel constituents and
+fission products into the cladding, and the eutectic formation at the
+fuel cladding interface. Diffusion of fuel and fission products creates
+a lanthanide rich FCCI zone that has distinctly different microstructure
+with cracks and it is assumed to be strengthless. In addition, a
+separate carbon depleted band with decreased hardness is often
+identified next to the FCCI zone in HT9 cladding. Although this region
+exhibits only a moderate decrease in strength, it can conservatively be
+considered as part of the wastage for the safety cases.
+
+In the integrated SAS-FPIN2 model, effective inner surface wastage is
+defined as the sum of inner and outer surface wastages and it is
+incorporated into the mechanics calculation by defining them as part of
+an FPIN2 variable describing the cladding eutectic penetration. This
+allows consideration of the wastage bands as part of the cladding for
+heat transfer while the stress field is determined considering only the
+thickness of unaffected cladding that is available to carry the load.
+
+[anchor: output-description-and-graphics-file-usage]
+
+## 11.4.4. Output Description and Graphics File Usage
+
+A brief description of the output generated by FPIN2 in the interfaced
+mode is as follows. A sample of the regular output for fuel/cladding
+summary information and plenum/molten cavity results is shown in Figure 11.4.4. In the first part of the output, FPIN2 mechanics results are
+printed for each axial segment separately. The descriptions of the
+variables printed in this category are presented in Table 11.4.4. FPIN2
+regular output for each axial segment is followed by a summary of
+plenum/molten cavity results as shown in the bottom portion of Figure 11.4.4. The description of the variables printed in this category is
+presented in Table 11.4.5.
+
+In addition to regular FPIN2 output described above, a series of
+diagnostic messages are also printed as part of SAS4A/SASSYS-1 output as
+the integrated model calculations progress. These diagnostic messages
+can be categorized as follows:
+
+Messages regarding the execution of the FPIN2 such as non-convergent
+iterations and maximum iteration warnings in various parts of the
+program, and occurrence of non-positive definite matrix,
+
+Messages regarding the non-physical phenomena such as negative gas
+pressure, inconsistent input for constitutive equation options, or
+negative open porosity,
+
+Information messages regarding the cladding failure in a particular
+axial segment, fuel-cladding gap mixup, complete cladding melting,
+and cavity solidification stop.
+
+A summary of these messages is also printed at the end of the transient
+calculations.
+
+The FPIN2 detailed output option can be invoked by setting the input
+flag LOUTSW=1. This option generates a huge
+printout for the details of FPIN2 calculations and it is used for
+debugging purposes only. The information printed under this option is
+generally self-explanatory; therefore, it is not discussed separately
+here. The print frequency of the regular and detailed FPIN2 output
+discussed above is controlled by the same SAS4A/SASSYS-1 input parameters
+that control DEFORM5 output.
+
+For graphics use, some of the variables printed in regular output are
+stored in binary form in a graphics file at every time step by invoking
+the option LGRAPH=1. The logical unit number
+assigned for FPIN2 graphics file is 23. The list of variables printed in
+the graphics file is presented in Table 11.4.6.
+
+Figure 11.4.4 FPIN2 Regular Output for Fuel Element Mechanics Summary
+
+Table 11.4.4 Description of the variables in FPIN2 Regular Output for Fuel Element Mechanics Summary
+ | 
+
+ | 
+Variable
+ | 
+ | 
+Unit
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+PCAV
+ | 
+ | 
+Pa
+ | 
+ | 
+Molten fuel cavity pressure
+ | 
+
+ | 
+VGCAV
+ | 
+ | 
+cm3
+ | 
+ | 
+Volume of gas in molten fuel cavity
+ | 
+
+ | 
+RCAV
+ | 
+ | 
+cm
+ | 
+ | 
+Outer radius of the molten fuel cavity
+ | 
+
+ | 
+WFUEL
+ | 
+ | 
+mm
+ | 
+ | 
+Axial displacement of fuel column segment
+ | 
+
+ | 
+FCGAP
+ | 
+ | 
+mm
+ | 
+ | 
+Fuel-cladding gap thickness
+ | 
+
+ | 
+PFC
+ | 
+ | 
+Pa
+ | 
+ | 
+Contact pressure between the fuel and cladding
+
+(plenum pressure if gap is open)
+
+ | 
+
+ | 
+RCMELT
+ | 
+ | 
+cm
+ | 
+ | 
+Radius of cladding melting
+ | 
+
+ | 
+TCMID
+ | 
+ | 
+K
+ | 
+ | 
+Temperature of cladding at radial midpoint
+ | 
+
+ | 
+SIGAV
+ | 
+ | 
+Pa
+ | 
+ | 
+Average hoop stress in cladding
+ | 
+
+ | 
+EPSPTMID
+ | 
+ | | 
+ | 
+Plastic hoop strain in cladding at radial midpoint
+ | 
+
+ | 
+WCLAD
+ | 
+ | 
+mm
+ | 
+ | 
+Axial displacement of cladding segment
+ | 
+
+ | 
+CLIFE
+ | 
+ | | 
+ | 
+Cladding life fraction
+ | 
+
+ | 
+CLDPR
+ | 
+ | 
+%
+ | 
+ | 
+Eutectic penetration of the cladding
+ | 
+
+Table 11.4.5 Description of the Variable in FPIN2 Regular Output for Plenum/Multen Cavity Results
+ | 
+
+ | 
+Variable
+ | 
+ | 
+Unit
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+CVGAST
+ | 
+ | 
+K
+ | 
+ | 
+Molten fuel average temperature
+ | 
+
+ | 
+VOLCV
+ | 
+ | 
+cm3
+ | 
+ | 
+Total molten cavity volume
+ | 
+
+ | 
+VFSOL
+ | 
+ | 
+cm3
+ | 
+ | 
+Volume of fuel in molten cavity between solidus and liquidus
+ | 
+
+ | 
+VFLIQ
+ | 
+ | 
+cm3
+ | 
+ | 
+Volume of fuel in molten cavity above liquidus
+ | 
+
+ | 
+CVGASV
+ | 
+ | 
+cm3
+ | 
+ | 
+Volume of fuel vapor in molten cavity
+ | 
+
+ | 
+PPLEN
+ | 
+ | 
+Pa
+ | 
+ | 
+Pin plenum pressure
+ | 
+
+ | 
+PLGAST
+ | 
+ | 
+K
+ | 
+ | 
+Pin plenum average temperature
+ | 
+
+ | 
+PLGASV
+ | 
+ | 
+cm3
+ | 
+ | 
+Volume in pin plenum available to gas
+ | 
+
+ | 
+PLNAV
+ | 
+ | 
+cm3
+ | 
+ | 
+Volume of sodium in plenum
+ | 
+
+ | 
+EXTRUS
+ | 
+ | 
+cm3
+ | 
+ | 
+Volume of molten fuel extruded into the plenum
+ | 
+
+ | 
+WFTOT
+ | 
+ | 
+cm
+ | 
+ | 
+Total axial displacement of fuel
+ | 
+
+ | 
+WCTOT
+ | 
+ | 
+cm
+ | 
+ | 
+Total axial displacement of cladding
+ | 
+
+ | 
+F-TAVE
+ | 
+ | 
+K
+ | 
+ | 
+Average temperature of entire fuel column
+ | 
+
+ | 
+C-TAVE
+ | 
+ | 
+K
+ | 
+ | 
+Average temperature of cladding tube containing fuel
+ | 
+
+Table 11.4.6 Description of the Variables Stored in FPIN2 Binary Graphics File (Logical Unit #23)
+ | 
+
+ | 
+Order
+ | 
+ | 
+Variable
+ | 
+ | 
+Unit
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+1
+ | 
+ | 
+TIME
+ | 
+ | 
+s
+ | 
+ | 
+Current time at which values of the variables are reported
+ | 
+
+ | 
+2
+ | 
+ | 
+PCAVTY
+ | 
+ | 
+Pa
+ | 
+ | 
+Molten fuel cavity pressure
+ | 
+
+ | 
+3
+ | 
+ | 
+CVGAST
+ | 
+ | 
+K
+ | 
+ | 
+Molten fuel cavity temperature
+ | 
+
+ | 
+4
+ | 
+ | 
+AMELTF(NDZ)
+ | 
+ | 
+%
+ | 
+ | 
+Areal (radial) melt fraction for the top axial segment
+ | 
+
+ | 
+5
+ | 
+ | 
+PPLEN
+ | 
+ | 
+Pa
+ | 
+ | 
+Pin plenum pressure
+ | 
+
+ | 
+6
+ | 
+ | 
+PLGAST
+ | 
+ | 
+K
+ | 
+ | 
+Pin plenum temperature
+ | 
+
+ | 
+7
+ | 
+ | 
+PFC(NDZ)
+ | 
+ | 
+Pa
+ | 
+ | 
+Fuel-cladding contact pressure at top axial segment
+ | 
+
+ | 
+8
+ | 
+ | 
+SIGCM(NDZ)
+ | 
+ | 
+Pa
+ | 
+ | 
+Cladding average hoop stress in top axial segment
+ | 
+
+ | 
+9
+ | 
+ | 
+EPSPTM(NDZ)
+ | 
+ | | 
+ | 
+Cladding average plastic hoop strain in top axial segment
+ | 
+
+ | 
+10
+ | 
+ | 
+FRCPEN(NDZ)
+ | 
+ | 
+%
+ | 
+ | 
+Cladding eutectic penetration at top axial segment
+ | 
+
+ | 
+11
+ | 
+ | 
+XLIFEF(NDZ)
+ | 
+ | | 
+ | 
+Cladding life fraction for top axial segment
+ | 
+
+ | 
+12
+ | 
+ | 
+WCTOT
+ | 
+ | 
+cm
+ | 
+ | 
+Total cladding axial displacement
+ | 
+
+ | 
+13
+ | 
+ | 
+WFTOT
+ | 
+ | 
+cm
+ | 
+ | 
+Total fuel axial displacement
+ | 
+
+ | 
+14
+ | 
+ | 
+EXTRUL
+ | 
+ | 
+cm
+ | 
+ | 
+Length of molten fuel extruded into plenum
+ | 
+
+ | 
+15
+ | 
+ | 
+FUELTL
+ | 
+ | 
+cm
+ | 
+ | 
+Total fuel elongation
+ | 
+
+ | 
+16
+ | 
+ | 
+TCLADM(NDZ)
+ | 
+ | 
+K
+ | 
+ | 
+Average cladding temperature in top axial segment
+ | 
+
+Footnotes
+
+[1]
+
+FPIN2 mechanical analysis can be performed for axial blankets by
+describing them as a type of fuel with known material mechanical
+properties.
+
+[2]
+
+EBR-II specific, may not be valid for other reactors.
 
 
 ------------------------------------------------------------------------------

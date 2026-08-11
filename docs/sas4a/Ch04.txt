@@ -977,6 +977,1534 @@ TABLE <id> ReactivityTable
  0.0 0.0 0.0 0.0 ! Upper Reflector
 END
 
+Table 4.5.2 Input in a Mass Fraction Table
+
+ | 
+
+ | 
+Column Label
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+<any> (optional)
+ | 
+ | 
+Mass fraction of fuel component “any” for each axial mesh interval in the original fuel (MZ) mesh.
+Column labels in the mass fraction table must match a column label in the reactivity table.
+ | 
+
+Note that the following terms are considered reserved words and may not be used
+as column labels: LENGTH, CLADRA, CLADRA2, VOIDRA, VOIDRA2, STRCRA, STRCRA2. Any other label, including FUELRA, is permitted.
+
+Example fuel mass fraction table input:
+
+TABLE <id> MassFractionTable
+ FUELRA FUELRA2
+ 0.3 0.7 ! Lower Reflector
+ 0.3 0.7 ! Fuel, Segment 1
+ 0.3 0.7 ! Fuel, Segment 2
+ 0.3 0.7 ! Fuel, Segment 3
+ 0.3 0.7 ! Fuel, Segment 4
+ 0.3 0.7 ! Fuel, Segment 5
+ 0.3 0.7 ! Fuel, Segment 6
+ 0.3 0.7 ! Fuel, Segment 7
+ 0.3 0.7 ! Fuel, Segment 8
+ 0.3 0.7 ! Fuel, Segment 9
+ 0.3 0.7 ! Fuel, Segment 10
+ 0.3 0.7 ! Fuel, Segment 11
+ 0.3 0.7 ! Fuel, Segment 12
+ 0.3 0.7 ! Fuel, Segment 13
+ 0.3 0.7 ! Fuel, Segment 14
+ 0.3 0.7 ! Fuel, Segment 15
+ 0.3 0.7 ! Fuel, Segment 16
+ 0.3 0.7 ! Gas Plenum
+ 0.3 0.7 ! Upper Reflector
+END
+
+The effective axial expansion multiplier in Eq. (4.5-24) is
+input as EXPCFF. Thermal expansion
+coefficients for fuel, cladding, and structure are input in FUELEX,
+CLADEX, and StructEX. The
+initial mass of cladding and structure in each channel is computed using
+the density DENSS. The simple axial
+expansion reactivity model is invoked by IAXEXP with the axial expansion mode option selection in MODEEX.
+
+[anchor: deform-4-axial-expansion-reactivity-model]
+
+### 4.5.4.2. DEFORM-4 Axial Expansion Reactivity Model
+
+For any channel in which the DEFORM-4 module (see Chapter 8) has been
+specified, the axial expansion reactivity feedback will be calculated as
+described in Eq. (4.5-10) through Eq. (4.5-24) but using fuel and cladding
+expanded axial mesh heights as calculated by DEFORM-4. The DEFORM-4
+effective axial expansion multiplier is entered as EXPCOF.
+
+[anchor: coolant-density-feedback-reactivity]
+
+## 4.5.5. Coolant Density Feedback Reactivity
+
+Reactivity feedback effects from either single-phase coolant density
+changes or two-phase coolant boiling are calculated using the input
+coolant void reactivity worth table VOIDRA or a TABLE block
+referenced by iReactivityTable that includes a VOIDRA column (see Table 4.5.1).
+The reactivity feedback from coolant density and voiding changes
+is calculated from
+
+$$\delta k_{{\text{Na}}} = \epsilon_{\text{d}}\sum_{i}{\sum_{j}{\left( \rho_{c} \right)_{ij}\alpha_{ij}}}$$ [eq 4.5-25]
+
+where
+
+ $\epsilon_{\text{d}}$ = sodium density multiplier
+
+ $\left( \rho_{c} \right)_{ij}$ = coolant void worth in
+axial segment $j$ of channel $i$ 
+
+and
+
+ $\alpha_{ij}$ = average coolant void fraction in segment
+ $j$ of channel $i$ .
+
+Second-order effects can optionally be considered, in which case the reactivity
+feedback from coolant density changes is calculated using
+
+$$\delta k_{{\text{Na}}} = \epsilon_{\text{d}}\sum_{i}{\sum_{j}{\left\lbrack \left( \rho_{c} \right)_{ij}\alpha_{ij} + \left( \rho_{c,2} \right)_{ij}\alpha_{ij}^{2} \right\rbrack }}$$ [eq 4.5-26]
+
+where $\rho_{c,2}$ is the second order coefficient. Second-order coefficients are input
+using a TABLE block referenced by iReactivityTable that includes a VOIDRA2 column (see Table 4.5.1).
+Currently, second-order void effects are not compatible with the sodium boiling model.
+
+The local coolant void fraction is calculated based on either a) liquid
+coolant density changes from the initial steady-state condition, or b)
+combined liquid density and boiling-induced voiding density changes from
+the steady-state condition. The sodium density multiplier is entered as COLFAC.
+
+[anchor: radial-expansion-feedback-reactivity]
+
+## 4.5.6. Radial Expansion Feedback Reactivity
+
+[anchor: simple-radial-expansion-reactivity-model]
+
+### 4.5.6.1. Simple Radial Expansion Reactivity Model
+
+Two radial expansion feedback models are available in SAS4A/SASSYS-1: a
+simple model described here and a more detailed model described in
+Section 4.5.6.2.
+
+The simple radial expansion feedback model in SAS4A/SASSYS-1 is based on
+a model by Huebotter [4-4]. The radial growth of the core is determined
+by the expansion of the lower grid support structure and by the
+expansion of the duct walls at the above core load pads. The expansion
+of the lower grid support structure is assumed to be proportional to the
+rise in the subassembly inlet temperature above its initial steady-state
+value. The expansion at the location of the above core load pads is
+assumed to be proportional to the change in the average structure
+temperature at this location.
+
+The equations actually used in SAS4A/SASSYS-1 are
+
+$$\delta k_{\text{re}} = C_{\text{re}}\left\lbrack \Delta T_{{\text{in}}} + \frac{{\text{XMC}}}{{\text{XAC}}}\left( \Delta{\overline{T}}_{\text{SLP}} - \Delta T_{{\text{in}}} \right) \right\rbrack$$ [eq 4.5-27]
+
+where
+
+ $t$ = time, s
+
+ $\delta k_{\text{re}}$ = reactivity change due to radial
+expansion, $
+
+ $C_{\text{re}}$ = radial expansion coefficient, $/K
+
+ $\Delta T_{{\text{in}}}$ =
+ $T_{{\text{in}}}\left( t \right) - T_{{\text{in}}}\left( t_{1} \right)$ ,
+K
+
+ $T_{{\text{in}}}$ = coolant inlet temperature, K
+
+ $t_{1}$ = time at the end of the first main time step, s
+
+ $\text{XMC}$ = distance from nozzle support point to core midplane, m
+
+ $\text{XAC}$ = distance from nozzle support point to above core load pad, m
+
+$$\Delta{\overline{T}}_{\text{SLP}} = {\overline{T}}_{\text{SLP}}\left( t \right) - {\overline{T}}_{\text{SLP}}\left( t_{1} \right) \quad K$$ [eq 4.5-28]
+
+$${\overline{T}}_{\text{SLP}}\left( t \right) = \frac{\sum_{\text{i}}{N_{\text{s}}\left( i \right)T_{\text{SLP}}\left( i,t \right)f_{\text{i}}}}{\sum_{\text{i}}{N_{\text{s}}\left( i \right)f_{\text{i}}}}$$ [eq 4.5-29]
+
+ ${\overline{T}}_{\text{SLP}}$ = average structure
+temperature at the above core load pads
+
+ $T_{\text{SLP}}\left( i,t \right)$ = structure temperature (outer
+structural radial node) in channel i at the axial node corresponding
+to the above core load pad
+
+ $i$ = channel number
+
+ $N_{\text{s}}\left( i \right)$ = number of subassemblies represented by
+channel $i$ 
+
+ $f_{\text{i}} = \begin{cases}
+1 & \text{if channel is to be included in the average} \\
+0 & \text{if channel is not to be included} \\
+\end{cases}$ 
+
+An option has been included in the code to use the inlet plenum wall
+temperature instead of the coolant inlet temperature for
+ $T_{{\text{in}}}$ . This option can be used to account for
+time delays in the heating of the lower grid support structure. Note
+that for coding simplicity the temperatures at the end of the first main
+time step are used as the reference values, rather than using
+steady-state temperatures for the reference. This makes very little
+difference in the results, since the changes in the inlet temperature
+and the outer structure node temperature above the core are normally
+extremely small during the first time step. Also, the user can choose
+which channels will be included in the averaging of Eq. (4.5-29) by
+specifying $f_{\text{i}}$ for each channel using IRDEXP.
+
+This model was not explicitly set up to account for subassembly bowing
+or flowering of the core, but the user can set arbitrary values for
+ $C_{\text{re}}$ and
+ $\left\lbrack \frac{{\text{XMC}}}{{\text{XAC}}} \right\rbrack$ 
+in Eq. (4.5-27). Therefore, if the bowing reactivity effect is
+proportional to $\Delta{\overline{T}}_{{\text{SLP}}}$ or to
+ $\Delta{\overline{T}}_{{\text{SLP}}} - \Delta{\overline{T}}_{{\text{in}}}$ ,
+then bowing reactivity can be accounted for by adjusting
+ $C_{\text{re}}$ and
+ $\frac{{\text{XMC}}}{{\text{XAC}}}$ , which are
+entered as input variables RDEXPC and XMCXAC. The simple radial expansion model is invoked by specifying
+IRADEX.
+
+[anchor: detailed-radial-expansion-reactivity-model]
+
+### 4.5.6.2. Detailed Radial Expansion Reactivity Model
+
+The basic radial core expansion reactivity feedback model described in
+Section 4.5.6.1 incorporated several major assumptions that restricted
+the ability of the model to calculate the reactivity feedback
+accurately, particularly in extended transients. These assumptions
+include the following:
+
+The reactivity feedback is determined solely by thermal expansions of
+the grid support plate and load pad region, with all regions having
+the same thermal expansion coefficient.
+
+The displacement of the core midplane is sufficient to estimate the
+reactivity feedback from radial core expansion.
+
+All of the subassembly load pads are in contact throughout the
+transients.
+
+With these assumptions, the model does not explicitly account for
+subassembly bowing, and is not capable of calculating changes in core
+loading conditions during the course of a transient. This deficiency
+becomes especially important for the extended transients typically
+encountered for unprotected accidents.
+
+In order to provide a more mechanistic approach to the calculation of
+the radial core expansion reactivity feedback, and to provide a
+framework for more detailed modeling as required, the following detailed
+model was developed. It is intended to overcome the restrictions
+associated with the assumptions listed above, and to allow a more
+appropriate use of results from detailed computer code simulations of
+core behavior, such as those obtained with NUBOW-3D [4-5].
+
+[anchor: model-description]
+
+#### 4.5.6.2.1. Model Description
+
+The approach taken in the development of the detailed model is to relate
+the reactivity feedback from radial core expansion to a change in the
+size of the core, in the same manner as a uniform dilation of the core
+is used to calculate the reactivity effect of a change in effective core
+radius. However, rather than maintain the cylindrical shape associated
+with a uniform core dilation, an axial profile of core radius is
+calculated. During a transient, the changes in the axial profile are
+used in conjunction with a worth curve for radial core expansion to
+yield the reactivity feedback.
+
+The axial profile of the core radius is obtained from the behavior of an
+average subassembly in the outer row of the core. The shape of this
+subassembly is determined by the relative location of the grid plate,
+the core, the load pads, and any core restraint rings. The shape is also
+affected by the thermal gradient across the subassembly, as this
+introduces additional bending of the subassembly. The subassembly is
+treated as a continuous beam subject to these conditions and restraints.
+The basic equation that describes these deflections is the differential
+equation of the elastic curve of the beam,
+
+$$\text{EI}\frac{\text{d}^{2}\text{y}}{\text{dx}^{2}} = M_{\text{x}}$$ [eq 4.5-30]
+
+where
+
+ $E$ = modulus of elasticity, N/m2
+
+ $I$ = moment of inertia of the beam cross-sectional area,
+m4
+
+ $M$ = bending moment, N-m
+
+ $x$ = distance along the beam, m
+
+ $y$ = distance perpendicular to the beam, m
+
+This equation is solved subject to various loads and moments, depending
+on the state of the core. However, since only the displacement is
+needed, and the forces and moments are never evaluated, the solution is
+not dependent on the value of EI.
+
+At present, the model is only applicable to the “limited free bow” type
+of restraint. For this type of restraint, there are load pads just above
+the top of the core (ACLP) and at the top of the subassembly (TLP).
+There is also a restraint ring (RR), or core former, around the core at
+the top load pad elevation. This restraint ring limits the outward
+motion of the top of the subassembly. With this type of restraint, the
+shape of the subassembly is determined by one of the following
+possibilities:
+
+Grid Plate/Subassembly Nozzle Clearances Not Exceeded
+
+A.1. No contact at ACLP, RR, or TLP
+
+$$y\left( x \right) = \frac{M_{1}}{6\text{EI}\left( a - x_{1} \right)}\left( x - x_{1} \right)^{3} \quad \text{for } x_{1} \leq x \leq a$$ [eq 4.5-31]
+
+A.2. No contact at ACLP or TLP; contact at RR
+
+$$y\left( x \right) = \frac{M_{1}}{6\text{EI}\left( a - x_{1} \right)}\left( x - x_{1} \right)^{3} + S_{\text{GR}}x \quad \text{for } x_{1} \leq x \leq a$$ [eq 4.5-32]
+
+$$S_{\text{GR}} = \frac{R_{3} - \frac{M_{1}}{\text{EI}}\left\lbrack \frac{\left( a - x_{1} \right)\left( L - a \right)}{2} + \frac{\left( a - x_{1} \right)^{2}}{6} \right\rbrack - \frac{M_{2}}{\text{EI}}\frac{\left( L - a \right)^{2}}{2}}{L}$$
+
+A.3. No contact at ACLP or RR; contact at TLP
+
+$$y\left( x \right) = \frac{M_{1}}{6\text{EI}\left( a - x_{1} \right)}\left( x - x_{1} \right)^{3} + S_{\text{GR}}x \quad \text{for } x_{1} \leq x \leq a$$ [eq 4.5-33]
+
+$$S_{\text{GR}} = \frac{R_{2} - \frac{M_{1}}{\text{EI}}\left\lbrack \frac{\left( a - x_{1} \right)\left( L - a \right)}{2} + \frac{\left( a - x_{1} \right)^{2}}{6} \right\rbrack - \frac{M_{2}}{\text{EI}}\frac{\left( L - a \right)^{2}}{2}}{L}$$
+
+A.4. Contact at ACLP; no contact at TLP or RR
+
+$$y\left( x \right) = \frac{M_{1}}{6\text{EI}\left( a - x_{1} \right)}\left( x - x_{1} \right)^{3} + S_{\text{GR}}x \quad \text{for } x_{1} \leq x \leq a$$ [eq 4.5-34]
+
+$$S_{\text{GR}} = \frac{R_{1} - \frac{M_{1}}{\text{EI}}\left\lbrack \frac{\left( a - x_{1} \right)^{2}}{6} \right\rbrack}{a}$$
+
+A.5. Contact at ACLP and RR; no contact at TLP
+
+$$y\left( x \right) = \frac{M_{1}}{6\text{EI}\left( a - x_{1} \right)}\left( x - x_{1} \right)^{3} - \frac{V_{\text{GR}}}{\text{EI}}\frac{x^{3}}{6} - \frac{C_{1}}{\text{EI}}x \quad \text{for } x_{1} \leq x \leq a$$ [eq 4.5-35]
+
+$$\begin{split}\frac{V_{\text{GR}}}{\text{EI}} &= \frac{P}{\text{EI}}\left\lbrack 1 - \frac{a}{L} \right\rbrack \\
+\frac{P}{\text{EI}} &= \frac{\frac{R_{1}L}{a} - R_{3} + \frac{M_{1}}{\text{6EI}}\left( 2a^{2} - ax_{1} - x_{1}^{2} \right)\left(\frac{L}{a} - 1 \right) + \frac{M_{2}}{\text{EI}}\frac{\left( L - a \right)^{2}}{2}}{\frac{a}{3}\left( L - a \right)^{2}} \\
+\frac{C_{1}}{\text{EI}} &= \frac{C_{3}}{\text{EI}} + \frac{M_{1}}{\text{EI}}\frac{x_{1}^{2}}{2\left( a - x_{1} \right)} \\
+\frac{C_{3}}{\text{EI}} &= - \frac{R_{1}}{a} + \frac{M_{1}}{\text{EI}}\frac{1}{a - x_{1}}\left\lbrack \frac{a^{2}}{6} - \frac{x_{1}a}{2} + \frac{x_{1}^{3}}{6a} \right\rbrack - \frac{V_{\text{GR}}}{\text{EI}}\frac{a^{2}}{6}\end{split}$$
+
+Grid Plate/Subassembly Nozzle Clearances Exceeded
+
+B.1. No contact at ACLP; contact at RR
+
+$$y\left( x \right) = \frac{M_{1}}{6\text{EI}\left( a - x_{1} \right)}\left( x - x_{1} \right)^{3} + S_{\text{GRMAX}}x - \frac{V_{\text{GR}}}{\text{EI}}\frac{x^{3}}{6} - \frac{M_{\text{GR}}}{\text{EI}}\frac{x^{2}}{2} \quad \text{for } x_{1} \leq x \leq a$$ [eq 4.5-36]
+
+$$\begin{split}\frac{M_{\text{GR}}}{\text{EI}} &= - \frac{V_{\text{GR}}}{\text{EI}}L \\
+\frac{V_{\text{GR}}}{\text{EI}} &= 3\frac{R_{3}}{L^{3}} - \frac{M_{1}}{\text{EI}}\left\lbrack \frac{3\left( a - x_{1} \right)\left( L - a \right) + \left( a - x_{1} \right)^{2}}{2L^{3}} \right\rbrack - \frac{M_{2}}{\text{EI}}\left\lbrack \frac{3\left( L - a \right)^{2}}{2L^{3}} \right\rbrack - 3\frac{S_{\text{GRMAX}}}{L^{2}}\end{split}$$
+
+B.2. No Contact at ACLP or RR; contact at TLP
+
+$$y\left( x \right) = \frac{M_{1}}{6\text{EI}\left( a - x_{1} \right)}\left( x - x_{1} \right)^{3} + S_{\text{GRMAX}}x - \frac{V_{\text{GR}}}{\text{EI}}\frac{x^{3}}{6} - \frac{M_{\text{GR}}}{\text{EI}}\frac{x^{2}}{2} \quad \text{for } x_{1} \leq x \leq a$$ [eq 4.5-37]
+
+$$\begin{split}\frac{M_{\text{GR}}}{\text{EI}} &= - \frac{V_{\text{GR}}}{\text{EI}}L \\
+\frac{V_{\text{GR}}}{\text{EI}} &= 3\frac{R_{2}}{L^{3}} - \frac{M_{1}}{\text{EI}}\left\lbrack \frac{3\left( a - x_{1} \right)\left( L - a \right) + \left( a - x_{1} \right)^{2}}{2L^{3}} \right\rbrack - \frac{M_{2}}{\text{EI}}\left\lbrack \frac{3\left( L - a \right)^{2}}{2L^{3}} \right\rbrack - 3\frac{S_{\text{GRMAX}}}{L^{2}}\end{split}$$
+
+B.3. Contact at ACLP; no contact at TLP or RR
+
+$$y\left( x \right) = \frac{M_{1}}{6\text{EI}\left( a - x_{1} \right)}\left( x - x_{1} \right)^{3} + S_{\text{GRMAX}}x - \frac{V_{\text{GR}}}{\text{EI}}\frac{x^{3}}{6} - \frac{M_{\text{GR}}}{\text{EI}}\frac{x^{2}}{2} \quad \text{for } x_{1} \leq x \leq a$$ [eq 4.5-38]
+
+$$\begin{split}\frac{M_{\text{GR}}}{\text{EI}} &= - \frac{P}{\text{EI}}a \\
+\frac{V_{\text{GR}}}{\text{EI}} &= \frac{P}{\text{EI}} \\
+\frac{P}{\text{EI}} &= 3\frac{R_{1}}{a^{3}} - \frac{M_{1}}{\text{EI}}\frac{\left( a - x_{1} \right)^{2}}{2a^{3}} - 3\frac{S_{\text{GRMAX}}}{a^{2}}\end{split}$$
+
+B.4. Contact at ACLP and RR; no contact at TLP
+
+$$y\left( x \right) = \frac{M_{1}}{6\text{EI}\left( a - x_{1} \right)}\left( x - x_{1} \right)^{3} + S_{\text{GRMAX}}x - \frac{V_{\text{GR}}}{\text{EI}}\frac{x^{3}}{6} - \frac{M_{\text{GR}}}{\text{EI}}\frac{x^{2}}{2} \quad \text{for } x_{1} \leq x \leq a$$ [eq 4.5-39]
+
+$$\begin{align}\begin{aligned}\frac{M_{\text{GR}}}{\text{EI}} &= \frac{P}{\text{EI}} \left( L-a \right) - \frac{V_{\text{GR}}}{\text{EI}}L\\\frac{V_{\text{GR}}}{\text{EI}} &= \frac{P}{\text{EI}} \left\lbrack 1 + \frac{a^3}{2L^3} - \frac{3a^2}{2L^2} \right\rbrack + \frac{3R_3}{L^3} - \frac{M_1}{\text{EI}} \frac{\left\lbrack 3 \left( a-x_1 \right) \left( L-a \right) + \left( a-x_1 \right)^2 \right\rbrack}{2L^3} - \frac{M_2}{\text{EI}} \frac{\left\lbrack 3 \left( L-a \right)^2 \right\rbrack}{2L^3} - \frac{3S_{\text{GRMAX}}}{L^2}\end{aligned}\end{align}$$
+
+$$\begin{split}\frac{P}{\text{EI}} = \left\lbrack R_3 \frac{\left( \frac{3a^2}{L^2} - \frac{a^3}{L^3} \right)}{2} - R_1 - \frac{M_1}{\text{EI}} \left\lbrack \left( \frac{3a^2}{L^2} - \frac{a^3}{L^3} \right) \frac{ \left( L-a \right)}{4} + \left( \frac{a^2}{4L^2} - \frac{a^3}{12L^3} - \frac{1}{6} \right) \left( a-x_1 \right) \right\rbrack \left( a-x_1 \right) \right. \\
+\left. - \frac{M_2}{\text{EI}} \left( \frac{3a^2}{L^2} - \frac{a^3}{L^3} \right) \frac{ \left( L-a \right)^2}{4} + S_{\text{GRMAX}} \left(a + \frac{a^3}{L^2} - \frac{3a^2}{2L} \right) \right\rbrack \bigg/ a^3 \left( \frac{a^3}{12L^3} - \frac{a^2}{2L^2} + \frac{3a}{4L} - \frac{1}{3} \right)\end{split}$$
+
+B.5. Contact at ACLP and TLP; no contact at RR
+
+$$\begin{split} y\left( x \right) = \frac{M_{1}}{6\text{EI}\left( a - x_{1} \right)}\left( x - x_{1} \right)^{3} + S_{\text{GRMAX}}x - \frac{V_{\text{GR}}}{\text{EI}}\frac{x^{3}}{6} - \frac{M_{\text{GR}}}{\text{EI}}\frac{x^{2}}{2} \quad \text{for } x_{1} \leq x \leq a \\\end{split}$$ [eq 4.5-40]
+
+$$\begin{align}\begin{aligned}\frac{M_{\text{GR}}}{\text{EI}} &= \frac{P}{\text{EI}} \left( L-a \right) - \frac{V_{\text{GR}}}{\text{EI}}L\\\frac{V_{\text{GR}}}{\text{EI}} &= \frac{P}{\text{EI}} \left\lbrack 1 + \frac{a^3}{2L^3} - \frac{3a^2}{2L^2} \right\rbrack + \frac{3R_2}{L^3} - \frac{M_1}{\text{EI}} \frac{\left\lbrack 3 \left( a-x_1 \right) \left( L-a \right) + \left( a-x_1 \right)^2 \right\rbrack}{2L^3} - \frac{M_2}{\text{EI}} \frac{\left\lbrack 3 \left( L-a \right)^2 \right\rbrack}{2L^3} - \frac{3S_{\text{GRMAX}}}{L^2}\end{aligned}\end{align}$$
+
+$$\begin{split}\frac{P}{\text{EI}} = \left\lbrack R_2 \frac{\left( \frac{3a^2}{L^2} - \frac{a^3}{L^3} \right)}{2} - R_1 - \frac{M_1}{\text{EI}} \left\lbrack \left( \frac{3a^2}{L^2} - \frac{a^3}{L^3} \right) \frac{ \left( L-a \right)}{4} + \left( \frac{a^2}{4L^2} - \frac{a^3}{12L^3} - \frac{1}{6} \right) \left( a-x_1 \right) \right\rbrack \left( a-x_1 \right) \right. \\
+\left. - \frac{M_2}{\text{EI}} \left( \frac{3a^2}{L^2} - \frac{a^3}{L^3} \right) \frac{ \left( L-a \right)^2}{4} + S_{\text{GRMAX}} \left(a + \frac{a^3}{L^2} - \frac{3a^2}{2L} \right) \right\rbrack \bigg/ a^3 \left( \frac{a^3}{12L^3} - \frac{a^2}{2L^2} + \frac{3a}{4L} - \frac{1}{3} \right)\end{split}$$
+
+where
+
+ $y$ = radial displacement with respect to the core radius at the
+grid plate
+
+ $R_{1}$ = minimum core radius at the above-core load pad with
+respect to the core radius at the grid plate
+
+ $R_{2}$ = minimum core radius at the top load pad with respect to
+the core radius at the grid plate
+
+ $R_{3}$ = maximum core radius at the restraint ring with respect
+to the core radius at the grid plate
+
+ $x$ = axial elevation
+
+ $x_{1}$ = elevation of the lower axial blanket/lower reflector
+interface
+
+ $a$ = elevation of the above core load pad
+
+ $L$ = elevation of the top load pad
+
+ $S_{\text{GR}}$ = subassembly slope with respect to vertical at
+the grid plate
+
+ $S_{\text{GRMAX}}$ = maximum subassembly slope with respect to
+vertical at the grid plate
+
+ $\frac{M_{1}}{\text{EI}}$ = thermally induced bending moment in
+the core region
+
+ $\frac{M_{2}}{\text{EI}}$ = thermally induced bending moment in
+the above core region
+
+ $V_{\text{GR}}$ = radial reaction at the grid plate
+
+ $M_{\text{GR}}$ = applied moment at the grid plate
+
+ $P$ = radial force at the above core load pad
+
+ $\text{EI}$ = modulus of elasticity times the moment of inertia of
+the subassembly cross-sectional area
+
+The use of the word contact in this context implies that either the
+outward motion is sufficient for the restraint ring to apply a force
+preventing further outward motion, or there is sufficient inward motion
+such that all of the intra-subassembly gaps in the load pad region(s)
+are eliminated, thus generating a force preventing further inward
+motion. A grid plate/subassembly nozzle clearance is required for the
+replacement of subassemblies, and results in a corresponding maximum
+possible deviation of the subassembly from vertical at the grid plate.
+When this clearance is exceeded, a moment is applied to the subassembly
+at the nozzle.
+
+The subassembly is also subjected to a bending moment related to the
+temperature difference of opposite hex can walls within the subassembly.
+This temperature difference is converted into an equivalent bending
+moment, as described in the following section. The temperature
+difference increases linearly through the core region, from the lower
+axial blanket to the upper axial blanket. In the upper subassembly
+region, the temperature difference is assumed to be constant from the
+upper axial blanket to the top of the subassembly, with the value
+varying with time as the transient progresses.
+
+The major assumptions incorporated in this model at present include the
+uniform distribution of core material in the radial direction at every
+axial elevation and the completely rigid subassembly load pads.
+Distributing the material uniformly at each axial elevation as the core
+radius changes is the same assumption used for the uniform core dilation
+calculation to obtain the radial core expansion reactivity feedback
+coefficient, and implies that all of the subassemblies are moving in
+proportion to their distance from the center of the core. The radial
+expansion worth gradient and the intra-subassembly temperature gradients
+tend to be greatest at the edge of the active core, with the result that
+most of the reactivity feedback effect comes from movement of the outer
+row of subassemblies. Any movement in the central region of the core
+that is not proportional to the distance from the center of the core is
+expected to cause a minor effect. The accuracy of this assumption for
+any specific reactor core can be evaluated by comparison with results
+from NUBOW-3D [4-5].
+
+The use of completely rigid subassembly load pads provides slightly
+greater expansion of the core during certain events as in an unprotected
+loss-of-flow, and less for other accidents, such as an unprotected
+loss-of-heat-sink transient. The error introduced by using this
+assumption is on the order of 15% to 20%, and can be design dependent.
+The incorporation of deformable load pads and “bridging” of
+subassemblies may be desirable, and is being considered for a future
+version of this model. The accuracy of this assumption can also be
+checked by comparison with NUBOW-3D.
+
+Since the expression given by Eq. (4.5-30) is solved for the various core
+loading possibilities listed above, the resulting algebraic formulas are
+incorporated in the code. This avoids the need for a finite difference
+solution of Eq. (4.5-30), simplifying the computer coding and providing a
+rapid calculation of the core shape.
+
+[anchor: code-description-and-input-requirements]
+
+#### 4.5.6.2.2. Code Description and Input Requirements
+
+This section contains a description of the algorithm used for
+calculating the appropriate core shape. This calculation is performed at
+the start of the transient to establish the steady-state core
+configuration, and for every step during the transient. The use of the
+detailed radial core expansion reactivity feedback model requires some
+of the same input as the simple model plus several other variables.
+These will be discussed as their use occurs.
+
+The optional model is activated by setting
+ $|$ IRADEX $| =$ 4 or 5, where a value of ±5
+gives a much more detailed printout, while ±4
+only gives results in the PSHORT printout. The first step is to
+calculate the average temperature of the above-core load pad (ACLP) and
+top load pad (TLP) regions. This is done using Eq. (4.5-29), as in the
+basic model. The model sets the location of the ACLP, so that JSTRDX does not need to be input. The temperature of the
+grid plate can be given by either the inlet coolant temperature, or by
+the wall temperature of the compressible volume used to represent the
+inlet plenum in PRIMAR-4. This option is discussed in detail for the
+basic model, and is activated by setting IRADEX to the
+appropriate negative value.
+
+The next step is to calculate the equivalent core radius at the grid
+plate, the ACLP and the TLP. For this calculation, the following input
+is needed:
+
+ | 
+
+ | 
+Input
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+NSUBTC
+ | 
+ | 
+total number of subassemblies in the active core region, including internal blankets and control subassemblies
+ | 
+
+ | 
+MTGRD
+ | 
+ | 
+material used for the grid plate, where
+
+1 = 316 SS
+
+2 = HT-9
+
+ | 
+
+ | 
+MTACLP
+
+MTTLP
+
+ | 
+ | 
+material used for the ACLP and TLP, where
+
+1 = 316 SS
+
+2 = HT-9
+
+ | 
+
+ | 
+PITCHG
+ | 
+ | 
+subassembly pitch at the grid plate at reference temperature TR
+ | 
+
+ | 
+PITCHA
+ | 
+ | 
+flat-to-flat dimension across the ACLP at reference temperature TR
+ | 
+
+ | 
+PITCHT
+ | 
+ | 
+flat-to-flat dimension across the TLP at reference temperature TR
+ | 
+
+Using the pitch at the grid plate along with the steady-state inlet
+temperature, the equivalent radius of the subassemblies in active core
+is calculated. As part of the calculation, there is a call to subroutine
+THRMEX that gives the material thermal expansion as a function of
+temperature for either 316 SS or HT-9. For the load pad regions, a
+minimum allowable core radius is calculated based on the size of the
+load pad region when all of the load pads are pushed together and there
+are no intra-subassembly gaps. This is possible since the model assumes
+the load pads all have the same temperature, as described above.
+
+In addition to these dimensions, there are two other geometric
+constraints, as follows:
+
+ | 
+
+ | 
+Input
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+SLLMAX
+ | 
+ | 
+maximum allowable slope of the subassembly at the grid plate with respect to vertical, based on subassembly nozzle/grid plate clearances and dimensions
+ | 
+
+ | 
+TLPRRC
+ | 
+ | 
+clearance between the top load pads and the restraint ring
+ | 
+
+The value for SLLMAX is calculated from the radial clearances of the
+subassembly nozzle/grid plate socket connection and the length of the
+connection. The maximum tilt of the subassembly occurs when the maximum
+radial motion of the nozzle is used, usually inward at the bottom of the
+nozzle and outward at the top. This number is design-dependent and can
+vary greatly, even when the subassembly sizes are comparable. The
+clearance between the top load pad region and the restraint ring is
+determined by the maximum clearance that would occur between the
+subassemblies in the outer row of active core and the first row of
+radial blankets when all of the core subassembly load pads are pushed
+inward together and all of the radial blanket load pads are pushed
+outward against the restraint ring. The top load pad/restraint ring
+clearance is kept constant throughout the transient, i.e. the restraint
+ring expands as the top load pads expand thermally. This approximation
+tends to be conservative. Default values for these two input variables
+have been provided for cases where such detailed design information is
+not available. Design information should be used wherever possible, as
+the results can be especially sensitive to the value for SLLMAX.
+
+The only other input variable required for determining the core shape
+are those related to the thermally-induced bending moment:
+
+ | 
+
+ | 
+Input
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+BNDMM1
+ | 
+ | 
+applied bending moment at the top of the core region, representing the flat-to-flat temperature difference in the radial direction for the subassemblies at the outer edge of the active core
+ | 
+
+ | 
+BNDMM2
+ | 
+ | 
+applied bending moment in the region above the core, representing the flat-to-flat temperature difference in the radial direction in this region for the subassemblies at the outer edge of active core
+ | 
+
+The data on the temperature difference must be obtained from a code
+which performs detailed calculations of the steady-state subassembly
+temperatures with intersubassembly heat transfer, such as SUPERENERGY-2
+[4-6]. Default values are included if such information is not available.
+The input variables can then be calculated using Eq. (4.5-41).
+
+$$\text{BNDMM}1 = \frac{\alpha \Delta T}{D}$$ [eq 4.5-41]
+
+where
+
+ $\alpha$ = mean thermal expansion coefficient of the subassembly
+hexcan, $1/K$ 
+
+ $\Delta T$ = flat-to-flat temperature difference, K
+
+ $D$ = hexcan flat-to-flat dimension, m
+
+The model uses a linear variation in bending moment through the core
+region, from zero at the bottom of the core to BNDMM1 at the top. The
+bending moment BNDMM2 is applied uniformly from the top of the core to
+the top of the subassembly. In the transient, the bending moments are
+modified in proportion to the power-to-flow ratio changes.
+
+Once all of these conditions have been calculated, the algorithm goes
+through a series of logic to determine the correct combination of forces
+and moments, as given above. The subassemblies are assumed to be
+vertical at the grid plate unless there are forces at the ACLP or TLP,
+or both, which would cause the subassembly to tilt. With the appropriate
+choice, the algebraic equation corresponding to that loading condition
+is evaluated for every axial node in the core region. In the printout,
+the algebraic equation selected is indicated by “CORE SHAPE MODEL =”,
+where the value printed corresponds to the particular case as listed:
+
+CORE SHAPE MODEL
+
+ | 
+
+ | | 
+ | 
+Steady-State
+ | 
+ | 
+Transient
+ | 
+
+ | 
+
+ | 
+Grid plate/subassembly nozzle clearances not exceeded
+ | 
+ | | 
+ | | 
+
+ | 
+No contact at ACLP, RR or TLP
+ | 
+ | 
+1.0
+ | 
+ | 
+21.0
+ | 
+
+ | 
+No contact at ACLP; contact at RR
+ | 
+ | 
+2.0
+ | 
+ | 
+22.0
+ | 
+
+ | 
+No contact at ACLP; contact at TLP
+ | 
+ | 
+3.0
+ | 
+ | 
+23.0
+ | 
+
+ | 
+Contact at ACLP; no contact at TLP or RR
+ | 
+ | 
+4.0
+ | 
+ | 
+24.0
+ | 
+
+ | 
+Contact at ACLP and RR
+ | 
+ | 
+5.0
+ | 
+ | 
+25.0
+ | 
+
+ | 
+Grid plate/subassembly nozzle clearances exceeded
+ | 
+ | | 
+ | | 
+
+ | 
+No contact at ACLP; contact at RR
+ | 
+ | 
+8.0
+ | 
+ | 
+28.0
+ | 
+
+ | 
+No contact at ACLP; contact at TLP
+ | 
+ | 
+9.0
+ | 
+ | 
+29.0
+ | 
+
+ | 
+Contact at ACLP; no contact at TLP or RR
+ | 
+ | 
+10.0
+ | 
+ | 
+30.0
+ | 
+
+ | 
+Contact at ACLP and RR
+ | 
+ | 
+11.0
+ | 
+ | 
+31.0
+ | 
+
+ | 
+Contact at ACLP and TLP
+ | 
+ | 
+12.0
+ | 
+ | 
+32.0
+ | 
+
+In the steady-state, the axial profile of core radius is stored for
+comparison during the transient. For each step during the transient, the
+process is repeated and the difference in core radius at each elevation
+is calculated.
+
+The reactivity worth curve is based on the radial expansion coefficient
+for a uniform core dilation,
+
+ | 
+
+ | 
+Input
+ | 
+ | 
+Description
+ | 
+
+ | 
+
+ | 
+RDEXCF
+ | 
+ | 
+radial expansion coefficient for a uniform core dilation, $/m
+ | 
+
+This coefficient is then proportioned among the axial fuel nodes
+according to the axial power shape. The resulting worth curve provides
+the radial displacement worth for each axial node in the core. When used
+in combination with the deflections from steady-state described above,
+the reactivity feedback from each axial node is determined and the total
+reactivity feedback from radial core expansion is calculated by summing
+over the axial fuel nodes. As stated above, this is a very rapid
+calculation due to the use of algebraic expressions for the subassembly
+shape, which are the solutions given in Eq. (4.5-31) for the various
+combinations of force and moments.
+
+[anchor: control-rod-drive-expansion-feedback-reactivity]
+
+## 4.5.7. Control Rod Drive Expansion Feedback Reactivity
+
+For the control rod drive feedback model, it is assumed that the control
+rod drives are washed by the outlet coolant from the core. Thermal
+expansion of the drives due to a rise in core outlet temperature will
+cause the control rods to be inserted further into the core, providing a
+negative reactivity component. On the other hand, if the control rod
+drives are supported on the vessel head, and if the core is supported by
+the vessel walls, then heating the vessel walls will either lower the
+core or raise the control rod drive supports, leading to a positive
+reactivity component. Both the control drive expansion and the vessel
+wall expansion are accounted for in SAS4A/SASSYS-1. This model is
+invoked with input variable ICREXP.
+
+A simple one-node treatment is used for calculating the temperature of
+the control rod drives. The equation used is
+
+$$M_{\text{cr}}C_{\text{cr}}\frac{\text{dT}_{\text{cr}}}{\text{dt}} = h_{\text{cr}}A_{\text{cr}}\left( T_{\text{ui}} - T_{\text{cr}} \right)$$ [eq 4.5-42]
+
+where
+
+ $M_{\text{cr}}$ = mass of the control rod drivelines, kg
+
+ $C_{\text{cr}}$ = specific heat of the rod drivelines, J/kg-K
+
+ $T_{\text{cr}}$ = control rod drive temperature, K
+
+ $T_{\text{ui}}$ = coolant temperature in the upper internal
+structure region, K
+
+ $h_{\text{cr}}$ = heat transfer coefficient between the coolant
+and the control rod drive, W/m2-K
+
+ $A_{\text{cr}}$ = heat transfer area between the coolant and the
+control rod drive, $\text{m}^2$ 
+
+ $t$ = time, s
+
+The product of the control rod driveline mass and specific heat is
+entered as input variable CRDMC, and the
+product of the driveline heat transfer coefficient and area is entered
+as CRDHA.
+
+The coolant temperature in the upper internal structure region is
+calculated using
+
+$$\frac{\text{dT}_{\text{ui}}}{\text{dt}} = w_{\text{c}}\frac{T_{\text{mm}} - T_{\text{ui}}}{\rho_{\text{u}}V_{\text{ui}}}$$ [eq 4.5-43]
+
+where
+
+ $w_{\text{c}}$ = core outlet flow rate
+
+ $T_{\text{mm}}$ = mixed mean coolant outlet temperature
+
+ $\rho_{\text{u}}$ = sodium density in the outlet plenum
+
+ $V_{\text{ui}}$ = coolant volume in the upper internal structure
+region
+
+Initially both $T_{\text{ui}}$ and $T_{\text{cr}}$ are set
+equal to the steady-state mixed mean outlet temperature. The UIS volume,
+ $V_{\text{ui}}$ is entered as input variable UIVOL.
+
+During the transient calculation, Eq. (4.5-43) is approximated with
+
+$$T_{\text{ui}}\left( t + \Delta t \right) = \frac{T_{\text{ui}}\left( t \right) + x{T}_{\text{mm}}\left( t + \Delta t \right)}{1 + x}$$ [eq 4.5-44]
+
+where
+
+$$x = \frac{w_{\text{c}}\left( t + \Delta t \right)\Delta t}{\rho_{\text{u}}V_{\text{ui}}}$$ [eq 4.5-45]
+
+For this calculation, only channels with positive outlet flow rates
+contribute to $w_{\text{c}}$ and $T_{\text{mm}}$ . Eq. (4.5-42) is
+approximated as
+
+$$M_{\text{cr}}C_{\text{cr}}\frac{T_{\text{cr}}\left( t + \Delta t \right) - T_{\text{cr}}\left( t \right)}{\Delta t} = h_{\text{cr}}A_{\text{cr}}\left\lbrack T_{\text{ui}}\left( t + \Delta t \right) - T_{\text{cr}}\left( t + \Delta t \right) \right\rbrack$$ [eq 4.5-46]
+
+or
+
+$$T_{\text{cr}}\left( t + \Delta t \right) = \frac{T_{\text{cr}}\left( t \right) + d\ T_{\text{ui}}\left( t + \Delta t \right)}{1 + d}$$ [eq 4.5-47]
+
+where
+
+$$d = \frac{h_{\text{cr}}A_{\text{cr}}}{M_{\text{cr}}C_{\text{cr}}}\Delta t$$ [eq 4.5-48]
+
+The axial expansion of the control rod drive,
+ $\Delta z_{\text{cr}}$ , is calculated as
+
+$$\Delta z_{\text{cr}}\left( t \right) = L_{\text{cr}}\alpha_{\text{cr}}\left\lbrack T_{\text{cr}}\left( t \right) - T_{\text{cr}}\left( 0 \right) \right\rbrack$$ [eq 4.5-49]
+
+where $L_{\text{cr}}$ is the length of the control rod drive
+washed by the outlet sodium, and $\alpha_{\text{cr}}$ is the
+thermal expansion coefficient. These data are entered as CRDLEN and
+CRDEXP.
+
+The vessel wall expansion is calculated on the basis of the temperatures
+calculated by PRIMAR-4 for the walls of the liquid elements or
+compressible volumes that represent the vessel wall. For a typical pool
+reactor, the vessel wall would be the wall of the cold pool; but for
+some reactor designs a number of compressible volumes and liquid
+elements would be used to represent the vessel wall. The expansion of
+the vessel wall, $\Delta z_{\text{v}}$ , is calculated as
+
+$$\Delta z_{\text{v}} = \sum_{\text{k}}{\left\lbrack {\overline{T}}_{\text{k}}\left( t \right) - {\overline{T}}_{\text{k}}\left( 0 \right) \right\rbrack L_{\text{k}}\alpha_{\text{k}}}$$ [eq 4.5-50]
+
+where
+
+ ${\overline{T}}_{\text{k}}$ = average wall temperature of the
+k-th compressible volume or liquid element in the vessel wall
+
+ $L_{\text{k}}$ = length of the vessel wall represented by the k-th
+compressible volume or element
+
+ $\alpha_{\text{k}}$ = thermal expansion coefficient of the vessel wall
+
+The net movement, $\Delta z_{\text{n}}$ , is calculated as
+
+$$\Delta z_{\text{n}} = \Delta z_{\text{cr}} - \Delta z_{\text{v}}$$ [eq 4.5-51]
+
+and the reactivity feedback, $\delta k_{\text{cr}}$ , is calculated
+as
+
+$$\delta k_{\text{cr}} = a_{\text{cr}}\Delta z_{\text{n}} + b_{\text{cr}}\left( \Delta z_{\text{n}} \right)^{2}$$ [eq 4.5-52]
+
+where $a_{\text{cr}}$ and $b_{\text{cr}}$ are user-supplied
+coefficients entered as ACRDEX and BCRDEX.
+
+A multiple-node version of this model is in development, but has not
+been verified for production use.
+
+[anchor: fuel-and-cladding-relocation-feedback-reactivity]
+
+## 4.5.8. Fuel and Cladding Relocation Feedback Reactivity
+
+The fuel and cladding relocation reactivity feedbacks are calculated as
+the product of the input material reactivity worth (CLADRA and FUELRA) and the change in the axial
+material mass distribution since the initial steady-state condition.
+Symbolically this is represented by
+
+$$\delta k \left( t \right) = \sum_{i}{\sum_{j}{\left( \frac{\Delta k}{\Delta m} \right)_{ij}\left\lbrack m_{ij}\left( t \right) - m_{ij}\left( 0 \right) \right\rbrack}}$$
+
+where $\left( \frac{\Delta k}{\Delta m} \right)_{ij}$ is
+the material reactivity worth in axial node $j$ of channel
+ $i$ , $m_{ij}\left( t \right)$ is the material mass at
+axial node $j$ in channel $i$ at time $t$ , and
+ $m_{ij}\left( 0 \right)$ is the initial steady-state node
+material mass. The input worth curves may be input on the fuel (MZ)
+mesh, or the coolant (MZC) mesh according to the input value of IREACZ.
+The initial and transient axial mass
+distributions are computed internally from input design geometry and
+density data, and the fuel and cladding relocation models and solutions.
+
+[anchor: ebr-ii-reactivity-feedback-model]
+
+## 4.5.9. EBR-II Reactivity Feedback model
+
+A reactor-specific set of reactivity feedback correlations has been
+implemented in SAS4A/SASSYS-1 for analysis of the EBR-II reactor and
+plant. The formulation of these correlations is based on the reactivity
+feedback model used in the NATDEMO computer program [4-7, 4-8], which is
+based on analysis of reactivity temperature coefficients in EBR-II Run
+93 [4-9]. This documentation of the SAS4A/SASSYS-1 EBR-II reactivity
+feedback model is taken from notes provided by White [4-10] and Herzog
+[4-11].
+
+In SAS4A/SASSYS-1, the EBR-II reactivity feedback is assumed to be
+composed of nine components. These components are: 1) fuel expansion, 2)
+coolant expansion, 3) stainless steel expansion, 4) axial reflector
+sodium expansion, 5) radial reflector sodium expansion, 6) fuel Doppler
+effect, 7) control rod bank expansion, 8) upper grid plate expansion,
+and 9) core subassembly bowing.
+
+Each of these effects will be considered independently and the method in
+which the feedback magnitude is determined will be given. The source and
+nature (linear or nonlinear) of the term will also be discussed.
+
+The reactivity in a steady state critical reactor is defined as zero. In
+the EBR-II feedback calculation, a parameter, which shall be named
+ $\zeta\left( 0 \right)$ , is defined at time zero (this treatment
+is not used in the other reactivity calculations performed by
+SAS4A/SASSYS-1). At later times, $\zeta\left( t \right)$ is
+calculated. The difference,
+ $\delta k \left( t \right) = \zeta\left( t \right) - \zeta\left( 0 \right)$ ,
+is the reactivity introduced from feedback effects at time $t$ .
+
+[anchor: fuel-expansion]
+
+### 4.5.9.1. Fuel Expansion
+
+Both radial and axial expansion of the fuel are considered to be linear
+terms.
+
+[anchor: axial-expansion]
+
+#### 4.5.9.1.1. Axial Expansion
+
+The method used is derived from Ref. 4-12. It has been modified to
+include the possibility that contact can occur between the fuel and
+cladding, thus altering the expression for the amount of expansion.
+Correlations from the Metallic Fuels Handbook [4-13] are used to
+evaluate the linear expansion coefficient and Young’s modulus for the
+fuel and cladding types used in EBR-II fuel elements. First, the
+following correlation is used to determine the coefficient of linear
+expansion for U-5FS fuel:
+
+$$\begin{split}\alpha_{\text{LF}} = \begin{cases}
+1.264 \times 10^{- 5} - 1.7964 \times 10^{- 9}\overline{T} + 2.0532 \times {10^{- 11}\overline{T}}^{2} & \overline{T} < 941 \\
+1.73 \times 10^{- 5} & 941 < \overline{T} < 1048 \\
+1.775 \times 10^{- 5} + 8.761 \times 10^{- 9}\overline{T} - 3.717 \times 10^{- 12}{\overline{T}}^{2} & 1048 < \overline{T} < 1480 \\
+2.55 \times 10^{- 5} & 1480 < \overline{T} \\
+\end{cases}\end{split}$$
+
+and for U-10Zr fuel, the following correlation is used:
+
+$$\begin{split}\alpha_{\text{LF}} = \begin{cases}
+1.658 \times 10^{- 5} - 2.104 \times 10^{- 8}\overline{T} + 3.345 \times 10^{- 11}{\overline{T}}^{2} & \overline{T} < 900 \\
+2.25 \times 10^{- 5} & 900 < \overline{T} \\
+\end{cases}\end{split}$$
+
+and for U-10Zr-20Pu fuel, the following correlation is used:
+
+$$\begin{split}\alpha_{\text{LF}} = \begin{cases}
+1.73 \times 10^{- 5} & \overline{T} < 868 \\
+1.98 \times 10^{- 5} & 868 < \overline{T} \\
+\end{cases}\end{split}$$
+
+The $\overline{T}$ used here is the mass-average temperature for
+the fuel in a particular channel for a particular axial layer.
+
+For SS316 or D-9 cladding, the steel linear thermal expansion
+coefficient is calculated from:
+
+$$\alpha_{\text{Lss}} = 5.189 \times 10^{- 5} - 6.4375 \times 10^{- 4}{\overline{T}}^{- \frac{1}{2}} - 1.00862 \times 10^{- 8}\overline{T}$$
+
+and for HT-9 cladding the linear thermal expansion coefficient is
+calculated from:
+
+$$\alpha_{\text{Lss}} = 1.62307 \times 10^{- 6} + 2.84714 \times 10^{- 8}\overline{T} - 1.65103 \times 10^{- 11}{\overline{T}}^{2}$$
+
+where $\overline{T}$ is the mass-average cladding
+temperature at a particular axial location in a particular channel.
+
+Correlations [4-13] for the Young’s modulus of metal fuels are functions
+of the fuel temperature and porosity PRSTY. The following correlation is used to determine the Young’s
+modulus of U-5Fs fuel:
+
+$$\begin{split}Y_{\text{f}} = \begin{cases}
+1.5123 \times 10^{11}\left( 1 - 1.2P \right)\left( 1 - 1.06\frac{\overline{T} - 588}{1405} \right) & \overline{T} < 923 \\
+1.5123 \times 10^{- 11}\left( 1 - 1.2P \right)\left( 1 - 1.06\frac{\overline{T} - 588}{1405} \right) - 0.3Y_{\text{f}}\left( 923 \right) & 923 < \overline{T} \\
+\end{cases}\end{split}$$
+
+For U-10Zr fuel, the following correlation is used:
+
+$$\begin{split}Y_{\text{f}} = \begin{cases}
+1.4349 \times 10^{11}\left( 1 - 1.2P \right)\left( 1 - 1.06\frac{\overline{T} - 588}{1405} \right) & \overline{T} < 923 \\
+1.4349 \times 10^{- 11}\left( 1 - 1.2P \right)\left( 1 - 1.06\frac{\overline{T} - 588}{1405} \right) - 0.3Y_{f}\left( 923 \right) & 923 < \overline{T} \\
+\end{cases}\end{split}$$
+
+And for U-10Zr-20 Pu fuel, the following correlation is used:
+
+$$\begin{split}Y_{\text{f}} = \begin{cases}
+1.1149 \times 10^{11}\left( 1 - 1.2P \right)\left( 1 - 1.06\frac{\overline{T} - 588}{1405} \right) & \overline{T} < 923 \\
+1.1149 \times 10^{- 11}\left( 1 - 1.2P \right)\left( 1 - 1.06\frac{\overline{T} - 588}{1405} \right) - 0.3Y_{\text{f}}\left( 923 \right) & 923 < \overline{T} \\
+\end{cases}\end{split}$$
+
+For SS316 or D-9 cladding, the steel Young’s modulus is calculated from:
+
+$$Y_{\text{ss}} = 2.01 \times 10^{11} - 7.929 \times 10^{7}\overline{T}$$
+
+and for HT-9 cladding the Young’s modulus is calculated from:
+
+$$Y_{\text{ss}} = 2.137 \times 10^{11} - 1.0274 \times 10^{8}\overline{T}$$
+
+The expression for the expansion in the fuel is
+
+$$\delta_{\text{f}} = \alpha_{\text{Lf}}\Delta T_{\text{f}}$$
+
+for no contact (fuel burnup < 2.9%), and
+
+$$\delta_{\text{f}} = \frac{\alpha_{\text{Lss}}\Delta T_{\text{ss}}Y_{\text{ss}}A_{\text{ss}} + \alpha_{\text{Lf}}\Delta T_{\text{f}}Y_{\text{f}}A_{\text{f}}}{Y_{\text{ss}}A_{\text{ss}} + Y_{\text{f}}A_{\text{f}}}$$
+
+for contact (fuel burnup > 2.9%), where $\alpha_{\text{Lf}}$ and
+ $\alpha_{\text{Lss}}$ are the thermal expansion coefficients for
+the fuel and stainless steel, $\Delta T_{\text{f}}$ and
+ $\Delta T_{\text{ss}}$ are the temperature changes for the fuel
+and stainless steel, $Y_{\text{f}}$ and $Y_{\text{ss}}$ are Young’s
+modulus for the fuel and stainless steel, and $A_{\text{f}}$ and
+ $A_{\text{ss}}$ are the cross sectional areas of the fuel and
+stainless steel.
+
+As described above, the change in temperature is not calculated directly
+by the code. Instead, the code expands the expression into two terms:
+one involving steady state conditions, $\zeta\left( 0 \right)$ ,
+and the second involving the conditions at some time $t$ ,
+ $\zeta\left( t \right)$ . The reactivity feedback is determined
+using the expression
+ $\delta k \left( t \right) = \zeta\left( t \right) - \zeta\left( 0 \right)$ .
+The parameter $\zeta$ due to the expansion can be expressed as:
+
+$$\zeta_{\text{fa}} = - \left\lbrack \left( \frac{\partial \text{k}}{\frac{\partial \text{N}}{N}} \right)_{\text{f}} - \left( \frac{\partial \text{k}}{\frac{\partial \text{H}}{H}} \right)_{\text{f}} \right\rbrack\frac{\alpha_{\text{Lss}}{\overline{T}}_{\text{ss}}Y_{\text{ss}}A_{\text{ss}} + \alpha_{\text{Lf}}{\overline{T}}_{\text{f}}Y_{\text{f}}A_{\text{f}}}{\left( Y_{\text{ss}}A_{\text{ss}} + Y_{\text{f}}A_{\text{f}} \right)\beta}$$
+
+where $\beta$ is the delayed neutron fraction,
+ $\zeta_{\text{fa}}$ is the reactivity due to fuel axial expansion
+in dollars,
+ $\left( \frac{\partial \text{k}}{\frac{\partial \text{N}}{N}} \right)_{\text{f}}$ is
+the change in $k$ with a relative change in the number density of the
+fuel, and
+ $\left( \frac{\partial \text{k}}{\frac{\partial \text{H}}{H}} \right)_{\text{f}}$ is
+the change in $k$ with a relative change in the height of the fuel, for
+the case when the clad and fuel are in contact and
+
+$$\zeta_{\text{fa}} = - \left\lbrack \left( \frac{\partial \text{k}}{\frac{\partial \text{N}}{N}} \right)_{\text{f}} - \left( \frac{\partial \text{k}}{\frac{\partial \text{H}}{H}} \right)_{\text{f}} \right\rbrack\frac{\alpha_{\text{Lf}}{\overline{T}}_{\text{f}}}{\beta}$$
+
+for the case where there is no contact. The two partial derivatives in
+both of these expressions are entered as input to SAS4A/SASSYS-1 as
+input variables YKNF and YKHF.
+
+Because some channels will have both assemblies in which the cladding
+and fuel do contact and assemblies in which they do not contact, the
+code uses the equation:
+
+$$\begin{split}\zeta_{\text{fa}} = - \left\lbrack \left( \frac{\partial \text{k}}{\frac{\partial \text{N}}{N}} \right)_{\text{f}} - \left( \frac{\partial \text{k}}{\frac{\partial \text{H}}{H}} \right)_{\text{f}} \right\rbrack\frac{\alpha_{\text{Lss}}{\overline{T}}_{\text{ss}}Y_{\text{ss}}A_{\text{ss}} + \alpha_{\text{Lf}}{\overline{T}}_{\text{f}}Y_{\text{f}}A_{\text{f}}}{\left( Y_{\text{ss}}A_{\text{ss}} + Y_{\text{f}}A_{\text{f}} \right)\beta}\left( 1 - F_{{\text{LowBU}}} \right) \\
+- \left\lbrack \left( \frac{\partial \text{k}}{\frac{\partial \text{N}}{N}} \right)_{\text{f}} - \left( \frac{\partial \text{k}}{\frac{\partial \text{H}}{H}} \right)_{\text{f}} \right\rbrack \frac{\alpha_{\text{Lf}}{\overline{T}}_{\text{f}}}{\beta}F_{{\text{LowBU}}} \\\end{split}$$
+
+where $F_{\text{LowBU}}$ is the fraction of pins with < 2.9%
+burnup. This fraction is entered to SAS4A/SASSYS-1 as variable FLOWBU.
+
+The temperature of the stainless steel (cladding) is determined using a
+weighted mass-average of the cladding temperature. The cladding is
+composed of three radial nodes. In the weighting, the middle node is
+given twice the weight of the two other nodes.
+
+[anchor: radial-expansion]
+
+#### 4.5.9.1.2. Radial Expansion
+
+The radial expansion of the fuel contributes to the reactivity
+principally by displacing the bond gap sodium from the core. This
+displacement is of the sodium between the cladding and the fuel. Once
+the fuel reaches a burnup of 2.9% the cladding is in contact with the
+fuel and there is no additional displacement, and therefore, no
+additional reactivity change. The amount by which the fuel volume
+increases can be determined using a two dimensional isotropic
+approximation, i.e.: fuel volume increase is
+ $V_{\text{f}}{2\alpha}_{\text{Lf}}$ . The fractional decrease in the
+sodium volume is then
+ $\frac{V_{\text{f}}2\alpha_{\text{Lf}}}{V_{{\text{Na}}}}$ . The
+ $\zeta$ value associated with this sodium expulsion is:
+
+$$\zeta_{\text{fr}} = \left( - \frac{2V_{\text{f}}\ \alpha_{\text{Lf}}}{V_{{\text{Na}}}} \right)\left( \frac{\partial \text{k}}{\frac{\partial \text{N}}{N}} \right)_{{\text{Na}}}\frac{{\overline{T}}_{\text{f}}}{\beta}$$
+
+when there is no contact and $\zeta_{\text{fr}} = 0$ when there is
+contact. In these expressions,
+ $\left( \frac{\partial \text{k}}{\frac{\partial \text{N}}{N}} \right)_{{\text{Na}}}$ is
+the change in $k$ with respect to a relative change in the number
+density of the sodium, which is entered as input variable YKNNA.
+Therefore, the value of $\zeta$ for the
+radial expansion of the fuel can be expressed as:
+
+$$\zeta_{\text{fr}} = \left( - \frac{2V_{\text{f}}\alpha_{\text{Lf}}}{V_{{\text{Na}}}} \right)\left( \frac{\partial \text{k}}{\frac{\partial \text{N}}{N}} \right)_{{\text{Na}}}\frac{{\overline{T}}_{\text{f}}}{\beta}F_{{\text{LowBU}}}$$
+
+The same type of summation as given above is used to volume weight the
+reactivities (and temperatures, $\zeta$ values) from the different
+axial layers and channels.
+
+[anchor: coolant-expansion]
+
+### 4.5.9.2. Coolant Expansion
+
+When the sodium coolant expands, it increases the leakage from the
+reactor, decreases sodium capture and results in spectral shifts. Sodium
+expansion is assumed to be a linear effect. The sodium coolant expansion
+is treated in a manner developed in Ref. 4.9. The equation used is:
+
+$$\zeta_{\text{c}} = \left( \frac{\partial \text{k}}{\frac{\partial \text{N}}{N}} \right)\alpha_{\text{V}_{{\text{Na}}}}\frac{{\overline{T}}_{{\text{Na}}}}{\beta}$$
+
+where ${\alpha_{\text{V}}}_{{\text{Na}}}$ is the thermal
+volumetric expansion coefficient,
+ ${\overline{T}}_{{\text{Na}}}$ is the sodium
+temperature, and the sodium temperature is the value assigned by the
+code for a particular channel and axial layer. The sodium volumetric
+thermal expansion coefficient is calculated from the local sodium
+temperature in the correlation for the sodium volumetric thermal
+expansion coefficient given in Eq. (12.13-10).
+
+The reactivity worths are summed in the manner described in the fuel
+axial expansion section. The sodium number density reactivity
+coefficient is entered as YKNNA, the
+radial sodium reactivity worth factor is entered as XRNSHP, and the axial sodium reactivity worth weighting is
+taken as the normalized axial shape of VOIDRA.
+
+[anchor: stainless-steel-expansion]
+
+### 4.5.9.3. Stainless Steel Expansion
+
+Both axial and radial steel expansion coefficients are considered to be
+linear effects.
+
+[anchor: section-4-5-9-3-1]
+
+#### 4.5.9.3.1. Axial Expansion
+
+The axial expansion of the stainless steel cladding results in a
+decrease in the number density. The amount of expansion, as in the case
+of the fuel, is different for conditions where there is contact or no
+contact. In the event of no contact (burnup < 2.9%), the expression for
+the reactivity is:
+
+$$\zeta_{\text{ssa}} = {- \left( \frac{\partial \text{k}}{\frac{\partial \text{N}}{N}} \right)}_{\text{ss}}\frac{\alpha_{\text{Lss}}{\overline{T}}_{\text{ss}}}{\beta}$$
+
+where $\alpha_{\text{Lss}}$ is the linear thermal expansion coefficient for
+the cladding, and
+ $\left( \frac{\partial \text{k}}{\frac{\partial \text{N}}{N}} \right)_{{\text{ss}}}$ 
+is the change in $k$ with respect to the relative number density in the
+stainless steel.
+
+The partial derivative above is an input parameter, YKNSS.
+If there is contact, the following expression applies:
+
+$$\zeta_{\text{ssa}} = {- \left( \frac{\partial \text{k}}{\frac{\partial \text{N}}{N}} \right)}_{\text{ss}}\frac{\alpha_{\text{Lss}}{\overline{T}}_{\text{ss}}Y_{\text{ss}}A_{\text{ss}} + \alpha_{\text{Lf}}{\overline{T}}_{\text{f}}Y_{\text{f}}A_{\text{f}}}{\left( Y_{\text{ss}}A_{\text{ss}} + Y_{\text{f}}A_{\text{f}} \right)\beta}$$
+
+The code therefore contains the expression:
+
+$$\zeta_{\text{ssa}} = {- \left( \frac{\partial \text{k}}{\frac{\partial \text{N}}{N}} \right)}_{\text{ss}}\frac{\alpha_{\text{Lss}}{\overline{T}}_{\text{ss}}}{\beta}F_{{\text{LowBU}}} - \left( \frac{\partial \text{k}}{\frac{\partial \text{N}}{N}} \right)_{\text{ss}}\frac{\alpha_{\text{Lss}}{\overline{T}}_{\text{ss}}Y_{\text{ss}}A_{\text{ss}} + \alpha_{\text{Lf}}{\overline{T}}_{\text{f}}Y_{\text{f}}A_{\text{f}}}{\left( Y_{\text{ss}}A_{\text{ss}} + Y_{\text{f}}A_{\text{f}} \right)\beta}\left( 1 - F_{{\text{LowBU}}} \right)$$
+
+The radial and axial weighting of the steel expansion reactivity is
+carried out in the same manner as for the fuel expansion reactivity. The
+radial steel reactivity worth shape factor is entered as XRSSHP,
+and the axial shape is taken as the normalized
+axial shape of input array CLADRA.
+
+[anchor: section-4-5-9-3-2]
+
+#### 4.5.9.3.2. Radial Expansion
+
+The reactivity feedback due to radial expansion of the cladding results
+from the displacement of sodium from the core. This removal is
+independent of the burnup because the expansion is directed toward the
+coolant channel. The expression for the radial expansion of the
+stainless steel structure is:
+
+$$\zeta_{\text{ssr}} = - 2\frac{V_{\text{ss}}}{V_{{\text{Na}}}}\left( \frac{\partial \text{k}}{\frac{\partial \text{N}}{N}} \right)_{{\text{Na}}}\frac{\alpha_{\text{Lss}}{\overline{T}}_{\text{ss}}}{\beta}$$
+
+where $V_{\text{ss}}$ is the volume of stainless steel in the
+cladding, and $\zeta_{\text{ssr}}$ is the reactivity feedback due
+to radial expansion of the clad.
+
+The same type of summation as given above (Section 4.5.9.3.1) is used to
+volume weight the reactivities.
+
+[anchor: axial-reflector-sodium-expansion]
+
+### 4.5.9.4. Axial Reflector Sodium Expansion
+
+In the axial reflector the reactivity feedbacks stem mostly from the
+change in leakage. The upper and lower axial reflector sodium expansion
+are treated as linear effects.
+
+[anchor: upper-reflector]
+
+#### 4.5.9.4.1. Upper Reflector
+
+The expression for the upper reflector sodium parameter $\zeta$ 
+is:
+
+$$\zeta_{\text{ur}} = \left( \frac{\partial \text{k}}{\partial \text{T}} \right)_{\text{ar}}\frac{{\overline{T}}_{\text{ur}}\ }{\beta}$$
+
+where ${\overline{T}}_{\text{ur}}$ is the average
+temperature in the upper reflector, and
+ $\left( \frac{\partial \text{k}}{\partial \text{T}} \right)_{\text{ar}}$ is the
+change in $k$ with respect to a change in axial reflector
+temperature.
+
+The input value for the above partial derivative is entered as variable
+YRCUR.
+
+To determine the average temperature of the coolant in the upper
+reflector, the following equation is used:
+
+$${\overline{T}}_{\text{uf}} = \frac{\sum_{\text{i} = 1}^{N}{V_{\text{i}}T_{\text{i}}} + \sum_{\text{j} = 1}^{M}{\sum_{\text{k} = 1}^{L\left( j \right)}{V_{\text{j,k}}T_{\text{j,k}}}}}{\sum_{\text{i} = 1}^{N}V_{\text{i}} + \sum_{\text{j} = 1}^{M}{\sum_{\text{k} = 1}^{L\left( j \right)}V_{\text{j,k}}}}$$
+
+where $N$ is the number of axial nodes in the gas plenum,
+ $M$ is the number of zones in the upper reflector,
+ $L\left( j \right)$ is the number of axial nodes in zone
+ $j$ . Also, $V_{\text{i}}$ is the volume of coolant node $i$ 
+in the plenum space, $T_{\text{i}}$ is the temperature of the node
+ $i$ coolant in the plenum space, $V_{\text{j,k}}$ is the volume of
+coolant node $k$ in zone $j$ in the reflector area, and
+ $T_{\text{j,k}}$ is the temperature of the coolant in node $k$ of
+zone $j$ in the reflector area.
+
+In this analysis, only the sodium coolant is considered to determine the
+reactivity feedback. This is done for two reasons: the difference
+between the sodium coolant and stainless steel temperature is small and
+the relative contributions of the stainless steel and coolant expansions
+are unknown. The volumes used are that of the flow, not of the structure
+and flow.
+
+[anchor: lower-reflector]
+
+#### 4.5.9.4.2. Lower Reflector
+
+The expression for the lower reflector sodium feedback is:
+
+$$\zeta_{\text{lr}} = \left( \frac{\partial \text{k}}{\partial \text{T}} \right)_{\text{ar}}\frac{{\overline{T}}_{\text{lr}}}{\beta}$$
+
+where the partial derivative is entered as input variable YLCLR and
+ ${\overline{T}}_{\text{lr}}$ is the average
+temperature in the lower reflector.
+
+The same temperature volume-weighting scheme used in the upper reflector
+is also used in the lower reflector. Again, the temperatures are that of
+the coolant and the volumes are that in which flow occurs.
+
+[anchor: radial-reflector-expansion]
+
+### 4.5.9.5. Radial Reflector Expansion
+
+The reactivity change that results from a temperature change in the
+radial reflector is mainly due to the change in density of the sodium in
+the reflector, which results in a change in the leakage. The radial
+reflector expansion is treated as a linear effect. The expression for
+the radial reflector sodium feedback is:
+
+$$\zeta_{\text{rr}} = \left( \frac{\partial \text{k}}{\partial \text{T}} \right)_{\text{rr}}\frac{{\overline{T}}_{\text{rr}}}{\beta}$$
+
+where $\left( \frac{\delta \text{k}}{\delta \text{T}} \right)_{\text{rr}}$ is
+the change in $k$ with respect to the radial reflector
+temperature, and ${\overline{T}}_{\text{rr}}$ is the average
+temperature of the radial reflector.
+
+The partial derivative is entered as input variable YRCRR.
+The nodes from which the average temperature is
+determined are those in which LCHTYP is set to 2, indicating a stainless
+steel reflector subassembly, and those of the bypass region at the core
+level. For the channel subassemblies, only zone 5 (currently the core)
+is used in the volume weighting. For the bypass channel, the
+temperatures are also volume weighted. The coolant temperature is volume
+weighted in all axial nodes of all channels to obtain the average
+temperature. The equation used in the code is:
+
+$${\overline{T}}_{\text{rr}} = \frac{\sum_{\text{i}}{V_{\text{by,i}}T_{\text{by,i}}} + \sum_{\text{j}}{V_{\text{ch,j}}T_{\text{ch,j}}}}{V_{\text{by}} + V_{\text{ch}}}$$
+
+where $V_{\text{by,i}}$ is the volume of bypass region $i$ ,
+ $T_{\text{by,i}}$ is the temperature of the bypass region $i$ ,
+ $V_{\text{by}}$ is the total volume of the bypass region
+corresponding to the reflector, $V_{\text{ch,j}}$ is the volume of axial
+layer $j$ of the stainless steel containing channel,
+ $T_{\text{ch,j}}$ is the temperature of axial layer $j$ of the
+stainless steel containing channel, $V_{\text{ch}}$ is the total
+volume of the stainless steel channel.
+
+[anchor: doppler-effect]
+
+### 4.5.9.6. Doppler Effect
+
+The Doppler effect is a nonlinear phenomenon that results from the
+change in effective cross sections at different temperatures. The
+temperature coefficient for the Doppler effect
+ $\left( \frac{\delta \text{k}}{\delta \text{T}} \right)_{\text{D}}$ is a function of
+fuel temperature:
+
+$$\left( \frac{\partial \text{k}}{\partial \text{T}} \right)_{\text{D}} = \frac{k_{\text{D}}}{{\overline{T}}_{\text{f}}}$$
+
+where $k_{\text{D}}$ is an input variable YRCDOP and ${\overline{T}}_{\text{f}}$ is the channel
+average fuel temperature. Since the Doppler temperature coefficient is
+temperature dependent, an average value is used.
+
+$$\left\langle \left( \frac{\partial \text{k}}{\partial \text{T}} \right)_{\text{D}} \right\rangle = \frac{\int_{{\overline{T}}_{\text{f}}\left( 0 \right)}^{{\overline{T}}_{\text{f}}\left( t \right)}{\left( \frac{\partial \text{k}}{\partial \text{T}} \right)_{\text{D}}\text{d}{\overline{T}}_{\text{f}}}}{\int_{{\overline{T}}_{\text{f}}\left( 0 \right)}^{{\overline{T}}_{\text{f}}\left( t \right)}{\text{d}{\overline{T}}_{\text{f}}}} = \frac{k_{\text{D}}}{{\overline{T}}_{\text{f}}\left( t \right) - {\overline{T}}_{\text{f}}\left( 0 \right)}\ln\left\lbrack \frac{{\overline{T}}_{\text{f}}\left( t \right)}{{\overline{T}}_{\text{f}}\left( 0 \right)} \right\rbrack$$
+
+where ${\overline{T}}_{\text{f}}\left( t \right)$ is the channel average
+fuel temperature at time $t$ , and
+ ${\overline{T}}_{\text{f}}\left( 0 \right)$ is the steady-state channel
+average fuel temperature.
+
+The total feedback $\delta k_{\text{D}}$ due to the Doppler effect is the
+sum of the Doppler feedbacks for each fueled channel. This is
+implemented in the code as:
+
+$$\delta k_{\text{D}} = \sum_{\text{i} = 1}^{N}{\left\langle \left( \frac{\partial \text{k}}{\partial \text{T}} \right)_{\text{D}} \right\rangle_{\text{i}}\frac{V_{\text{i}}}{V_{{\text{tot}}}}\left\lbrack {\overline{T}}_{\text{f,i}}\left( t \right) - {\overline{T}}_{\text{f,i}}\left( 0 \right) \right\rbrack} = \frac{k_{\text{D}}}{V_{{\text{tot}}}}\sum_{\text{i} = 1}^{N}{V_{\text{i}}\ln\left\lbrack \frac{{\overline{T}}_{\text{f,i}}\left( t \right)}{{\overline{T}}_{\text{f,i}}\left( 0 \right)} \right\rbrack}$$
+
+where the temperatures given above are currently weighted by the axial
+and radial reactivity worths.
+
+[anchor: control-rod-bank-expansions]
+
+### 4.5.9.7. Control Rod Bank Expansions
+
+The change in reactivity that results from control rod bank temperature
+change is a result of the support of these rods. These are suspended
+from the top of the reactor. When a temperature change occurs, the rods
+expand or contract, forcing some of the fuel into or out of the core.
+This results in a reactivity change. The control rod expansion is
+treated as a linear effect. Although there are several portions of the
+control rod that undergo expansion when the temperature is increased,
+the current code only models two. The first of these is the control rod
+fuel and the second is the driveline expansion. The expression found in
+the code is:
+
+$$\zeta_{\text{cr}} = \frac{\left( \frac{\partial \text{k}}{\partial \text{T}} \right)_{\text{cr}}}{\beta}\left\lbrack F_{\text{cr}}\frac{\sum_{\text{i} = 1}^{N}{{\overline{T}}_{\text{f,i}}V_{\text{i}}}}{V_{{\text{tot}}}} + \left( 1 - F_{\text{cr}} \right)T_{\text{CV}2} \right\rbrack$$
+
+where $T_{\text{CV}2}$ is the temperature in the upper plenum (CV#2 in
+SAS4A/SASSYS-1),
+ $\left( \frac{\delta \text{k}}{\delta \text{T}} \right)_{\text{cr}}$ is the
+change is the change in $k$ with respect to control rod
+temperature, and $F_{\text{cr}}$ is the fraction of the response
+due to the channel temperature change.
+
+The partial derivative above is entered as input variable YRCCR and
+ $F_{\text{cr}}$ is entered as FCR.
+
+The model given above differs from previous models [Ref. 4-12] because
+it does not include different time constants which characterize the
+different portions of the stainless steel control rod structure;
+instead, they are treated as the two terms given above; one proportional
+to fuel temperature and the other proportional to the exit plenum
+temperature. For steady state or a series of steady states this will not
+result in any significant error.
+
+[anchor: upper-grid-plate-expansion]
+
+### 4.5.9.8. Upper Grid Plate Expansion
+
+The upper grid plate is located below the core and serves as a support
+for the hex can. Grid plate expansion impacts the reactivity by
+displacing the assembly rows in the reactor. The upper grid plate
+expansion is treated as a linear effect. Reference 4-9 gives the
+following expression for the feedback:
+
+$$\zeta_{\text{gp}} = \frac{T_{\text{CV}1}\left( t \right)}{\beta}\left( \frac{\partial \text{k}}{\partial \text{T}} \right)_{\text{gp}}$$
+
+where $\zeta_{\text{gp}}$ is the reactivity due to the upper grid
+plate expansion, $T_{\mathrm{CV1}}\left( t \right)$ is the
+temperature of the inlet plenum (CV#1 in SAS4A/SASSYS-1), and
+ $\left( \frac{\delta \text{k}}{\delta \text{T}} \right)_{\text{gp}}$ is the
+feedback coefficient associated with the grid plate.
+
+The partial derivative above is an input parameter entered as YRCGP.
+
+[anchor: bowing-and-unspecified-parameters]
+
+### 4.5.9.9. Bowing and Unspecified Parameters
+
+In the EBR-II reactivity feedback model, “bowing” is a “catch all” for
+terms which can not specifically be identified and therefore may contain
+terms other than that which result from the bowing of the assembly. True
+assembly bowing results when one side of a fuel assembly is at a higher
+temperature than the other. This results in a different expansion of the
+two sides moving the assembly radially. Bowing contributes to the
+reactivity by increasing or decreasing the amount of fuel in relatively
+high worth portions of the core.
+
+The overall “bowing” term in the EBR-II model is treated as a linear
+effect that is modeled by one line below a threshold and by another line
+above the threshold. The effect is a function of the normalized
+temperature rise across the core
+ $\Delta T_{{\text{norm}}}$ . For normalized temperatures
+above the threshold, which is given by the input variable YTCUT, the bowing reactivity
+ $\delta k_{\text{bw}}$ is given by:
+
+$$\delta k_{\text{bw}} = A + B\Delta T_{{\text{norm}}}$$
+
+For normalized temperatures below the threshold, the bowing reactivity
+ $\delta k_{\text{bw}}$ is given by:
+
+$$\delta k_{\text{bw}} = \left( \frac{A}{{\text{YTCUT}}} + B \right)\Delta T_{{\text{norm}}}$$
+
+The values for the input coefficients $A$ and $B$ are
+entered as YABOW and YBBOW.
+
+The normalized temperature rise is the ratio of the temperature rise
+across the core at time t to the temperature rise across the core at
+full power and flow conditions. The temperature rise is modeled as the
+difference between the upper and lower plena temperatures (found in
+YTLCV2 and YTLCV1) or as the difference between the average sodium
+temperature for the fueled channels
+ ${\overline{T}}_{{\text{Na}}}$ and the
+temperature of the lower plenum YTLCV1. Which model is used for the
+normalized temperature rise is determined by an input parameter IBOWTP.
+For IBOWTP equal to zero, the normalized
+temperature rise is based on the outlet and inlet plena temperatures. In
+the case, the normalized factor YDELT0
+gives the difference between the outlet and inlet plena temperatures at
+full power and flow conditions. For IBOWTP not equal to zero, the
+normalized temperature rise is based on the average sodium temperature
+in fueled channels and the temperature of the inlet plenum. In this
+case, the normalized factor YDELT0 gives the difference between the
+average sodium temperature in the fueled channels and the temperature of
+the inlet plenum at full power and flow conditions.
+
 
 ------------------------------------------------------------------------------
 [page: Part02/Ch04/solution-methods.html]
@@ -4266,6 +5794,264 @@ EXPCFF
  | 
  | 
 -
+ | 
+
+Table 4.8.2 Decay Heat Input Data
+
+ | 
+
+ | 
+Symbol
+ | 
+ | 
+Reference
+ | 
+ | 
+Name
+ | 
+ | 
+Block
+ | 
+ | 
+Location
+ | 
+ | 
+Comments
+ | 
+
+ | 
+
+ | 
+-
+ | 
+ | 
+Eq. (4.4-19)
+ | 
+ | 
+NDKGRP
+ | 
+ | 
+1
+ | 
+ | 
+17
+ | 
+ | 
+max = 24
+ | 
+
+ | 
+-
+ | 
+ | | 
+ | 
+NPOWDK
+ | 
+ | 
+1
+ | 
+ | 
+45
+ | 
+ | 
+max = 5
+ | 
+
+ | 
+-
+ | 
+ | | 
+ | 
+NPDKST
+ | 
+ | 
+1
+ | 
+ | 
+46
+ | 
+ | 
+max = 8
+ | 
+
+ | 
+ $\beta_{\text{n}}$ 
+ | 
+ | 
+Eq. (4.4-4)
+ | 
+ | 
+BETADK or
+
+DKBET2
+
+ | 
+ | 
+12
+ | 
+ | 
+260-289
+
+511-630
+
+ | 
+ | 
+deprecated, use DKBET2
+ | 
+
+ | 
+ $\lambda_{\text{n}}$ 
+ | 
+ | 
+Eq. (4.4-1)
+ | 
+ | 
+DKLAM or
+
+DKLAM2
+
+ | 
+ | 
+12
+ | 
+ | 
+290-319
+
+631-750
+
+ | 
+ | 
+deprecated, use DKLAM2
+ | 
+
+ | 
+ $\beta_{\text{d}}$ 
+ | 
+ | 
+Eq. (4.4-4)
+ | 
+ | 
+BETAHT
+ | 
+ | 
+12
+ | 
+ | 
+320-324
+ | 
+ | 
+-
+ | 
+
+ | 
+ $x_{\text{i}}$ 
+ | 
+ | 
+Eq. (4.4-12)
+ | 
+ | 
+DKFRAC
+ | 
+ | 
+12
+ | 
+ | 
+751-800
+ | 
+ | 
+-
+ | 
+
+ | 
+ $x_{\text{i}}$ 
+ | 
+ | 
+Eq. (4.4-12)
+ | 
+ | 
+DKANSI
+ | 
+ | 
+12
+ | 
+ | 
+801-880
+ | 
+ | 
+-
+ | 
+
+ | 
+ $P_{\text{t}}^{k}$ 
+ | 
+ | 
+Eq. (4.4-19)
+ | 
+ | 
+POWLVL
+
+and
+
+PWLVL2
+
+ | 
+ | 
+12
+ | 
+ | 
+325-364
+
+881-920
+
+ | 
+ | 
+PWLVL2 is an extension of POWLVL
+ | 
+
+ | 
+ $\tau_{\text{k}}$ 
+ | 
+ | 
+Eq. (4.4-19)
+ | 
+ | 
+POWTIM
+
+and
+
+PWTIM2
+
+ | 
+ | 
+12
+ | 
+ | 
+365-404
+
+921-960
+
+ | 
+ | 
+PWTIM2 is an extension of POWTIM
+ | 
+
+ | 
+ $Q_{\text{t}}$ 
+ | 
+ | 
+Eq. (4.4-2)
+ | 
+ | 
+QETOT
+ | 
+ | 
+12
+ | 
+ | 
+961-968
+ | 
+ | 
+default = 200 MeV
  |
 
 

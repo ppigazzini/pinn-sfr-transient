@@ -9559,6 +9559,22 @@ Listing 8.6.1 Sample DEFORM-4 Output using 15-15Ti Model (IDEFOPT > 0 and ICTYPE
  2 0.1128 0.0076 0.0612 0.000E+00 0.000E+00 0.459E-03 0.199E-01 0.100E-05 0.000E+00
  1 0.0376 0.0076 0.0612 0.000E+00 0.000E+00 0.459E-03 0.199E-01 0.100E-05 0.000E+00
 
+Listing 8.6.1 shows an example output from a fuel performance with 15-15Ti
+cladding in a fuel channel. Columns show the axial node
+number, the axial elevation (m), fuel burnup (at%), clad dose (dpa),
+clad outer corrosion thickness (m), which is controlled by COCOR input,
+irradiation induced volumetric clad swelling
+(%), clad irradiation and thermal creep hoop strain (%), clad failure
+margin due to thermal creep rupture, which is the computed Clad Damage
+Fraction value (CDF) and fuel pin failure fraction (or probability)
+computed if stochastic clad damage evaluation module is switched ON
+(IDEFSTFAL > 0 and IDEFOPT > 0). Irradiation creep,
+thermal creep, void swelling, and clad
+creep rupture and clad failure fractions are computed by EPSIR15Ti,
+ET15Ti, EPSWC15Ti, CRUP15Ti, and CDFNORMALDIST routines, respectively.
+This output can be printed together with the DEFORM-4 output for normal
+operation and transient simulations at user specified steps.
+
 
 ------------------------------------------------------------------------------
 [page: Part03/Ch08/material-properties.html]
@@ -11620,5 +11636,241 @@ n/m2
  | 
  | 
 Negative fractional density change in the cladding
+ | 
+ | | 
+
+ | 
+Superscripts
+ | 
+ | | 
+ | | 
+
+ | 
+ $f$ 
+ | 
+ | 
+Force component
+ | 
+ | | 
+
+ | 
+ $th$ 
+ | 
+ | 
+Thermal component
+ | 
+ | | 
+
+ | 
+ $p$ 
+ | 
+ | 
+Plenum
+ | 
+ | | 
+
+ | 
+ $v$ 
+ | 
+ | 
+Central fuel void
+ | 
+ | | 
+
+ | 
+Subscripts
+ | 
+ | | 
+ | | 
+
+ | 
+ $r$ 
+ | 
+ | 
+Radial or reference
+ | 
+ | | 
+
+ | 
+ $\theta$ 
+ | 
+ | 
+Circumferential
+ | 
+ | | 
+
+ | 
+ $z$ 
+ | 
+ | 
+Axial
+ | 
+ | | 
+
+ | 
+ $f$ 
+ | 
+ | 
+Force or fuel
+ | 
+ | | 
+
+ | 
+ $th$ 
+ | 
+ | 
+Thermal
+ | 
+ | | 
+
+ | 
+ $\rho$ 
+ | 
+ | 
+Inner radius of the solid fuel annulus
+ | 
+ | | 
+
+ | 
+ $\eta$ 
+ | 
+ | 
+Outer radius of the solid fuel annulus
+ | 
+ | | 
+
+ | 
+ $g$ 
+ | 
+ | 
+Plenum gas or fuel-cladding gap
+ | 
+ | | 
+
+ | 
+ $FC$ 
+ | 
+ | 
+Fuel-cladding interface
+ | 
+ | | 
+
+ | 
+ $c$ 
+ | 
+ | 
+Cladding
+ | 
+ | | 
+
+ | 
+ $m$ 
+ | 
+ | 
+Maximum
+ | 
+ | | 
+
+ | 
+ $k$ 
+ | 
+ | 
+Iteration counter
+ | 
+ | | 
+
+ | 
+ $i$ 
+ | 
+ | 
+Time step or radial node
+ | 
+ | | 
+
+ | 
+ $j$ 
+ | 
+ | 
+Axial node
+ | 
+ | | 
+
+ | 
+ $B$ 
+ | 
+ | 
+Bubble
+ | 
+ | | 
+
+ | 
+ $fg$ 
+ | 
+ | 
+Fission gas
+ | 
+ | | 
+
+ | 
+ $s$ 
+ | 
+ | 
+Swelling
+ | 
+ | | 
+
+ | 
+ $v$ 
+ | 
+ | 
+Central fuel void
+ | 
+ | | 
+
+ | 
+ $p$ 
+ | 
+ | 
+Plenum or pore
+ | 
+ | | 
+
+ | 
+ $He$ 
+ | 
+ | 
+Helium
+ | 
+ | | 
+
+ | 
+ $T$ 
+ | 
+ | 
+Total
+ | 
+ | | 
+
+ | 
+ $R$ 
+ | 
+ | 
+Reference
+ | 
+ | | 
+
+ | 
+ $cav$ 
+ | 
+ | 
+Molten cavity
+ | 
+ | | 
+
+ | 
+ $mc$ 
+ | 
+ | 
+Melting of cladding
  | 
  | |
