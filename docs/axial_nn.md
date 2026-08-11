@@ -3023,7 +3023,104 @@ unmeasured — and §7.5.30 notes the ansatz and embedding are evidently doing t
 constraining, since the fixed 4000-point solution generalises to a reference on a
 different grid.
 
-#### 7.5.31 Is a cheaper embedding competitive at a funded budget? — running
+#### 7.5.31 The capacity ladder is flat at a funded budget — f32 matches f256
+
+`uv run python tools/axial_study.py fourierbudget`, JAX, `adam10000 / qn30000`, three
+seeds per rung.
+
+| `fourier_features` | `T_s` | seed range | `L_void` | worst margin | sec | params |
+|---|---|---|---|---|---|---|
+| **f32** | 0.0026 | .0021–.0032 | 0.3748 | +65.4 K | **5110** | 21 125 |
+| f64 | 0.0025 | .0018–.0031 | 0.3729 | +65.7 K | 6122 | 25 221 |
+| **f128** | **0.0019** | .0018–.0022 | 0.3769 | +67.2 K | 7208 | 33 413 |
+| f256 (shipped) | 0.0024 | .0019–.0029 | 0.3687 | +65.2 K | **12 289** | 49 797 |
+
+**Every rung's seed range overlaps every other rung's.** f32 spans .0021–.0032 against
+f256's .0019–.0029, and f256 is *nominally worse than f128* while costing 1.7× more.
+`L_void` moves 2% across an eightfold change in embedding width; the worst-seed margin
+moves 2 K.
+
+**f32 matches f256 at 42% of the wall-clock and 42% of the parameters.** Capacity above
+f32 buys nothing measurable at this budget.
+
+§7.5.12's ladder — which is where the shipped `fourier_features = 256` comes from, as its
+config comment says — was measured entirely at `adam300 / qn3000`. Every row of
+`margin.json`, `margin256`, `margin512` and `margin1024` carries that budget. It found
+f32 → f512 monotone; at a funded quasi-Newton stage the same axis is flat.
+
+> ### This is the fourth conclusion invalidated by `qn3000`, and that is now the finding
+>
+> §7.5.11's Adam axis, §7.5.27's optimiser bake-off, §7.5.24's multi-scale bands, and now
+> §7.5.12's capacity ladder were all drawn from measurements at a starved quasi-Newton
+> stage, and all four dissolve or reverse when the stage is funded. Four is enough to stop
+> treating them as separate corrections:
+>
+> **Every architectural conclusion this project drew was an artefact of an under-converged
+> optimiser.** An architectural comparison run at an under-converged budget measures which
+> architecture reaches the under-converged state faster, which is a different question
+> from which is more accurate — and this document answered the wrong one four times.
+>
+> The corollary is uncomfortable and worth stating: the remaining architectural choices
+> here — width, depth, `fourier_scale` — were never measured at all (§7.5.30), so they are
+> not even in the position the four above were. They are simply unexamined.
+
+#### 7.5.32 Freezing the encoder makes the polish worse, at either Adam budget
+
+§7.5.30 showed the first Linear — the Fourier-to-trunk projection — is 66% of the model,
+and §7.5.31a that letting the quasi-Newton stage move it is what leaves that stage 2.07×
+underdetermined. Holding it fixed makes the polish overdetermined (24 000 residual entries
+against 16 965 weights, 1.41), which is the side of the line the literature prescribes.
+
+Measured, seed 0, against a byte-identical control:
+
+| arm | `T_s` | `L_void` | margin | sec |
+|---|---|---|---|---|
+| control, `freeze=False` | **0.0019** | 0.3772 | +67.3 K | 11 584 |
+| `freeze=True` after `adam10000` | 0.0141 | 0.3297 | +50.9 K | 10 061 |
+
+**7.2× worse**, at 0.87× the cost.
+
+The obvious objection is that 10 000 full-batch Adam steps had barely moved the encoder,
+so the frozen layer was near its initialisation and the arm tested a random-feature
+method. §7.5.33 removes that objection and the answer does not change.
+
+**So determinacy is not the binding constraint.** Making the polish overdetermined by
+removing parameters is strictly worse than leaving it underdetermined with the encoder
+free. That agrees with §7.5.29 from the opposite direction: the embedding is
+*representation*, and the polish needs to keep adjusting it.
+
+#### 7.5.33 The deep-learning schedule — small-batch Adam does not rescue it either
+
+Every Adam measurement in this document was made at **full batch** (§7.5.31a): the Adam
+stage evaluating the same 6000 points the quasi-Newton stage uses. That is not how a
+first-order method is run anywhere — JAX-PI takes 200 000 steps of 4096 points, and the
+cost advantage that makes Adam attractive comes entirely from the small batch. So "Adam
+buys nothing here" had only ever been tested against an algorithm nobody uses.
+
+`axial_study.py dlstyle` runs the protocol properly: **60 000 Adam steps at 1000 points**,
+then the encoder frozen, then **30 000 quasi-Newton iterations at 6000 points redrawn
+every 1000** — blocked restarts as in arXiv:2605.24278, so curvature stays consistent
+within a block while the stage as a whole cannot overfit one draw.
+
+| arm | `T_s` | `L_void` | margin | sec |
+|---|---|---|---|---|
+| **dlstyle** | **0.0324** | 62% | +24.2 K | 11 229 |
+| `f256 adam10000/qn30000`, full batch | **0.0019** | 99% | +67.3 K | 11 584 |
+
+**17× worse at the same wall-clock**, and it lands in the same 0.03–0.05 band every
+Adam-only arm has occupied regardless of batch size, step count, embedding or optimiser
+variant (§7.5.29).
+
+So the full-batch objection was a real methodological gap and is now measured **not** to
+be the explanation. Small-batch Adam, in the regime and at the step count the literature
+uses, does not close the gap on this problem.
+
+**It changes three things at once, deliberately — it is a schedule, not an ablation** —
+so it cannot attribute the failure between small-batch Adam, the freeze, and the blocked
+polish. Given §7.5.32 measured the freeze alone at 7.2× worse, the freeze is the prime
+suspect, but that is inference and is labelled as such.
+
+#### 7.5.31b The design of that sweep, and the risk it carried
 
 §7.5.29 established the embedding is *necessary*. It did not establish how much of it is.
 `uv run python tools/axial_study.py fourierbudget` sweeps `fourier_features ∈ {32, 64,
@@ -3039,7 +3136,8 @@ funded budget, the shipped f256 is over-specified.
 
 `adam_iters = 10000` is above `rar_every`, so **RAR is active in these arms** and it is
 not in any recent table. That is a live difference in the recipe, not only a budget
-change, and it is stated here rather than discovered when the rows disagree.
+change — so the f-ladder above is internally consistent but is not directly comparable to
+the shipped `adam30/qn30000` row, where RAR never fires.
 
 ### 7.6 Pseudo-time stepping
 
@@ -3098,7 +3196,7 @@ Sorting every isolated arm by what it changed:
 
 | what it changed | outcome |
 |---|---|
-| **the function space** — Fourier capacity (§7.5.8), multi-scale bands (§7.5.14), anisotropic bandwidth (§7.5.12) | **capacity worked.** Bands and anisotropic bandwidth worked *only at a starved quasi-Newton budget*: at `qn30000` bands are 5.6× worse on the mean and lose half the margin (§7.5.24), because a multi-band basis is an implicit preconditioner the funded optimiser no longer needs |
+| **the function space** — Fourier capacity (§7.5.8), multi-scale bands (§7.5.14), anisotropic bandwidth (§7.5.12) | **having an embedding is decisive; its size is not.** Without one, no optimiser forms a front (§7.5.29). With one, f32 matches f256 at 42% of the cost — the capacity ladder is flat at a funded budget (§7.5.31). Bands and anisotropic bandwidth helped *only* at a starved one (§7.5.24) |
 | **the optimiser** — quasi-Newton budget (§7.5.11), curvature memory (§7.5.17) | **decisive**; the only axis that forms the front at all |
 | **the first-order stage** — Adam, AdEMAMix (§7.5.29) | **buys nearly nothing, and is not cheaper.** `adam0` matches `adam30` at the funded budget; Adam-only is 19x worse; and per iteration L-BFGS is the *cheapest* of the three (99.3 ms against 107.8 and 115.5) |
 | **the loss measure** — level-set sampling (§7.5.6), front fraction (§7.5.9), block and causal weighting | **failed or inert**; `frontfrac` degrades monotonically |

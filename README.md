@@ -94,6 +94,17 @@ carries; a factor is not. Since the height half cannot be failed on a monotone f
 and the time half is now passed, **M4 no longer discriminates between formulations**
 and is being replaced (§7.5.25).
 
+**Architecture turned out not to matter here — and finding that out took four
+corrections.** The Adam iteration count, the choice of quasi-Newton variant, a multi-scale
+Fourier basis and the size of the Fourier embedding were each measured, concluded on, and
+then overturned once the quasi-Newton stage was properly funded. The embedding *width* is
+the clearest case: a 32-feature embedding matches the shipped 256 at 42% of the wall-clock
+and 42% of the parameters, with every seed range overlapping. The original ladder that
+chose 256 was measured at a tenth of the final budget. An architectural comparison made at
+an under-converged budget measures which architecture reaches the under-converged state
+faster, which is a different question from which is more accurate — and this project
+answered the wrong one four times ([`docs/axial_nn.md`](docs/axial_nn.md) §7.5.31).
+
 **The Fourier embedding and the optimisation budget do different jobs, and neither
 substitutes for the other.** Strip the embedding entirely and give the quasi-Newton stage
 its full funded budget: the error goes from 0.0017 to 0.0397 and the boiling front
