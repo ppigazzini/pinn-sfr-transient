@@ -112,6 +112,15 @@ disappears — +0.8 K of saturation margin against the reference's +69.2 K. With
 embedding *nothing* forms a front, on any optimiser tried. The features make the front
 representable; the budget makes it accurate.
 
+**The best configuration we have measured has no Adam stage and half the network.**
+A 64-feature embedding, no first-order stage at all, and one long quasi-Newton solve on a
+fixed collocation set reaches `T_s = 0.0016` [.0016–.0017] with 99.4% of the reference
+voided length and a +67.8 K margin — equal or better than the shipped default on every
+column, with **25 221 trainable parameters against 49 797**. Both sit at the reference's
+own resolution, so this is not a claim of more accuracy; it is the same result from half
+the model and none of the Adam machinery
+([`docs/axial_nn.md`](docs/axial_nn.md) §7.5.37).
+
 **The Adam stage turned out to be worse than unnecessary — on this model.** Removing it
 entirely, and spending the whole budget on the quasi-Newton stage with its collocation set
 redrawn periodically, makes the axial model **2.8× more accurate** at three seeds with

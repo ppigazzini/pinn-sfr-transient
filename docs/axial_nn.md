@@ -3230,6 +3230,64 @@ framework observation.
 Both 0D configs now carry `lbfgs_history = 50`, so the two cannot drift again. The §5.1
 table should be re-measured or marked as measured at `memory_size = 10` on the JAX side.
 
+#### 7.5.37 The blocked restart hurts — and the best configuration in this project has no Adam stage
+
+§7.5.30 posed a question it could not answer: the polish runs on one fixed collocation
+set, which is **both** what makes a curvature estimate meaningful — the pairs are
+meaningless if the objective moves underneath them — **and** what a 2× underdetermined
+stage can overfit. arXiv:2605.24278 runs its BFGS baseline in blocks of 1000 for the
+second reason. Every published number here used the fixed set; every arm in §7.5.34 used
+the refresh; nobody had separated them.
+
+One knob, `f64 adam0/qn50000` on 6000 points, three seeds:
+
+| polish set | `T_s` | range | `L_void` | worst margin | sec |
+|---|---|---|---|---|---|
+| **one fixed set** | **0.0016** | **.0016–.0017** | **0.3790** | **+67.8 K** | 5859 |
+| redrawn every 1000 | 0.0024 | .0023–.0025 | 0.3784 | +66.5 K | 8950 |
+
+**The ranges do not overlap: redrawing is 1.5× worse.** Curvature consistency beats
+overfitting protection here, decisively. And the overfitting the refresh was guarding
+against does not appear — the fixed-set arm is scored against the reference on a
+*different* grid and is the most accurate arm in this document, so whatever it fits on
+4000 sampled points generalises.
+
+> The wall-clock column is **not** a clean comparison. The refresh arms ran six-to-eight
+> concurrent, the fixed arms three, and §7.3.2's rule is that a time from a loaded machine
+> is not comparable to one from an idle one. The 1.53× is mostly contention; the two
+> configurations do identical arithmetic apart from 50 optimiser restarts. **The accuracy
+> comparison is clean; the timing one is not**, and no conclusion below rests on it.
+
+##### The recommended configuration changes
+
+| | shipped default | **best measured** |
+|---|---|---|
+| embedding | f256 | **f64** |
+| Adam | 30 | **0** |
+| quasi-Newton | 30 000, fixed set | **50 000, fixed set** |
+| trainable parameters | 49 797 | **25 221** |
+| `T_s` (3 seeds) | 0.0017 [.0016–.0017] | **0.0016 [.0016–.0017]** |
+| `L_void` | 0.3784 | **0.3790** |
+| worst margin | +67.6 K | **+67.8 K** |
+
+**Equal or better on every column, with half the parameters and no first-order stage at
+all.** The two `T_s` ranges are identical to four digits, so this is not a claim of
+improved accuracy — both are at the reference's own resolution (§7.5.22) and neither can
+be distinguished from the other. The claim is that **the same result is reachable with
+half the model and none of the Adam machinery**.
+
+That also retires a great deal of apparatus. At `adam_iters = 0` the RAR reservoir, the
+adaptive block weighting, the time-window curriculum and the pseudo-time anchors are not
+merely unreachable (§7.5.30) — they are absent. The recipe is: a hard-constraint
+multiplicative ansatz, a frozen Fourier embedding, and one long quasi-Newton solve on a
+fixed collocation set.
+
+> **This also confounds §7.5.33.** The `dlstyle` arm carried the refresh, so its 17× deficit
+> mixes small-batch Adam, the frozen encoder *and* a polish protocol now measured to cost
+> 1.5×. Its conclusion — that small-batch Adam does not rescue the first-order stage —
+> survives, because 17× is far larger than 1.5×, but the figure is not attributable and
+> should not be quoted as if it were.
+
 ### 7.6 Pseudo-time stepping
 
 Implemented (`pts_every`, `pts_dtau`, `pts_growth`), and **measured harmful** in
