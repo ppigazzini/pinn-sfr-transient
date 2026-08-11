@@ -251,6 +251,9 @@ def mean_table(rows: list[dict], key: str = "arm") -> None:
         )
 
 
+_BOUNDARY = " /@-"
+
+
 def _selected(label: str, wanted: list[str]) -> bool:
     """Return whether ``label`` is picked by any ``--only`` token, matched at a boundary.
 
@@ -264,12 +267,18 @@ def _selected(label: str, wanted: list[str]) -> bool:
     A token now matches only if it is the whole label, the whole label without its
     ``[backend]`` suffix, or a prefix of that ending at a separator — so `nofourier`
     matches `nofourier adam30000/qn0` but never `ademamix-nofourier ...`.
+
+    ``_BOUNDARY`` lists every character an arm name uses to join its parts. It started as
+    just space and slash, which silently rejected `f32 adam0/qn50000` against
+    `f32 adam0/qn50000@6k-refresh1k` — the guard did its job and printed "0 arm(s)", but
+    a separator missing from this set turns a valid token into a no-op. Add to it when a
+    new arm-naming scheme appears.
     """
     bare = label.split(" [", maxsplit=1)[0]
     for w in wanted:
         if w in (label, bare):
             return True
-        if bare.startswith(w) and (len(bare) == len(w) or bare[len(w)] in " /"):
+        if bare.startswith(w) and (len(bare) == len(w) or bare[len(w)] in _BOUNDARY):
             return True
     return False
 
@@ -1541,6 +1550,56 @@ def study_freezeenc(out: Path) -> None:
     _per_second(rows)
 
 
+def study_adamcheck(out: Path) -> None:
+    """Test whether the Adam stage does ANYTHING -- one knob, at a funded polish.
+
+    §7.5.20 measured `adam0/qn30000` at 0.0018 against `adam30`'s 0.0017 with overlapping
+    ranges, but §7.5.30 then showed why that was a weak test: at 30 iterations the Adam
+    loop does nothing at all -- RAR, adaptive weighting and the curriculum are every one
+    of them unreachable -- so it compared no Adam against almost no Adam.
+
+    This compares **no Adam** against **10 000 full-batch Adam steps**, which is a budget
+    where RAR fires and the loop is doing real work, at two embedding widths, with
+    everything downstream identical:
+
+    * `qn50000` at 6000 points (`polish_colloc = 4000`), **redrawn every 1000 iterations**
+      -- the blocked-restart protocol of arXiv:2605.24278, so the polish cannot overfit a
+      single draw and curvature stays consistent within each block;
+    * `f32` and `f64`, the two rungs §7.5.31 found indistinguishable from f256 at 42% of
+      the cost -- so this also asks whether Adam matters *more* when capacity is tight.
+
+    The comparison is exactly one knob: `adam_iters` 0 against 10 000. If the pairs come
+    out equal, the first-order stage is not merely cheap to shorten (§7.5.20) but
+    **removable**, and the recipe is a quasi-Newton solve from a random initialisation.
+    """
+    traj = ruler()
+    rows = run_all(
+        traj,
+        [
+            (
+                f"f{n} adam{a}/qn50000@6k-refresh1k [jax]",
+                {
+                    "backend": "jax",
+                    "seed": seed,
+                    "fourier_features": n,
+                    "adam_iters": a,
+                    "lbfgs_iters": 50000,
+                    "polish_colloc": 4000,
+                    "polish_refresh": 1000,
+                },
+            )
+            for seed in SEEDS
+            for n in (32, 64)
+            for a in (0, 10000)
+        ],
+        out,
+    )
+    mean_table(rows)
+    print("\nis the Adam stage removable, or does it earn its 10000 steps?")
+    _arm_summary(rows)
+    _per_second(rows)
+
+
 def study_dlstyle(out: Path) -> None:
     """Deep-learning-style schedule: many small-batch Adam steps, then a blocked polish.
 
@@ -1798,6 +1857,7 @@ STUDIES = {
     "fourierbudget": study_fourierbudget,
     "freezeenc": study_freezeenc,
     "dlstyle": study_dlstyle,
+    "adamcheck": study_adamcheck,
 }
 
 
