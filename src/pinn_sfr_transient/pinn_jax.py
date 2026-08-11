@@ -52,6 +52,10 @@ class TrainConfig:
     n_colloc: int = 4000
     adam_iters: int = 15000
     lbfgs_iters: int = 600
+    # Curvature pairs. `optax.lbfgs()` defaults to 10; the torch twin passes 50, and that
+    # single unset argument was the WHOLE cross-backend accuracy gap on the axial model
+    # (docs/axial_nn.md 7.5.17). The same bare call was still here.
+    lbfgs_history: int = 50
     lr: float = 1e-3
 
     # Causal weighting [Wang, Sankaran & Perdikaris 2024]
@@ -282,7 +286,8 @@ def _lbfgs_polish(
     def loss_fn(params: SFRPinn) -> jax.Array:
         return causal_loss(eqx.combine(params, static), t, w, p, cfg)
 
-    opt = optax.lbfgs()
+    # Never bare: see `lbfgs_history`.
+    opt = optax.lbfgs(memory_size=cfg.lbfgs_history)
     state = opt.init(params)
     value_and_grad = optax.value_and_grad_from_state(loss_fn)
 

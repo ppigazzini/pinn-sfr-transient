@@ -59,6 +59,9 @@ class TrainConfig:
     n_colloc: int = 4000
     adam_iters: int = 15000
     lbfgs_iters: int = 600
+    # Mirrors the JAX twin's knob so the two cannot drift; 50 is what this backend
+    # already used, so no published torch number moves.
+    lbfgs_history: int = 50
     lr: float = 1e-3
 
     # Causal weighting [Wang, Sankaran & Perdikaris 2024]
@@ -401,7 +404,7 @@ class Trainer:
         opt = torch.optim.LBFGS(
             self.model.parameters(),
             max_iter=self.cfg.lbfgs_iters,
-            history_size=50,
+            history_size=self.cfg.lbfgs_history,
             line_search_fn="strong_wolfe",
             tolerance_grad=1e-12,
             tolerance_change=1e-14,
