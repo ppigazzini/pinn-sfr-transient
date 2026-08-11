@@ -3139,6 +3139,97 @@ not in any recent table. That is a live difference in the recipe, not only a bud
 change — so the f-ladder above is internally consistent but is not directly comparable to
 the shipped `adam30/qn30000` row, where RAR never fires.
 
+#### 7.5.34 Removing the Adam stage makes the axial model *better* — 2×2, three seeds
+
+§7.5.20 measured `adam0/qn30000` at 0.0018 against `adam30`'s 0.0017 and called them
+indistinguishable, which made Adam look merely useless. §7.5.30 then showed why that was a
+weak test: at 30 iterations the Adam loop does nothing at all, so it compared no Adam
+against almost no Adam.
+
+`axial_study.py adamcheck` compares **no Adam** against **10 000 full-batch Adam steps** —
+a budget where RAR fires and the loop does real work — at two embedding widths, with an
+identical polish: 50 000 quasi-Newton iterations on 6000 points **redrawn every 1000**
+(the blocked-restart protocol of arXiv:2605.24278). Three seeds per cell.
+
+| | `adam0` | `adam10000` | ratio |
+|---|---|---|---|
+| **f32** | 0.0038 [.0021–.0056] | 0.0074 [.0042–.0118] | 1.9× |
+| **f64** | **0.0024 [.0023–.0025]** | 0.0067 [.0030–.0124] | **2.8×** |
+
+**f64's ranges do not overlap** — .0023–.0025 against .0030–.0124 — so at that width
+removing the first-order stage entirely makes the model **2.8× more accurate**. f32's do
+overlap (.0042–.0056 is common), so f32 shows the direction without establishing it.
+
+`f64 adam0` is the best-behaved arm in this document: `L_void` 0.3784 (99.3% of
+reference), worst-seed margin +66.5 K, and a seed spread of **1.09×** — the tightest
+measured here. Both `adam10000` cells carry the widest spreads in the study, 2.8× and
+4.1×, so the Adam stage adds variance as well as error.
+
+**So the first-order stage is not merely removable, it is harmful at this budget.** That
+does not contradict §7.5.20; it explains it. Thirty Adam iterations do nothing and cost
+nothing; ten thousand do something, and what they do is move the parameters somewhere a
+curvature-based method does worse from.
+
+> **A retraction of my own reading, recorded because the pattern is the one this document
+> keeps repeating.** On seed 0 alone `f32 adam0` read 0.0021 with 99.9% voided length, and
+> that was reported as "the best arm we have measured" and compared against three-seed
+> numbers. At three seeds it is 0.0038 [.0021–.0056] — the single seed was the *best* of a
+> 2.7× spread. The hedge "one seed" was stated and was useless, exactly as AGENTS.md says
+> a hedge under a confident headline always is. **f64, not f32, is the arm that survived.**
+
+#### 7.5.35 The 0D model does the opposite, which is the cleanest evidence that this is formulation-dependent
+
+`REPORT-01` §5.1 states that "L-BFGS from scratch on a PINN loss stalls", citing Rathore
+et al. — but no row in this repository measured it, and §7.5.34 contradicts it outright on
+the axial model. The 0D model, under the **same** optimiser implementation, the same JAX
+backend and the same `memory = 50`:
+
+| 0D arm | power relative `L2` | sec |
+|---|---|---|
+| `adam0/qn0` (untrained network) | 0.2083 | 6.1 |
+| `adam0/qn100` | 0.1949 | 7.6 |
+| **`adam0/qn1000`** | **0.4466** | 6.5 |
+| **`adam100/qn100`** | **0.3997** | 13.9 |
+
+**More quasi-Newton makes the 0D model worse than not training it at all.** 100 iterations
+move the power error 6%; 1000 iterations take it to 2.1× *worse than the untrained
+network*. That is not a stall, it is divergence in the trajectory.
+
+It is also the exact failure `REPORT-01` §5.1 warns about two sentences later: the polish
+"runs full-batch on a *fixed* collocation set — that is also how it can overfit that set.
+Always report trajectory error, not just loss." The 0D polish drives the collocation
+residual down while the trajectory goes the other way. The divergence guard does not catch
+it because the guard is on the training loss.
+
+**So both behaviours exist in this repository, under one implementation.** On the axial
+model a pure quasi-Newton solve is the best configuration measured; on the 0D model it is
+worse than an untrained network. The Adam-then-L-BFGS consensus is therefore neither
+right nor wrong in general — it is a statement about a formulation, and the two
+formulations here differ in three respects at once (multiplicative hard-constraint ansatz
+with no penalty terms, a Fourier embedding, and advection with a near-discontinuous
+front), so this measurement does not say *which* of them is decisive.
+
+> **And a wrong diagnosis of my own, corrected.** A 50 000-iteration 0D probe ran for
+> nearly three hours producing nothing, and I attributed it to XLA compilation growing
+> with the `fori_loop` bound. That was wrong: `qn1000` compiles and runs in 6.5 s. The
+> three hours are unexplained and the probe was killed; nothing here rests on it.
+
+#### 7.5.36 The 0D backend had the same bare `optax.lbfgs()` — never fixed
+
+Found while setting up §7.5.35. `pinn_jax.py` called `optax.lbfgs()` **bare**, defaulting
+to `memory_size = 10`, while the torch twin passed `history_size = 50`. That is the
+identical defect §7.5.17 traced in the axial model, where it accounted for the *entire*
+cross-backend accuracy gap and was read as a framework difference for four milestones.
+
+The axial model was fixed. **The 0D model was not, and nobody looked.** So every 0D
+cross-backend comparison in this project is affected — including `REPORT-01` §5.1's table
+reporting JAX's polish improving −74% / −40% against torch's −82% / −54%. That gap has
+exactly the shape the memory defect produces, and it is sitting in the report as a
+framework observation.
+
+Both 0D configs now carry `lbfgs_history = 50`, so the two cannot drift again. The §5.1
+table should be re-measured or marked as measured at `memory_size = 10` on the JAX side.
+
 ### 7.6 Pseudo-time stepping
 
 Implemented (`pts_every`, `pts_dtau`, `pts_growth`), and **measured harmful** in

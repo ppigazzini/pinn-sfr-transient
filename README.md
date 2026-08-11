@@ -112,6 +112,19 @@ disappears — +0.8 K of saturation margin against the reference's +69.2 K. With
 embedding *nothing* forms a front, on any optimiser tried. The features make the front
 representable; the budget makes it accurate.
 
+**The Adam stage turned out to be worse than unnecessary — on this model.** Removing it
+entirely, and spending the whole budget on the quasi-Newton stage with its collocation set
+redrawn periodically, makes the axial model **2.8× more accurate** at three seeds with
+non-overlapping ranges — and gives the tightest seed spread we have measured (1.09×).
+
+That is emphatically *not* a general claim about first-order methods, and the counter-example
+is in this repository. The 0D lumped model, under the same optimiser, the same backend and
+the same settings, **diverges** without an Adam warm start: a pure quasi-Newton solve reaches
+a power error of 0.45 against an untrained network's 0.21. So the standard Adam→L-BFGS recipe
+is right for one of our two models and wrong for the other, and which one you are on is
+decided by the formulation rather than by the optimiser
+([`docs/axial_nn.md`](docs/axial_nn.md) §7.5.34–35).
+
 **And the first-order stage buys nearly nothing here — nor is it cheaper.** Adam alone,
 at the same iteration count and comparable wall-clock, is 19× worse than spending that
 budget on the quasi-Newton stage, and AdEMAMix is worse still. Per *iteration*, measured
