@@ -1591,11 +1591,31 @@ def study_adamcheck(out: Path) -> None:
             for seed in SEEDS
             for n in (32, 64)
             for a in (0, 10000)
+        ]
+        + [
+            # The blocked restart isolated. Identical to `f64 adam0/qn50000@6k-refresh1k`
+            # except the polish keeps ONE fixed set for all 50 000 iterations, which is
+            # what every published number here used. arXiv:2605.24278 runs its BFGS
+            # baseline in blocks; §7.5.30 notes a fixed set is both what makes curvature
+            # meaningful and what the stage can overfit. This says which effect wins.
+            (
+                "f64 adam0/qn50000@6k-fixed [jax]",
+                {
+                    "backend": "jax",
+                    "seed": seed,
+                    "fourier_features": 64,
+                    "adam_iters": 0,
+                    "lbfgs_iters": 50000,
+                    "polish_colloc": 4000,
+                    "polish_refresh": 0,
+                },
+            )
+            for seed in SEEDS
         ],
         out,
     )
     mean_table(rows)
-    print("\nis the Adam stage removable, or does it earn its 10000 steps?")
+    print("\nis the Adam stage removable, and does redrawing the polish set help?")
     _arm_summary(rows)
     _per_second(rows)
 
