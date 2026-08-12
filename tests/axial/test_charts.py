@@ -13,6 +13,8 @@ if the caching were wrong.
 
 from __future__ import annotations
 
+import sys
+
 import pytest
 
 from pinn_sfr_transient.axial import charts
@@ -68,3 +70,78 @@ def test_an_open_loop_chart_does_not_pay_for_the_closed_loop(tmp_path, monkeypat
     monkeypatch.setattr(charts, "solve_reference", spy)
     charts.generate_all(tmp_path, n_axial=12, n_out=9, only=("front_height",))
     assert seen == [False], f"expected one open-loop solve, got feedback flags {seen}"
+
+
+# --- the artefacts themselves -----------------------------------------------------
+# Rendered once for the whole module: every chart below asserts a property of the SAME
+# set of files, and each reference solve is tens of seconds. This mirrors the fixture
+# `tests/test_entrypoints.py` uses for `axial/figures.py`, which exists for the same
+# reason -- a plotting module is mostly uncovered until something actually draws it,
+# and 274 statements of it took the repository's coverage gate below its floor.
+@pytest.fixture(scope="module")
+def drawn(tmp_path_factory):
+    """Every chart, at a mesh small enough to be a test rather than a study."""
+    out = tmp_path_factory.mktemp("charts")
+    return out, charts.generate_all(out, n_axial=20, n_out=41)
+
+
+def test_every_chart_writes_a_non_empty_png(drawn):
+    """One file per registered chart, each with its own name."""
+    _, paths = drawn
+    assert len(paths) == len(charts.CHARTS)
+    for path in paths:
+        assert path.exists(), path
+        assert path.suffix == ".png", path
+        assert path.stat().st_size > 0, path
+    assert len({p.stem for p in paths}) == len(paths), "two charts share a filename"
+
+
+def test_the_requested_charts_are_all_present(drawn):
+    """The set the paper asks for, by name, so a rename cannot silently drop one."""
+    _, paths = drawn
+    names = {p.stem for p in paths}
+    for expected in (
+        "temperature_history",
+        "final_temperature_profile",
+        "vapor_fraction",
+        "temperature_map",
+        "heat_flux",
+        "power",
+        "reactivity",
+        "front_height",
+    ):
+        assert expected in names, f"{expected} missing from {sorted(names)}"
+
+
+def test_explicit_snapshot_times_are_honoured(tmp_path):
+    """``--alpha-times`` overrides the per-cent default, including out-of-range asks.
+
+    An out-of-range time must not raise: the nearest column is drawn and labelled with
+    the time it was actually drawn at, which is the honest behaviour when someone asks
+    for 60 s of a transient that stops at 16.
+    """
+    (path,) = charts.generate_all(
+        tmp_path, n_axial=20, n_out=41, only=("vapor_fraction",), alpha_times=(0.0, 999.0)
+    )
+    assert path.stat().st_size > 0
+
+
+def test_module_main_runs(tmp_path, monkeypatch):
+    """The documented ``python -m pinn_sfr_transient.axial.charts`` path."""
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "charts",
+            "--outdir",
+            str(tmp_path),
+            "--n-axial",
+            "16",
+            "--n-out",
+            "21",
+            "--only",
+            "void_worth,front_height",
+        ],
+    )
+    assert charts.main() == 0
+    assert len(list(tmp_path.glob("*.png"))) == 2
