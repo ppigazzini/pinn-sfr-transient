@@ -173,8 +173,22 @@ def train_jax(**kw: Any) -> Callable[[Any], tuple]:  # noqa: ANN401
     from pinn_sfr_transient.axial import pinn_jax as pj  # noqa: PLC0415
 
     cfg = pj.AxialTrainConfig(log_every=10**9, **kw)
-    model, p, cfg = pj.train(AxialParams(), cfg, verbose=False)
-    return lambda traj: pj.predict(model, p, traj.zeta, traj.t, cfg)
+    if not cfg.polish_checkpoints:
+        model, p, cfg = pj.train(AxialParams(), cfg, verbose=False)
+        return lambda traj: pj.predict(model, p, traj.zeta, traj.t, cfg)
+
+    # One run, scored at several budgets. The callback fires with the model as it stood
+    # at each cumulative iteration count, and the optimiser is NOT restarted at those
+    # stops, so these rows are the trajectory a single solve takes rather than a ladder
+    # of independent short runs (tests/axial/test_polish_schedule.py pins that).
+    seen: list[tuple[int, Any]] = []
+    pp = AxialParams()
+
+    def keep(n: int, m: Any) -> None:  # noqa: ANN401
+        seen.append((n, lambda traj, m=m: pj.predict(m, pp, traj.zeta, traj.t, cfg)))
+
+    pj.train(pp, cfg, verbose=False, on_checkpoint=keep)
+    return seen
 
 
 def pin_cpu_block(block: int, n: int) -> tuple[int, ...]:
@@ -194,11 +208,32 @@ def pin_cpu_block(block: int, n: int) -> tuple[int, ...]:
     return cores
 
 
-def run_arm(traj: Any, label: str, backend: str, **kw: Any) -> dict:  # noqa: ANN401
-    """One trained arm, timed and scored."""
+def run_arm(traj: Any, label: str, backend: str, **kw: Any) -> list[dict]:  # noqa: ANN401
+    """One trained arm, timed and scored -- or several rows, if it checkpoints."""
     t0 = time.perf_counter()
-    predict = (train_torch if backend == "torch" else train_jax)(**kw)
+    trained = (train_torch if backend == "torch" else train_jax)(**kw)
     dt = time.perf_counter() - t0
+    if isinstance(trained, list):
+        # A checkpointed run: one row per scored budget, from ONE solve. `sec` is
+        # apportioned by iteration count -- the run was not timed per segment, and a
+        # row that copied the whole run's wall-clock would read as if each budget had
+        # cost the full solve.
+        total = max(n for n, _ in trained)
+        return [
+            _row(traj, f"{label} @qn{n}", backend, fn, dt * n / total, kw | {"lbfgs_iters": n})
+            for n, fn in trained
+        ]
+    return [_row(traj, label, backend, trained, dt, kw)]
+
+
+def _row(  # noqa: PLR0913, PLR0917 - a row is the arm's identity plus its measurement
+    traj: Any,  # noqa: ANN401
+    label: str,
+    backend: str,
+    predict: Any,  # noqa: ANN401
+    dt: float,
+    kw: dict,
+) -> dict:
     # Record the load average with every timing. A wall-clock is only a
     # measurement against a stated thread budget AND a stated contention level,
     # and these studies are sometimes run concurrently -- putting it in the row
@@ -340,7 +375,7 @@ def run_all(
             kw.setdefault("adam_iters", _ADAM)
         if _QN is not None:
             kw.setdefault("lbfgs_iters", _QN)
-        rows.append(run_arm(traj, label, kw.pop("backend", backend), **kw))
+        rows.extend(run_arm(traj, label, kw.pop("backend", backend), **kw))
         write(rows, out)
     return rows
 
@@ -1694,6 +1729,116 @@ def study_adamcheck(out: Path) -> None:
             )
             for seed in SEEDS
             for k in (10000, 20000, 30000, 40000)
+        ]
+        + [
+            # Does the ENCODER have a finite amount of work to do? 10 000 iterations with
+            # the Fourier read-out trainable, then it is held for the remaining 40 000.
+            #
+            # sec 7.5.32 measured the all-or-nothing freeze and found it worse at either
+            # Adam budget, so the projection is evidently still earning its gradient. This
+            # asks whether it stops: if the representation settles early, the late
+            # iterations are carrying 33% (f64) or 66% (f256) of a curvature space that
+            # has stopped moving, and dropping it should help rather than hurt.
+            #
+            # f64 AND f256 because that is what makes it a test of the mechanism rather
+            # than a knob-turn. Freezing barely touches the fitting capacity -- 17 029 to
+            # 16 965, sec 7.5.37a -- so any gain has to come from the curvature dimension,
+            # which falls 3.0x at f256 and only 1.5x at f64. A conditioning effect must
+            # therefore be LARGER at f256. If the two widths gain equally, the explanation
+            # is something else.
+            #
+            # One solve per seed, scored at three budgets: `polish_checkpoints` carries
+            # the optimiser state across each stop, so the 30k and 40k rows are the
+            # trajectory this run actually took rather than three independent short runs.
+            (
+                f"f{n} adam0/qn50000-freeze10k@5k [jax]",
+                {
+                    "backend": "jax",
+                    "seed": seed,
+                    "fourier_features": n,
+                    "adam_iters": 0,
+                    "lbfgs_iters": 50000,
+                    "polish_colloc": 3333,
+                    "polish_refresh": 0,
+                    "freeze_after": 10000,
+                    "polish_checkpoints": (30000, 40000, 50000),
+                },
+            )
+            for seed in SEEDS
+            for n in (64, 256)
+        ]
+        + [
+            # The control the freeze arms are scored against, and it was missing.
+            #
+            # f256 with NO freeze, everything else identical -- same 5000 points, same
+            # 50 000 iterations, same three checkpoints. Without it, "freezing costs
+            # 2.4x at f256" compares an f256 arm against an f64 one and leans on
+            # sec 7.5.31's finding that the widths are equivalent, which was measured at
+            # 6000 points and a different budget. That is an inference standing where a
+            # measurement belongs, and it is the shape of the D67 failure.
+            # Widening it to f128 as well makes this the width ladder at the
+            # RECOMMENDED configuration. Every rung of sec 7.5.31's ladder was measured
+            # at 6000 points with a 10 000-iteration Adam stage, and sec 7.5.37a showed
+            # that ladder never varied capacity at all -- so whether the widths are still
+            # indistinguishable under adam0, a fixed 5000-point set and a funded polish
+            # has not been measured in the configuration this project now recommends.
+            (
+                f"f{n} adam0/qn50000@5k [jax]",
+                {
+                    "backend": "jax",
+                    "seed": seed,
+                    "fourier_features": n,
+                    "adam_iters": 0,
+                    "lbfgs_iters": 50000,
+                    "polish_colloc": 3333,
+                    "polish_refresh": 0,
+                    "polish_checkpoints": (30000, 40000, 50000),
+                },
+            )
+            for seed in SEEDS
+            for n in (128, 256)
+        ]
+        + [
+            # Schedule-free AdamW (arXiv:2405.15682), first order ONLY -- no polish.
+            #
+            # Every "is Adam enough" arm in this document ran Adam with a cosine decay,
+            # so "Adam plateaus" has always been entangled with "our schedule ends".
+            # Schedule-free removes the schedule rather than tuning it, which makes this
+            # the version of the question that is not about our own hyper-parameters.
+            #
+            # `lbfgs_iters = 0` is the point: 30 000 first-order iterations against the
+            # `qn30000` rung of the budget ladder at the same 5000 points, so the
+            # comparison is optimiser against optimiser at equal iteration count.
+            #
+            # JAX only, as `optax.contrib` is where this lives -- the same standing
+            # divergence as ademamix. The reported iterate is the averaged `x`, not the
+            # optimiser's `y`; see `_schedule_free_x` and tests/axial/test_schedule_free.py.
+            (
+                f"f64 sfadamw{a}/qn{q}@5k [jax]",
+                {
+                    "backend": "jax",
+                    "seed": seed,
+                    "fourier_features": 64,
+                    "first_order": "schedulefree",
+                    "sf_warmup_frac": 0.1,
+                    "adam_iters": a,
+                    "lbfgs_iters": q,
+                    "n_colloc": 3333,
+                    "polish_colloc": 3333,
+                },
+            )
+            # Two arms, and the pair is the point. `sfadamw30000/qn0` asks whether a
+            # first-order method with no schedule to run out of can reach the accuracy
+            # the quasi-Newton stage reaches at the same 30 000 iterations. The second
+            # asks the older question -- does a first-order warm start help the polish --
+            # but now with a warm start that is not ending on a decayed learning rate,
+            # which every previous version of that arm was.
+            #
+            # The polish begins from the AVERAGED iterate x, not the optimiser's y; the
+            # conversion happens before `_run_polish` and is pinned by
+            # tests/axial/test_schedule_free.py::test_the_polish_starts_from_x_not_y.
+            for seed in (0,)
+            for a, q in ((30000, 0), (10000, 30000))
         ],
         out,
     )
