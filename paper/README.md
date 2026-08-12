@@ -79,7 +79,14 @@ uv run python -m pinn_sfr_transient.axial.charts --only front_height,reactivity
 
 Each chart is selectable, and `generate_all` solves the reference at most once per
 regime — a closed-loop solve is the expensive one, so `--only front_height` does not pay
-for it. `pinn_sfr_transient.axial.figures` is the *other* figure module: it draws the
+for it.
+
+**The PNGs are not committed.** `docs/img/charts/` is gitignored and CI regenerates it on
+every build, so a figure in the PDF is always the current model's; a committed PNG is a
+number that stops tracking the code that produced it. Two consequences: **draw the charts
+before building the paper locally**, or the LaTeX build fails on a missing file (the CI
+lane names which one), and the image links in `paper.md` render as broken on GitHub until
+you have drawn them. `pinn_sfr_transient.axial.figures` is the *other* figure module: it draws the
 three explanatory figures embedded in `docs/`, all at once.
 
 ## CI

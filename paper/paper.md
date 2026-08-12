@@ -169,6 +169,10 @@ below that uncertainty is measuring the instrument.
 The reference terminates when any temperature reaches the top of the §12.13 property fits,
 which defines the validity horizon; the surrogate is trained only over that horizon.
 
+![What drives the transient: the pumps coast down to the natural-circulation floor while
+the power is still near nominal, so the outlet temperature rises until it meets saturation
+plus superheat. The dashed line marks boiling onset.](../docs/img/charts/boundary_conditions.png)
+
 **Onset time is located by root-finding, not by grid inspection.** The reference's own
 onset is **10.9784 s**; read off the 0.25 s output grid it appears as 10.75 s. A quarter
 of a second of every onset error previously reported for this model was that quantisation.
@@ -222,6 +226,17 @@ fields follow at 1.7 × 10⁻³ (coolant), 2.6 × 10⁻³ (fuel) and 3.7 × 10�
 
 ### 5.2 The boiling front
 
+![Coolant temperature over space and time. The cyan contour is the boiling criterion,
+which under D-TH-3 *is* the front rather than a separately computed curve; the star marks
+onset, located by tangency.](../docs/img/charts/temperature_map.png)
+
+![Void fraction over space and time, with axial profiles at five instants and at onset.
+The front forms at the outlet and propagates downward.](../docs/img/charts/vapor_fraction.png)
+
+![Front height and voided length. The saturation level set and the $\alpha > 0.5$ contour
+do not coincide; the gap is the partially voided region the worth integral is most
+sensitive to.](../docs/img/charts/front_height.png)
+
 The engineering quantities are reproduced:
 
 | quantity | surrogate | reference |
@@ -266,6 +281,13 @@ Splitting the void functional at the sign change, at the instant it peaks:
 | negative-worth region, `J-` | −1.695 × 10⁻⁴ |
 | their sum, `J` | +2.962 × 10⁻⁴ |
 | cancellation ratio, `|J| / (|J+| + |J-|)` | **0.466** |
+
+![The void worth $w(\zeta)$, shaded by sign — positive over most of the core and negative
+near the top, so the reactivity functional is a difference of two large contributions
+rather than a sum of small ones.](../docs/img/charts/void_worth_split.png)
+
+![Reactivity split by mechanism, in units of $\beta_{eff}$. Reporting only the net would
+hide which component carries the error.](../docs/img/charts/reactivity.png)
 
 A relative error $\epsilon$ on each half therefore becomes $2.1 \epsilon$ on the sum. The
 functional is an ill-conditioned target by construction, and reporting it as one number
