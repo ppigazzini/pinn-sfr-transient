@@ -3196,6 +3196,12 @@ does not contradict §7.5.20; it explains it. Thirty Adam iterations do nothing 
 nothing; ten thousand do something, and what they do is move the parameters somewhere a
 curvature-based method does worse from.
 
+> **And it is not our schedule's fault — §7.5.40.** The obvious objection to this section
+> is that Adam did not plateau, our cosine decay ran out. Schedule-free AdamW, which has
+> no schedule to end, is 33× worse than the quasi-Newton stage alone and produces **no
+> boiling front at all**; as a warm start it makes the polish 13.6× worse. The reading
+> above survives the strongest available version of the objection.
+
 > **A retraction of my own reading, recorded because the pattern is the one this document
 > keeps repeating.** On seed 0 alone `f32 adam0` read 0.0021 with 99.9% voided length, and
 > that was reported as "the best arm we have measured" and compared against three-seed
@@ -3662,6 +3668,113 @@ uv run python tools/axial_study.py adamcheck --seeds 0 --cpu-block 0 \
     --only 'f64 adam0/qn30000@5k-fixed' --out __DEV/studies/adamcheck_f64_qn30000_5k_s0.json
 ```
 
+#### 7.5.40 Schedule-free AdamW: the first-order stage fails with no schedule to blame
+
+Every "is the first-order stage enough?" measurement in this document ran Adam under our
+own cosine decay (`optax.cosine_decay_schedule`, `alpha = 0.1`). So each of them — §7.5.11,
+§7.5.20, §7.5.29, §7.5.34 — has been open to the same objection: *Adam did not plateau,
+our schedule ran out.* The objection is reasonable and it has never been tested.
+
+**Schedule-free AdamW** (arXiv:2405.15682, `optax.contrib.schedule_free_adamw`) is the
+version of the method whose entire claim is that no schedule is needed. It **replaces**
+the cosine rather than composing with it — a constant `lr = 1e-3`, its own warmup at 10%
+of the budget, `weight_decay = 0.0` so the only difference from Adam is the schedule-free
+averaging. Seed 0, 5000 points, f64, JAX only (this lives in `optax.contrib`, the same
+standing divergence as `ademamix`).
+
+| arm | `T_s` | `L_void` | worst margin | max `α` | sec | load |
+|---|---|---|---|---|---|---|
+| sf-AdamW 30 000, **no polish** | **0.0603** | 0.1057 | **−0.2 K** | 0.857 | 4201 | 10.6 |
+| sf-AdamW 10 000 → `qn30000` | **0.0245** | 0.2666 | +39.9 K | 1.000 | 4627 | 4.9 |
+| `qn30000` alone (§7.5.39) | **0.0018** | 0.3781 | +67.7 K | 1.000 | 4827 | 29.7 |
+
+**Alone it does not produce the transient at all.** The margin is *negative*: the channel
+never reaches saturation, so there is no boiling front, `L_void` is 0.106 against the
+reference's 0.381, and the onset error is undefined because there is no onset. This is not
+a less accurate solution of the problem — it is a solution with the phenomenon missing.
+33× worse on `T_s` than the quasi-Newton stage at the same 30 000 iterations.
+
+**And as a warm start it makes the polish 13.6× worse**, while spending 40 000 iterations
+against the winner's 30 000. It recovers a front, but a badly placed one: `L_void` 0.267
+and a margin of +39.9 K against the reference's +69.2 K.
+
+##### What this closes
+
+The schedule objection is answered, and answered in the direction the existing results
+already pointed. §7.5.34's "removing the Adam stage makes the model better" was open to
+being read as a statement about *our* Adam — our decay, our learning rate, our schedule
+ending at the wrong moment. A first-order stage **with no schedule to end** does the same
+damage. The first-order stage is not being mis-scheduled; it moves the parameters
+somewhere the quasi-Newton stage is worse off starting from.
+
+> **Two caveats, both stated because they cut against the conclusion.** These are single
+> seeds, and both schedule-free arms ran on a nearly idle machine — loads 4.9 and 10.6
+> against the control's 29.7 — so their wall-clocks *understate* their true cost and the
+> comparison is more favourable to them than reality. Neither changes the reading: a
+> negative boiling margin is not a seed effect, and a 33× gap is not a timing artefact.
+
+**A note on cost, because it bears on §7.5.31a.** A schedule-free step runs at ~140 ms
+against L-BFGS's 160 ms at the same 5000 points — within 20%. The literature's argument
+for first-order methods is that their steps are 20–45× cheaper, which depends on
+minibatching; here **both optimisers evaluate the same 5000 residuals per step**, so the
+30 000-against-30 000 comparison is close to equal wall-clock as well as equal iterations.
+
+The reported iterate is the averaged `x`, never the optimiser's `y`. That distinction is
+the standard way to get a wrong number out of this family — it trains, it converges, and
+nothing indicates the wrong sequence was read — so the conversion happens before anything
+downstream sees the model, including the polish, and
+`tests/axial/test_schedule_free.py::test_the_polish_starts_from_x_not_y` pins it.
+
+#### 7.5.41 Freezing the encoder part-way: 2.5x worse, and 22% faster
+
+§7.5.32 measured the all-or-nothing freeze and found it worse. This asks whether the
+encoder's work is merely **front-loaded**: 10 000 iterations with the Fourier read-out
+trainable, then held for the remaining 40 000, on the same fixed 5000-point set. If the
+representation settles early, the late iterations are carrying a curvature space that has
+stopped moving.
+
+One solve per seed, scored at three budgets by `polish_checkpoints` — the optimiser state
+is carried across each stop, so these are the trajectory the run took rather than three
+independent short runs. Three seeds:
+
+| | `qn30000` | `qn40000` | `qn50000` | seed range at 50k | sec |
+|---|---|---|---|---|---|
+| **f64 frozen** | 0.0078 | 0.0051 | **0.0041** | [.0027–.0050] | 6592 |
+| f64 **unfrozen** (§7.5.39) | 0.0018 | 0.0017 | **0.0016** | [.0016–.0016] | 6973 |
+| **f256 frozen** | 0.0052 | 0.0045 | **0.0038** | [.0024–.0063] | 11 882 |
+| f256 unfrozen | — | — | — | | *running* |
+
+**At f64 the answer is no: freezing costs 2.5×**, and the gap narrows with budget
+(4.3× → 3.0× → 2.5×) without closing. The frozen runs are still converging at 50 000 while
+the unfrozen ones finished by 30 000, and their seed spread stays wide — 0.0027 to 0.0050
+against an unfrozen arm that is 0.0016 on all three seeds. The encoder's work is not
+front-loaded; ten thousand iterations of freedom is not enough for it.
+
+##### It is genuinely faster, and that is still not a reason to do it
+
+Backing out the 10 000 free iterations at the known unfrozen rate, **the frozen iterations
+run at 124.8 ms against 160.0 ms — a 22% saving**, at comparable load (27.5 against 29.7
+and 32.9). That is far more than the arithmetic predicts: the two-loop recursion is ~1% of
+an iteration, and the saving is better explained by memory traffic, the L-BFGS history
+falling from 20 MB to 13.6 MB at f64 with six processes competing for bandwidth.
+
+It buys nothing usable. 22% cheaper per iteration for 2.5× the error is a bad trade, and
+at equal wall-clock it is worse still: unfrozen `qn40000` costs *less* than frozen
+`qn50000` and is 3× more accurate.
+
+##### The conditioning hypothesis is not yet decided — the control is still running
+
+Freezing barely changes fitting capacity, 17 029 to 16 965 (§7.5.37a), so any *gain* would
+have to come from the **curvature dimension** — which falls 3.0× at f256 against 1.5× at
+f64. That makes a sharp prediction: a conditioning effect must be larger at f256.
+
+The two frozen arms do land on top of each other, 0.0038 against 0.0041, which would kill
+the hypothesis — **but only if f256 unfrozen is where f64 unfrozen is**, and that arm has
+never been run at 5000 points. Reading it off §7.5.31's flat width ladder would import a
+number measured at 6000 points under a 10 000-iteration Adam stage, which is the D67
+pattern exactly. `f256 adam0/qn50000@5k` and `f128` are running at three seeds; **this
+section states no conclusion about conditioning until they land.**
+
 ### 7.6 Pseudo-time stepping
 
 Implemented (`pts_every`, `pts_dtau`, `pts_growth`), and **measured harmful** in
@@ -3707,7 +3820,7 @@ collocation bug. Both are findings a single backend could not have produced.
 | How much collocation goes to the front | **measured, and it fails** — §7.5.9. `T_s` degrades monotonically from 0% to 50%; re-weighting the measure is not the remedy |
 | M4 acceptance: onset within 0.5 s and one cell | **the time half is met at three seeds** — §7.5.16a: 0.0006 / 0.0064 / 0.0181 s against 0.5 s at the funded default, root-found rather than read off the 0.25 s grid. The 0.62–0.84 s figure was measured at `qn3000` and is superseded. The height answer is "the outlet" whatever the network does, because `T_c` is monotone in `ζ`, so **M4 as written no longer discriminates between formulations** |
 | Is M4's criterion sound? | **yes — measured, §7.5.21.** At the scoring mesh the reference's own onset is uncertain by 0.06 cells and 0.009 s, so the criterion sits an order of magnitude above the ruler. The failure is the network's and the target is worth chasing |
-| Is Adam needed at all? | **never tested** — §7.5.11's floor is `adam30`, not `adam0`. "30 is as good as 3000" is measured; "Adam is unnecessary" is not |
+| Is Adam needed at all? | **answered: no, and it is harmful.** `adam0` beats `adam10000` by 2.8× (§7.5.34), the best arm in this document has no first-order stage (§7.5.37), and the objection that our *schedule* was at fault is closed by §7.5.40 — schedule-free AdamW forms no boiling front at all and degrades the polish 13.6× as a warm start |
 | Where the quasi-Newton axis ends | **not measured** — §7.5.11 is monotone over two decades with no interior optimum, and by §7.5.8's own rule an unterminated monotone trend is an extrapolation. Kiyani et al. run 30000 quasi-Newton iterations against this model's 3000 |
 | Where the memory optimum sits at the real budget | **not measured** — §7.5.17a. The iso-time optimum is 100 at a 200 s budget; the recipe spends ~550 s and the crossover moves with the budget |
 | The 1% bar on temperatures | **not met** — see §7.2.5 for the current figures |
@@ -3721,7 +3834,7 @@ Sorting every isolated arm by what it changed:
 |---|---|
 | **the function space** — Fourier capacity (§7.5.8), multi-scale bands (§7.5.14), anisotropic bandwidth (§7.5.12) | **having an embedding is decisive; its size is not.** Without one, no optimiser forms a front (§7.5.29). With one, f32 matches f256 at 42% of the cost — the capacity ladder is flat at a funded budget (§7.5.31). Bands and anisotropic bandwidth helped *only* at a starved one (§7.5.24) |
 | **the optimiser** — quasi-Newton budget (§7.5.11), curvature memory (§7.5.17) | **decisive**; the only axis that forms the front at all |
-| **the first-order stage** — Adam, AdEMAMix (§7.5.29) | **buys nearly nothing, and is not cheaper.** `adam0` matches `adam30` at the funded budget; Adam-only is 19x worse; and per iteration L-BFGS is the *cheapest* of the three (99.3 ms against 107.8 and 115.5) |
+| **the first-order stage** — Adam, AdEMAMix (§7.5.29), schedule-free AdamW (§7.5.40) | **harmful, and not cheaper.** `adam0` beats `adam10000` by 2.8× (§7.5.34); Adam-only is 19× worse; per iteration L-BFGS is the *cheapest* of the three (99.3 ms against 107.8 and 115.5). Removing the schedule does not rescue it: schedule-free AdamW produces **no front**, and warm-starting from it costs 13.6× |
 | **the loss measure** — level-set sampling (§7.5.6), front fraction (§7.5.9), block and causal weighting | **failed or inert**; `frontfrac` degrades monotonically |
 | **extra residuals** — onset head (§7.5.16), front network, pseudo-time | **harmful**; a consequence of the PDE carries no information as a constraint |
 | **re-parameterisation of the *output*** — level-set coordinate (§7.5.13), Laplace embedding (§7.5.18) | **inert**; both are functions of things the network already computes, so neither adds information. **Not** the same as a trainable change of *input* coordinate, which is a change of function space and is untested here — see the narrowing below |
