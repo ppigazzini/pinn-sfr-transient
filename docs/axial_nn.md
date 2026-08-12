@@ -3310,6 +3310,22 @@ much smaller embedding and none of the Adam machinery**.
 > accuracy is still worth taking, and it is 2× cheaper per iteration — but "half the
 > model" overstated what changed.
 
+> **Superseded on two knobs by §7.5.38 and §7.5.39**, which measured the collocation
+> count and the budget as axes rather than inheriting them. The recommendation is now:
+>
+> | | for a temperature claim | for an onset claim |
+> |---|---|---|
+> | embedding | f64 | f64 |
+> | Adam | 0 | 0 |
+> | polish set | **4000 points** | **5000 points** |
+> | quasi-Newton | **30 000** | **50 000** |
+> | cost | **~3900 s** | ~8000 s |
+>
+> Against this section's arm — 6000 points and 50 000 iterations, ~9600 s at matched load
+> — a temperature result is reachable in **40% of the machine time**. Both knobs were
+> carried over untested from configurations chosen for other reasons; neither was ever
+> the subject of a measurement until now.
+
 That also retires a great deal of apparatus. At `adam_iters = 0` the RAR reservoir, the
 adaptive block weighting, the time-window curriculum and the pseudo-time anchors are not
 merely unreachable (§7.5.30) — they are absent. The recipe is: a hard-constraint
@@ -3526,6 +3542,90 @@ which is enough for them because they fail by 20× and the question there is onl
 they fail. Three seeds are not a formality on the transition rungs — they are what
 revealed that 3000 is bistable, and a single sample there produced a conclusion that
 survived two hours.
+
+#### 7.5.39 The quasi-Newton budget, measured at last on the collocation count it should be
+
+Every budget conclusion in this document was measured at the wrong point count. §7.5.11,
+§7.5.20 and §7.5.31 ran at 6000 points, which §7.5.38 shows is 1.5× more than even the
+onset claim needs; §7.5.29's axis ran at 3000, which is the bistable rung. The two axes
+have been confounded throughout, and this separates them: **`f64 adam0`, 5000 points, the
+budget as the only knob, three seeds per rung.**
+
+5000 points and not 4000 because 4000 is the temperature floor while 5000 is where onset
+drops below its own ruler, and measuring a budget against a saturated metric answers
+nothing.
+
+| `lbfgs_iters` | `T_s` | range | spread | `L_void` | worst margin | onset err | sec | load |
+|---|---|---|---|---|---|---|---|---|
+| 10 000 | 0.0129 | [.0104–.0155] | 1.49× | 0.3420 | +49.3 K | 0.194 s | 1633 | 30.0 |
+| 20 000 | 0.0030 | [.0026–.0033] | 1.29× | 0.3728 | +65.9 K | 0.034 s | 3207 | 29.4 |
+| **30 000** | **0.0018** | [.0018–.0019] | 1.06× | 0.3781 | +67.7 K | 0.0165 s | 4827 | 29.7 |
+| **40 000** | **0.0017** | [.0016–.0017] | 1.03× | 0.3786 | +67.8 K | 0.0092 s | 6399 | 32.9 |
+| 50 000 | 0.0016 | [.0016–.0016] | 1.02× | 0.3788 | +67.4 K | 0.0057 s | 6973 | **9.6** |
+
+**This axis saturates smoothly; it is not the cliff the collocation axis is.** `T_s` falls
+4.3× from 10 000 to 20 000, then 1.7×, then 1.06×, then 1.06× — a monotone approach with
+no rung where the solution is simply absent. Contrast §7.5.38, where one 1.33× step in
+points moved the answer 17× and the rung below it was bistable. **The two axes fail
+differently**, which is worth knowing before reading either: too few points and there is
+no front, too few iterations and the front is there but imprecise. Every rung here from
+20 000 up has a boiling front on every seed.
+
+##### The budget also buys reproducibility, which no other axis in this document does
+
+The seed spread contracts monotonically: **1.49× → 1.29× → 1.06× → 1.03× → 1.02×**. That
+is the same 12.5×-spread problem §7.1 records, dissolving as a function of one knob. It
+also says something about every under-funded arm on the shelf: a wide seed range at
+`qn3000` is not evidence that the configuration is unstable, it is evidence that the
+optimiser stopped early, and §7.5.31b's worry about ranking arms by single seeds is
+sharpest exactly where the budget is smallest.
+
+##### Cost is exactly linear, and this is the one clean timing in the document
+
+| `lbfgs_iters` | sec | per iteration |
+|---|---|---|
+| 10 000 | 1633 | 163.3 ms |
+| 20 000 | 3207 | 160.3 ms |
+| 30 000 | 4827 | 160.9 ms |
+| 40 000 | 6399 | 160.0 ms |
+
+**160 ms per iteration, constant to 2% across a 4× range in budget.** These four rungs ran
+concurrently at loads 29.4 to 32.9 — matched, by construction, because the arms were
+packed two-deep per CPU block so that long and short jobs shared the machine rather than
+following one another onto an emptying one. §7.3.2's rule is usually invoked to void a
+timing comparison; here it is satisfied, and the linearity is a real measurement rather
+than a hope.
+
+> **The 50 000 row's 6973 s is not part of that.** It was measured in §7.5.38 at **load
+> 9.6**, a third of the others, so it appears cheaper than 40 000 while doing 25% more
+> work. At the 160.5 ms/iteration these four establish, 50 000 iterations cost **~8000 s**
+> at matched load. The accuracy column is unaffected.
+
+##### What to fund, and it depends on the headline again
+
+`T_s` reaches the reference's own resolution at **30 000** — 0.0018 against a ruler of
+1.1 to 1.6e-3 — and the two rungs above it are indistinguishable from it and from each
+other. **Onset time is not saturated there**: 0.0165 s at 30 000 is 1.8× its ruler,
+0.0092 s at 40 000 is 1.0×, and only 50 000 clears it at 0.0057 s.
+
+| if the claim is | fund | cost at 5000 points |
+|---|---|---|
+| temperatures | `qn30000` | 4827 s |
+| onset timing | `qn50000` | ~8000 s |
+
+So the shipped `qn30000` was **right for the claim the paper currently makes**, and
+§7.5.37's recommendation of `qn50000` buys onset accuracy rather than temperature
+accuracy — which is worth 1.66× the machine time only because onset is the quantity with
+headroom (§7.5.22). That is the same conclusion the collocation axis reached from the
+other direction, and the two now agree: **temperatures are done, and every remaining
+decision on this model is an onset decision.**
+
+Reproduced by, one arm per invocation:
+
+```bash
+uv run python tools/axial_study.py adamcheck --seeds 0 --cpu-block 0 \
+    --only 'f64 adam0/qn30000@5k-fixed' --out __DEV/studies/adamcheck_f64_qn30000_5k_s0.json
+```
 
 ### 7.6 Pseudo-time stepping
 
