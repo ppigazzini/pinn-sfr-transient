@@ -3310,21 +3310,28 @@ much smaller embedding and none of the Adam machinery**.
 > accuracy is still worth taking, and it is 2× cheaper per iteration — but "half the
 > model" overstated what changed.
 
-> **Superseded on two knobs by §7.5.38 and §7.5.39**, which measured the collocation
-> count and the budget as axes rather than inheriting them. The recommendation is now:
+> **The point count is superseded by §7.5.38; the budget survives.** Quoting only
+> configurations that have been run:
 >
-> | | for a temperature claim | for an onset claim |
+> | | **recommended** | this section |
 > |---|---|---|
 > | embedding | f64 | f64 |
 > | Adam | 0 | 0 |
-> | polish set | **4000 points** | **5000 points** |
-> | quasi-Newton | **30 000** | **50 000** |
-> | cost | **~3900 s** | ~8000 s |
+> | polish set | **5000 points** | 6000 points |
+> | quasi-Newton | 50 000 | 50 000 |
+> | `T_s` (3 seeds) | 0.0016 | 0.0016 |
+> | onset error | 0.0057 s | 0.0058 s |
+> | cost | **~8000 s** | ~9600 s |
 >
-> Against this section's arm — 6000 points and 50 000 iterations, ~9600 s at matched load
-> — a temperature result is reachable in **40% of the machine time**. Both knobs were
-> carried over untested from configurations chosen for other reasons; neither was ever
-> the subject of a measurement until now.
+> Identical on every measured quantity for **83%** of the machine time. The 50 000
+> iterations were the right call for the wrong reason — §7.5.39 shows the axis is
+> monotone, so nothing below it is better at anything, and only the cost was ever in
+> question. The 6000 points were not: they are 1.2× more than the recommendation and were
+> inherited, never measured.
+>
+> A **4000-point, `qn30000`** corner would be cheaper still at a plausible ~3900 s, and is
+> **unmeasured** — the two axes were swept as an L and never as a rectangle, so that
+> corner has never been run and is not recommended from here.
 
 That also retires a great deal of apparatus. At `adam_iters = 0` the RAR reservoir, the
 adaptive block weighting, the time-window curriculum and the pseudo-time anchors are not
@@ -3601,24 +3608,52 @@ than a hope.
 > work. At the 160.5 ms/iteration these four establish, 50 000 iterations cost **~8000 s**
 > at matched load. The accuracy column is unaffected.
 
-##### What to fund, and it depends on the headline again
+##### What to fund: more is simply better, and the question is only what is demonstrable
 
-`T_s` reaches the reference's own resolution at **30 000** — 0.0018 against a ruler of
-1.1 to 1.6e-3 — and the two rungs above it are indistinguishable from it and from each
-other. **Onset time is not saturated there**: 0.0165 s at 30 000 is 1.8× its ruler,
-0.0092 s at 40 000 is 1.0×, and only 50 000 clears it at 0.0057 s.
+**There is no trade-off on this axis.** `qn50000` is weakly better than every rung below
+it on every column — `T_s`, `L_void`, onset, and seed spread — so nothing is given up by
+funding it. An earlier revision of this section presented the choice as splitting by
+claim, "`qn30000` for temperatures and `qn50000` for onset", which implied `qn30000` is
+*better for temperatures*. It is not. It is **cheaper and indistinguishable**.
 
-| if the claim is | fund | cost at 5000 points |
+The real question is where the extra 1.66× buys something the reference can resolve:
+
+| | `T_s` vs its 1.1–1.6e-3 ruler | onset vs its 0.009 s ruler |
 |---|---|---|
-| temperatures | `qn30000` | 4827 s |
-| onset timing | `qn50000` | ~8000 s |
+| `qn30000` | 0.0018 — **at the ruler** | 0.0165 s — 1.8×, resolvable |
+| `qn40000` | 0.0017 — at the ruler | 0.0092 s — 1.0×, marginal |
+| `qn50000` | 0.0016 — at the ruler | 0.0057 s — **below the ruler** |
 
-So the shipped `qn30000` was **right for the claim the paper currently makes**, and
-§7.5.37's recommendation of `qn50000` buys onset accuracy rather than temperature
-accuracy — which is worth 1.66× the machine time only because onset is the quantity with
-headroom (§7.5.22). That is the same conclusion the collocation axis reached from the
-other direction, and the two now agree: **temperatures are done, and every remaining
-decision on this model is an onset decision.**
+So `qn30000` and `qn50000` cannot be distinguished on temperatures **by this reference**,
+and can be on onset. That makes `qn30000` a defensible economy for a temperature-only
+claim — 4827 s against ~8000 s, buying nothing demonstrable — and `qn50000` the right
+default, because it is better everywhere and provably better where the ruler still has
+room.
+
+| | measured | cost |
+|---|---|---|
+| **default** | 5000 points, `qn50000` | ~8000 s, load-corrected |
+| economy, temperature claims only | 5000 points, `qn30000` | **4827 s**, measured |
+
+> **Both rows hold the point count at 5000, and that is deliberate.** The measured grid is
+> an **L**, not a rectangle: every point count was run at `qn50000`, and every budget was
+> run at 5000 points. The corner where both are dialled down — 4000 points *and*
+> `qn30000` — **has never been run**, and it is exactly where an interaction would show,
+> since each knob is one rung above its own transition (§7.5.38's 4000-point spread is
+> 1.06×, and `qn30000`'s is 1.06× here). A revision of this section quoted that corner at
+> "~3900 s" from a linear cost model. No study row contains it; the claim is withdrawn and
+> the recommendation stays on the measured cell.
+
+So §7.5.37's `qn50000` was the right call, and the shipped `qn30000` is not wrong so much
+as **unfalsifiable against this reference** on the quantity the paper currently leads
+with. The 1.66× buys accuracy that only becomes visible on onset — which is the same
+conclusion the collocation axis reached from the other direction. The two now agree:
+**temperatures are done, and every remaining decision on this model is an onset
+decision.**
+
+That also says what the next reference-side work is worth. A refined reference would move
+the temperature ruler below 1.1e-3 and make these three rungs orderable again; until then,
+any budget from 30 000 up is a cost decision and not an accuracy one.
 
 Reproduced by, one arm per invocation:
 
