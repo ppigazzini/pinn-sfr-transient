@@ -36,20 +36,54 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  pdf:
-    name: build paper PDF
+  paper:
+    # ONE job, and the order inside it is the point: the paper embeds the charts, so
+    # they have to be drawn before pdflatex runs or the build fails on a missing file.
+    # Two jobs would express the same dependency through `needs:` plus an artefact
+    # round-trip, which is more moving parts for an ordering that is already sequential.
+    name: draw charts, then build the paper PDF
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      # `scheme-basic` plus the packages the preamble names. Not `scheme-full`: it is
-      # several GB and this document uses eight packages, all listed here so a future
-      # `\usepackage` fails loudly at build time rather than silently pulling a
-      # dependency nobody recorded.
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+
+      # Core dependencies only. The charts come from the reference solver, which needs
+      # numpy, scipy and matplotlib and none of the three deep-learning extras -- so
+      # this also proves they have not grown a quiet dependency on one.
+      - name: Sync core dependencies
+        run: uv sync --locked --python 3.13
+
+      # Into `docs/img/charts`, which is gitignored and is the path all three paper
+      # copies reference. One canonical location means a local build and a CI build
+      # resolve the same figures -- Typst has no `graphicspath` equivalent, so a
+      # second location would fork the Typst copy from the other two.
+      - name: Draw the charts the paper embeds
+        run: uv run python -m pinn_sfr_transient.axial.charts --outdir docs/img/charts
+
+      - name: Upload charts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: transient-charts
+          path: docs/img/charts
+          if-no-files-found: error
+
+      # The packages the preamble names, not `scheme-full`: that is several GB for a
+      # document using eight packages, and listing them means a future `\usepackage`
+      # fails loudly rather than silently pulling a dependency nobody recorded.
+      #
+      # `texlive-plain-generic` is here because of a build failure, not a guess.
+      # `newtxtext.sty` inputs `binhex.tex`, which lives in that package, and
+      # `--no-install-recommends` drops it -- so the first run of this lane installed
+      # newtx, found it, used it, and died on its missing dependency.
       - name: Install TeX Live
         run: |
           sudo apt-get update
@@ -58,10 +92,36 @@ jobs:
             texlive-latex-extra \
             texlive-fonts-recommended \
             texlive-fonts-extra \
+            texlive-plain-generic \
             latexmk
-          # `newtx` gives Times; the preamble falls back to `mathptmx` without it, so
-          # record which one this build actually used rather than leaving it ambiguous.
-          kpsewhich newtxtext.sty || echo "newtx absent -- the mathptmx fallback is in use"
+
+      # Report which Times the build will use, and check the dependency rather than
+      # only the package. `newtxtext.sty` being present is NOT sufficient -- that is
+      # exactly what the first failure looked like.
+      - name: Report the font path taken
+        run: |
+          if kpsewhich newtxtext.sty >/dev/null && kpsewhich binhex.tex >/dev/null; then
+            echo "newtx available (Times via TeX Gyre Termes)"
+          else
+            echo "newtx incomplete -- the preamble's mathptmx fallback will be used"
+            kpsewhich newtxtext.sty || echo "  newtxtext.sty missing"
+            kpsewhich binhex.tex   || echo "  binhex.tex missing"
+          fi
+
+      # Fail here rather than inside pdflatex. A missing figure surfaces as
+      # "File `...' not found" partway through a 200-line log; this says which one.
+      - name: Check the embedded figures exist
+        run: |
+          missing=0
+          for f in temperature_map vapor_fraction front_height reactivity \
+                   void_worth_split boundary_conditions; do
+            if [ ! -s "docs/img/charts/$f.png" ]; then
+              echo "::error::docs/img/charts/$f.png missing -- the paper embeds it"
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ] && echo "all embedded figures present"
+          exit "$missing"
 
       - name: Build paper.pdf
         run: latexmk -pdf -interaction=nonstopmode -halt-on-error -outdir=build paper/paper.tex
@@ -79,7 +139,7 @@ jobs:
           echo "all references resolved"
 
       - name: Upload paper.pdf
-        if: ${{ !cancelled() }}
+        if: ${{ success() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: paper-pdf
@@ -95,35 +155,3 @@ jobs:
           name: paper-latex-log
           path: build/paper.log
           if-no-files-found: warn
-
-  charts:
-    name: draw the transient charts
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-        with:
-          enable-cache: true
-
-      # Core dependencies only. The charts are drawn from the reference solver, which
-      # needs numpy, scipy and matplotlib and none of the three deep-learning extras --
-      # so this job also proves the charts have not grown a quiet dependency on one.
-      - name: Sync core dependencies
-        run: uv sync --locked --python 3.13
-
-      - name: Draw the charts
-        run: uv run python -m pinn_sfr_transient.axial.charts --outdir build/charts
-
-      - name: Upload charts
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: transient-charts
-          path: build/charts
-          if-no-files-found: error

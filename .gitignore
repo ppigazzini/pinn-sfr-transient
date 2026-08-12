@@ -29,6 +29,13 @@ htmlcov/
 # demand and the CLI recreates the directory, so the binaries are not tracked.
 /results/
 
+# The transient charts are DRAWN, never committed. `paper.yml` regenerates them from
+# the physics on every build, so a figure in the PDF is always the current model's --
+# a committed PNG is a number that stops tracking the code that produced it, which is
+# the same failure mode AGENTS.md records for tables. Rebuild with
+# `python -m pinn_sfr_transient.axial.charts`.
+/docs/img/charts/
+
 # Scratch / pasted logs (e.g. CI run logs saved locally)
 *.log
 
