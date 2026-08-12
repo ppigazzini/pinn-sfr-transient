@@ -3062,7 +3062,9 @@ this budget.
 
 > **This section's title was wrong, and the last column is why.** It is not a *capacity*
 > ladder: the fitting capacity is **17 029 at every rung** and only the encoder read-out
-> grows (§7.5.37a). A flat result across a column that does not vary is not a finding
+> grows (§7.5.37a). §7.5.42 re-measures the same axis on the recommended configuration —
+> `adam0`, 5000 points, a funded polish — and finds it flat there too, so the default
+> stays f64. A flat result across a column that does not vary is not a finding
 > about capacity — it is the arithmetic working. What the ladder does measure, and
 > measures usefully, is that **a 32× wider random-Fourier basis buys nothing**, which is a
 > statement about the embedding and is the one §7.5.29 makes on other grounds. The
@@ -3762,18 +3764,104 @@ It buys nothing usable. 22% cheaper per iteration for 2.5× the error is a bad t
 at equal wall-clock it is worse still: unfrozen `qn40000` costs *less* than frozen
 `qn50000` and is 3× more accurate.
 
-##### The conditioning hypothesis is not yet decided — the control is still running
+##### The conditioning hypothesis is refuted — the control landed
 
-Freezing barely changes fitting capacity, 17 029 to 16 965 (§7.5.37a), so any *gain* would
-have to come from the **curvature dimension** — which falls 3.0× at f256 against 1.5× at
-f64. That makes a sharp prediction: a conditioning effect must be larger at f256.
+Freezing barely changes fitting capacity, 17 029 to 16 965 (§7.5.37a), so any *gain* has to
+come from the **curvature dimension**, and that falls by different factors at the two
+widths. The prediction is sharp and one-sided: a conditioning effect must be **larger where
+the saving is larger**.
 
-The two frozen arms do land on top of each other, 0.0038 against 0.0041, which would kill
-the hypothesis — **but only if f256 unfrozen is where f64 unfrozen is**, and that arm has
-never been run at 5000 points. Reading it off §7.5.31's flat width ladder would import a
-number measured at 6000 points under a 10 000-iteration Adam stage, which is the D67
-pattern exactly. `f256 adam0/qn50000@5k` and `f128` are running at three seeds; **this
-section states no conclusion about conditioning until they land.**
+With the unfrozen control now measured at both widths, three seeds each, same 5000 points:
+
+| | frozen | unfrozen | penalty | curvature dimension |
+|---|---|---|---|---|
+| f64 | 0.0041 | 0.0016 | **2.53×** | 25 221 → 16 965 (**1.5×**) |
+| f256 | 0.0038 | 0.0016 | **2.38×** | 49 797 → 16 965 (**2.9×**) |
+
+**The penalties are the same to 6% while the curvature saving differs by two.** Freezing
+costs as much where it saves most, which is what the hypothesis forbids. It is refuted, not
+merely unsupported, and the difference matters: the earlier revision of this subsection
+could only say the two *frozen* arms coincided, which is compatible with conditioning if
+f256 unfrozen were worse. It is not — f256 unfrozen is 0.0016, exactly where f64 is.
+
+What remains is the reading §7.5.32 already had: freezing removes work the encoder is still
+doing. The curvature space it saves is not the mechanism, at either width.
+
+#### 7.5.42 The embedding width, measured at last on the recommended configuration
+
+Every rung of §7.5.31's ladder ran at 6000 points under a 10 000-iteration Adam stage, and
+§7.5.37a showed that ladder never varied capacity at all. This is the width axis at the
+configuration the project now recommends — `adam0`, a fixed 5000-point set, a funded
+polish — across three budgets and three seeds, 27 runs.
+
+**Fitting capacity is 17 029 at every rung.** What changes is the read-out: 8192 at f64,
+16 384 at f128, 32 768 at f256.
+
+| budget | width | fuel | clad | film | coolant | `L_void` | worst margin | onset | onset spread |
+|---|---|---|---|---|---|---|---|---|---|
+| qn30000 | f64 | 0.0024 | 0.0035 | 0.0018 | 0.0019 | 99.2% | **+67.7 K** | 0.0165 s (1.8×) | **15.7×** |
+| | f128 | 0.0024 | 0.0035 | 0.0017 | 0.0018 | 99.4% | +66.9 K | 0.0101 s (1.1×) | 2.0× |
+| | f256 | 0.0025 | 0.0036 | 0.0017 | 0.0017 | 99.4% | +66.7 K | **0.0091 s (1.0×)** | 7.0× |
+| qn40000 | f64 | 0.0025 | 0.0036 | 0.0017 | 0.0017 | 99.3% | **+67.8 K** | 0.0092 s | 1.5× |
+| | f128 | 0.0025 | 0.0037 | 0.0016 | 0.0017 | 99.4% | +66.2 K | **0.0042 s** | 3.7× |
+| | f256 | 0.0026 | 0.0038 | 0.0016 | 0.0017 | 99.4% | +67.2 K | 0.0050 s | 4.6× |
+| **qn50000** | **f64** | 0.0026 | 0.0037 | 0.0016 | 0.0017 | 99.4% | +67.4 K | 0.0057 s | 1.9× |
+| | f128 | 0.0026 | 0.0037 | 0.0016 | 0.0017 | 99.4% | +66.3 K | **0.0026 s** | 3.2× |
+| | f256 | 0.0026 | 0.0038 | 0.0016 | 0.0017 | 99.4% | +67.2 K | 0.0033 s | 12.6× |
+
+Rulers: temperatures 1.1 to 1.6e-3, onset 0.009 s (the bracketed multiples), reference
+`L_void` 0.38116 and margin +69.24 K.
+
+##### At the recommended budget the three widths are indistinguishable
+
+At `qn50000` every width gives `T_s` 0.0016, `L_void` **99.4%**, and an onset error
+**below the reference's own uncertainty**. Onset *height* error is exactly 0.0000 in all
+nine runs at that budget — which is the tautology §5.2 of the paper records rather than a
+result: the coolant heats monotonically, so boiling always begins at the outlet.
+
+To five decimals a pattern does appear, and it is a **trade rather than an improvement**:
+
+| | film | coolant | fuel | clad |
+|---|---|---|---|---|
+| f64 | 0.00163 | 0.00169 | **0.00258** | **0.00372** |
+| f128 | 0.00162 | 0.00168 | **0.00257** | **0.00371** |
+| f256 | **0.00161** | **0.00167** | 0.00263 | 0.00380 |
+
+**f256 buys film and coolant accuracy by giving up fuel and cladding**, and the ordering
+holds at all three budgets, so it is not a seed effect. f128 is the only width at-or-better
+than f64 on all four. All of it sits below the temperature ruler, so none of it is
+demonstrable — a consistent direction, not a measurable difference.
+
+##### Where width does buy something: the starved budget
+
+At `qn30000` the onset differences are **at or above the ruler** and therefore real: 1.8×
+for f64 against 1.1× and 1.0×. More striking is the spread — f64's onset scatters
+**15.7×** across three seeds there, against f128's 2.0×. The narrow embedding is not
+merely less accurate at a starved budget, it is *unstable*, and that is the honest argument
+for widening.
+
+By `qn40000` the argument is gone: f64 reaches the ruler exactly (1.0×) and every width is
+below it at `qn50000`.
+
+##### Cost, and why the raw seconds must not be ranked
+
+| | ms per iteration | at load | normalised |
+|---|---|---|---|
+| f64 | 139.5 | **9.6** | 1.00 |
+| f128 | 200.1 | 29.8 | ~1.25 |
+| f256 | 277.6 | 14.6 | ~1.9 |
+
+The f64 arms ran on a machine three times quieter than the f128 arms, so the wall-clocks
+are not comparable as measured. Normalising through §7.5.39's anchor — f64 at 160.5 ms at
+load ~30 — gives roughly **1 : 1.25 : 1.9**, which tracks the read-out width rather than
+anything the network can represent.
+
+##### The default stays f64
+
+At the recommended `qn50000` the widths cannot be told apart by this reference, and f64 is
+**about half the cost of f256**. Widening is worth considering only at a starved budget,
+where it buys onset accuracy and, more importantly, onset *stability* — and the project's
+answer to a starved budget is to fund it, not to widen the embedding.
 
 ### 7.6 Pseudo-time stepping
 
