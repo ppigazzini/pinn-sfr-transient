@@ -21,8 +21,8 @@ core. Thermophysics, the saturation-plus-superheat boiling criterion and both fe
 laws are taken from the SAS4A/SASSYS-1 manual; four deviations from it are registered
 with their justification, of which two are load-bearing. Against a verified stiff Radau
 reference the surrogate reproduces the temperature fields to a relative $L_2$ of
-$1.7 \times 10^{-3}$, places boiling onset within 0.018 s of the reference's 10.9784 s,
-and reproduces 99.3% of the peak voided length with a saturation margin of +67.6 K
+$1.6 \times 10^{-3}$, places boiling onset within 0.008 s of the reference's 10.9784 s,
+and reproduces 99.4% of the peak voided length with a saturation margin of +67.4 K
 against +69.2 K. Both of the first two now sit at the reference solver's own resolution,
 so we report them as met rather than as measured accuracies. What the surrogate does
 **not** yet deliver is the closed reactivity loop: the void-worth integral is a
@@ -187,13 +187,20 @@ allowed the optimiser to drive the fuel temperature negative, at which point the
 logarithmic Doppler term is undefined.
 
 Inputs pass through a random Fourier embedding
-$x \mapsto [\sin(2\pi Bx), \cos(2\pi Bx)]$ with $B$ frozen. The trunk is a 64-wide,
-5-layer tanh MLP with five outputs, carrying 17 029 fitted parameters; the embedding's
-read-out adds a further 32 768 that scale with the embedding width and not with what the
-network can represent.
-Training minimises the squared PDE residuals at collocation points drawn fresh each step,
-with a short Adam stage followed by a long L-BFGS stage with strong-Wolfe line search. All
-arithmetic is float64 on CPU — curvature pairs are meaningless at float32 residual
+$x \mapsto [\sin(2\pi Bx), \cos(2\pi Bx)]$ with $B$ frozen, at **64 features**. The trunk
+is a 64-wide, 5-layer tanh MLP with five outputs, carrying **17 029 fitted parameters**;
+the embedding contributes a further 8192 in the read-out layer, whose width follows the
+embedding rather than anything the network can represent, and 128 frozen entries in $B$.
+
+Training minimises the squared PDE residuals on **one fixed set of 5000 collocation
+points**, with **50 000 L-BFGS iterations** under a strong-Wolfe line search and **no
+first-order stage at all**. Each of those three choices is measured rather than inherited:
+a first-order warm start degrades the result rather than helping it, a set redrawn during
+the solve costs a factor of 1.5 against a fixed one, and 5000 points is where the onset
+error falls below the reference's own resolution. At 2000 points a front still forms but is
+badly placed: onset is 0.19 s late and the saturation margin is +28 K against the
+reference's +69 K.
+All arithmetic is float64 on CPU; curvature pairs are meaningless at float32 residual
 magnitudes.
 
 Two independent implementations exist, in PyTorch and JAX/Equinox, required by test to
@@ -207,10 +214,11 @@ All results at three seeds unless stated, against the reference at its scoring m
 
 ### 5.1 Temperature fields
 
-The relative $L_2$ error on the film temperature is $1.7 \times 10^{-3}$ (range
-1.6–1.7 × 10⁻³), against a 1% acceptance bar. Because the reference's own error is
+The relative $L_2$ error on the film temperature is $1.6 \times 10^{-3}$ (range
+1.62–1.65 × 10⁻³), against a 1% acceptance bar. Because the reference's own error is
 1.1–1.6 × 10⁻³, the surrogate has reached the resolution of the instrument judging it: the
-bar is met, and *how far inside* it is not a question this reference can answer.
+bar is met, and *how far inside* it is not a question this reference can answer. The other
+fields follow at 1.7 × 10⁻³ (coolant), 2.6 × 10⁻³ (fuel) and 3.7 × 10⁻³ (cladding).
 
 ### 5.2 The boiling front
 
@@ -218,15 +226,14 @@ The engineering quantities are reproduced:
 
 | quantity | surrogate | reference |
 |---|---|---|
-| peak voided length | **99.3%** of reference | — |
-| worst-seed saturation margin | **+67.6 K** | +69.2 K |
-| boiling onset time | **0.0006 / 0.0064 / 0.0181 s** error | 10.9784 s |
+| peak voided length | **99.4%** of reference | — |
+| worst-seed saturation margin | **+67.4 K** | +69.2 K |
+| boiling onset time | **0.0042 / 0.0046 / 0.0082 s** error | 10.9784 s |
 
-The onset criterion of 0.5 s is met on every seed, with the worst at 0.018 s. Two caveats
-belong in the same sentence as the result: the seed spread on onset is 32×, the widest of
-any quantity measured here, and the reference's own onset uncertainty is 0.009 s, so the
-worst seed sits at twice the instrument's resolution and the best below it. Met is what
-the measurement supports.
+The onset criterion of 0.5 s is met on every seed, with the worst at 0.008 s. **Every seed
+now sits below the reference's own onset uncertainty of 0.009 s**, so onset is reported as
+met and is no longer separable from the instrument either; the seed spread has fallen to
+2.0× from the 32× of the earlier configuration. Met is what the measurement supports.
 
 **Onset height is not a discriminating quantity in this model.** The coolant heats
 monotonically up the channel, so the hottest point — and therefore where boiling begins —
@@ -239,6 +246,12 @@ as solved exactly; it had merely been restated as a tautology.
 With the thermal fields prescribed, the surrogate is accurate. Driving the **kinetics**
 from the learned fields is a different matter, and it fails in a specific and instructive
 way.
+
+> The figures in this section were measured on the earlier default configuration
+> (256 Fourier features, a short Adam stage, 30 000 quasi-Newton iterations on 6000
+> points) and have not been re-measured on the configuration of §4. The cancellation
+> ratio is a property of the worth distribution and does not depend on the surrogate; the
+> recovered fractions may move.
 
 Over the same fields and the same network, the Doppler integral is reproduced to a factor
 of **1.017**. The void integral recovers only **8–16%** of the reference's value. The two
@@ -295,7 +308,7 @@ feedback will meet the same 2.1× amplification.
 
 Two consequences for practice. First, **a surrogate should be qualified against the
 functionals it will be used for, not only against field norms**: an $L_2$ of
-$1.7\times10^{-3}$ on temperature coexists here with an 84–92% miss on a reactivity
+$1.6\times10^{-3}$ on temperature coexists here with an 84–92% miss on a reactivity
 integral built from the same field. Second, **the reference's own resolution must be
 quantified before an acceptance bar is set**. Two bars in this work were set without that
 check; one was withdrawn, and the temperature result has since reached the point where the
@@ -306,8 +319,8 @@ instrument, not the model, is the limit.
 A physics-informed neural surrogate for the sodium-boiling phase of an SFR unprotected
 loss-of-flow transient, built on SAS4A/SASSYS-1 thermophysics and feedback laws with four
 registered deviations, reproduces the reference solution's temperature fields to
-$1.7 \times 10^{-3}$ relative $L_2$, its boiling onset to within 0.018 s of 10.9784 s, and
-99.3% of its peak voided length with a saturation margin of +67.6 K against +69.2 K. The
+$1.6 \times 10^{-3}$ relative $L_2$, its boiling onset to within 0.008 s of 10.9784 s, and
+99.4% of its peak voided length with a saturation margin of +67.4 K against +69.2 K. The
 first two are at the reference's own resolution and are reported as met rather than as
 measured accuracies.
 
