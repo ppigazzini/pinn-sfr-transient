@@ -204,6 +204,13 @@ class AxialTrainConfig:
     # JAX only: torch has no AdEMAMix and one is deliberately not written.
     first_order: str = "adam"
 
+    # Warmup as a FRACTION of the first-order budget, used by the JAX backend's
+    # "schedulefree" arm. Present here so the two configs stay field-for-field equal --
+    # the parity check in `tools/backend_smoke.py` compares fields and defaults, and a
+    # knob that exists on one side only is exactly the silent fork AGENTS.md forbids.
+    # Torch has no schedule-free optimiser and this value is unused there.
+    sf_warmup_frac: float = 0.1
+
     # Collocation counts per stage, and how often the polish redraws.
     #
     # `n_colloc` alone drove BOTH stages, which meant Adam ran full batch -- every step
