@@ -59,8 +59,9 @@
   ]
   v(1.2em)
 
-  // Abstract: 10pt, indented 25 mm both sides.
-  block(width: 100%, inset: (left: 25mm, right: 25mm))[
+  // Abstract: 10pt, indented 25 mm from the LEFT margin only. The guide says left; an
+  // earlier revision indented both sides, narrowing the measure by a further 25 mm.
+  block(width: 100%, inset: (left: 25mm))[
     #set text(size: 10pt)
     #set par(justify: true, first-line-indent: 0mm)
     *Abstract.* #abstract
@@ -78,9 +79,10 @@
 // IOP numeric reference list: [n] Authors Year Title Journal Volume Page.
 #let references(items) = {
   heading(numbering: none)[References]
-  set par(first-line-indent: 0mm, hanging-indent: 8mm)
+  // Guide: 5 mm gap after the number, 5 mm indent on continuation lines. Was 8 mm.
+  set par(first-line-indent: 0mm, hanging-indent: 5mm)
   set text(size: 10pt)
   for (i, r) in items.enumerate() {
-    block(spacing: 0.5em)[#box(width: 8mm)[\[#(i + 1)\]] #r]
+    block(spacing: 0.5em)[#box(width: 5mm)[\[#(i + 1)\]] #r]
   }
 }
