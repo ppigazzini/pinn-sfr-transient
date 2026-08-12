@@ -229,7 +229,29 @@ class AxialTrainConfig:
     # "ademamix" adds a slow gradient EMA (arXiv:2409.03137); REPORT-01 records it ~2x
     # better than Adam beyond 8000 iterations and ~260x WORSE at 3000, because the slow
     # EMA has not warmed up -- so it is gated on budget, never swapped in blind.
+    #
+    # "schedulefree" is `optax.contrib.schedule_free_adamw` (arXiv:2405.15682). Two
+    # things about it are load-bearing and neither is optional:
+    #
+    #  * it replaces the cosine decay rather than composing with it -- the method's
+    #    claim is that no schedule is needed, so wrapping it in one would measure
+    #    something else. `warmup_steps` is its own and is set from `sf_warmup_frac`.
+    #  * it maintains TWO sequences: gradients are evaluated at `y`, and the iterate
+    #    to report is the average `x`. The optimiser's parameters are `y`. Reporting
+    #    them is the standard way to get a wrong number out of this family, so the
+    #    conversion through `schedule_free_eval_params` is done in `training.py` and
+    #    pinned by `tests/axial/test_schedule_free.py`.
+    #
+    # "ademamix" and "schedulefree" are JAX-only, like the `optax.contrib` methods they
+    # wrap. The FIELD exists in both backends and its default is the same in both, so
+    # config parity holds; only the accepted values differ.
     first_order: str = "adam"
+
+    # Warmup as a FRACTION of the first-order budget, for "schedulefree" only. A
+    # fraction rather than a step count so the warmup scales with the budget instead of
+    # silently becoming the whole run at a short one -- which is the shape of the
+    # ademamix failure above, where a fixed EMA horizon was 260x worse at 3000.
+    sf_warmup_frac: float = 0.1
 
     # Collocation counts per stage, and how often the polish redraws.
     #

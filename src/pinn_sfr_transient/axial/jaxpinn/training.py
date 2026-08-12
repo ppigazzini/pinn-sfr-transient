@@ -65,10 +65,7 @@ def train(
         + (1 if cfg.onset_head else 0)
     )
     w = jnp.ones(n_blocks)
-    sched = optax.cosine_decay_schedule(cfg.lr, decay_steps=max(1, cfg.adam_iters), alpha=0.1)
-    optimizer = (
-        optax.contrib.ademamix(sched) if cfg.first_order == "ademamix" else optax.adam(sched)
-    )
+    optimizer = _first_order(cfg)
     opt_state = optimizer.init(eqx.filter(model, eqx.is_inexact_array))
 
     @eqx.filter_jit
@@ -128,10 +125,50 @@ def train(
         if verbose and it % cfg.log_every == 0:
             print(f"[adam {it:6d}] loss={float(loss):.3e}")
 
+    # Schedule-free keeps two sequences: the gradients were evaluated at `y`, which is
+    # what `model` holds, and the iterate to REPORT is the running average `x`. Convert
+    # before anything downstream sees the model -- the polish, the caller, `predict`.
+    if cfg.first_order == "schedulefree" and cfg.adam_iters > 0:
+        model = _schedule_free_x(model, opt_state)
+
     if cfg.lbfgs_iters > 0:
         key, pk = jax.random.split(key)
         model = _run_polish(model, p, cfg, rar, w, pk, on_checkpoint, verbose=verbose)
     return model, p, cfg
+
+
+def _first_order(cfg: AxialTrainConfig) -> optax.GradientTransformation:
+    """Build the first-order optimiser with its learning-rate schedule.
+
+    ``schedulefree`` gets a CONSTANT learning rate and its own warmup, not the cosine
+    decay the other arms use: the method's claim (arXiv:2405.15682) is that a schedule
+    is unnecessary, so composing it with one would measure a hybrid nobody proposed.
+    """
+    if cfg.first_order == "schedulefree":
+        return optax.contrib.schedule_free_adamw(
+            cfg.lr,
+            warmup_steps=max(1, int(cfg.sf_warmup_frac * cfg.adam_iters)),
+            # weight_decay stays at optax's 0.0. AdamW with no decay is Adam plus the
+            # schedule-free averaging, which is the one difference this arm is testing;
+            # turning decay on as well would make any result unattributable.
+            weight_decay=0.0,
+        )
+    sched = optax.cosine_decay_schedule(cfg.lr, decay_steps=max(1, cfg.adam_iters), alpha=0.1)
+    if cfg.first_order == "ademamix":
+        return optax.contrib.ademamix(sched)
+    return optax.adam(sched)
+
+
+def _schedule_free_x(model: AxialPinn, opt_state: optax.OptState) -> AxialPinn:
+    """Replace the model's ``y`` iterate with the ``x`` one that should be reported.
+
+    This is the whole hazard of the schedule-free family. The optimiser's parameters are
+    the point gradients are taken at; the answer is the weighted average maintained
+    alongside it, and the two are NOT close early in a run. Returning ``y`` produces a
+    plausible, worse number with nothing to indicate anything went wrong.
+    """
+    params, static = eqx.partition(model, eqx.is_inexact_array)
+    return eqx.combine(optax.contrib.schedule_free_eval_params(opt_state, params), static)
 
 
 def _polish_spec(cfg: AxialTrainConfig, model: AxialPinn):  # noqa: ANN202
