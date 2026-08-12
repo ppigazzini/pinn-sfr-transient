@@ -13,6 +13,8 @@ import jax
 import jax.numpy as jnp
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from pinn_sfr_transient.axial.config import AxialParams
 
 from dataclasses import replace
@@ -38,9 +40,18 @@ from pinn_sfr_transient.axial.jaxpinn.weighting import (
 
 # --- training ---------------------------------------------------------------
 def train(
-    p: AxialParams | None = None, cfg: AxialTrainConfig | None = None, *, verbose: bool = True
+    p: AxialParams | None = None,
+    cfg: AxialTrainConfig | None = None,
+    *,
+    verbose: bool = True,
+    on_checkpoint: Callable[[int, AxialPinn], None] | None = None,
 ) -> tuple[AxialPinn, AxialParams, AxialTrainConfig]:
-    """Adam (causal + adaptive block weights + RAR) then an L-BFGS polish."""
+    """Adam (causal + adaptive block weights + RAR) then an L-BFGS polish.
+
+    ``on_checkpoint`` receives ``(cumulative quasi-Newton iterations, model)`` at each
+    entry of ``cfg.polish_checkpoints``, so one run can be scored at several budgets
+    instead of being re-run once per budget.
+    """
     p = p or AxialParams()
     cfg = cfg or AxialTrainConfig()
     key = jax.random.PRNGKey(cfg.seed)
@@ -119,7 +130,7 @@ def train(
 
     if cfg.lbfgs_iters > 0:
         key, pk = jax.random.split(key)
-        model = _run_polish(model, p, cfg, rar, w, pk, verbose=verbose)
+        model = _run_polish(model, p, cfg, rar, w, pk, on_checkpoint, verbose=verbose)
     return model, p, cfg
 
 
@@ -130,14 +141,16 @@ def _polish_spec(cfg: AxialTrainConfig, model: AxialPinn):  # noqa: ANN202
     the projection from the Fourier features into the trunk -- is held fixed and the
     polish optimises the trunk alone.
 
-    The argument is a counting one. That layer is an encoder: it decides which of the
-    512 embedded frequencies the network uses, which is a *representation* choice, and
-    Adam with its fresh-sample-per-step stream is the tool suited to it. It is also 66%
-    of the model -- 32 832 of 49 797 parameters. Holding it fixed turns the polish from a
-    2.1x **under**determined problem into a 1.4x **over**determined one (24 000 residual
-    entries against 16 965 trainable weights), which is the side of the line the
-    literature prescribes, and it drops two-thirds of the parameters from every
-    curvature pair as well.
+    That layer is an encoder: it decides which of the embedded frequencies the network
+    uses, which is a *representation* choice.
+
+    The determinacy argument this docstring used to make is **withdrawn**. Freezing takes
+    the trainable count from 17 029 to 16 965 -- 0.4% -- because the projection was never
+    fitting capacity (section 7.5.37a), so it cannot turn an underdetermined problem into
+    an overdetermined one. What it does change is the **curvature dimension**: the space
+    L-BFGS builds its pairs in drops from 49 797 to 16 965 at f256 and from 25 221 to
+    16 965 at f64. That is a conditioning argument, and it predicts the benefit should
+    scale with the embedding width.
 
     Off by default, so no published number moves when it lands.
     """
@@ -158,6 +171,7 @@ def _run_polish(  # noqa: PLR0913, PLR0917 - the polish needs all of this state
     rar: tuple | None,
     w: jax.Array,
     key: jax.Array,
+    on_checkpoint: Callable[[int, AxialPinn], None] | None = None,
     *,
     verbose: bool,
 ) -> AxialPinn:
@@ -174,8 +188,37 @@ def _run_polish(  # noqa: PLR0913, PLR0917 - the polish needs all of this state
     def draw(k: jax.Array) -> tuple:
         return _merge(_collocation(p, q_cfg, k, 1.0, model), rar, feedback=cfg.feedback)
 
+    cps = tuple(cfg.polish_checkpoints)
+
+    if cfg.freeze_after > 0:
+        if cfg.polish_refresh > 0:
+            msg = "freeze_after and polish_refresh both set; they schedule the same stage"
+            raise ValueError(msg)
+        # One set for both halves: the switch already discards the curvature history --
+        # the parameter vector changes length -- so redrawing here would confound a
+        # restart with a change of objective, and 7.5.37 measured the redraw at 1.5x worse.
+        pts = draw(key)
+        n1 = min(cfg.freeze_after, cfg.lbfgs_iters)
+        free = replace(cfg, lbfgs_iters=n1, freeze_encoder=False)
+        model = _lbfgs_polish(
+            model, p, free, pts, w, tuple(c for c in cps if c < n1), on_checkpoint, verbose=verbose
+        )
+        if verbose:
+            print(f"[lbfgs] encoder frozen after {n1} of {cfg.lbfgs_iters}", flush=True)
+        rest = replace(cfg, lbfgs_iters=cfg.lbfgs_iters - n1, freeze_encoder=True)
+        return _lbfgs_polish(
+            model,
+            p,
+            rest,
+            pts,
+            w,
+            tuple(c - n1 for c in cps if c > n1),
+            None if on_checkpoint is None else lambda n, m: on_checkpoint(n + n1, m),
+            verbose=verbose,
+        )
+
     if cfg.polish_refresh <= 0:
-        return _lbfgs_polish(model, p, cfg, draw(key), w, verbose=verbose)
+        return _lbfgs_polish(model, p, cfg, draw(key), w, cps, on_checkpoint, verbose=verbose)
 
     done, blk = 0, cfg.polish_refresh
     while done < cfg.lbfgs_iters:
@@ -188,16 +231,77 @@ def _run_polish(  # noqa: PLR0913, PLR0917 - the polish needs all of this state
     return model
 
 
-def _lbfgs_polish(  # noqa: PLR0913 - polish needs the model, params, points and weights
+def _ssbfgs_polish(  # noqa: PLR0913, PLR0917 - the same state the caller holds
+    model: AxialPinn,
+    static: AxialPinn,
+    params: AxialPinn,
+    loss_fn,  # noqa: ANN001
+    cfg: AxialTrainConfig,
+    before: float,
+    *,
+    verbose: bool,
+) -> AxialPinn:
+    """Minimise with the self-scaled quasi-Newton family, on a flattened vector."""
+    flat0, unravel = ravel_pytree(params)
+    vg = eqx.filter_jit(jax.value_and_grad(lambda z: loss_fn(unravel(z))))
+    flat, after = ssbfgs_minimize(
+        vg,
+        flat0,
+        max_iter=cfg.lbfgs_iters,
+        history_size=cfg.lbfgs_history,
+        self_scale=cfg.optimizer in ("ssbfgs", "ssbroyden"),
+        broyden_phi=0.5 if cfg.optimizer == "ssbroyden" else 0.0,
+    )
+    if not np.isfinite(after) or after > before:
+        if verbose:
+            print(f"[{cfg.optimizer}] reverted: {before:.3e} -> {after:.3e} (kept Adam)")
+        return model
+    if verbose:
+        print(f"[{cfg.optimizer} done] loss={after:.3e}")
+    return eqx.combine(unravel(flat), static)
+
+
+def _segmented(body, params, state, total: int, checkpoints: tuple[int, ...]):  # noqa: ANN001, ANN202
+    """Run ``total`` iterations of ``body``, snapshotting the parameters at each stop.
+
+    The optimiser is **not** restarted at a stop: ``state`` is carried across the segment
+    boundary, so the trajectory is the one a single uninterrupted `fori_loop` would take
+    and a checkpoint costs one copy. Restarting instead would turn every checkpoint into
+    a blocked restart, which section 7.5.37 measured at 1.5x worse -- the intermediate
+    rows would then be measuring the checkpointing, not the budget.
+    """
+    wanted = {b for b in checkpoints if 0 < b <= total}
+    snaps, done = [], 0
+    for b in [*sorted(wanted - {total}), total]:
+        params, state = jax.lax.fori_loop(0, b - done, body, (params, state))
+        done = b
+        # Only what was asked for. A stage boundary is not a checkpoint: with
+        # `freeze_after` the polish runs in two stages, and snapshotting each stage's
+        # end silently added a row at the freeze point that no caller requested.
+        if done in wanted:
+            snaps.append((done, params))
+    return params, snaps
+
+
+def _lbfgs_polish(  # noqa: PLR0913, PLR0917 - polish needs model, params, points, weights
     model: AxialPinn,
     p: AxialParams,
     cfg: AxialTrainConfig,
     pts: tuple,
     w: jax.Array,
+    checkpoints: tuple[int, ...] = (),
+    on_checkpoint: Callable[[int, AxialPinn], None] | None = None,
     *,
     verbose: bool,
 ) -> AxialPinn:
-    """Quasi-Newton polish on a fixed collocation set via ``optax.lbfgs``."""
+    """Quasi-Newton polish on a fixed collocation set via ``optax.lbfgs``.
+
+    ``checkpoints`` are iteration counts *within this call* at which the model is handed
+    to ``on_checkpoint``, so one run can be scored at several budgets. They fire only
+    after the divergence guard passes -- a reverted polish has no intermediate states
+    worth reporting, and emitting them would put rows in a study file that no returned
+    model corresponds to.
+    """
     params, static = eqx.partition(model, _polish_spec(cfg, model))
 
     def loss_fn(params: AxialPinn) -> jax.Array:
@@ -205,24 +309,10 @@ def _lbfgs_polish(  # noqa: PLR0913 - polish needs the model, params, points and
 
     before = float(loss_fn(params))
     if cfg.optimizer in ("ssbfgs", "lbfgs-shared", "ssbroyden"):
-        flat0, unravel = ravel_pytree(params)
-        vg = eqx.filter_jit(jax.value_and_grad(lambda z: loss_fn(unravel(z))))
-        flat, after = ssbfgs_minimize(
-            vg,
-            flat0,
-            max_iter=cfg.lbfgs_iters,
-            history_size=cfg.lbfgs_history,
-            self_scale=cfg.optimizer in ("ssbfgs", "ssbroyden"),
-            broyden_phi=0.5 if cfg.optimizer == "ssbroyden" else 0.0,
-        )
-        params = unravel(flat)
-        if not np.isfinite(after) or after > before:
-            if verbose:
-                print(f"[{cfg.optimizer}] reverted: {before:.3e} -> {after:.3e} (kept Adam)")
-            return model
-        if verbose:
-            print(f"[{cfg.optimizer} done] loss={after:.3e}")
-        return eqx.combine(params, static)
+        if checkpoints:
+            msg = f"polish_checkpoints is not implemented for optimizer={cfg.optimizer!r}"
+            raise NotImplementedError(msg)
+        return _ssbfgs_polish(model, static, params, loss_fn, cfg, before, verbose=verbose)
 
     # Never call this bare: the default memory_size is 10 against torch's 50,
     # and that single argument was the entire cross-backend accuracy gap.
@@ -236,7 +326,7 @@ def _lbfgs_polish(  # noqa: PLR0913 - polish needs the model, params, points and
         updates, state = opt.update(grads, state, params, value=loss, grad=grads, value_fn=loss_fn)
         return optax.apply_updates(params, updates), state
 
-    params, _ = jax.lax.fori_loop(0, cfg.lbfgs_iters, body, (params, state))
+    params, snaps = _segmented(body, params, state, cfg.lbfgs_iters, checkpoints)
     after = float(loss_fn(params))
     # Same divergence guard as the torch twin: a bad line-search step can only
     # cost time, never accuracy.
@@ -246,4 +336,7 @@ def _lbfgs_polish(  # noqa: PLR0913 - polish needs the model, params, points and
         return model
     if verbose:
         print(f"[lbfgs done] loss={after:.3e}")
+    if on_checkpoint is not None:
+        for n, snap in snaps:
+            on_checkpoint(n, eqx.combine(snap, static))
     return eqx.combine(params, static)

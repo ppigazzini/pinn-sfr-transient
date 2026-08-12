@@ -251,11 +251,42 @@ class AxialTrainConfig:
 
     # Hold the Fourier->trunk projection FIXED during the quasi-Newton stage.
     # That layer is an encoder -- it selects which embedded frequencies are used, a
-    # representation choice Adam's fresh-sample stream suits -- and it is 66% of the
-    # model. Freezing it makes the polish OVERdetermined (24000 residuals against 16965
-    # weights, 1.41) instead of 2.1x under, and removes two thirds of the parameters
-    # from every curvature pair. Off by default.
+    # representation choice Adam's fresh-sample stream suits.
+    #
+    # The DETERMINACY argument this comment used to make was wrong and is withdrawn:
+    # freezing takes the trainable count from 17029 to 16965, a 0.4% change, because the
+    # projection was never fitting capacity in the first place (sec 7.5.37a). What
+    # freezing actually changes is the CURVATURE DIMENSION -- the space L-BFGS builds its
+    # pairs in drops from 49797 to 16965 at f256, and from 25221 to 16965 at f64. That is
+    # a conditioning argument, and it predicts the gain should scale with the embedding
+    # width, which is testable and is what `freeze_after` is for. Off by default.
     freeze_encoder: bool = False
+
+    # Freeze that projection PART WAY THROUGH the quasi-Newton stage rather than for all
+    # of it. `freeze_after = k` runs k iterations with everything trainable and the
+    # remaining `lbfgs_iters - k` with the encoder held, on the SAME collocation set.
+    #
+    # sec 7.5.32 measured the all-or-nothing form and found it worse at either Adam
+    # budget: the projection evidently still has work to do. This asks whether it has a
+    # FINITE amount -- if the representation settles early and only the trunk keeps
+    # improving, the late iterations are paying for 33% (f64) or 66% (f256) of a
+    # curvature space that has stopped moving.
+    #
+    # Zero disables it. Incompatible with `polish_refresh`, which restarts the optimiser
+    # on its own schedule; setting both raises rather than silently picking one.
+    freeze_after: int = 0
+
+    # Cumulative quasi-Newton iteration counts at which the model is handed to a
+    # caller-supplied callback, so ONE run can be scored at several budgets instead of
+    # being re-run once per budget. `(30000, 40000, 50000)` with `lbfgs_iters = 50000`
+    # gives three scored states from one 50000-iteration solve.
+    #
+    # A checkpoint does not perturb the run. The optimiser state is carried across the
+    # segment boundary rather than rebuilt, so the trajectory is the one an uninterrupted
+    # solve would take -- if it were restarted instead, every intermediate row would be
+    # measuring the checkpointing rather than the budget, and sec 7.5.37 measured that
+    # restart at 1.5x worse. Empty disables it.
+    polish_checkpoints: tuple[int, ...] = ()
 
     # Trainable multi-resolution Fourier feature pyramid, arXiv:2605.24278 ("beignet").
     # OFF by default (`levels = 0`), so no published number moves when it lands.
