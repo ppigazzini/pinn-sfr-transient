@@ -104,8 +104,12 @@ transient: what it reproduces, and what it does not
 
 \vspace{10mm}
 
+% `\raggedright` MUST come first: it resets \leftskip to zero, so setting the indent
+% before it silently discards the 25 mm. Measured from the built PDF -- the authors sat
+% at 2.49 cm, flush with the title, while the abstract (which has no \raggedright) was
+% correctly at 4.99 cm.
 \begingroup
-\leftskip=25mm \raggedright
+\raggedright \leftskip=25mm
 P Pigazzini\textsuperscript{1}
 \par
 \vspace{0.6em}
@@ -366,8 +370,8 @@ variable that decides whether the boiling front forms at all, and the full measu
 reported in the repository documentation.
 
 \subsubsection{Spectral bias}
-Plain multilayer perceptrons learn low-frequency structure long before high-frequency
-structure, which is fatal for a solution containing a sharp moving front. Mapping the
+Plain multilayer perceptrons learn low-frequency structure long before they learn the
+high-frequency part, which is fatal for a solution containing a sharp moving front. Mapping the
 inputs through a fixed set of sinusoidal features removes the bias by presenting the high
 frequencies directly to the first layer \cite{tancik}. Section~\ref{sec:embedding} uses
 exactly that, and without it no optimiser tested here forms a front.
@@ -466,7 +470,7 @@ Total arrays & 25\,349 \\
 \end{tabular}
 \end{table}
 
-The trunk's 17\,029 parameters are invariant to the embedding width; a 256-feature
+The trunk's 17\,029 parameters do not depend on the embedding width; a 256-feature
 embedding changes only the read-out, from 8\,192 to 32\,768. That column is not fitting
 capacity, which is why widening it changes nothing measurable.
 
