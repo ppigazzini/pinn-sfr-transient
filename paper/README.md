@@ -10,46 +10,62 @@ what it does not yet solve. A reader should be able to judge the reactor physics
 knowing what L-BFGS is.
 
 
-Two copies of the same paper, and they are not redundant:
+Three copies of the same paper, and they are not redundant:
 
-- **`paper.md`** — the working draft. Reviewable in a pull request, checked by
-  `tools/check_markdown.py` like every other document here, and readable without a
-  toolchain. Edit this one while the content is still moving.
-- **`paper.typ`** — the typeset version, laid out to `__DEV/paper_template.docx`
-  (IOP *Journal of Physics: Conference Series*). This is what produces the PDF.
+- **`paper.md`** — the working draft, and the one that carries the current content.
+  Reviewable in a pull request, checked by `tools/check_markdown.py` like every other
+  document here, and readable without a toolchain. Edit this one while the content is
+  still moving.
+- **`paper.tex`** — the **submission** format. IOP accepts LaTeX or Word, not Typst, so
+  this is what can actually be sent.
+- **`paper.typ`** — the local typeset version, one command and no toolchain.
+
+All three are laid out to `__DEV/paper_template.docx` (IOP *Journal of Physics:
+Conference Series*), and `paper.tex` and `paper.typ` encode the *same* constants from
+it — margins from the guide's Table 1, section styles from its Table 2. Change one and
+change the other.
 
 They are kept in sync by hand, so they can drift. When they disagree, neither wins:
-`docs/axial_nn.md` holds the measurement record and both are wrong until reconciled
+`docs/axial_nn.md` holds the measurement record and all three are wrong until reconciled
 against it.
 
-## Why Typst and not the template's own format
+> **`paper.typ` has drifted and is currently stale.** It still carries the earlier
+> machine-learning framing — a different title, a different abstract, and an optimiser
+> bake-off as the headline. `paper.md` was rewritten as a nuclear-engineering paper and
+> `paper.tex` was written from `paper.md`, so those two agree and the Typst copy does
+> not. Reconcile before building anything from it.
+
+## Why neither is the template's own format
 
 The template is a **layout guide**, not a submission binary: it specifies A4 with
 4.0/2.7/2.5/2.5 cm margins, 11 pt Times, a 17 pt bold flush-left title, authors and
 abstract indented 25 mm, numbered sections in bold and subsections in italic, captions
-below figures and above tables, and IOP numeric references. `iop-jpcs.typ` encodes that
-specification, so the mapping from the guide to the output is readable and checkable
-rather than buried in a binary.
+below figures and above tables, and IOP numeric references. Both `iop-jpcs.typ` and
+`paper.tex`'s preamble encode that specification, so the mapping from the guide to the
+output is readable and checkable rather than buried in a binary — and the two encodings
+can be diffed against each other.
 
-Typst is the choice because the paper then lives in the repository the way everything
-else does — plain text, diffable, reviewable in a pull request, and buildable by one
-command with no toolchain. A `.docx` is none of those things, and the numbers in this
-paper come from JSON the repository can regenerate.
+Plain text is the choice because the paper then lives in the repository the way
+everything else does — diffable, reviewable in a pull request, and buildable by one
+command. A `.docx` is none of those things, and the numbers in this paper come from JSON
+the repository can regenerate.
 
-**If you submit to IOP**, they accept LaTeX (`iopart.cls`) or Word, not Typst. Say the
-word and I will add a LaTeX variant; the content is format-independent and the
-translation is mechanical.
+**`paper.tex` deliberately does not use `iopart.cls`.** The class imposes its own
+geometry, which would silently override the guide it is supposed to be following, and it
+is not installed everywhere. The body transfers unchanged if IOP ask for the class
+specifically — only the preamble is discarded.
 
 ## Build
 
 ```bash
-uv run --with typst python -c "import typst,pathlib; pathlib.Path('paper.pdf').write_bytes(typst.compile('paper/paper.typ'))"
+latexmk -pdf paper/paper.tex          # submission PDF; or pdflatex twice
+typst compile paper/paper.typ         # local PDF, no toolchain
 ```
 
-or, with the standalone binary:
+The Typst copy also builds without the standalone binary:
 
 ```bash
-typst compile paper/paper.typ
+uv run --with typst python -c "import typst,pathlib; pathlib.Path('paper.pdf').write_bytes(typst.compile('paper/paper.typ'))"
 ```
 
 ## Where the numbers come from
