@@ -3354,6 +3354,146 @@ the embedding width by 32× changes 128 000 parameters and nothing about the ans
 is the evidence that those parameters are not capacity. `tests/axial/test_axial_pinn.py`
 now pins the body count across widths and across both backends, so this cannot drift back.
 
+#### 7.5.38 The polish set has a threshold, and it is not where determinacy predicts
+
+§7.5.31a is the one open argument in this document that was **argued and never measured**:
+the literature (arXiv:2605.30910) prescribes a collocation set that overdetermines the
+system, and it claimed every number here came from an underdetermined one. This sweep
+measures the axis directly, moving one knob — the size of the fixed polish set — over a
+20× range. `f64 adam0/qn50000`, fixed set, `polish_colloc` the only difference.
+
+| points | ratio | seeds | `T_s` | `L_void` | worst margin | onset err | sec |
+|---|---|---|---|---|---|---|---|
+| 1 000 | 0.235 | 1 | **0.0332** | 0.3500 | +79.4 K | **0.753 s** | 3136 |
+| 2 000 | 0.470 | 1 | **0.0309** | 0.3397 | +28.0 K | 0.193 s | 4200 |
+| **3 000** | **0.705** | 1 | **0.0018** | 0.3773 | +67.1 K | 0.0129 s | 5277 |
+| 4 000 | 0.940 | 1 | 0.0017 | 0.3784 | +67.7 K | 0.0099 s | 6582 |
+| 5 000 | 1.174 | 1 | 0.0016 | 0.3791 | +68.0 K | 0.0046 s | 7499 |
+| 6 000 (shipped) | 1.409 | 3 | 0.0016 [.0016–.0017] | 0.3790 | +67.8 K | 0.0058 s | 5859 |
+| 10 000 | 2.349 | 3 | 0.0016 [.0016–.0016] | 0.3790 | +67.7 K | 0.0049 s | 16 191 |
+| 19 999 | 4.698 | 3 | 0.0016 [.0016–.0016] | 0.3792 | +67.8 K | 0.0033 s | 29 488 |
+
+Reference: `L_void` 0.38116, margin +69.24 K. Rulers (§7.5.22): temperatures 1.1 to
+1.6e-3, onset 0.009 s. Ratios are against the 17 029-parameter body (§7.5.37a);
+`polish_colloc` is `n` and the sampler adds `n // 2` early-time points, so the rungs are
+labelled by point count, which is the physical quantity.
+
+**The axis is a threshold with a flat top.** Between 2000 and 3000 points `T_s` improves
+**17×**, from 0.0309 to 0.0018; over the 6.7× from 3000 to 20 000 it moves by 12%, all of
+it inside the reference's own uncertainty. Below the threshold the failure is not a
+degradation but an absence: the boiling margin is wrong in *both* directions (+79.4 K and
++28.0 K against +69.2 K), and the 1000-point arm misses the onset bar outright at 0.753 s
+against a 0.5 s tolerance — the only arm on this ladder whose error the reference can
+resolve at all, at 83× the ruler.
+
+##### And the threshold is below the determined point, so determinacy is not the mechanism
+
+**3000 points is a ratio of 0.705 — underdetermined by 1.4× — and it reaches 0.0018.**
+The transition is bracketed at $0.47 < r^* < 0.71$, and 1.0 lies outside that bracket.
+Whatever sets the threshold, it is not the residuals-to-parameters count that
+arXiv:2605.30910 prescribes: the prescription would put the edge at 1.0 and would make
+0.705 fail.
+
+What is left is a resolution argument — roughly 2500 points in $(t, \zeta)$ is what a
+sub-cell interface moving through the channel needs before the residual can see it — and
+this sweep does not test that. It is recorded as **unexplained**, not as a mechanism.
+
+> **Two readings of this axis have now been wrong, and the sequence is worth keeping.**
+> The first said the cliff proved *absolute point count* governs and determinacy does not,
+> reasoning from f256 at 6000 points (then miscounted as ratio 0.48) against f64 at 2000
+> (0.32) — two close ratios, 18× apart in accuracy. §7.5.37a corrected the denominator,
+> those became 1.41 and 0.47, and the contradiction evaporated; the reading was withdrawn
+> and replaced by "the threshold sits at the determined point", which the 3000- and
+> 4000-point rungs had not yet reached. They then landed at 0.0018 and 0.0017, putting the
+> edge *below* 1.0 and refuting that too. The original instinct was right and its evidence
+> was not, which is why it had to go; what replaced it was an interpolation between two
+> rungs that were already running. **Neither reading should have been written before the
+> bracketing arms returned.**
+
+##### Above the threshold: nothing measurable, in either direction
+
+6000 against 10 000 points, three seeds each. Same backend and same seeds throughout, so
+unlike a cross-backend comparison these seeds are **legitimately paired** — identical
+initialisations, one knob apart.
+
+| | 6000 (1.41) | 10 000 (2.35) | change |
+|---|---|---|---|
+| `T_s` | 0.001641 [.001629–.001661] | 0.001631 [.001621–.001646] | **−0.7%** |
+| `T_c` | 0.001700 [.001675–.001721] | 0.001693 [.001678–.001714] | −0.4% |
+| `T_f` | 0.002560 [.002478–.002686] | 0.002578 [.002494–.002661] | +0.7% |
+| `T_cl` | 0.003691 [.003568–.003851] | 0.003722 [.003587–.003846] | +0.9% |
+| `L_void` | 0.3790 | 0.3790 | none |
+| worst margin | +67.83 K | +67.74 K | −0.09 K |
+| onset time error | 0.0058 s [.0010–.0095] | 0.0049 s [.0043–.0052] | −15% |
+| sec (contended) | 5859 | 16 191 | +176% |
+
+**Every one of those differences is below the resolution of the instrument.** `T_s`
+improves in all three paired seeds — −0.81%, −0.86%, −0.31% — which suggests the effect is
+real rather than noise, and it is also **thirty times smaller than the reference's own
+uncertainty** of 1.1 to 1.6e-3 (§7.5.22, where the temperature bar's ratio is 1.06). The
+same holds everywhere else: the onset errors sit at 0.005 s against a reference uncertain
+by 0.009 s, and the void error at 3e-3 against a ruler of 3.2e-2. **Buying more
+overdetermination than 1.41 buys nothing**, and the 20 000-point arms confirm it at 4.70:
+`T_s` 0.0016 on all three seeds, `L_void` 0.3792, worst margin +67.8 K — the 6000-point
+numbers to four digits, for **5× the wall-clock**.
+
+**One signal is not flat: the seed spread.** Onset time scatters over 0.0010 to 0.0095 s at
+6000 points and over 0.0043 to 0.0052 s at 10 000 — an **8.5× narrower** spread — and the
+margin spread falls from 0.86 K to 0.22 K. More points averaging the sampling noise is the
+obvious explanation and a mechanism that needs no new physics. At three seeds a variance
+claim is weak evidence, so it is recorded as an observation to confirm, not a finding; but
+it is the only column where the extra points bought anything at all.
+
+##### Where the extra points still buy something: onset, not temperature
+
+`T_s` saturates at 3000 points — every rung from there up sits at or below the ruler, so
+they cannot be ordered. **Onset time can be**, and §7.5.22 already identified it as the
+quantity with headroom left (ratio 56 against its bar):
+
+| points | onset error | against the 0.009 s ruler |
+|---|---|---|
+| 3 000 | 0.0129 s | **1.4× — still resolvable** |
+| 4 000 | 0.0099 s | 1.1× |
+| 5 000 | 0.0046 s | below |
+| 20 000 | 0.0033 s | below |
+
+So the smallest sufficient set **depends on the headline**: 3000 points if the claim is
+about temperatures, 5000 if it is about onset timing. That is the one place on this axis
+where a decision is still available, and it is the axis §8 says the project should be
+moving onto.
+
+**The shipped 6000 is about twice what the temperature claim needs**, and 20 000 costs
+5× the wall-clock of 6000 for nothing measurable on any field.
+
+##### The cheap direction is not cheap
+
+1000 points cost 3136 s against 6000 points at 5859 s — 1.87× for a sixth of the data,
+because 50 000 quasi-Newton iterations carry a per-iteration overhead that dominates once
+the batch is small. Accuracy cannot be traded back for wall-clock by shrinking the set:
+below the threshold the run costs most of what it cost before and returns a solution with
+no front in the right place.
+
+> The `sec` column is **not** clean and no conclusion rests on it. The rungs ran at loads
+> from 5.4 to 34.5 as the ladder filled and drained — the 6000-point arms at 14.5, the
+> 10 000 at 25–34.5 — so the wall-clock mixes the point count with contention. That is why
+> 6000 appears *cheaper* than 5000 here, which it is not. Point count is a lower bound on
+> relative cost; the measured figures are not attributable, and only the accuracy columns
+> carry an argument.
+
+Reproduced by, one arm per invocation — the rung is the `--only` token and the seed count
+follows the table:
+
+```bash
+uv run python tools/axial_study.py adamcheck --seeds 0 --cpu-block 0 \
+    --only 'f64 adam0/qn50000@3k-fixed' --out __DEV/studies/adamcheck_f64_3k_s0.json
+```
+
+Rungs are `@1k`, `@2k`, `@3k`, `@4k`, `@5k`, `@6k`, `@10k`, `@20k`, all suffixed
+`-fixed`. The 6000-, 10 000- and 20 000-point rows are three seeds; the rest are seed 0
+only. A single sample is enough to place a 17× step — it is far outside the 12.5× worst
+seed spread this project has recorded (§7.1) — and is **not** enough to order the rungs
+above the threshold, which is why those carry three.
+
 ### 7.6 Pseudo-time stepping
 
 Implemented (`pts_every`, `pts_dtau`, `pts_growth`), and **measured harmful** in
