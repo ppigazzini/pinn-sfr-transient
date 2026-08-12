@@ -31,17 +31,22 @@
 \usepackage[utf8]{inputenc}
 \usepackage{amsmath}
 
-% Times at 11 pt. `newtx` if usable, `mathptmx` as the fallback that ships everywhere.
+% Times at 11 pt, via `mathptmx` -- URW Nimbus Roman, a metrically exact Times clone,
+% which is what the guide asks for ("11 point Times or Times New Roman").
 %
-% BOTH files are tested, and the second is the point: `newtxtext.sty` inputs `binhex.tex`,
-% which Debian ships in a DIFFERENT package (`texlive-plain-generic`). Testing only for the
-% style file finds newtx present, selects it, and then dies on the missing input -- which
-% is what happened on this lane's first run. A guard that checks the wrong file is not a
-% guard.
-\usepackage{ifthen}
-\IfFileExists{newtxtext.sty}{%
-  \IfFileExists{binhex.tex}{\usepackage{newtxtext,newtxmath}}{\usepackage{mathptmx}}%
-}{\usepackage{mathptmx}}
+% ONE font path, deliberately, after `newtx` cost this lane three red runs. Each was a
+% different missing piece of the same package family: `binhex.tex` in
+% texlive-plain-generic, then \Bbbk clashing with amssymb, then the TS1 metric
+% `ts1-qtmr` from tex-gyre. Every one of them was invisible on the development machine,
+% because newtx is not installed there and the conditional silently took the mathptmx
+% branch -- so a green local build proved nothing about the branch CI actually ran.
+%
+% A conditional that selects an untestable path is worse than no conditional. mathptmx
+% ships in texlive-fonts-recommended, is what the local build already used, and needs
+% neither tex-gyre nor plain-generic. If newtx is ever wanted back, it needs
+% texlive-fonts-extra, texlive-plain-generic and tex-gyre installed together, and amssymb
+% must stay dropped.
+\usepackage{mathptmx}
 \usepackage{graphicx}
 % Drawn by `python -m pinn_sfr_transient.axial.charts`, never committed and never
 % exported by hand -- CI regenerates them from the physics before pdflatex runs. Draw
