@@ -188,7 +188,9 @@ logarithmic Doppler term is undefined.
 
 Inputs pass through a random Fourier embedding
 $x \mapsto [\sin(2\pi Bx), \cos(2\pi Bx)]$ with $B$ frozen. The trunk is a 64-wide,
-5-layer tanh MLP with five outputs; the default model has 49 797 trainable parameters.
+5-layer tanh MLP with five outputs, carrying 17 029 fitted parameters; the embedding's
+read-out adds a further 32 768 that scale with the embedding width and not with what the
+network can represent.
 Training minimises the squared PDE residuals at collocation points drawn fresh each step,
 with a short Adam stage followed by a long L-BFGS stage with strong-Wolfe line search. All
 arithmetic is float64 on CPU — curvature pairs are meaningless at float32 residual
