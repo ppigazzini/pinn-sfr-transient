@@ -76,14 +76,13 @@ jobs:
           path: docs/img/charts
           if-no-files-found: error
 
-      # The packages the preamble names, not `scheme-full`: that is several GB for a
-      # document using eight packages, and listing them means a future `\usepackage`
-      # fails loudly rather than silently pulling a dependency nobody recorded.
-      #
-      # `texlive-plain-generic` is here because of a build failure, not a guess.
-      # `newtxtext.sty` inputs `binhex.tex`, which lives in that package, and
-      # `--no-install-recommends` drops it -- so the first run of this lane installed
-      # newtx, found it, used it, and died on its missing dependency.
+      # Exactly what the preamble needs, and no more. `texlive-fonts-extra` (629 MB) and
+      # `texlive-plain-generic` are GONE with newtx: they existed only to satisfy it, and
+      # it cost three red runs -- binhex.tex, then \Bbbk against amssymb, then the TS1
+      # metric ts1-qtmr from tex-gyre, which `--no-install-recommends` also drops. The
+      # paper now uses mathptmx (URW Nimbus Roman) from texlive-fonts-recommended, which
+      # is the same font path the development machine builds with, so a green local build
+      # finally predicts a green run here.
       - name: Install TeX Live
         run: |
           sudo apt-get update
@@ -91,22 +90,15 @@ jobs:
             texlive-latex-recommended \
             texlive-latex-extra \
             texlive-fonts-recommended \
-            texlive-fonts-extra \
-            texlive-plain-generic \
             latexmk
 
-      # Report which Times the build will use, and check the dependency rather than
-      # only the package. `newtxtext.sty` being present is NOT sufficient -- that is
-      # exactly what the first failure looked like.
-      - name: Report the font path taken
+      # Fail before pdflatex does if the font is not actually there.
+      - name: Check the Times metrics are present
         run: |
-          if kpsewhich newtxtext.sty >/dev/null && kpsewhich binhex.tex >/dev/null; then
-            echo "newtx available (Times via TeX Gyre Termes)"
-          else
-            echo "newtx incomplete -- the preamble's mathptmx fallback will be used"
-            kpsewhich newtxtext.sty || echo "  newtxtext.sty missing"
-            kpsewhich binhex.tex   || echo "  binhex.tex missing"
-          fi
+          for f in ptmr8t.tfm ptmb8t.tfm ptmri8t.tfm; do
+            kpsewhich $f >/dev/null || { echo "::error::$f missing (mathptmx/URW Times)"; exit 1; }
+          done
+          echo "URW Times metrics present"
 
       # Fail here rather than inside pdflatex. A missing figure surfaces as
       # "File `...' not found" partway through a 200-line log; this says which one.
