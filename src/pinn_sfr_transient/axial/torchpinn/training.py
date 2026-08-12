@@ -17,6 +17,8 @@ except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency
     raise SystemExit(msg) from exc
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from pinn_sfr_transient.axial.config import AxialParams
 
 import numpy as np
@@ -253,8 +255,18 @@ class Trainer:
         """Drop the reservoir when the window grows; its points are stale."""
         self.rar = torch.empty(0, 2, dtype=torch.float64, device=self.dev)
 
-    def train(self, *, verbose: bool = True) -> AxialPinn:
-        """Run the full schedule and return the trained model."""
+    def train(
+        self,
+        *,
+        verbose: bool = True,
+        on_checkpoint: Callable[[int, AxialPinn], None] | None = None,
+    ) -> AxialPinn:
+        """Run the full schedule and return the trained model.
+
+        ``on_checkpoint`` receives ``(cumulative quasi-Newton iterations, model)`` at each
+        entry of ``cfg.polish_checkpoints``, so one run can be scored at several budgets
+        instead of being re-run once per budget. The JAX twin takes the same argument.
+        """
         cfg = self.cfg
         opt = torch.optim.Adam(self.model.parameters(), lr=cfg.lr)
         sched = torch.optim.lr_scheduler.CosineAnnealingLR(
@@ -286,17 +298,36 @@ class Trainer:
                 w = [f"{v:.1e}" for v in self.block_w.tolist()]
                 print(f"[adam {it:6d}] t<={t_max:.2f} loss={loss.item():.3e} w=[{','.join(w)}]")
         if cfg.lbfgs_iters > 0:
-            self._lbfgs(verbose=verbose)
+            self._lbfgs(verbose=verbose, on_checkpoint=on_checkpoint)
         return self.model
 
-    def _freeze_encoder(self) -> list:
+    def _polish_stages(self) -> list[tuple[int, bool]]:
+        """Return ``(iterations, freeze the encoder)`` for each block of the polish.
+
+        One block unless ``freeze_after`` splits it, in which case the projection is
+        trainable for the first ``freeze_after`` iterations and held for the rest -- on
+        the same collocation set, since the switch already discards the curvature history
+        and redrawing would confound a restart with a change of objective.
+        """
+        cfg = self.cfg
+        if cfg.freeze_after <= 0:
+            return [(cfg.lbfgs_iters, cfg.freeze_encoder)]
+        if cfg.polish_refresh > 0:
+            msg = "freeze_after and polish_refresh both set; they schedule the same stage"
+            raise ValueError(msg)
+        n1 = min(cfg.freeze_after, cfg.lbfgs_iters)
+        return [(n1, False), (cfg.lbfgs_iters - n1, True)]
+
+    def _freeze_encoder(self, *, force: bool = False) -> list:
         """Hold the Fourier-to-trunk projection fixed; return the parameters frozen.
 
         The JAX twin does this by partitioning that layer out of the optimised pytree.
-        Here it is ``requires_grad_(False)``, and ``_lbfgs`` restores it afterwards so
-        the model is left exactly as found whatever the divergence guard decides.
+        Here it is ``requires_grad_(False)`` -- a parameter with no gradient contributes
+        zeros to every curvature pair, so the space L-BFGS searches is the same one --
+        and ``_lbfgs`` restores it afterwards so the model is left exactly as found
+        whatever the divergence guard decides.
         """
-        if not (self.cfg.freeze_encoder and self.model.embed is not None):
+        if not ((force or self.cfg.freeze_encoder) and self.model.embed is not None):
             return []
         first = next(m for m in self.model.net.modules() if isinstance(m, torch.nn.Linear))
         frozen = [q for q in first.parameters() if q.requires_grad]
@@ -304,16 +335,33 @@ class Trainer:
             q.requires_grad_(False)
         return frozen
 
-    def _lbfgs(self, *, verbose: bool) -> None:
-        """Quasi-Newton polish on a fixed collocation set, with a divergence guard."""
-        frozen = self._freeze_encoder()
-        zeta, that = self.collocation()
-        before = self.causal_loss(zeta, that).item()
-        snapshot = [q.detach().clone() for q in self.model.parameters()]
+    def _emit_checkpoint(
+        self, cb: Callable[[int, AxialPinn], None] | None, n: int, saved: list
+    ) -> None:
+        """Hand the caller the model as it stood at iteration ``n``, then restore it.
+
+        The JAX twin can pass a snapshot directly because its models are immutable
+        pytrees. Here the parameters are mutated in place, so the model is rewound,
+        handed over, and put back -- the callback sees the intermediate state and the
+        caller's model is left exactly as the polish finished it.
+        """
+        if cb is None:
+            return
+        current = [q.detach().clone() for q in self.model.parameters()]
+        with torch.no_grad():
+            for q, old in zip(self.model.parameters(), saved, strict=True):
+                q.copy_(old)
+        cb(n, self.model)
+        with torch.no_grad():
+            for q, new in zip(self.model.parameters(), current, strict=True):
+                q.copy_(new)
+
+    def _make_opt(self, iters: int) -> torch.optim.Optimizer:
+        """Build the quasi-Newton optimiser for a block of ``iters`` iterations."""
         if self.cfg.optimizer in ("ssbfgs", "lbfgs-shared", "ssbroyden"):
-            opt = SelfScaledLBFGS(
+            return SelfScaledLBFGS(
                 self.model.parameters(),
-                max_iter=self.cfg.lbfgs_iters,
+                max_iter=iters,
                 history_size=self.cfg.lbfgs_history,
                 self_scale=self.cfg.optimizer in ("ssbfgs", "ssbroyden"),
                 # SSBroyden is the self-scaled Broyden class at the midpoint of the
@@ -323,15 +371,69 @@ class Trainer:
                 tolerance_grad=1e-12,
                 tolerance_change=1e-14,
             )
-        else:
-            opt = torch.optim.LBFGS(
-                self.model.parameters(),
-                max_iter=self.cfg.lbfgs_iters,
-                history_size=self.cfg.lbfgs_history,
-                line_search_fn="strong_wolfe",
-                tolerance_grad=1e-12,
-                tolerance_change=1e-14,
-            )
+        return torch.optim.LBFGS(
+            self.model.parameters(),
+            max_iter=iters,
+            history_size=self.cfg.lbfgs_history,
+            line_search_fn="strong_wolfe",
+            tolerance_grad=1e-12,
+            tolerance_change=1e-14,
+        )
+
+    def _run_stages(self, closure, *, want_snaps: bool, verbose: bool) -> list:  # noqa: ANN001
+        """Step the polish through its stages and segments, returning the snapshots.
+
+        One optimiser per *stage*, stepped once per *segment*. ``torch.optim.LBFGS``
+        keeps its history in ``state``, so repeated ``.step()`` calls continue the same
+        solve and a segment boundary costs a copy rather than a restart. A **new**
+        optimiser at the freeze switch is deliberate: the history there refers to
+        coordinates the next stage holds fixed.
+        """
+        cps = sorted(set(self.cfg.polish_checkpoints))
+        snaps: list = []
+        done = 0
+        for iters, freeze in self._polish_stages():
+            if iters <= 0:
+                continue
+            frozen = self._freeze_encoder(force=freeze)
+            stops = [b - done for b in cps if done < b < done + iters]
+            opt, run = self._make_opt(iters), 0
+            for seg in [*stops, iters]:  # the last entry ends the stage, requested or not
+                # BOTH limits, per segment. `torch.optim.LBFGS` derives `max_eval` from
+                # `max_iter` at construction and enforces it PER `.step()` call, so
+                # setting only `max_iter` leaves the segment capped by the constructor's
+                # evaluation budget -- which silently truncated every segment to one
+                # function evaluation and made a checkpointed run a different run.
+                opt.param_groups[0]["max_iter"] = seg - run
+                opt.param_groups[0]["max_eval"] = (seg - run) * 5 // 4 + 1
+                opt.step(closure)
+                run = seg
+                # Only what was asked for -- a stage boundary is not a checkpoint.
+                if want_snaps and done + run in cps:
+                    state = [q.detach().clone() for q in self.model.parameters()]
+                    snaps.append((done + run, state))
+            done += iters
+            for q in frozen:  # leave the model as it was found, whatever the guard decides
+                q.requires_grad_(True)
+            if verbose and self.cfg.freeze_after > 0:
+                print(
+                    f"[lbfgs] {iters} iterations, encoder {'frozen' if freeze else 'free'}",
+                    flush=True,
+                )
+        return snaps
+
+    def _lbfgs(
+        self, *, verbose: bool, on_checkpoint: Callable[[int, AxialPinn], None] | None = None
+    ) -> None:
+        """Quasi-Newton polish on a fixed collocation set, with a divergence guard.
+
+        One block, or two when ``freeze_after`` splits it. The guard spans the whole
+        stage rather than each block: the question a caller cares about is whether the
+        polish as a whole improved on what Adam handed it.
+        """
+        zeta, that = self.collocation()
+        before = self.causal_loss(zeta, that).item()
+        snapshot = [q.detach().clone() for q in self.model.parameters()]
 
         def closure() -> torch.Tensor:
             for q in self.model.parameters():
@@ -340,9 +442,7 @@ class Trainer:
             loss.backward()
             return loss
 
-        opt.step(closure)
-        for q in frozen:  # leave the model as it was found, whatever the guard decides
-            q.requires_grad_(True)
+        snaps = self._run_stages(closure, want_snaps=on_checkpoint is not None, verbose=verbose)
         after = self.causal_loss(zeta, that).item()
         if not np.isfinite(after) or after > before:
             with torch.no_grad():
@@ -350,12 +450,20 @@ class Trainer:
                     q.copy_(saved)
             if verbose:
                 print(f"[lbfgs] reverted: {before:.3e} -> {after:.3e} (kept Adam)")
-        elif verbose:
+            return
+        if verbose:
             print(f"[lbfgs done] loss={after:.3e}")
+        for n, saved in snaps:  # only a polish that improved has states worth reporting
+            self._emit_checkpoint(on_checkpoint, n, saved)
 
 
-def train(p: AxialParams | None = None, cfg: AxialTrainConfig | None = None) -> AxialPinn:
+def train(
+    p: AxialParams | None = None,
+    cfg: AxialTrainConfig | None = None,
+    *,
+    on_checkpoint: Callable[[int, AxialPinn], None] | None = None,
+) -> AxialPinn:
     """Build and train the axial PINN."""
     p = p or AxialParams()
     cfg = cfg or AxialTrainConfig()
-    return Trainer(AxialPinn(p, cfg), cfg).train()
+    return Trainer(AxialPinn(p, cfg), cfg).train(on_checkpoint=on_checkpoint)
