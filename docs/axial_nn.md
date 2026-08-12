@@ -3362,53 +3362,81 @@ system, and it claimed every number here came from an underdetermined one. This 
 measures the axis directly, moving one knob — the size of the fixed polish set — over a
 20× range. `f64 adam0/qn50000`, fixed set, `polish_colloc` the only difference.
 
-| points | ratio | seeds | `T_s` | `L_void` | worst margin | onset err | sec |
-|---|---|---|---|---|---|---|---|
-| 1 000 | 0.235 | 1 | **0.0332** | 0.3500 | +79.4 K | **0.753 s** | 3136 |
-| 2 000 | 0.470 | 1 | **0.0309** | 0.3397 | +28.0 K | 0.193 s | 4200 |
-| **3 000** | **0.705** | 1 | **0.0018** | 0.3773 | +67.1 K | 0.0129 s | 5277 |
-| 4 000 | 0.940 | 1 | 0.0017 | 0.3784 | +67.7 K | 0.0099 s | 6582 |
-| 5 000 | 1.174 | 1 | 0.0016 | 0.3791 | +68.0 K | 0.0046 s | 7499 |
-| 6 000 (shipped) | 1.409 | 3 | 0.0016 [.0016–.0017] | 0.3790 | +67.8 K | 0.0058 s | 5859 |
-| 10 000 | 2.349 | 3 | 0.0016 [.0016–.0016] | 0.3790 | +67.7 K | 0.0049 s | 16 191 |
-| 19 999 | 4.698 | 3 | 0.0016 [.0016–.0016] | 0.3792 | +67.8 K | 0.0033 s | 29 488 |
+| points | ratio | seeds | `T_s` | range | `L_void` | worst margin | onset err | sec |
+|---|---|---|---|---|---|---|---|---|
+| 1 000 | 0.235 | 1 | **0.0332** | — | 0.3500 | +79.4 K | **0.753 s** | 3136 |
+| 2 000 | 0.470 | 1 | **0.0309** | — | 0.3397 | +28.0 K | 0.193 s | 4200 |
+| **3 000** | **0.705** | 3 | **0.0088** | **[.0018–.0159]** | 0.3372 | +42.2 K | 0.076 s | 5122 |
+| **4 000** | **0.940** | 3 | **0.0017** | [.0016–.0017] | 0.3792 | +67.7 K | 0.0112 s | 6227 |
+| 5 000 | 1.174 | 3 | 0.0016 | [.0016–.0016] | 0.3788 | +67.4 K | 0.0057 s | 6973 |
+| 6 000 (shipped) | 1.409 | 3 | 0.0016 | [.0016–.0017] | 0.3790 | +67.8 K | 0.0058 s | 5859 |
+| 10 000 | 2.349 | 3 | 0.0016 | [.0016–.0016] | 0.3790 | +67.7 K | 0.0049 s | 16 191 |
+| 19 999 | 4.698 | 3 | 0.0016 | [.0016–.0016] | 0.3792 | +67.8 K | 0.0033 s | 29 488 |
 
 Reference: `L_void` 0.38116, margin +69.24 K. Rulers (§7.5.22): temperatures 1.1 to
 1.6e-3, onset 0.009 s. Ratios are against the 17 029-parameter body (§7.5.37a);
 `polish_colloc` is `n` and the sampler adds `n // 2` early-time points, so the rungs are
 labelled by point count, which is the physical quantity.
 
-**The axis is a threshold with a flat top.** Between 2000 and 3000 points `T_s` improves
-**17×**, from 0.0309 to 0.0018; over the 6.7× from 3000 to 20 000 it moves by 12%, all of
-it inside the reference's own uncertainty. Below the threshold the failure is not a
-degradation but an absence: the boiling margin is wrong in *both* directions (+79.4 K and
-+28.0 K against +69.2 K), and the 1000-point arm misses the onset bar outright at 0.753 s
-against a 0.5 s tolerance — the only arm on this ladder whose error the reference can
-resolve at all, at 83× the ruler.
+**The axis is a threshold with a flat top**, and the transition occupies one rung rather
+than falling between two. Below it the failure is an absence rather than a degradation:
+the boiling margin is wrong in *both* directions (+79.4 K and +28.0 K against +69.2 K),
+and the 1000-point arm misses the onset bar outright at 0.753 s against a 0.5 s tolerance
+— the only arm on this ladder whose error the reference can resolve at all, at 83× the
+ruler. Above it, six-fold more points move nothing outside the reference's own
+uncertainty.
 
-##### And the threshold is below the determined point, so determinacy is not the mechanism
+##### The transition rung is bistable, which is why one seed could not place it
 
-**3000 points is a ratio of 0.705 — underdetermined by 1.4× — and it reaches 0.0018.**
-The transition is bracketed at $0.47 < r^* < 0.71$, and 1.0 lies outside that bracket.
-Whatever sets the threshold, it is not the residuals-to-parameters count that
-arXiv:2605.30910 prescribes: the prescription would put the edge at 1.0 and would make
-0.705 fail.
+**3000 points does not have an accuracy; it has two.** Per seed: 0.0018, 0.0159, 0.0088 —
+an **8.8× spread**, against 1.06× at 4000 and 1.00× at 5000. The mean of 0.0088 describes
+none of the three runs. What the seeds differ in is whether the front is found at all:
+`L_void` averages 0.3372 against the reference's 0.3811, and the worst margin is +42.2 K
+against +69.2 K, so the poor seeds are not less accurate versions of the good one — they
+have a front in the wrong place.
 
-What is left is a resolution argument — roughly 2500 points in $(t, \zeta)$ is what a
-sub-cell interface moving through the channel needs before the residual can see it — and
-this sweep does not test that. It is recorded as **unexplained**, not as a mechanism.
+That makes the rung a **statement about the initialisation**, not about the point count,
+and it is the reason a single sample could not locate the edge. Seed 0 drew the good
+basin and read 0.0018, which is indistinguishable from the converged shelf.
 
-> **Two readings of this axis have now been wrong, and the sequence is worth keeping.**
-> The first said the cliff proved *absolute point count* governs and determinacy does not,
-> reasoning from f256 at 6000 points (then miscounted as ratio 0.48) against f64 at 2000
-> (0.32) — two close ratios, 18× apart in accuracy. §7.5.37a corrected the denominator,
-> those became 1.41 and 0.47, and the contradiction evaporated; the reading was withdrawn
-> and replaced by "the threshold sits at the determined point", which the 3000- and
-> 4000-point rungs had not yet reached. They then landed at 0.0018 and 0.0017, putting the
-> edge *below* 1.0 and refuting that too. The original instinct was right and its evidence
-> was not, which is why it had to go; what replaced it was an interpolation between two
-> rungs that were already running. **Neither reading should have been written before the
-> bracketing arms returned.**
+##### Where the edge is, and what this ladder cannot say about it
+
+The transition is bracketed at $0.71 < r^* \le 0.94$: 3000 points is unreliable at three
+seeds and 4000 is reliable at three. That is as far as the data goes, and the limit is
+worth stating rather than reading through:
+
+**0.940 sits 6% below the determined point, and the ladder steps by 1.33×.** So this
+sweep cannot separate "the edge is at 0.94" from "the edge is at 1.0". Determinacy —
+arXiv:2605.30910's prescription that residuals should exceed parameters — is *consistent*
+with the bracket, and so is any other mechanism inside it, including the resolution
+argument that roughly 3500 points in $(t, \zeta)$ is what a sub-cell interface moving
+through the channel needs before the residual can see it. Distinguishing them needs rungs
+between 3000 and 4000 at three seeds each, and a way to vary the two candidates
+independently — which the body count now makes possible, since capacity can be changed
+without touching the embedding (§7.5.37a).
+
+Recorded as **unresolved**, with a stated bracket.
+
+> **Three readings of this axis have now been withdrawn, and the sequence is the lesson.**
+>
+> 1. *"Absolute point count governs, determinacy does not"* — reasoned from f256 at 6000
+>    points (then miscounted as ratio 0.48) against f64 at 2000 (0.32): two close ratios,
+>    18× apart in accuracy. §7.5.37a corrected the denominator to 1.41 and 0.47, on
+>    opposite sides of one, and the contradiction evaporated.
+> 2. *"The threshold sits at the determined point"* — written while the 3000- and
+>    4000-point rungs were still running, and refuted when they returned 0.0018 and 0.0017.
+> 3. *"The edge is below the determined point, so determinacy is not the mechanism"* —
+>    rested entirely on 3000 points reaching 0.0018 at **one seed**. Two more seeds put
+>    that rung at 0.0159 and 0.0088; it is bistable, not converged, and the claim requires
+>    it to be reliable.
+>
+> The third is the instructive one, because it was written *after* the rule against
+> reading an axis mid-flight was added to `AGENTS.md`, and it obeyed the letter of that
+> rule — every arm had returned. What it did instead was rest a conclusion on the one rung
+> of eight that had a single sample, on the reasoning that a 17× step is far outside any
+> seed spread. The step was; the rung's **position** was not, and the position was the
+> whole claim. **The seed count has to be sufficient on the rung the conclusion turns on,
+> not on the ladder as a whole.**
 
 ##### Above the threshold: nothing measurable, in either direction
 
@@ -3446,24 +3474,28 @@ it is the only column where the extra points bought anything at all.
 
 ##### Where the extra points still buy something: onset, not temperature
 
-`T_s` saturates at 3000 points — every rung from there up sits at or below the ruler, so
-they cannot be ordered. **Onset time can be**, and §7.5.22 already identified it as the
-quantity with headroom left (ratio 56 against its bar):
+`T_s` saturates at **4000** points — every rung from there up sits at or below the ruler,
+so they cannot be ordered. **Onset time can be**, and §7.5.22 already identified it as the
+quantity with headroom left (ratio 56 against its bar). Three seeds per rung:
 
 | points | onset error | against the 0.009 s ruler |
 |---|---|---|
-| 3 000 | 0.0129 s | **1.4× — still resolvable** |
-| 4 000 | 0.0099 s | 1.1× |
-| 5 000 | 0.0046 s | below |
+| 3 000 | 0.076 s | 8.4× — but the rung is bistable, so this is a mean of two regimes |
+| 4 000 | 0.0112 s | **1.2× — still resolvable** |
+| 5 000 | 0.0057 s | below |
 | 20 000 | 0.0033 s | below |
 
-So the smallest sufficient set **depends on the headline**: 3000 points if the claim is
-about temperatures, 5000 if it is about onset timing. That is the one place on this axis
-where a decision is still available, and it is the axis §8 says the project should be
-moving onto.
+So the smallest sufficient set **depends on the headline**: 4000 points if the claim is
+about temperatures, **5000** if it is about onset timing. That is the one place on this
+axis where a decision is still available, and onset is the axis §8 says the project should
+be moving onto — so 5000 is the defensible default and 4000 is the floor.
 
-**The shipped 6000 is about twice what the temperature claim needs**, and 20 000 costs
-5× the wall-clock of 6000 for nothing measurable on any field.
+**The shipped 6000 is 1.5× what even the onset claim needs**, and 20 000 costs 5× the
+wall-clock of 6000 for nothing measurable on any field.
+
+> An earlier revision of this subsection put the temperature floor at 3000 and quoted its
+> onset error as 0.0129 s. Both were seed 0 of a bistable rung; at three seeds the rung
+> does not converge at all. The floor is 4000.
 
 ##### The cheap direction is not cheap
 
@@ -3489,10 +3521,11 @@ uv run python tools/axial_study.py adamcheck --seeds 0 --cpu-block 0 \
 ```
 
 Rungs are `@1k`, `@2k`, `@3k`, `@4k`, `@5k`, `@6k`, `@10k`, `@20k`, all suffixed
-`-fixed`. The 6000-, 10 000- and 20 000-point rows are three seeds; the rest are seed 0
-only. A single sample is enough to place a 17× step — it is far outside the 12.5× worst
-seed spread this project has recorded (§7.1) — and is **not** enough to order the rungs
-above the threshold, which is why those carry three.
+`-fixed`. Every rung from 3000 up carries **three seeds**; 1000 and 2000 carry one,
+which is enough for them because they fail by 20× and the question there is only whether
+they fail. Three seeds are not a formality on the transition rungs — they are what
+revealed that 3000 is bistable, and a single sample there produced a conclusion that
+survived two hours.
 
 ### 7.6 Pseudo-time stepping
 
