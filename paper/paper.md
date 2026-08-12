@@ -11,26 +11,21 @@ Independent researcher — <pasquale.pigazzini@gmail.com>
 
 ## Abstract
 
-We solve the sodium-boiling phase of an unprotected loss-of-flow (ULOF) transient in a
-sodium-cooled fast reactor with a physics-informed neural surrogate, and report it as a
-reactor-physics result rather than a machine-learning one. One coolant channel is
-resolved axially with four material fields — fuel, cladding, film and coolant temperature
-— and a sodium void fraction, coupled to six-group point kinetics through a logarithmic
-Doppler integral and a void-worth integral whose weight changes sign near the top of the
-core. Thermophysics, the saturation-plus-superheat boiling criterion and both feedback
-laws are taken from the SAS4A/SASSYS-1 manual; four deviations from it are registered
-with their justification, of which two are load-bearing. Against a verified stiff Radau
-reference the surrogate reproduces the temperature fields to a relative $L_2$ of
-$1.6 \times 10^{-3}$, places boiling onset within 0.008 s of the reference's 10.9784 s,
-and reproduces 99.4% of the peak voided length with a saturation margin of +67.4 K
-against +69.2 K. Both of the first two now sit at the reference solver's own resolution,
-so we report them as met rather than as measured accuracies. What the surrogate does
-**not** yet deliver is the closed reactivity loop: the void-worth integral is a
-near-cancellation of two large opposite contributions, and driving the kinetics from the
-learned fields recovers only 8–16% of it, while the non-cancelling Doppler integral over
-the same fields is correct to 1.017. We show by a dual-weighted-residual argument that
-this is not a sampling deficiency, quantify the cancellation, and identify the closed-loop
-void reactivity as the outstanding physics problem.
+We solve the sodium-boiling phase of an unprotected loss-of-flow transient in a
+sodium-cooled fast reactor with a physics-informed neural surrogate. One coolant channel is
+resolved axially with four material fields and a sodium void fraction, coupled to six-group
+point kinetics through Doppler and void-worth integrals, the latter changing sign near the
+top of the core. Thermophysics, the boiling criterion and both feedback laws follow the
+SAS4A/SASSYS-1 manual, with four registered deviations. Against a verified stiff Radau
+reference the surrogate reaches a relative $L_2$ of $1.6\times10^{-3}$ on the temperature
+fields, places boiling onset within 0.008 s of 10.9784 s, and reproduces 99.4% of the
+peak voided length at a saturation margin of $+67.4$ K against $+69.2$ K. The first two
+sit at the reference's own resolution, so we report them as met rather than as measured
+accuracies. What the surrogate does not yet deliver is the closed reactivity loop: the
+void-worth integral nearly cancels between two large opposite contributions, and driving
+the kinetics from the learned fields recovers only 8–16% of it while the non-cancelling
+Doppler integral is correct to 1.017. We quantify that cancellation and show by an adjoint
+argument that it is not a sampling deficiency.
 
 ## 1. Introduction
 
@@ -162,7 +157,7 @@ at second order in the step. Refining it against itself:
 Two consequences are load-bearing. First, **an acceptance bar on the pointwise void
 fraction is not supportable** and was withdrawn: the reference does not know that quantity
 to better than 3%. Second, calibration practice requires a tolerance to sit at least four
-times above the uncertainty of the instrument measuring it, so the 1% temperature bar is
+times above the uncertainty of the instrument measuring it [16], so the 1% temperature bar is
 sound at a ratio of about 6 and the 0.5 s onset criterion at about 56 — but a *result*
 below that uncertainty is measuring the instrument.
 
@@ -177,46 +172,179 @@ plus superheat. The dashed line marks boiling onset.](../docs/img/charts/boundar
 onset is **10.9784 s**; read off the 0.25 s output grid it appears as 10.75 s. A quarter
 of a second of every onset error previously reported for this model was that quantisation.
 
-## 4. The surrogate
+## 4. Physics-informed neural networks
 
-Described here only as far as reproduction requires; the design study is in the
-repository documentation.
+The surrogate is a physics-informed neural network (PINN), and because this paper is
+addressed to reactor physicists rather than to the machine-learning literature, this
+section states what that means, what it does not mean, and which of its known weaknesses
+govern the design in §5.
 
-The state is written multiplicatively,
-$\theta(\zeta, \hat{t}) = \theta_0(\zeta)\exp(\hat{t} N(\zeta, \hat{t}))$, with $\theta_0$
-the analytic steady profile. This makes the initial condition exact, keeps every
-temperature at or above the inlet, and pins the single upstream boundary condition the
-advection equation admits — all without penalty terms. An additive ansatz, tried first,
-allowed the optimiser to drive the fuel temperature negative, at which point the
-logarithmic Doppler term is undefined.
+### 4.1 The idea
 
-Inputs pass through a random Fourier embedding
-$x \mapsto [\sin(2\pi Bx), \cos(2\pi Bx)]$ with $B$ frozen, at **64 features**. The trunk
-is a 64-wide, 5-layer tanh MLP with five outputs, carrying **17 029 fitted parameters**;
-the embedding contributes a further 8192 in the read-out layer, whose width follows the
-embedding rather than anything the network can represent, and 128 frozen entries in $B$.
+A PINN represents the solution of a differential equation directly as a neural network
+$u_\theta$ of the independent variables, and fits it by driving the equation's own
+residual to zero [2]. For a system written as $\mathcal{R}[u] = 0$ over the domain, the training objective
+is
 
-Training minimises the squared PDE residuals on **one fixed set of 5000 collocation
-points**, with **50 000 L-BFGS iterations** under a strong-Wolfe line search and **no
-first-order stage at all**. Each of those three choices is measured rather than inherited:
-a first-order warm start degrades the result rather than helping it, a set redrawn during
-the solve costs a factor of 1.5 against a fixed one, and 5000 points is where the onset
-error falls below the reference's own resolution. At 2000 points a front still forms but is
-badly placed: onset is 0.19 s late and the saturation margin is +28 K against the
-reference's +69 K.
-All arithmetic is float64 on CPU; curvature pairs are meaningless at float32 residual
-magnitudes.
+```math
+\mathcal{L}(\theta) = \frac{1}{N}\sum_{i=1}^{N}
+\bigl\lVert \mathcal{R}[u_\theta](x_i, t_i)\bigr\rVert^2 ,
+```
 
-Two independent implementations exist, in PyTorch and JAX/Equinox, required by test to
-expose identical knobs and defaults and sharing only the numpy definition of the physics.
-Results below are from the JAX implementation; the cross-implementation agreement and its
-limits are documented in the repository.
+evaluated at $N$ **collocation points** scattered through the domain. The derivatives
+$\partial_t u_\theta$ and $\partial_x u_\theta$ that $\mathcal{R}$ needs come from
+automatic differentiation of the network itself, so they are exact to machine precision
+rather than differenced on a mesh.
 
-## 5. What the surrogate reproduces
+Three properties follow, and they are why the method is of interest here.
+
+**No solution data is required.** The objective contains no measured or simulated values
+of $u$. The network is fitted to the *equations*, not to a dataset, which distinguishes a
+PINN from a regression surrogate trained on solver output. The reference solution of §3 is
+used only to **score** the result, never to train it.
+
+**The result is mesh-free and differentiable.** $u_\theta$ is a closed-form function that
+can be evaluated anywhere in the domain and differentiated with respect to its inputs —
+and, with the same machinery, with respect to physical parameters. That is what makes the
+method attractive for uncertainty propagation and parameter inference, which need many
+evaluations and gradients rather than one accurate trajectory [3, 4].
+
+**Constraints can be imposed exactly or by penalty.** Initial and boundary conditions are
+commonly added as extra penalty terms whose weights must then be chosen. The alternative,
+used here, is to build them into the functional form of $u_\theta$ so they hold
+identically for any parameters [4].
+
+### 4.2 Why they are hard to train, and what follows for the design
+
+PINNs are not function approximation with a different loss. The objective is a composition
+of the network with a differential operator, which makes the optimisation problem
+substantially worse conditioned than a supervised one. Four failure modes are established
+in the literature [5] and each is visible in this problem.
+
+**Ill-conditioning, and the choice of optimiser.** The Hessian of a PINN objective is
+severely ill-conditioned, and first-order stochastic methods stall on it far short of what
+the architecture can represent [10, 12]. Quasi-Newton methods, which build curvature from
+successive gradients [14], reach accuracies first-order methods do not, and comparative
+optimiser studies for PINNs find the same [11, 13]. The consequence here is §5.5: the
+optimisation budget, not the architecture, decides whether the boiling front forms at all.
+
+**Spectral bias.** Plain multilayer perceptrons learn low-frequency structure long before
+high-frequency structure, which is fatal for a solution containing a sharp moving front.
+Mapping the inputs through fixed sinusoidal features removes the bias by presenting the
+high frequencies directly to the first layer [6]. Without it no optimiser tested here
+forms a front.
+
+**Competing loss terms.** When initial conditions, boundary conditions and the residual
+are summed as penalties their gradients compete, and the balance shifts during training
+[7, 8]. The remedy adopted here is to remove the competition rather than tune it, by
+making the constraints exact (§5.1).
+
+**Where the points go.** The residual is minimised only where it is sampled, so the
+collocation distribution is part of the method [9]. For a front problem the instinct is to
+concentrate points on the front; §7 shows by an adjoint argument that for the functional
+this paper cares about, that instinct is wrong.
+
+### 4.3 What a PINN result must be compared against
+
+A recurring criticism of the machine-learning-for-PDEs literature is that reported
+speed-ups and accuracies are measured against weak baselines and reported selectively
+[19]. This paper follows the opposite convention: the baseline is a verified stiff solver
+of the same equations, its own discretisation error is quantified first (§3), and results
+at or below that error are reported as **met** rather than as measured accuracies.
+
+## 5. The surrogate
+
+### 5.1 Hard-constraint ansatz
+
+The state is not the network output. It is written multiplicatively,
+
+```math
+\theta(\zeta,\hat{t}) = \theta_0(\zeta)\exp\bigl(\hat{t}\,N(\zeta,\hat{t})\bigr),
+```
+
+where $\theta_0$ is the analytic steady profile of §2, $\hat{t} = t/t_{\mathrm{end}}$, and
+$N$ is the network. Three constraints then hold for *any* weights, exactly and without a
+penalty term:
+
+- at $\hat{t} = 0$ the exponent vanishes and $\theta = \theta_0$, so the initial condition
+  is the steady state to machine precision;
+- the exponential is positive, so no temperature can fall below the inlet — which matters
+  because the Doppler feedback is logarithmic in $T_f$ and undefined for non-positive
+  arguments;
+- multiplying by a factor vanishing at $\zeta = 0$ pins the single upstream boundary
+  condition the advection equation admits.
+
+This is not a stylistic preference. An additive ansatz was tried first; the optimiser drove
+the fuel temperature negative while the loss fell, at which point the logarithmic Doppler
+term is undefined. Exact constraints also remove the loss-balancing problem of §4.2
+entirely, since there are no constraint penalties to balance against the residual.
+
+### 5.2 Input embedding
+
+The two inputs $(\zeta, \hat{t})$ pass through a random Fourier feature map [6],
+$x \mapsto [\sin(2\pi Bx), \cos(2\pi Bx)]$, with $B$ drawn once from a Gaussian and held
+fixed — a change of input coordinates, not a fitted layer. The default uses **64
+features**, giving a 128-component embedding.
+
+### 5.3 Network
+
+The trunk is a 64-wide, 5-layer tanh multilayer perceptron with five outputs, one per
+field. Its parameter count is worth stating carefully, because two different numbers can
+be quoted:
+
+| component | parameters |
+|---|---|
+| trunk (5 layers, 64 wide, 5 outputs) | **17 029** |
+| read-out from the embedding ($64 \times 128$) | 8 192 |
+| frozen Fourier matrix $B$ | 128 |
+| total arrays | 25 349 |
+
+The trunk's 17 029 parameters are invariant to the embedding width; a 256-feature
+embedding changes only the read-out, from 8192 to 32 768. Measured over the widths 32 to
+1024, accuracy at a funded optimisation budget does not depend on that column at all.
+
+### 5.4 Residuals and collocation
+
+The loss applies the objective of §4.1 to the four field equations of §2 together with the
+void closure, each block scaled to a common magnitude so no field dominates the sum by
+virtue of its units. The collocation set is drawn once over
+$(\zeta, \hat{t}) \in [0,1]^2$ and held fixed for the whole solve; the default is **5000
+points**.
+
+The count is a measured choice. At 2000 points a front still forms but is badly placed —
+onset 0.19 s late, and a saturation margin of +28 K against the reference's +69 K — while
+5000 is where the onset error falls below the reference's own resolution. Beyond it
+nothing measurable changes.
+
+### 5.5 Training
+
+Training is **50 000 L-BFGS iterations** [14] with a strong-Wolfe line search, and **no
+first-order stage at all**. All arithmetic is float64 on CPU; curvature pairs are
+meaningless at float32 residual magnitudes.
+
+The absence of a first-order stage is deliberate and measured. A short Adam warm start
+neither helps nor is free: removing it improves the converged result, and a schedule-free
+first-order method run alone for the same 30 000 iterations produces no boiling front at
+all. Redrawing the collocation set during the solve costs a factor of 1.5 against holding
+it fixed, because the curvature pairs a quasi-Newton method accumulates are only
+meaningful while the objective is unchanged. The supporting measurements are in the
+repository documentation and are not reproduced here.
+
+### 5.6 Two implementations
+
+The model exists twice, in PyTorch and JAX/Equinox, sharing only the numpy definition of
+the physics and required by automated test to expose identical knobs with identical
+defaults. The reason is a defect class a single implementation cannot detect: one unset
+library default — a quasi-Newton history length of 10 against 50 — once accounted for an
+entire apparent accuracy gap between the two, and was read as a framework difference for
+four milestones before the arguments were compared. Results below are from the JAX
+implementation.
+
+## 6. What the surrogate reproduces
 
 All results at three seeds unless stated, against the reference at its scoring mesh.
 
-### 5.1 Temperature fields
+### 6.1 Temperature fields
 
 The relative $L_2$ error on the film temperature is $1.6 \times 10^{-3}$ (range
 1.62–1.65 × 10⁻³), against a 1% acceptance bar. Because the reference's own error is
@@ -224,7 +352,7 @@ The relative $L_2$ error on the film temperature is $1.6 \times 10^{-3}$ (range
 bar is met, and *how far inside* it is not a question this reference can answer. The other
 fields follow at 1.7 × 10⁻³ (coolant), 2.6 × 10⁻³ (fuel) and 3.7 × 10⁻³ (cladding).
 
-### 5.2 The boiling front
+### 6.2 The boiling front
 
 ![Coolant temperature over space and time. The cyan contour is the boiling criterion,
 which under D-TH-3 *is* the front rather than a separately computed curve; the star marks
@@ -256,7 +384,7 @@ is always the outlet, for the surrogate and the reference alike. A height criter
 measures the mesh, not the model. An earlier revision of this work reported that quantity
 as solved exactly; it had merely been restated as a tautology.
 
-## 6. What is not yet solved: the closed void-reactivity loop
+## 7. What is not yet solved: the closed void-reactivity loop
 
 With the thermal fields prescribed, the surrogate is accurate. Driving the **kinetics**
 from the learned fields is a different matter, and it fails in a specific and instructive
@@ -264,7 +392,7 @@ way.
 
 > The figures in this section were measured on the earlier default configuration
 > (256 Fourier features, a short Adam stage, 30 000 quasi-Newton iterations on 6000
-> points) and have not been re-measured on the configuration of §4. The cancellation
+> points) and have not been re-measured on the configuration of §5. The cancellation
 > ratio is a property of the worth distribution and does not depend on the surrogate; the
 > recovered fractions may move.
 
@@ -293,7 +421,7 @@ A relative error $\epsilon$ on each half therefore becomes $2.1 \epsilon$ on the
 functional is an ill-conditioned target by construction, and reporting it as one number
 hides which half is wrong; we report the halves separately from here on.
 
-**It is not a sampling problem.** Dual-weighted-residual theory gives the error in a
+**It is not a sampling problem.** Dual-weighted-residual theory [15] gives the error in a
 functional as $\langle R(u_\theta), z^*\rangle$ to leading order, with $z^*$ the solution
 of the adjoint problem sourced by the functional's derivative. For this advective coolant
 operator the adjoint runs backwards in $\zeta$, and it can be evaluated in closed form.
@@ -311,7 +439,7 @@ fully voided in surrogate and reference alike and the integral is then fixed by 
 back into the kinetics and the error compounds — not in the evaluation of the functional
 on a given field. That localises the remaining work precisely.
 
-## 7. Discussion
+## 8. Discussion
 
 The surrogate reproduces the thermal-hydraulic phase of this transient to the resolution
 of the reference solver, including the safety-relevant front quantities: when boiling
@@ -332,11 +460,11 @@ Two consequences for practice. First, **a surrogate should be qualified against 
 functionals it will be used for, not only against field norms**: an $L_2$ of
 $1.6\times10^{-3}$ on temperature coexists here with an 84–92% miss on a reactivity
 integral built from the same field. Second, **the reference's own resolution must be
-quantified before an acceptance bar is set**. Two bars in this work were set without that
+quantified before an acceptance bar is set** [17, 18]. Two bars in this work were set without that
 check; one was withdrawn, and the temperature result has since reached the point where the
 instrument, not the model, is the limit.
 
-## 8. Conclusions
+## 9. Conclusions
 
 A physics-informed neural surrogate for the sodium-boiling phase of an SFR unprotected
 loss-of-flow transient, built on SAS4A/SASSYS-1 thermophysics and feedback laws with four
@@ -365,15 +493,43 @@ source for the thermophysics and feedback laws used here.
 2. Raissi M, Perdikaris P and Karniadakis G E 2019 Physics-informed neural networks: a
    deep learning framework for solving forward and inverse problems involving nonlinear
    partial differential equations *J. Comput. Phys.* **378** 686
-3. Becker R and Rannacher R 2001 An optimal control approach to a posteriori error
-   estimation in finite element methods *Acta Numerica* **10** 1
-4. Tancik M *et al* 2020 Fourier features let networks learn high frequency functions in
-   low dimensional domains *Adv. Neural Inf. Process. Syst.* **33** 7537
-5. Nocedal J and Wright S J 2006 *Numerical Optimization* 2nd edn (New York: Springer)
-6. Taylor B N and Kuyatt C E 1994 *Guidelines for Evaluating and Expressing the
-   Uncertainty of NIST Measurement Results* NIST Technical Note 1297
-7. Jakeman J D, Barba L A, Martins J R R A and O'Leary-Roseberry T 2026 Verification and
-   validation for trustworthy scientific machine learning *Mach. Learn.: Sci. Technol.*
-   **7** 025055
-8. Eça L and Hoekstra M 2014 A procedure for the estimation of the numerical uncertainty
-   of CFD calculations based on grid refinement studies *J. Comput. Phys.* **262** 104
+3. Karniadakis G E, Kevrekidis I G, Lu L, Perdikaris P, Wang S and Yang L 2021
+   Physics-informed machine learning *Nat. Rev. Phys.* **3** 422
+4. Lu L, Meng X, Mao Z and Karniadakis G E 2021 DeepXDE: a deep learning library for
+   solving differential equations *SIAM Rev.* **63** 208
+5. Krishnapriyan A S, Gholami A, Zhe S, Kirby R M and Mahoney M W 2021 Characterizing
+   possible failure modes in physics-informed neural networks *Adv. Neural Inf. Process.
+   Syst.* **34** 26548
+6. Tancik M, Srinivasan P P, Mildenhall B, Fridovich-Keil S, Raghavan N, Singhal U,
+   Ramamoorthi R, Barron J T and Ng R 2020 Fourier features let networks learn high
+   frequency functions in low dimensional domains *Adv. Neural Inf. Process. Syst.*
+   **33** 7537
+7. Wang S, Teng Y and Perdikaris P 2021 Understanding and mitigating gradient flow
+   pathologies in physics-informed neural networks *SIAM J. Sci. Comput.* **43** A3055
+8. Wang S, Sankaran S and Perdikaris P 2024 Respecting causality for training
+   physics-informed neural networks *Comput. Methods Appl. Mech. Eng.* **421** 116813
+9. Wu C, Zhu M, Tan Q, Kartha Y and Lu L 2023 A comprehensive study of non-adaptive and
+   residual-based adaptive sampling for physics-informed neural networks *Comput. Methods
+   Appl. Mech. Eng.* **403** 115671
+10. Rathore P, Lei W, Frangella Z, Lu L and Udell M 2024 Challenges in training PINNs: a
+    loss landscape perspective *Proc. 41st Int. Conf. on Machine Learning*
+11. Kiyani E, Shukla K, Urbán J F, Darbon J and Karniadakis G E 2025 Which optimizer works
+    best for physics-informed neural networks and Kolmogorov-Arnold networks? Preprint
+    arXiv:2501.16371
+12. Urbán J F, Stefanou P and Pons J A 2025 Unveiling the optimization process of
+    physics-informed neural networks *J. Comput. Phys.* **523** 113656
+13. Müller J and Zeinhofer M 2023 Achieving high accuracy with PINNs via energy natural
+    gradient descent *Proc. 40th Int. Conf. on Machine Learning* **202** 25471
+14. Nocedal J and Wright S J 2006 *Numerical Optimization* 2nd edn (New York: Springer)
+15. Becker R and Rannacher R 2001 An optimal control approach to a posteriori error
+    estimation in finite element methods *Acta Numerica* **10** 1
+16. Taylor B N and Kuyatt C E 1994 *Guidelines for Evaluating and Expressing the
+    Uncertainty of NIST Measurement Results* NIST Technical Note 1297
+17. Jakeman J D, Barba L A, Martins J R R A and O'Leary-Roseberry T 2026 Verification and
+    validation for trustworthy scientific machine learning *Mach. Learn.: Sci. Technol.*
+    **7** 025055
+18. Eça L and Hoekstra M 2014 A procedure for the estimation of the numerical uncertainty
+    of CFD calculations based on grid refinement studies *J. Comput. Phys.* **262** 104
+19. McGreivy N and Hakim A 2024 Weak baselines and reporting biases lead to overoptimism
+    in machine learning for fluid-related partial differential equations *Nat. Mach.
+    Intell.* **6** 1256
