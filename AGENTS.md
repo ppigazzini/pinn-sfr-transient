@@ -161,10 +161,21 @@ four times: D38, D39, the budget sweep's "monotonic" front degradation, and §7.
   `tests/axial/test_axial_pinn.py` now pins the split in both backends.
 - **Do not publish a reading of an axis while the arms that bracket it are still running.**
   The same sweep got two interpretations in six hours — "absolute count governs, not
-  determinacy", then "the threshold is at the determined point" — and the rung that
-  settled it (3000 points, ratio 0.705, works) was already queued when both were written.
-  A conclusion interpolated between two pending arms is a guess with a table next to it.
-  Report the measured rows, name the arm that would decide it, and wait.
+  determinacy", then "the threshold is at the determined point" — and the rung that would
+  settle it was already queued when both were written. A conclusion interpolated between
+  two pending arms is a guess with a table next to it. Report the measured rows, name the
+  arm that would decide it, and wait.
+- **The seed count has to be sufficient on the rung the conclusion turns on, not on the
+  ladder as a whole.** The rule above was followed to the letter — every arm had returned —
+  and the reading was still wrong, because it rested on the one rung of eight that had a
+  single sample. A ladder is not "three-seeded" because most of it is. Ask which single row
+  the sentence would survive without, and count the seeds *there*.
+  The failure mode is specific and it recurs: **near a threshold, a rung is bistable rather
+  than noisy.** The 3000-point rung read 0.0018 / 0.0159 / 0.0088 — an 8.8× spread whose
+  mean describes none of the three runs, because the seeds differ in whether the boiling
+  front is found at all. One draw from a bistable rung looks exactly like a converged
+  result, and "far outside any recorded seed spread" is not a defence: the *step* was
+  outside it, the rung's *position* was the claim.
 - **An ablation is a statement about the formulation it was run on.** Change the
   formulation and every negative result on the shelf is provisional again (D59).
 - **The paper is a nuclear engineering paper, not a machine-learning one.** `docs/` and
