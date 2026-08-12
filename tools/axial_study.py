@@ -1662,6 +1662,38 @@ def study_adamcheck(out: Path) -> None:
                 (6667, 10),
                 (13333, 20),
             )
+        ]
+        + [
+            # The quasi-Newton budget, re-measured at the point count the ladder above
+            # settles on. Every budget conclusion in this document (7.5.11, 7.5.20,
+            # 7.5.31) was measured at 6000 points, which the sweep now shows is 1.5x more
+            # than even the onset claim needs -- and 7.5.29 measured the axis at 3000,
+            # where four conclusions turned out to be artefacts of an under-converged
+            # optimiser. This asks where the budget saturates once the collocation set is
+            # the recommended one, so the two axes are not confounded.
+            #
+            # 5000 points and not 4000: 4000 is the temperature floor, 5000 is where
+            # onset drops below its own ruler, and onset is the quantity with headroom
+            # left (7.5.22). Measuring a budget against a saturated metric would answer
+            # nothing.
+            #
+            # Three seeds per rung, not one. A budget ladder crosses the same kind of
+            # transition the collocation ladder did, and 7.5.38's 3000-point rung is the
+            # standing demonstration that a single draw near one reads as converged.
+            (
+                f"f64 adam0/qn{k}@5k-fixed [jax]",
+                {
+                    "backend": "jax",
+                    "seed": seed,
+                    "fourier_features": 64,
+                    "adam_iters": 0,
+                    "lbfgs_iters": k,
+                    "polish_colloc": 3333,
+                    "polish_refresh": 0,
+                },
+            )
+            for seed in SEEDS
+            for k in (10000, 20000, 30000, 40000)
         ],
         out,
     )
