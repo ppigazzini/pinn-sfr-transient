@@ -1611,11 +1611,62 @@ def study_adamcheck(out: Path) -> None:
                 },
             )
             for seed in SEEDS
+        ]
+        + [
+            # How big should the fixed polish set be? §7.5.31a: the literature prescribes
+            # an OVERdetermined system and we have never run one. At f64 the trainable
+            # count is 25 221, so 6000 points (24 000 residuals) is a ratio of 0.95 --
+            # essentially square. The ladder runs both ways from there:
+            #
+            #   points  residuals  ratio
+            #     1000       4000  0.235    fails: T_s 0.0332, misses the onset bar
+            #     2000       8000  0.470    fails: T_s 0.0309
+            #     3000      12000  0.705
+            #     4000      16000  0.940    the determined point
+            #     5000      20000  1.175
+            #    (6000      24000  1.409)   the arm above, and the shipped count
+            #    10000      40000  2.349    equal to 6000, nothing bought
+            #    20000      80000  4.698
+            #
+            # The denominator is the MLP **body** (17 029), not the trainable total: the
+            # embedding is an encoder, and `mlp.layers[0].weight` is a read-out whose
+            # width follows it. The body is identical from f32 to f1024, which is why
+            # sec 7.5.31's capacity ladder is flat -- see sec 7.5.37a.
+            #
+            # Downward is where the axis turns out to matter, and abruptly: the failures
+            # are below the determined point and the successes above it, so these rungs
+            # bracket the threshold rather than sample a trend.
+            #
+            # `polish_colloc` is n, and the sampler adds n//2 early-time points, so 6667
+            # and 13333 give 10 000 and 19 999 points. The label states the point count,
+            # not the knob, because the point count is the physical quantity.
+            (
+                f"f64 adam0/qn50000@{pts}k-fixed [jax]",
+                {
+                    "backend": "jax",
+                    "seed": seed,
+                    "fourier_features": 64,
+                    "adam_iters": 0,
+                    "lbfgs_iters": 50000,
+                    "polish_colloc": n,
+                    "polish_refresh": 0,
+                },
+            )
+            for seed in SEEDS
+            for n, pts in (
+                (667, 1),
+                (1333, 2),
+                (2000, 3),
+                (2667, 4),
+                (3333, 5),
+                (6667, 10),
+                (13333, 20),
+            )
         ],
         out,
     )
     mean_table(rows)
-    print("\nis the Adam stage removable, and does redrawing the polish set help?")
+    print("\nis the Adam stage removable, and how big must the polish set be?")
     _arm_summary(rows)
     _per_second(rows)
 
