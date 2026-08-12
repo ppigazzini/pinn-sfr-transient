@@ -76,56 +76,32 @@ jobs:
           path: docs/img/charts
           if-no-files-found: error
 
-      # Exactly what the preamble needs, and no more. `texlive-fonts-extra` (629 MB) and
-      # `texlive-plain-generic` are GONE with newtx: they existed only to satisfy it, and
-      # it cost three red runs -- binhex.tex, then \Bbbk against amssymb, then the TS1
-      # metric ts1-qtmr from tex-gyre, which `--no-install-recommends` also drops. The
-      # paper now uses mathptmx (URW Nimbus Roman) from texlive-fonts-recommended, which
-      # is the same font path the development machine builds with, so a green local build
-      # finally predicts a green run here.
-      - name: Install TeX Live
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            texlive-latex-recommended \
-            texlive-latex-extra \
-            texlive-fonts-recommended \
-            latexmk
-
-      # Fail before pdflatex does if the font is not actually there.
-      - name: Check the Times metrics are present
-        run: |
-          for f in ptmr8t.tfm ptmb8t.tfm ptmri8t.tfm; do
-            kpsewhich $f >/dev/null || { echo "::error::$f missing (mathptmx/URW Times)"; exit 1; }
-          done
-          echo "URW Times metrics present"
-
-      # Fail here rather than inside pdflatex. A missing figure surfaces as
-      # "File `...' not found" partway through a 200-line log; this says which one.
-      - name: Check the embedded figures exist
-        run: |
-          missing=0
-          for f in temperature_map vapor_fraction front_height reactivity \
-                   void_worth_split boundary_conditions; do
-            if [ ! -s "docs/img/charts/$f.png" ]; then
-              echo "::error::docs/img/charts/$f.png missing -- the paper embeds it"
-              missing=1
-            fi
-          done
-          [ "$missing" -eq 0 ] && echo "all embedded figures present"
-          exit "$missing"
-
-      # `-file-line-error` puts `file:line:` in front of every error, which is what makes
-      # the extraction below useful.
+      # TeX Live as a container, not as an apt-get shopping list.
+      #
+      # Hand-assembling packages cost this lane three red runs -- `binhex.tex`, then
+      # \Bbbk against amssymb, then the TS1 metric `ts1-qtmr` -- and two of those were
+      # `--no-install-recommends` quietly dropping something a font needed. The official
+      # `texlive/texlive` image carries a full TeX Live, so there is no package list to
+      # get wrong, and it pulls in seconds against the two minutes apt was taking.
+      #
+      # `docker run` rather than a marketplace LaTeX action: those wrap this same image,
+      # and this repository pins every action to a full commit SHA. Swapping to
+      # `xu-cheng/latex-action` is a one-line change if the pin is available.
+      #
+      # `--user` keeps the build artefacts owned by the runner rather than by root.
       - name: Build paper.pdf
         run: |
-          latexmk -pdf -file-line-error -interaction=nonstopmode -halt-on-error \
-            -outdir=build paper/paper.tex
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$PWD":/work -w /work \
+            texlive/texlive:latest \
+            latexmk -pdf -file-line-error -interaction=nonstopmode -halt-on-error \
+              -outdir=build paper/paper.tex
 
-      # Surface the actual TeX error as a job annotation. The paper cannot be compiled on
-      # the machine it is written on, so every failure here is diagnosed by reading a log
-      # in a browser; three consecutive red runs were each a single `!` line buried in two
-      # hundred lines of package loading.
+      # Surface the actual TeX error as a job annotation. The paper is compiled here and
+      # on the development machine with the same font path now, but when this does fail
+      # it fails inside a container log; three consecutive red runs were each a single
+      # `!` line buried in two hundred lines of package loading.
       - name: Report the TeX error
         if: ${{ failure() }}
         run: |
