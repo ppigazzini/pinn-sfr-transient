@@ -1,0 +1,129 @@
+name: paper
+
+# Build the submission PDF and publish it as a downloadable artefact.
+#
+# This lane exists because the LaTeX copy cannot be built where it is written: the
+# development machine has no TeX engine, so `paper/paper.tex` was committed verified
+# only structurally -- balanced environments, balanced braces, no dangling \ref. That
+# catches what would stop a build; it does not catch what would make one fail. CI is
+# therefore the FIRST place the paper is actually compiled, and a red run here means
+# the paper does not build, not that a formatting nicety slipped.
+#
+# It also draws the transient charts, so the figures a reader sees are regenerated from
+# the physics on every push rather than exported by hand from a notebook.
+on:
+  push:
+    branches: [main, "feat/**", "fix/**"]
+    paths:
+      - "paper/**"
+      - "src/pinn_sfr_transient/axial/charts.py"
+      - ".github/workflows/paper.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "paper/**"
+      - "src/pinn_sfr_transient/axial/charts.py"
+      - ".github/workflows/paper.yml"
+  # Buildable on demand, because a paper is something you want a PDF of when you want
+  # it and not only when a file under `paper/` happens to change.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pdf:
+    name: build paper PDF
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # `scheme-basic` plus the packages the preamble names. Not `scheme-full`: it is
+      # several GB and this document uses eight packages, all listed here so a future
+      # `\usepackage` fails loudly at build time rather than silently pulling a
+      # dependency nobody recorded.
+      - name: Install TeX Live
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            texlive-latex-recommended \
+            texlive-latex-extra \
+            texlive-fonts-recommended \
+            texlive-fonts-extra \
+            latexmk
+          # `newtx` gives Times; the preamble falls back to `mathptmx` without it, so
+          # record which one this build actually used rather than leaving it ambiguous.
+          kpsewhich newtxtext.sty || echo "newtx absent -- the mathptmx fallback is in use"
+
+      - name: Build paper.pdf
+        run: latexmk -pdf -interaction=nonstopmode -halt-on-error -outdir=build paper/paper.tex
+
+      # A LaTeX run can exit 0 with an unresolved cross-reference, which prints as a
+      # literal `??` in the PDF. Fail on that: a submission with `??` in it is worse
+      # than a failed build, because nothing draws attention to it.
+      - name: Reject unresolved references
+        run: |
+          if grep -q "There were undefined references" build/paper.log; then
+            echo "::error::undefined references -- the PDF would contain '??'"
+            grep -n "undefined" build/paper.log || true
+            exit 1
+          fi
+          echo "all references resolved"
+
+      - name: Upload paper.pdf
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: paper-pdf
+          path: build/paper.pdf
+          if-no-files-found: error
+
+      # Kept on failure too: the log is the only way to diagnose a build that cannot
+      # be reproduced on the machine the paper is written on.
+      - name: Upload LaTeX log
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: paper-latex-log
+          path: build/paper.log
+          if-no-files-found: warn
+
+  charts:
+    name: draw the transient charts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+
+      # Core dependencies only. The charts are drawn from the reference solver, which
+      # needs numpy, scipy and matplotlib and none of the three deep-learning extras --
+      # so this job also proves the charts have not grown a quiet dependency on one.
+      - name: Sync core dependencies
+        run: uv sync --locked --python 3.13
+
+      - name: Draw the charts
+        run: uv run python -m pinn_sfr_transient.axial.charts --outdir build/charts
+
+      - name: Upload charts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: transient-charts
+          path: build/charts
+          if-no-files-found: error

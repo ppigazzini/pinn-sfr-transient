@@ -68,6 +68,33 @@ The Typst copy also builds without the standalone binary:
 uv run --with typst python -c "import typst,pathlib; pathlib.Path('paper.pdf').write_bytes(typst.compile('paper/paper.typ'))"
 ```
 
+## Charts
+
+The result charts are drawn from the physics, not exported from a notebook:
+
+```bash
+uv run python -m pinn_sfr_transient.axial.charts --outdir docs/img/charts
+uv run python -m pinn_sfr_transient.axial.charts --only front_height,reactivity
+```
+
+Each chart is selectable, and `generate_all` solves the reference at most once per
+regime — a closed-loop solve is the expensive one, so `--only front_height` does not pay
+for it. `pinn_sfr_transient.axial.figures` is the *other* figure module: it draws the
+three explanatory figures embedded in `docs/`, all at once.
+
+## CI
+
+`.github/workflows/paper.yml` builds `paper.pdf` and uploads it as the **`paper-pdf`**
+artefact, alongside **`transient-charts`**. Download either from the run's summary page,
+or with `gh run download <run-id> -n paper-pdf`. It also runs on `workflow_dispatch`, so
+a PDF can be built on demand rather than only when something under `paper/` changes.
+
+**That lane is the first place the LaTeX is actually compiled.** The machine the paper is
+written on has no TeX engine, so `paper.tex` is verified locally only structurally —
+balanced environments and braces, no dangling `\ref`. A red run there means the paper
+does not build. The lane also fails the build on *undefined references*, which LaTeX
+otherwise reports while exiting 0 and renders as a literal `??` in the PDF.
+
 ## Where the numbers come from
 
 Every figure in the paper is reproducible by a committed command. The two central
