@@ -610,3 +610,54 @@ def test_front_residual_is_masked_off_while_the_outlet_is_subcooled():
     # Untrained: the outlet sits at the steady profile, far below saturation.
     r = m.front_residual(torch.zeros(8, 1, dtype=torch.float64)).detach()
     assert float(r.abs().max()) == 0.0
+
+
+def _capacity(model) -> tuple[int, int, int]:
+    """``(fitted body, encoder read-out, frozen B)`` for a torch axial model.
+
+    The split is what makes a residuals-per-parameter ratio meaningful. ``B`` is a
+    buffer on the model, so it never appears in ``parameters()``; the read-out is the
+    one weight whose shape follows the embedding width.
+    """
+    read_out = model.net.net[0].weight
+    body = sum(p.numel() for p in model.parameters() if p is not read_out)
+    frozen = sum(b.numel() for b in model.buffers())
+    return body, read_out.numel(), frozen
+
+
+@pytest.mark.parametrize("n_features", [32, 64, 128, 256])
+def test_fitting_capacity_does_not_move_with_the_embedding_width(n_features):
+    """The Fourier embedding is an **encoder**: widening it adds no fitted capacity.
+
+    Every parameter it adds sits in ``net[0].weight``, the read-out whose input width is
+    ``2 * fourier_features``. The five layers behind it never move. This is not a
+    stylistic point -- counting the read-out as capacity put the shipped model's
+    residuals-per-parameter ratio at 0.48 when it is 1.41, which inverted the conclusion
+    of a collocation-size sweep and mistitled a "capacity ladder" that holds capacity
+    fixed. ``docs/axial_nn.md`` sections 7.5.37a and 7.5.38 carry the retractions.
+    """
+    m = AxialPinn(AxialParams(), AxialTrainConfig(fourier_features=n_features))
+    body, read_out, frozen = _capacity(m)
+    assert body == 17029, "the MLP body must not depend on the embedding width"
+    assert read_out == 64 * 2 * n_features
+    assert frozen == 2 * n_features
+
+
+def test_both_backends_agree_on_what_counts_as_capacity():
+    """A count that differs between backends would make every ratio backend-specific."""
+    pytest.importorskip("jax")
+    import equinox as eqx
+    import jax
+
+    from pinn_sfr_transient.axial.jaxpinn.archs import AxialPinn as JaxPinn
+    from pinn_sfr_transient.axial.jaxpinn.config import AxialTrainConfig as JaxCfg
+
+    jnet = JaxPinn(JaxCfg(fourier_features=64), jax.random.PRNGKey(0))
+    sizes = {
+        jax.tree_util.keystr(p): int(a.size)
+        for p, a in jax.tree_util.tree_flatten_with_path(eqx.filter(jnet, eqx.is_inexact_array))[0]
+    }
+    jax_body = sum(sizes.values()) - sizes[".embed.B"] - sizes[".mlp.layers[0].weight"]
+    tnet = AxialPinn(AxialParams(), AxialTrainConfig(fourier_features=64))
+    torch_body, _, _ = _capacity(tnet)
+    assert jax_body == torch_body
