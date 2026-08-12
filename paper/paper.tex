@@ -165,9 +165,8 @@ against which it is judged and the resolution that reference actually has
 (section~\ref{sec:reference}), on what the surrogate reproduces
 (section~\ref{sec:results}), and on the one coupling it does not yet close
 (section~\ref{sec:openloop}). The complete methodological record---architecture sweeps, optimiser
-comparisons, seed statistics, cross-implementation checks and the negative results---is
-published alongside in the repository documentation and is cited rather than reproduced
-here.
+comparisons, seed statistics and the negative results---is published alongside in the
+repository documentation and is cited rather than reproduced here.
 
 \section{Physical model}\label{sec:physics}
 
@@ -430,6 +429,15 @@ with $B$ drawn once from a Gaussian and then held fixed --- it is a change of in
 coordinates, not a fitted layer. The default uses \textbf{64 features}, giving a
 128-component embedding.
 
+Wider embeddings were measured against this default at the same budget, three seeds each.
+\textbf{128 and 256 features are indistinguishable from 64 on every quantity the reference
+can resolve} --- the same relative $L_2$ to four digits, the same 99.4\% of peak voided
+length, and onset errors all below the reference's own uncertainty --- while costing
+roughly 1.25 and 1.9 times as much per iteration. The narrowest of the three is therefore
+the default. A wider embedding does help at a \emph{starved} optimisation budget, where it
+both improves onset accuracy and sharply reduces its scatter across seeds; at the funded
+budget of section~\ref{sec:training} that advantage has gone.
+
 \subsection{Network}\label{sec:network}
 
 The trunk is a 64-wide, 5-layer $\tanh$ multilayer perceptron with five outputs, one per
@@ -455,8 +463,8 @@ Total arrays & 25\,349 \\
 \end{table}
 
 The trunk's 17\,029 parameters are invariant to the embedding width; a 256-feature
-embedding changes only the read-out, from 8\,192 to 32\,768. Measured over the widths 32
-to 1024, accuracy at a funded optimisation budget does not depend on that column at all.
+embedding changes only the read-out, from 8\,192 to 32\,768. That column is not fitting
+capacity, which is why widening it changes nothing measurable.
 
 \subsection{Residuals and collocation}\label{sec:residuals}
 
@@ -474,8 +482,8 @@ resolution. Beyond it nothing measurable changes.
 \subsection{Training}\label{sec:training}
 
 Training is \textbf{50\,000 L-BFGS iterations} \cite{nocedal} with a strong-Wolfe line
-search, and \textbf{no first-order stage at all}. All arithmetic is float64 on CPU;
-curvature pairs are meaningless at float32 residual magnitudes.
+search, and \textbf{no first-order stage at all}. All arithmetic is in double
+precision; curvature pairs are meaningless at single-precision residual magnitudes.
 
 The absence of a first-order stage is deliberate and measured. A short Adam warm start
 neither helps nor is free: removing it improves the converged result, and a schedule-free
@@ -485,16 +493,6 @@ it fixed, because the curvature pairs a quasi-Newton method accumulates are only
 meaningful while the objective is unchanged. The supporting measurements --- optimiser
 comparisons, budget ladders, seed statistics --- are reported in the repository
 documentation and are not reproduced here.
-
-\subsection{Two implementations}\label{sec:impl}
-
-The model exists twice, in PyTorch and in JAX/Equinox, sharing only the \textsc{numpy}
-definition of the physics and required by automated test to expose identical knobs with
-identical defaults. The reason is a defect class a single implementation cannot detect:
-one unset library default --- a quasi-Newton history length of 10 against 50 --- once
-accounted for an entire apparent accuracy gap between the two, and was read as a
-framework difference for four milestones before the arguments were compared. Results
-below are from the JAX implementation.
 
 \section{What the surrogate reproduces}\label{sec:results}
 
