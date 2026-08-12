@@ -55,8 +55,7 @@ described in enough detail to reproduce it (@sec:surrogate); the detail is spent
 which it is judged and the resolution that reference actually has (@sec:reference), on what
 the surrogate reproduces (@sec:results), and on the one coupling it does not yet close
 (@sec:openloop). The complete methodological record — architecture sweeps, optimiser
-comparisons, seed statistics, cross-implementation checks and the negative results — is
-published alongside in the repository documentation and is cited rather than reproduced
+comparisons, seed statistics and the negative results — is published alongside in the repository documentation and is cited rather than reproduced
 here.
 
 = Physical model <sec:physics>
@@ -302,6 +301,15 @@ $x arrow.r [sin(2 pi B x), cos(2 pi B x)]$, with $B$ drawn once from a Gaussian 
 fixed — a change of input coordinates, not a fitted layer. The default uses *64 features*,
 giving a 128-component embedding.
 
+Wider embeddings were measured against this default at the same budget, three seeds each.
+*128 and 256 features are indistinguishable from 64 on every quantity the reference can
+resolve* — the same relative $L_2$ to four digits, the same 99.4% of peak voided length,
+and onset errors all below the reference's own uncertainty — while costing roughly 1.25 and
+1.9 times as much per iteration. The narrowest of the three is therefore the default. A
+wider embedding does help at a _starved_ optimisation budget, where it both improves onset
+accuracy and sharply reduces its scatter across seeds; at the funded budget of
+@sec:training that advantage has gone.
+
 == Network <sec:network>
 
 The trunk is a 64-wide, 5-layer tanh multilayer perceptron with five outputs, one per
@@ -327,8 +335,8 @@ quoted.
 ) <tab:params>
 
 The trunk's 17 029 parameters are invariant to the embedding width; a 256-feature embedding
-changes only the read-out, from 8192 to 32 768. Measured over the widths 32 to 1024,
-accuracy at a funded optimisation budget does not depend on that column at all.
+changes only the read-out, from 8192 to 32 768. That column is not fitting capacity, which
+is why widening it changes nothing measurable.
 
 == Residuals and collocation <sec:residuals>
 
@@ -346,8 +354,8 @@ nothing measurable changes.
 == Training <sec:training>
 
 Training is *50 000 L-BFGS iterations* [14] with a strong-Wolfe line search, and *no
-first-order stage at all*. All arithmetic is float64 on CPU; curvature pairs are meaningless
-at float32 residual magnitudes.
+first-order stage at all*. All arithmetic is in double precision; curvature pairs are
+meaningless at single-precision residual magnitudes.
 
 The absence of a first-order stage is deliberate and measured. A short Adam warm start
 neither helps nor is free: removing it improves the converged result, and a schedule-free
@@ -356,16 +364,6 @@ all. Redrawing the collocation set during the solve costs a factor of 1.5 agains
 fixed, because the curvature pairs a quasi-Newton method accumulates are only meaningful
 while the objective is unchanged. The supporting measurements are in the repository
 documentation and are not reproduced here.
-
-== Two implementations <sec:impl>
-
-The model exists twice, in PyTorch and JAX/Equinox, sharing only the numpy definition of the
-physics and required by automated test to expose identical knobs with identical defaults.
-The reason is a defect class a single implementation cannot detect: one unset library
-default — a quasi-Newton history length of 10 against 50 — once accounted for an entire
-apparent accuracy gap between the two, and was read as a framework difference for four
-milestones before the arguments were compared. Results below are from the JAX
-implementation.
 
 = What the surrogate reproduces <sec:results>
 
