@@ -21,20 +21,27 @@
 \usepackage[a4paper,top=4.0cm,bottom=2.7cm,left=2.5cm,right=2.5cm]{geometry}
 \pagestyle{empty}
 
+% ORDER MATTERS HERE, and both orderings below were learned from a failed build.
+%
+% `amsmath` must load BEFORE `newtxmath`, and `amssymb` must not load AFTER it: newtxmath
+% already provides the AMS symbols, so amssymb redefines \Bbbk and the run dies with
+% "Command \Bbbk already defined". amssymb is simply dropped -- nothing in this paper uses
+% a symbol it alone provides (\lVert and \rVert are amsmath).
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+
 % Times at 11 pt. `newtx` if usable, `mathptmx` as the fallback that ships everywhere.
 %
-% BOTH files are tested, and the second one is the point: `newtxtext.sty` inputs
-% `binhex.tex`, which Debian ships in a DIFFERENT package (`texlive-plain-generic`).
-% Testing only for the style file finds newtx present, selects it, and then dies on the
-% missing input -- which is what happened on this lane's first run. A guard that checks
-% the wrong file is not a guard.
+% BOTH files are tested, and the second is the point: `newtxtext.sty` inputs `binhex.tex`,
+% which Debian ships in a DIFFERENT package (`texlive-plain-generic`). Testing only for the
+% style file finds newtx present, selects it, and then dies on the missing input -- which
+% is what happened on this lane's first run. A guard that checks the wrong file is not a
+% guard.
 \usepackage{ifthen}
 \IfFileExists{newtxtext.sty}{%
   \IfFileExists{binhex.tex}{\usepackage{newtxtext,newtxmath}}{\usepackage{mathptmx}}%
 }{\usepackage{mathptmx}}
-\usepackage[T1]{fontenc}
-\usepackage[utf8]{inputenc}
-\usepackage{amsmath,amssymb}
 \usepackage{graphicx}
 % Drawn by `python -m pinn_sfr_transient.axial.charts`, never committed and never
 % exported by hand -- CI regenerates them from the physics before pdflatex runs. Draw
@@ -74,11 +81,8 @@
 % rather than a hand-numbered list so that \cite renumbers automatically -- inserting a
 % section is exactly when a hand-numbered list goes wrong.
 \makeatletter
-\let\@oldthebibliography\thebibliography
-\renewcommand{\thebibliography}[1]{%
-  \@oldthebibliography{#1}%
+\renewcommand\@openbib@code{%
   \setlength{\labelsep}{5mm}%
-  \setlength{\leftmargin}{\dimexpr\labelwidth+\labelsep\relax}%
   \setlength{\itemsep}{0.4em}%
   \setlength{\parsep}{0pt}%
 }

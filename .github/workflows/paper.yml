@@ -123,8 +123,26 @@ jobs:
           [ "$missing" -eq 0 ] && echo "all embedded figures present"
           exit "$missing"
 
+      # `-file-line-error` puts `file:line:` in front of every error, which is what makes
+      # the extraction below useful.
       - name: Build paper.pdf
-        run: latexmk -pdf -interaction=nonstopmode -halt-on-error -outdir=build paper/paper.tex
+        run: |
+          latexmk -pdf -file-line-error -interaction=nonstopmode -halt-on-error \
+            -outdir=build paper/paper.tex
+
+      # Surface the actual TeX error as a job annotation. The paper cannot be compiled on
+      # the machine it is written on, so every failure here is diagnosed by reading a log
+      # in a browser; three consecutive red runs were each a single `!` line buried in two
+      # hundred lines of package loading.
+      - name: Report the TeX error
+        if: ${{ failure() }}
+        run: |
+          echo "::group::TeX errors"
+          grep -n -E "^(!|.*:[0-9]+:)" build/paper.log | head -40 || true
+          echo "::endgroup::"
+          first=$(grep -m1 -E "^!" build/paper.log || true)
+          [ -n "$first" ] && echo "::error::$first"
+          exit 0
 
       # A LaTeX run can exit 0 with an unresolved cross-reference, which prints as a
       # literal `??` in the PDF. Fail on that: a submission with `??` in it is worse
