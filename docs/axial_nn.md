@@ -2000,13 +2000,16 @@ worst-seed margin:
 | **adam300** [jax] | 0.1935 · **no front** | 0.0880 · +2.6 K | 0.0363 · +9.5 K |
 | **adam3000** [jax] | 0.0762 · +2.4 K | 0.0545 · +3.7 K | 0.0358 · +5.3 K |
 
-> **Read with §7.5.31a.** This surface is measured at `n_colloc = 4000` — 6000 points once
-> the early-time cluster is counted — which is 0.48
-> residuals per parameter — a 2.07× *underdetermined* system, against a literature that
-> prescribes overdetermination. A quasi-Newton iteration is full-batch and therefore
-> linear in the point count, so the affordability of a 3000- or 30000-iteration
-> quasi-Newton stage is itself a consequence of that count. The conclusion below holds at
-> this ratio; it is not a general claim about first- against second-order methods.
+> **Read with §7.5.38.** This surface is measured at `n_colloc = 4000` — 6000 points once
+> the early-time cluster is counted — which is **1.41 residuals per parameter** against the
+> 17 029-parameter body (§7.5.37a), so the system is mildly *over*determined. A quasi-Newton
+> iteration is full-batch and therefore linear in the point count, so the affordability of
+> a 3000- or 30000-iteration quasi-Newton stage is itself a consequence of that count. The
+> conclusion below holds at this count; it is not a general claim about first- against
+> second-order methods. §7.5.38 measures the axis directly: flat above 1.41, and a cliff
+> below the determined point.
+> (An earlier version of this note said 0.48 and "2.07× underdetermined", counting the
+> encoder as capacity — see §7.5.31a's retraction.)
 
 At three seeds on both backends:
 
@@ -2957,6 +2960,16 @@ configuration every recent number was measured at.
 A caveat on §7.5.11 and §7.5.20, argued rather than measured, and recorded now because it
 is the kind of thing this project otherwise rediscovers as a retraction.
 
+> ## Retracted: the premise is an arithmetic error
+>
+> **This section's central claim — that we run an underdetermined collocation set —
+> is wrong, and it is wrong because it counted the encoder as fitting capacity.** The
+> correct count is in §7.5.37a; the shipped configuration runs at **1.41**, comfortably
+> on the *right* side of the literature's line, and always did. Everything below is kept
+> for the record. What survives is the cost argument — a quasi-Newton iteration is
+> full-batch and linear in the point count — and §7.5.38's threshold, which is a real
+> effect that this section's numbers merely mislocated.
+
 **The literature prescribes an overdetermined collocation set and we run a 3.1×
 underdetermined one.** arXiv:2605.30910 — *PINNs Failure Modes are Overfitting* — argues
 that PINN failures are overfitting rather than architectural or optimiser deficiencies,
@@ -2979,6 +2992,10 @@ shipped `n_colloc = 4000` is **6000 points** per step; at four residual blocks e
 > 0.32 — it forgot the early-time cluster, which is half as many points again. The system
 > is underdetermined by 2.07×, not 3.1×. The argument is unaffected; the arithmetic was
 > wrong by 1.5× and is corrected here rather than quietly.
+>
+> **And the corrected figure was still wrong**, by a larger factor and for a different
+> reason: 49 797 counts 32 768 parameters of encoder read-out. The ratio is 1.409. Two
+> corrections to one table, neither of which questioned the denominator — see §7.5.37a.
 
 **And our own training loop already cites that paper — for the other half of its
 argument.** The JAX Adam loop resamples every step and the comment says a frozen set is
@@ -3028,20 +3045,29 @@ different grid.
 `uv run python tools/axial_study.py fourierbudget`, JAX, `adam10000 / qn30000`, three
 seeds per rung.
 
-| `fourier_features` | `T_s` | seed range | `L_void` | worst margin | sec | params |
-|---|---|---|---|---|---|---|
-| **f32** | 0.0026 | .0021–.0032 | 0.3748 | +65.4 K | **5110** | 21 125 |
-| f64 | 0.0025 | .0018–.0031 | 0.3729 | +65.7 K | 6122 | 25 221 |
-| **f128** | **0.0019** | .0018–.0022 | 0.3769 | +67.2 K | 7208 | 33 413 |
-| f256 (shipped) | 0.0024 | .0019–.0029 | 0.3687 | +65.2 K | **12 289** | 49 797 |
+| `fourier_features` | `T_s` | seed range | `L_void` | worst margin | sec | arrays | capacity |
+|---|---|---|---|---|---|---|---|
+| **f32** | 0.0026 | .0021–.0032 | 0.3748 | +65.4 K | **5110** | 21 125 | 17 029 |
+| f64 | 0.0025 | .0018–.0031 | 0.3729 | +65.7 K | 6122 | 25 221 | 17 029 |
+| **f128** | **0.0019** | .0018–.0022 | 0.3769 | +67.2 K | 7208 | 33 413 | 17 029 |
+| f256 (shipped) | 0.0024 | .0019–.0029 | 0.3687 | +65.2 K | **12 289** | 49 797 | 17 029 |
 
 **Every rung's seed range overlaps every other rung's.** f32 spans .0021–.0032 against
 f256's .0019–.0029, and f256 is *nominally worse than f128* while costing 1.7× more.
 `L_void` moves 2% across an eightfold change in embedding width; the worst-seed margin
 moves 2 K.
 
-**f32 matches f256 at 42% of the wall-clock and 42% of the parameters.** Capacity above
-f32 buys nothing measurable at this budget.
+**f32 matches f256 at 42% of the wall-clock**, so nothing above f32 is worth paying for at
+this budget.
+
+> **This section's title was wrong, and the last column is why.** It is not a *capacity*
+> ladder: the fitting capacity is **17 029 at every rung** and only the encoder read-out
+> grows (§7.5.37a). A flat result across a column that does not vary is not a finding
+> about capacity — it is the arithmetic working. What the ladder does measure, and
+> measures usefully, is that **a 32× wider random-Fourier basis buys nothing**, which is a
+> statement about the embedding and is the one §7.5.29 makes on other grounds. The
+> original text read the flatness as "capacity above f32 buys nothing measurable"; that
+> claim has never been tested here, because no arm in this document has changed the body.
 
 §7.5.12's ladder — which is where the shipped `fourier_features = 256` comes from, as its
 config comment says — was measured entirely at `adam300 / qn3000`. Every row of
@@ -3265,16 +3291,24 @@ against does not appear — the fixed-set arm is scored against the reference on
 | embedding | f256 | **f64** |
 | Adam | 30 | **0** |
 | quasi-Newton | 30 000, fixed set | **50 000, fixed set** |
-| trainable parameters | 49 797 | **25 221** |
+| trainable arrays | 49 797 | **25 221** |
+| *of which* fitting capacity | 17 029 | **17 029** — unchanged |
 | `T_s` (3 seeds) | 0.0017 [.0016–.0017] | **0.0016 [.0016–.0017]** |
 | `L_void` | 0.3784 | **0.3790** |
 | worst margin | +67.6 K | **+67.8 K** |
 
-**Equal or better on every column, with half the parameters and no first-order stage at
-all.** The two `T_s` ranges are identical to four digits, so this is not a claim of
+**Equal or better on every column, with a quarter of the encoder and no first-order stage
+at all.** The two `T_s` ranges are identical to four digits, so this is not a claim of
 improved accuracy — both are at the reference's own resolution (§7.5.22) and neither can
-be distinguished from the other. The claim is that **the same result is reachable with
-half the model and none of the Adam machinery**.
+be distinguished from the other. The claim is that **the same result is reachable with a
+much smaller embedding and none of the Adam machinery**.
+
+> **Corrected.** This table read "trainable parameters 49 797 → 25 221" and the sentence
+> claimed "half the model". It is not half the model: §7.5.37a shows the **fitting
+> capacity is 17 029 in both**, and what f64 halves is the encoder read-out. The
+> measurement is untouched and the recommendation stands — a smaller embedding at equal
+> accuracy is still worth taking, and it is 2× cheaper per iteration — but "half the
+> model" overstated what changed.
 
 That also retires a great deal of apparatus. At `adam_iters = 0` the RAR reservoir, the
 adaptive block weighting, the time-window curriculum and the pseudo-time anchors are not
@@ -3287,6 +3321,38 @@ fixed collocation set.
 > 1.5×. Its conclusion — that small-batch Adam does not rescue the first-order stage —
 > survives, because 17× is far larger than 1.5×, but the figure is not attributable and
 > should not be quoted as if it were.
+
+#### 7.5.37a The Fourier embedding is an encoder, and counting it as capacity broke three sections
+
+**The fitting capacity of this model is 17 029 parameters at every embedding width.** Not
+25 221, not 49 797. Those figures count the read-out projection, whose width is set by the
+encoder's output and not by anything the network can express:
+
+| | all arrays | frozen `B` | encoder read-out | **body** |
+|---|---|---|---|---|
+| f32 | 21 189 | 64 | 4 096 | **17 029** |
+| f64 | 25 349 | 128 | 8 192 | **17 029** |
+| f128 | 33 669 | 256 | 16 384 | **17 029** |
+| f256 (shipped) | 50 309 | 512 | 32 768 | **17 029** |
+| f1024 | 150 149 | 2 048 | 131 072 | **17 029** |
+
+`B` is drawn once and held under `stop_gradient` in both backends, so it was already
+excluded. The error was the next column: `mlp.layers[0].weight` has shape
+`(width, 2 * n_features)`, so it grows 32× from f32 to f1024 while the five layers behind
+it — 16 965 parameters of hidden weights, biases and the output head — never move.
+
+**This is the explanation of §7.5.31, not merely a correction to it.** That section
+measured the capacity ladder as *flat* from f32 to f256 and called it a surprising result
+about capacity. It is not surprising and it is not about capacity: **the two arms have
+identical capacity**, and the ladder was measuring the width of an encoder read-out. The
+measurement stands; its title was wrong.
+
+The rule, because this document will otherwise redo it: **a ratio needs a denominator
+that varies when the model's expressive power varies.** The test of a candidate
+denominator is whether changing it changes what the network can represent. Here, changing
+the embedding width by 32× changes 128 000 parameters and nothing about the answer, which
+is the evidence that those parameters are not capacity. `tests/axial/test_axial_pinn.py`
+now pins the body count across widths and across both backends, so this cannot drift back.
 
 ### 7.6 Pseudo-time stepping
 
