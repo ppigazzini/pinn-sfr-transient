@@ -149,6 +149,22 @@ four times: D38, D39, the budget sweep's "monotonic" front degradation, and §7.
   That single unset argument was the entire cross-backend accuracy gap, and it was
   read as a framework difference for four milestones. When two backends disagree,
   diff the *arguments* before theorising about the libraries.
+- **A ratio needs a denominator that moves when the thing it claims to measure moves.**
+  "Residuals per parameter" was computed against 49 797 trainable arrays; 32 768 of those
+  are the read-out of the Fourier encoder, whose width follows the embedding and not what
+  the network can represent. The fitting capacity is **17 029 at every embedding width**,
+  f32 to f1024. That single wrong denominator put the shipped model at 0.48 when it is
+  1.41, inverted the conclusion of a collocation sweep, and titled a "capacity ladder"
+  that holds capacity fixed — three sections, two of them already carrying corrections
+  that had re-checked the numerator and never questioned the denominator. The test is
+  whether changing the candidate denominator changes what the model can express;
+  `tests/axial/test_axial_pinn.py` now pins the split in both backends.
+- **Do not publish a reading of an axis while the arms that bracket it are still running.**
+  The same sweep got two interpretations in six hours — "absolute count governs, not
+  determinacy", then "the threshold is at the determined point" — and the rung that
+  settled it (3000 points, ratio 0.705, works) was already queued when both were written.
+  A conclusion interpolated between two pending arms is a guess with a table next to it.
+  Report the measured rows, name the arm that would decide it, and wait.
 - **An ablation is a statement about the formulation it was run on.** Change the
   formulation and every negative result on the shelf is provisional again (D59).
 - **The paper is a nuclear engineering paper, not a machine-learning one.** `docs/` and
