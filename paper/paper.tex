@@ -133,15 +133,16 @@ resolved axially with four material fields and a sodium void fraction, coupled t
 point kinetics through Doppler and void-worth integrals, the latter changing sign near the
 top of the core. Thermophysics, the boiling criterion and both feedback laws follow the
 SAS4A/SASSYS-1 manual, with four registered deviations. Against a verified stiff Radau
-reference the surrogate reaches a relative $L_2$ of $1.6\times10^{-3}$ on the temperature
-fields, places boiling onset within 0.008\,s of 10.9784\,s, and reproduces 99.4\% of the
-peak voided length at a saturation margin of $+67.4$\,K against $+69.2$\,K. The first two
-sit at the reference solver's own resolution, so we report them as met rather than as
-measured accuracies. What the surrogate does not yet deliver is the closed reactivity loop:
-the void-worth integral nearly cancels between two large opposite contributions, and
-driving the kinetics from the learned fields recovers only 8--16\% of it while the
-non-cancelling Doppler integral is correct to 1.017. We quantify that cancellation and show
-by an adjoint argument that it is not a sampling deficiency.
+reference the surrogate reaches a relative $L_2$ of $1.63\times10^{-3}$ on the temperature
+fields, places boiling onset 0.006\,s from 10.9784\,s (0.008\,s on the worst of three
+seeds), and reproduces 99.4\% of the peak voided length at a saturation margin of
+$+67.7$\,K against $+69.2$\,K. The first two sit at the reference solver's own resolution,
+so we report them as met rather than as measured accuracies. What the surrogate does not
+yet deliver is the closed reactivity loop: the void-worth integral nearly cancels between
+two large opposite contributions, and driving the kinetics from the learned fields recovers
+only 8--16\% of it, while the non-cancelling Doppler integral is reproduced to within
+1.7\%. We quantify that cancellation and show by an adjoint argument that it is not a
+sampling deficiency.
 \par
 \endgroup
 
@@ -339,7 +340,7 @@ Quantity & Reference's own error \\
 \midrule
 Temperatures, relative $L_2$ & 1.1--$1.6\times10^{-3}$ \\
 Boiling onset time           & 0.009\,s \\
-Onset height                 & 0.06 cells \\
+Onset height                 & 0.06 cells ($0.0004$ in $\zeta$) \\
 Peak voided length           & 0.57\% \\
 Pointwise void fraction      & $3.2\times10^{-2}$ \\
 \bottomrule
@@ -372,11 +373,10 @@ system written as $\mathcal{R}[u] = 0$ the objective is
 \bigl\lVert \mathcal{R}[u_\theta](\zeta_i, t_i)\bigr\rVert^2 ,
 \end{equation}
 with the derivatives that $\mathcal{R}$ requires obtained by automatic differentiation of
-the network, exact to machine precision rather than differenced on a mesh. Here
-$\mathcal{R}$ is (\ref{eq:fuel})--(\ref{eq:void}) with the closure (\ref{eq:alpha}), each
-block scaled to a common magnitude so that no field dominates the sum through its units.
-The reference solution of section~\ref{sec:reference} is used only to score the result,
-never to train it.
+the network, exact to machine precision rather than differenced on a mesh. Which equations
+enter $\mathcal{R}$, and with what weight, is not a matter of convenience and is set out in
+section~\ref{sec:residualsystem}. The reference solution of section~\ref{sec:reference} is
+used only to score the result, never to train it.
 
 Three difficulties are established for this class of problem and each dictates a choice
 below \cite{krishnapriyan}. The objective is a composition of the network with a
@@ -387,6 +387,62 @@ long before high-frequency structure, which is fatal for a moving front and whic
 input embedding (section~\ref{sec:embedding}). And initial and boundary conditions added as
 penalty terms compete with the residual through weights that must be chosen, which is
 avoided here by imposing them exactly (section~\ref{sec:ansatz}).
+
+\subsection{The residual system}\label{sec:residualsystem}
+
+\subsubsection{Four residual blocks, not five}
+
+The state has five fields, and section~\ref{sec:model} writes five field equations, but the
+residual comprises only the four energy equations
+(\ref{eq:fuel})--(\ref{eq:cool}). Equation~(\ref{eq:void}) is \emph{not} residualised, and
+this is a consequence of the closure rather than an economy.
+
+The closure (\ref{eq:alpha}) slaves $\alpha$ to $T_c$. Its justification is a timescale
+separation --- vapour fills a node in 0.71\,ms against an advective 0.113\,s
+(section~\ref{sec:closure}) --- and what that separation asserts is precisely that the void
+transport equation is in quasi-steady balance on the timescale the model resolves. Once
+$\alpha$ is a function of $T_c$, it is no longer an independent unknown: the system has four
+unknown fields, and imposing five equations on them is over-determined. Worse, the fifth
+equation is one the closure has deliberately approximated, so requiring the network to
+satisfy (\ref{eq:void}) exactly asks it to undo the approximation that defines the model.
+
+The optimiser has only one way to comply, which is to distort the temperature field, and it
+does. Retaining the fifth block degrades the film temperature error by more than an order
+of magnitude and places boiling onset seconds rather than milliseconds late; a five-block
+solve at the full budget is worse than a four-block solve at one-fifteenth of it. The distinction matters for any formulation that eliminates a field algebraically:
+\emph{the equation the closure replaces must leave the residual with it}, and a solver
+that silently keeps both can converge smoothly to a wrong answer without any diagnostic
+suggesting a problem.
+
+\subsubsection{Variable scaling}
+
+The four equations carry different units and magnitudes, and an unscaled sum lets the
+stiffest field dominate. Each block is therefore multiplied by a constant $s_m$ chosen to
+bring the four equations to a common magnitude. This changes the objective and never the
+equations: the scales are constants, so dividing them back out recovers the physical
+residual exactly and the zero set is untouched.
+
+\subsubsection{Averaging over time windows}
+
+The objective is not a plain mean over collocation points. The points are partitioned into
+$K = 32$ equal windows $I_k$ in $\hat{t}$, each window averaged, and the windows then
+averaged:
+\begin{equation}\label{eq:objective}
+\mathcal{L}(\theta) = \frac{1}{K}\sum_{k=1}^{K}\;
+  \frac{1}{|I_k|}\sum_{i \in I_k}\; \sum_{m=1}^{4}
+  \bigl[s_m\,r_m(\zeta_i,\hat{t}_i)\bigr]^2 .
+\end{equation}
+
+The reason is that the sampling is deliberately non-uniform in time
+(section~\ref{sec:training}): half as many points again are placed in the first 40\% of the
+window, where the coastdown is fastest and the fields move most. Under a plain mean, that
+choice about \emph{where to evaluate} the residual would silently become a choice about
+\emph{where to weight} it, and it would weight it in exactly the wrong direction --- boiling
+onset occurs at 10.98\,s of a 16.5\,s window, so an objective tilted toward early time
+buys resolution of the coastdown at the expense of the event the model exists to predict.
+Equation~(\ref{eq:objective}) keeps the two decisions independent: sampling density is free
+to follow where the solution varies, while every interval of the transient contributes
+equally to the loss.
 
 \subsection{Hard-constraint ansatz}\label{sec:ansatz}
 
@@ -409,8 +465,10 @@ The inputs pass through a random Fourier feature map \cite{tancik},
 $x \mapsto [\sin(2\pi Bx), \cos(2\pi Bx)]$, with $B$ drawn once and held fixed: a change of
 input coordinates rather than a fitted layer. The default uses 64 features, giving a
 128-component embedding. The trunk is a 64-wide, 5-layer $\tanh$ multilayer perceptron with
-five outputs, one per field, and table~\ref{tab:netparams} separates the parameters that
-fit from those that merely follow the embedding width.
+five outputs, one per field. Only four of them are read: under the closure
+(\ref{eq:alpha}) the void follows from $T_c$, and the fifth output is retained so that the
+architecture does not depend on that modelling choice. Table~\ref{tab:netparams} separates
+the parameters that fit from those that merely follow the embedding width.
 
 \begin{table}[tbp]
 \caption{Parameters of the default network. Only the trunk is fitting capacity; the
@@ -421,11 +479,11 @@ read-out width follows the embedding, and $B$ is frozen.}
 \toprule
 Component & Parameters \\
 \midrule
-Trunk (5 layers, 64 wide, 5 outputs) & 17\,029 \\
+Trunk (5 hidden layers, 64 wide, 5 outputs) & 17\,029 \\
 Read-out from the embedding ($64 \times 128$) & 8\,192 \\
-Frozen Fourier matrix $B$ & 128 \\
 \midrule
-Total arrays & 25\,349 \\
+Trainable total & 25\,221 \\
+Frozen Fourier matrix $B$ (not trained) & 128 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -438,18 +496,32 @@ scatter across seeds; at the budget used here that advantage has gone.
 
 \subsection{Collocation and training}\label{sec:training}
 
-The collocation set is drawn once over $(\zeta,\hat{t}) \in [0,1]^2$ and held fixed for the
-whole solve, at 5000 points. Training is 50\,000 L-BFGS iterations \cite{nocedal} with a
-strong-Wolfe line search and no first-order stage. All arithmetic is in double precision;
-curvature pairs are meaningless at single-precision residual magnitudes.
+The collocation set is 5000 points over $(\zeta,\hat{t}) \in [0,1]^2$, drawn once and held
+fixed for the whole solve: 3333 uniform, plus 1666 confined to the first 40\% of the time
+window. That cluster is the only sampling choice in the method and it is fixed rather than
+adapted; it is placed where the flow coastdown is fastest and the fields therefore move
+most, and (\ref{eq:objective}) prevents it from reweighting the objective. No
+residual-adaptive refinement is used, for the reason established in
+section~\ref{sec:openloop}: once the void is closed algebraically the field residual is
+small almost everywhere, so residual magnitude is a poor guide to where accuracy is needed.
 
-Each of those three choices was measured. A first-order warm start degrades the converged
-result rather than improving it. Redrawing the collocation set during the solve costs a
-factor of 1.5 against holding it fixed, because the curvature pairs a quasi-Newton method
-accumulates are meaningful only while the objective is unchanged. And at 2000 points a
-front forms but is badly placed, onset 0.19\,s late with a saturation margin of $+28$\,K;
-5000 is where the onset error falls below the reference's own resolution, and beyond it
-nothing measurable changes.
+Training is 50\,000 L-BFGS iterations \cite{nocedal} with a strong-Wolfe line search and no
+first-order stage, retaining 50 curvature pairs. All arithmetic is in double precision;
+curvature pairs are formed from differences of gradients, and at single-precision residual
+magnitudes those differences are dominated by rounding, so the quasi-Newton model would be
+built from noise.
+
+Each of those choices was measured. A first-order warm start degrades the converged result
+rather than improving it, and a schedule-free first-order method run alone for the same
+iteration count produces no boiling front at all. Redrawing the collocation set during the
+solve costs a factor of 1.5 against holding it fixed, because the curvature pairs a
+quasi-Newton method accumulates are meaningful only while the objective is unchanged. At
+2000 points a front forms but is badly placed, onset 0.19\,s late with a saturation margin
+of $+28$\,K; 5000 is where the onset error falls below the reference's own resolution, and
+beyond it nothing measurable changes. The number of retained curvature pairs is a smaller
+effect, 1.2 to 1.4 times in converged error between 10 and 50, but it is stated explicitly
+because it is a common library default and leaving it unset once caused a difference in
+convergence to be attributed to the software rather than to the argument.
 
 \section{Results}\label{sec:results}
 
@@ -635,13 +707,15 @@ instrument rather than the model is the limit.
 
 A physics-informed neural surrogate for the sodium-boiling phase of an SFR unprotected
 loss-of-flow transient, built on SAS4A/SASSYS-1 thermophysics and feedback laws with four
-registered deviations, reproduces the reference temperature fields to $1.6\times10^{-3}$
-relative $L_2$, boiling onset to within 0.008\,s of 10.9784\,s, and 99.4\% of the peak
-voided length at a saturation margin of $+67.4$\,K against $+69.2$\,K. The first two sit at
-the reference's own resolution and are reported as met rather than as measured accuracies.
+registered deviations, reproduces the reference temperature fields to $1.63\times10^{-3}$
+relative $L_2$, boiling onset to within 0.008\,s of 10.9784\,s on the worst of three seeds,
+and 99.4\% of the peak voided length at a saturation margin of $+67.7$\,K against
+$+69.2$\,K. The first two sit at the reference's own resolution and are reported as met
+rather than as measured accuracies.
 
 The closed void-reactivity loop is not reproduced, recovering 8--16\% of the reference
-integral while the non-cancelling Doppler integral over the same fields is correct to 1.017.
+integral while the non-cancelling Doppler integral over the same fields is reproduced to
+within 1.7\%.
 The cause is quantified as a cancellation ratio of 0.466, amplifying any error on either
 half by a factor of 2.1, and is shown by an adjoint argument not to be a sampling
 deficiency. Closing that loop is the outstanding problem for this model, and we expect it to
