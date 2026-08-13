@@ -339,13 +339,30 @@ These bound what any comparison against it can claim.}
 Quantity & Reference's own error \\
 \midrule
 Temperatures, relative $L_2$ & 1.1--$1.6\times10^{-3}$ \\
-Boiling onset time           & 0.009\,s \\
+Boiling onset time           & 0.0103\,s \\
 Onset height                 & 0.06 cells ($0.0004$ in $\zeta$) \\
-Peak voided length           & 0.57\% \\
+Peak voided length           & 0.766\% \\
 Pointwise void fraction      & $3.2\times10^{-2}$ \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+The estimates are obtained by solving on 160, 320, 640 and 1280 axial nodes and
+extrapolating. The observed order of convergence is 1.00 on onset time and 0.99 on peak
+voided length, consistent with the first-order upwinding of the advective terms, so
+Richardson extrapolation applies and the uncertainty of a given mesh is its distance from
+the extrapolated limit \cite{eca}. Quoting instead the difference between a mesh and the
+finest one available understates it --- at 160 nodes by 14\% on onset and 34\% on voided
+length --- because the finest mesh is itself in error.
+
+The saturation margin is excluded from that procedure. Its observed order is 0.70 rather
+than 1, which is expected: it derives from a maximum over a discrete field rather than from
+a smooth functional, so it is not in the asymptotic range and Richardson extrapolation is
+not justified for it.
+
+Refinement is cheap. The four solves take 8.3, 17.6, 31.6 and 61.1\,s, against hours to
+train the surrogate they measure, so the resolution of the comparison is limited by choice
+rather than by cost. Section~\ref{sec:meshsens} returns to what that choice conceals.
 
 Two consequences follow. An acceptance criterion on the pointwise void fraction is not
 supportable, because the reference does not know that quantity to better than 3\%; such a
@@ -609,6 +626,55 @@ $\alpha > 0.5$ contour do not coincide; the gap between them is the partially vo
 to which the worth integral (\ref{eq:voidrho}) is most sensitive.}
 \label{fig:front}
 \end{figure}
+
+\subsection{Sensitivity of the comparison to the reference mesh}\label{sec:meshsens}
+
+Table~\ref{tab:results} is quoted against the 160-node reference, whose own error on the
+film temperature is $1.36\times10^{-3}$ --- the same size as the surrogate error being
+reported. A comparison in that regime measures the instrument as much as the specimen, so
+the same three models were re-scored against a 640-node reference, four times sharper at
+four times the cost.
+
+\begin{table}[tbp]
+\caption{The same three surrogates, scored against two reference meshes. Nothing about the
+models differs between the columns; the ruler does.}
+\label{tab:meshsens}
+\centering
+\begin{tabular}{@{}lrr@{}}
+\toprule
+Quantity & Against 160 nodes & Against 640 nodes \\
+\midrule
+Fuel $T_f$, relative $L_2$      & $2.50\times10^{-3}$ & $1.77\times10^{-3}$ \\
+Cladding $T_{cl}$               & $3.62\times10^{-3}$ & $2.56\times10^{-3}$ \\
+Film $T_s$                      & $1.66\times10^{-3}$ & $6.00\times10^{-4}$ \\
+Coolant $T_c$                   & $1.72\times10^{-3}$ & $6.36\times10^{-4}$ \\
+Peak voided length              & 99.1--99.4\%        & 99.7--100.0\% \\
+Onset time error (s)            & 0.0021--0.0304      & 0.0084--0.0357 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The temperature errors fall by a factor of 2.8. The models are unchanged, so the difference
+is not an improvement in the surrogate: most of what the coarser comparison attributed to
+the network was the reference's own discretisation error. \emph{the surrogate is
+closer to the converged solution than the 160-node reference is}, which is the substantive statement
+here and one a data-free method is entitled to make --- nothing in training ever saw the
+reference, at any mesh.
+
+The onset error moves the other way, from a 0.0021--0.0304\,s spread to 0.0084--0.0357\,s.
+The reference onset shifts earlier under refinement, 10.9784\,s at 160 nodes against
+10.9694\,s at 1280, while the surrogate is consistently late; the coarse mesh was
+cancelling part of that lateness rather than resolving it. Refining the reference therefore
+improves the apparent accuracy of the fields and worsens the apparent accuracy of onset,
+and both movements are the ruler's, not the model's.
+
+Two practical consequences. A verification exercise that fixes its reference mesh once and
+reports everything against it can be wrong in either direction by a factor of a few, and
+which direction depends on the quantity. And because the reference costs seconds against
+hours for the surrogate, there is no economic reason to accept the coarser comparison ---
+the limiting resource is not the reference solve. Table~\ref{tab:results} is retained at
+160 nodes because it is the baseline every other number in this work is quoted against;
+table~\ref{tab:meshsens} states what that baseline costs.
 
 \subsection{The closed void-reactivity loop}\label{sec:openloop}
 
