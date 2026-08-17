@@ -126,7 +126,10 @@ def train(
             w = cfg.weight_momentum * w + (1.0 - cfg.weight_momentum) * target
         model, opt_state, loss = step(model, opt_state, pts, w, anchor)
         if verbose and it % cfg.log_every == 0:
-            print(f"[adam {it:6d}] loss={float(loss):.3e}")
+            # `flush`, like every other progress print here. Without it a run
+            # redirected to a file shows nothing until the 8 kB buffer fills, so a
+            # ten-hour arm is indistinguishable from a hung one for its first hour.
+            print(f"[adam {it:6d}] loss={float(loss):.3e}", flush=True)
         # First-order budget ladder from ONE run. `it + 1` so a rung is named by the
         # number of iterations actually taken. Schedule-free is converted first: its
         # parameters are the `y` iterate and the answer is the running average `x`, so
