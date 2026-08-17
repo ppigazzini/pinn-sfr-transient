@@ -122,7 +122,12 @@ def test_errors_are_distances_and_values_are_quantities():
     }
     e, v = ladder.errors(m), ladder.values(m)
     assert e["onset"] == pytest.approx(0.02), "an error is a magnitude, never signed"
-    assert e["Lvoid"] == pytest.approx(0.001)
+    # Metres, NOT a fraction. Every error here is divided by `verification`'s
+    # uncertainty for the same quantity, and that one is in metres; the companion
+    # repository published the fraction, which is why its constant is `Lvoid_frac`.
+    # Reproducing its ladder row needed exactly this division and nothing else.
+    assert e["Lvoid"] == pytest.approx(0.001), "absolute metres, matching the ruler"
+    assert e["Lvoid"] != pytest.approx(0.001 / 0.379, rel=1e-3)
     assert e["margin"] == pytest.approx(1.0)
     assert v["onset_t"] == pytest.approx(10.99), "a value is the quantity, not the error"
     assert v["L_void_m"] == pytest.approx(0.38)

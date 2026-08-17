@@ -416,7 +416,10 @@ def study_ladder(out: Path) -> None:
     its name, and emits the JSON that `ladder-rows` renders and `--check` verifies the
     documents against.
     """
-    paths = sorted(Path(_MODELS_DIR).glob("*.eqx")) + sorted(Path(_MODELS_DIR).glob("*.pt"))
+    root = Path(_MODELS_DIR)
+    # rglob, not glob: the imported corpus keeps one subdirectory per configuration
+    # family, and a non-recursive scan silently found 279 of its 334 files.
+    paths = sorted(root.rglob("*.eqx")) + sorted(root.rglob("*.pt"))
     if not paths:
         print(f"no checkpoints in {_MODELS_DIR}/ -- train with --save-models first")
         return

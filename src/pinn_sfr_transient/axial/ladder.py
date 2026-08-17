@@ -100,7 +100,20 @@ def iters_of(path: Path, cfg: dict) -> int:
 
 
 def errors(m: dict[str, float]) -> dict[str, float]:
-    """Error against the reference for each ladder metric, in the ruler's own units."""
+    """Error against the reference for each ladder metric, in the ruler's own units.
+
+    **``Lvoid`` is in metres here and was a fraction in the companion repository**, and
+    the difference is deliberate rather than an oversight. Every error in this dict is
+    divided by the matching entry of ``verification``'s uncertainty table, and that table
+    reports the voided-length uncertainty in metres (0.000186 m at 2560 nodes). A
+    fractional error over a metric uncertainty is not a ratio of anything.
+
+    The companion's own constant is named ``Lvoid_frac`` for exactly this reason, and its
+    published rows are this number divided by the reference's peak voided length. The
+    control arm confirms it: at ``points = 5000, iters = 10000`` scored on 2560 nodes,
+    six of the seven metrics reproduce that repository's committed ladder to six
+    significant figures, and this one reproduces it after dividing by 0.378454 m.
+    """
     return {
         "T_f": m["T_f"],
         "T_cl": m["T_cl"],
@@ -167,6 +180,47 @@ def _ruler(n_axial: int) -> dict[str, float]:
     }
 
 
+#: Companion field name -> this repository's name, for the imported corpus.
+#:
+#: The two repositories call the same two knobs different things, and the ladder groups
+#: on them. Translating here rather than in `legacy` keeps that module a verbatim copy
+#: of what wrote the files.
+_LEGACY_RENAMES: dict[str, str] = {"points": "n_colloc", "iters": "lbfgs_iters"}
+
+
+def _normalise(cfg: dict) -> dict:
+    """Give a legacy header this repository's field names, so one arm key covers both."""
+    out = dict(cfg)
+    for old, new in _LEGACY_RENAMES.items():
+        if old in out and new not in out:
+            out[new] = out.pop(old)
+    # The corpus predates the optimiser knob; every file without one is quasi-Newton,
+    # which is what those runs were. Guessing is wrong here, so it is read from the
+    # header where present and defaulted only where the field did not yet exist.
+    out.setdefault("optimizer", "lbfgs")
+    return out
+
+
+def _reader(path: Path) -> tuple[dict | None, Any]:
+    """Pick the reader for a checkpoint: this repository's format, or the imported one.
+
+    Legacy files carry no ``format`` key — they were written before this repository had
+    a checkpoint at all — so its absence is the discriminator. Dispatching on it means
+    one corpus directory can hold both, which is what makes the imported 334 comparable
+    with anything trained from here on.
+    """
+    try:
+        return checkpoint.header(path), checkpoint.score
+    except (ValueError, KeyError):
+        pass
+    try:
+        from pinn_sfr_transient.axial import legacy  # noqa: PLC0415 - optional extra
+
+        return legacy.header(path), legacy.score
+    except (ValueError, KeyError, UnicodeDecodeError, ImportError):
+        return None, None
+
+
 def build(
     paths: list[Path],
     out: Path | None = None,
@@ -188,13 +242,16 @@ def build(
     ref: dict[str, float] = {}
     skipped: list[str] = []
     for path in sorted(paths):
-        head = checkpoint.header(path)
-        try:
-            m = checkpoint.score(path, traj, scoring_p)
-        except (ImportError, ModuleNotFoundError):
-            skipped.append(f"{Path(path).name} ({head['backend']} not installed)")
+        head, scorer = _reader(path)
+        if head is None:
+            skipped.append(f"{Path(path).name} (unreadable header)")
             continue
-        key = arm_key(head["config"], iters_of(path, head["config"]))
+        try:
+            m = scorer(path, traj, scoring_p)
+        except (ImportError, ModuleNotFoundError):
+            skipped.append(f"{Path(path).name} ({head.get('backend', 'jax')} not installed)")
+            continue
+        key = arm_key(_normalise(head["config"]), iters_of(path, head["config"]))
         rows.setdefault(key, []).append(errors(m) | values(m))
         ref = {
             "onset_t": m["onset_t_tan"] - m["onset_t_err_tan_s"],
