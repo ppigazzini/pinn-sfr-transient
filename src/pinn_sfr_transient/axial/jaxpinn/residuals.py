@@ -5,8 +5,6 @@ discretises, so the network and its ground truth cannot drift apart. Nothing her
 knows how the blocks will be weighted or where the points came from.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 import jax

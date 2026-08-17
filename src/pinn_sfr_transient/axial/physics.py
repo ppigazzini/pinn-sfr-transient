@@ -25,8 +25,6 @@ Boiling is **not** here — this is Chapter 3's regime. Void onset and the mixtu
 field arrive at M4; the kinetics closure at M6. Until then power is prescribed.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 

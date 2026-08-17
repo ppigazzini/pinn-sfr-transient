@@ -23,8 +23,6 @@ Two choices worth stating, both from `AGENTS.md`:
   by the next seed; the sample size belongs next to the number, not in a caveat.
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import math

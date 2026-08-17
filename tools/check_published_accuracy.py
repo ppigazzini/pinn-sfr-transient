@@ -15,8 +15,6 @@ axial equivalent is `tools/axial_study.py budget`, whose arm A is the shipped
 configuration.
 """
 
-from __future__ import annotations
-
 import time
 from pathlib import Path
 

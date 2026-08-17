@@ -5,8 +5,6 @@ separation follows jaxpi2, where architectures are swappable precisely because
 they know nothing about the equations they are used on.
 """
 
-from __future__ import annotations
-
 import equinox as eqx
 import jax
 import jax.numpy as jnp

@@ -4,8 +4,6 @@ Function approximators only: no physics, no residuals, no sampling. The
 separation follows jaxpi2 and mirrors the JAX twin's ``archs`` module.
 """
 
-from __future__ import annotations
-
 try:
     import torch  # ty: ignore
     from torch import nn  # ty: ignore

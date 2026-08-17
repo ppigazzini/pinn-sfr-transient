@@ -4,8 +4,6 @@
 ``pinn-sfr axial ...`` drives the 1D axial boiling model.
 """
 
-from __future__ import annotations
-
 import argparse
 from pathlib import Path
 

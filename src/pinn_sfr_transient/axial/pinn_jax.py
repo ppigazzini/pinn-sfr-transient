@@ -12,8 +12,6 @@ Run (after ``uv sync --extra jax-cpu``; ``--extra jax-gpu`` for CUDA)::
     uv run python -m pinn_sfr_transient.axial.pinn_jax
 """
 
-from __future__ import annotations
-
 from pinn_sfr_transient.axial.jaxpinn import *  # noqa: F403
 from pinn_sfr_transient.axial.jaxpinn import (
     _ALPHA_GATE,  # noqa: F401 - the parity test asserts it equals the torch twin's

@@ -29,15 +29,13 @@ Ported from ``checkpoint.py`` in the companion repository ``pinn-ulof``, with th
 backend dispatch, the parameter digest and the format version added here.
 """
 
-from __future__ import annotations
-
 import hashlib
 import json
 import os
 from dataclasses import asdict, fields
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, get_origin
 from uuid import uuid4
 
 import numpy as np
@@ -285,9 +283,21 @@ def _config_from(cls: Any, stored: dict) -> Any:  # noqa: ANN401 - either backen
     for k, v in stored.items():
         if k not in known:
             continue
-        ann = known[k].type
-        kwargs[k] = tuple(v) if isinstance(v, list) and "tuple" in str(ann) else v
+        # `get_origin`, not a substring of `str(annotation)`. Under PEP 563 --
+        # `from __future__ import annotations`, which this package no longer uses --
+        # `Field.type` is the *string* "tuple[float, ...]"; under 3.14's PEP 649 it is
+        # the type object. Sniffing for "tuple" happens to work on both, and would
+        # equally match a field annotated `str` in a module with "tuple" in a comment
+        # position that ended up in the annotation. Ask the typing API instead.
+        kwargs[k] = tuple(v) if isinstance(v, list) and _is_tuple(known[k].type) else v
     return cls(**kwargs)
+
+
+def _is_tuple(annotation: object) -> bool:
+    """Whether a dataclass field is declared as a tuple, under either annotation regime."""
+    if isinstance(annotation, str):  # PEP 563 leftovers, or a hand-written string
+        return annotation.startswith(("tuple", "Tuple"))
+    return get_origin(annotation) is tuple or annotation is tuple
 
 
 def matches(a: Any, b: Any, p: AxialParams, cfg: Any, backend: str) -> bool:  # noqa: ANN401

@@ -20,8 +20,6 @@ Deliberately tiny: a 3-parameter model and a handful of rows. The defect was
 never about scale, it was about which axis the allocation grew along.
 """
 
-from __future__ import annotations
-
 import sys
 from pathlib import Path
 

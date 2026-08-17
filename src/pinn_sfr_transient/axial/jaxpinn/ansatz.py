@@ -5,8 +5,6 @@ the inlet, positivity, the void bound — independently of which architecture
 produces the raw outputs and of which residual consumes them.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 import jax

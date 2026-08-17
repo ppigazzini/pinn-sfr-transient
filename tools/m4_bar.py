@@ -23,8 +23,6 @@ linear, and the criterion should be stated against whichever one is actually use
     uv run python tools/m4_bar.py
 """
 
-from __future__ import annotations
-
 import numpy as np
 
 from pinn_sfr_transient.axial import sodium

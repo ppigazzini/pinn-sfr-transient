@@ -6,8 +6,6 @@ The system is stiff (``Lambda ~ 5e-7`` with precursors ``~1e4-1e5``), so an
 implicit solver with per-component absolute tolerances is required.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 import numpy as np

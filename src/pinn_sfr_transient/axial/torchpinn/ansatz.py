@@ -5,8 +5,6 @@ precursor parameterisation. Written against tensors rather than numpy so they
 stay inside the autodiff graph.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 try:

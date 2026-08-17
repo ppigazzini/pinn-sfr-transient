@@ -19,8 +19,6 @@ Run (after ``uv sync --extra jax-cpu``; use ``--extra jax-gpu`` for CUDA)::
     uv run python -m pinn_sfr_transient.pinn_jax
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 import numpy as np

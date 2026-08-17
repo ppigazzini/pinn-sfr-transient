@@ -12,8 +12,6 @@ Run::
     uv run python tools/fetch_sas_manual.py docs/sas4a
 """
 
-from __future__ import annotations
-
 import argparse
 import html
 import re

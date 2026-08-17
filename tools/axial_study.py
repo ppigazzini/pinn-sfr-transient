@@ -41,8 +41,6 @@ Every study writes JSON alongside its table so a result can be re-tabulated
 without re-running it. Training studies take tens of minutes per arm on CPU.
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import os

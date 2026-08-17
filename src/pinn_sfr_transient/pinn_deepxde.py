@@ -11,8 +11,6 @@ and the training loop; we only declare the time domain, the residuals and the
 (hard) initial conditions.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import numpy as np

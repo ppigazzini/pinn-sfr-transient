@@ -4,8 +4,6 @@ Separated from the networks, the model and the trainer so a knob can be read
 without importing torch, and so the dependency graph stays a DAG.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 

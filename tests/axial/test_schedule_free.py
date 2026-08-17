@@ -12,8 +12,6 @@ against an implementation that silently returned ``y``; the third would not, and
 the reason this file exists.
 """
 
-from __future__ import annotations
-
 import numpy as np
 import pytest
 

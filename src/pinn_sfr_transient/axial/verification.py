@@ -26,8 +26,6 @@ the functions concerned:
    few lines above. The observed field order is now measured and used.
 """
 
-from __future__ import annotations
-
 import time
 from dataclasses import replace
 from itertools import pairwise

@@ -27,8 +27,6 @@ quantisation in the published number is free to remove that way.
     OMP_NUM_THREADS=8 uv run python tools/onset_conditioning.py --seed 0
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 from pathlib import Path

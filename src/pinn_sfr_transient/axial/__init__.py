@@ -24,8 +24,6 @@ mesh. ``docs/axial_nn.md`` records every measurement, including the negative one
 quote accuracy numbers from this package.
 """
 
-from __future__ import annotations
-
 from pinn_sfr_transient.axial import physics, sodium
 from pinn_sfr_transient.axial.config import AxialParams
 from pinn_sfr_transient.axial.reference import (

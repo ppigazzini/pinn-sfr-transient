@@ -23,8 +23,6 @@ config change rather than a rewrite of one long module.
 and the ``python -m`` entry point are unaffected.
 """
 
-from __future__ import annotations
-
 import jax
 
 # float64 BEFORE any array is created, and before any submodule is imported.

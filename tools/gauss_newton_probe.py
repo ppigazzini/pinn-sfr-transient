@@ -31,8 +31,6 @@ Six checks:
     OMP_NUM_THREADS=8 uv run python tools/gauss_newton_probe.py
 """
 
-from __future__ import annotations
-
 import equinox as eqx
 import jax
 import jax.numpy as jnp

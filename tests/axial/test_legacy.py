@@ -7,8 +7,6 @@ themselves, are skipped when ``models/`` is absent (it is gitignored), and inclu
 control arm that validates the whole transfer.
 """
 
-from __future__ import annotations
-
 from dataclasses import fields
 from pathlib import Path
 

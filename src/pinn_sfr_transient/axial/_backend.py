@@ -8,8 +8,6 @@ fit well at the same budget, and two backends cannot tell you which of them is
 wrong.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 import numpy as np

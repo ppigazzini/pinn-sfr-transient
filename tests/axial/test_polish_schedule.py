@@ -13,8 +13,6 @@ for the rest. Freezing changes the *curvature dimension*, not the fitting capaci
 (section 7.5.37a), so the thing to check is that the projection genuinely stops moving.
 """
 
-from __future__ import annotations
-
 import numpy as np
 import pytest
 

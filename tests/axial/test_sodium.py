@@ -22,8 +22,6 @@ Three things are checked, in order of importance:
    is worth having a third opinion on every number.
 """
 
-from __future__ import annotations
-
 import numpy as np
 import pytest
 

@@ -41,8 +41,6 @@ the number is comparable to every table in `docs/axial_nn.md`.
     OMP_NUM_THREADS=8 uv run python tools/gauss_newton_experiment.py --seconds 9000
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import time

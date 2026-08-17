@@ -11,8 +11,6 @@ closed-loop solve is the expensive one, and ``--only front_height`` would quietl
 if the caching were wrong.
 """
 
-from __future__ import annotations
-
 import sys
 
 import pytest

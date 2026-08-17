@@ -24,8 +24,6 @@ so both share ``Trainer`` in :mod:`training`.
 ``python -m`` entry point are unaffected.
 """
 
-from __future__ import annotations
-
 from pinn_sfr_transient.axial.torchpinn.ansatz import (
     _fuel_temperature,
     _power_integral,

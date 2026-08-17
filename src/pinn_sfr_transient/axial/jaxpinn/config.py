@@ -4,8 +4,6 @@ Separated from the networks, the residuals and the samplers so a knob can be
 read without importing a model, and so the dependency graph stays a DAG.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 

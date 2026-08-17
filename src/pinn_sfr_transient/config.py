@@ -13,8 +13,6 @@ U-235 systems, hence ``beta_eff ~ 3.5e-3``. The sodium void coefficient
 cores and the reason ULOF is the limiting unprotected transient for this class.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 
 import numpy as np

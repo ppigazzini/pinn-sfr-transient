@@ -25,8 +25,6 @@ Markdown, not LaTeX. The companion rendered LaTeX because it had a paper; this r
 publishes only `docs/*.md`, so a LaTeX renderer would have nothing to check against.
 """
 
-from __future__ import annotations
-
 import json
 import math
 import re

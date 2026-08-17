@@ -25,8 +25,6 @@ Run (after ``uv sync --extra torch-cpu``; use ``--extra torch-gpu`` for a CUDA b
     uv run python -m pinn_sfr_transient.pinn_torch
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal

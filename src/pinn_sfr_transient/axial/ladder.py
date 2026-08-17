@@ -27,8 +27,6 @@ see ``docs/axial_physics.md`` §6.6, where the shipped configuration sits at 1.0
 film field and below one on onset.
 """
 
-from __future__ import annotations
-
 import json
 from dataclasses import replace
 from pathlib import Path

@@ -21,8 +21,6 @@ These are slower than the rest of the suite and they are meant to be. They are t
 only tests here that could catch an error both backends make.
 """
 
-from __future__ import annotations
-
 import numpy as np
 import pytest
 from scipy import integrate, optimize

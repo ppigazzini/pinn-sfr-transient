@@ -8,8 +8,6 @@ are shared with the JAX twin and with ``tools/axial_study.py``. They were briefl
 defined in three places and the study tool silently stopped reporting two of them.
 """
 
-from __future__ import annotations
-
 from pinn_sfr_transient.axial.scoring import relative_l2 as _score
 from pinn_sfr_transient.axial.torchpinn.model import AxialPinn
 

@@ -10,8 +10,6 @@ Everything is tiny and short: these assert properties that hold for any weights,
 not accuracy, which belongs to a converged run.
 """
 
-from __future__ import annotations
-
 import numpy as np
 import pytest
 

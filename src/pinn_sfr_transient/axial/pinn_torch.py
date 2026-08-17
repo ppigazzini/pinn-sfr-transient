@@ -13,8 +13,6 @@ Run (after ``uv sync --extra torch-cpu``)::
     uv run python -m pinn_sfr_transient.axial.pinn_torch
 """
 
-from __future__ import annotations
-
 from pinn_sfr_transient.axial.config import AxialParams
 from pinn_sfr_transient.axial.reference import solve_reference
 from pinn_sfr_transient.axial.torchpinn import *  # noqa: F403

@@ -21,8 +21,6 @@ start, and nothing about the discretisation is being assumed correct in the
 process.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 

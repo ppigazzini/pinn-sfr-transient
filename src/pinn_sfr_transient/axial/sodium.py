@@ -42,8 +42,6 @@ vapour density 1.5%, liquid heat capacity 1.5%, vapour heat capacity 1%,
 compressibility 0.1%, expansion 0.7%, conductivity 0.5%, viscosity 0.5%.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from pinn_sfr_transient.axial._backend import xp as _xp

@@ -16,8 +16,6 @@ Inline code spans are stripped before matching, because a document that
 is full of them.
 """
 
-from __future__ import annotations
-
 import re
 import subprocess
 import sys

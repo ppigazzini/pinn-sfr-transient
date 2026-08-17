@@ -10,8 +10,6 @@ Every residual calls ``axial.physics``, the same functions the reference solver
 discretises, so the network and its ground truth cannot drift apart.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 try:

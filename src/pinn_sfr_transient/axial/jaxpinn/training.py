@@ -5,8 +5,6 @@ weighting, samplers — lives in its own module and can be replaced without edit
 this file.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 import jax
@@ -344,6 +342,15 @@ def _lbfgs_polish(  # noqa: PLR0913, PLR0917 - polish needs model, params, point
     def loss_fn(params: AxialPinn) -> jax.Array:
         return causal_loss(eqx.combine(params, static), p, cfg, pts, w)  # no proximal term
 
+    # `float(...)` is a HOST SYNC, and every JAX wall-clock this project quotes
+    # depends on one. JAX dispatches asynchronously, so a timer around `train()` that
+    # returned before the device finished would measure Python dispatch, not the
+    # solve -- the classic mistake `block_until_ready` exists to prevent. This call,
+    # and its twin after the polish, are what actually await the computation; the
+    # divergence guard is load-bearing for the timings as well as for the accuracy.
+    # Measured: `train()` as timed today and `train()` followed by an explicit
+    # `jax.block_until_ready` agree to run-to-run noise. Remove the guard and the
+    # timings silently become dispatch measurements.
     before = float(loss_fn(params))
     if cfg.optimizer in ("ssbfgs", "lbfgs-shared", "ssbroyden"):
         if checkpoints:

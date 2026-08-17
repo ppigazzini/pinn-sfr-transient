@@ -5,8 +5,6 @@ are keyed, and every set has a *constant* size so the jitted step never
 recompiles.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 import jax

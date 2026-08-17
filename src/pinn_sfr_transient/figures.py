@@ -14,8 +14,6 @@ overlay is rendered only when ``torch`` is importable (``uv sync --extra torch-c
 and is skipped cleanly otherwise.
 """
 
-from __future__ import annotations
-
 import argparse
 from pathlib import Path
 

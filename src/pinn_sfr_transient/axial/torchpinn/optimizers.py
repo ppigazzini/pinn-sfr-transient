@@ -51,8 +51,6 @@ Wright (Algorithms 3.5 and 3.6) at ``c1 = 1e-4``, ``c2 = 0.9`` -- the constants
 arXiv:2501.16371 states.
 """
 
-from __future__ import annotations
-
 import math
 from typing import TYPE_CHECKING
 

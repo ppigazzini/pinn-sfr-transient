@@ -11,8 +11,6 @@ Deliberately cheap. The convergence *of the reference* is already covered by
 belongs in ``tools/axial_study.py verify``, not in the suite.
 """
 
-from __future__ import annotations
-
 from itertools import pairwise
 
 import numpy as np

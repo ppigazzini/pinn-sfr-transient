@@ -41,8 +41,6 @@ be re-scored rather than quietly keep answering under the old truth.
     fields = legacy.predict(model, AxialParams(), cfg, traj.zeta, traj.t)
 """
 
-from __future__ import annotations
-
 import json
 from dataclasses import dataclass
 from dataclasses import fields as dc_fields

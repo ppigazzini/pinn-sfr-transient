@@ -6,8 +6,6 @@ The end-to-end path (train, save, score, render) is covered by the smoke run in
 ``tools/axial_study.py ladder``.
 """
 
-from __future__ import annotations
-
 import json
 
 import numpy as np

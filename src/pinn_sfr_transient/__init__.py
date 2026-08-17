@@ -1,7 +1,5 @@
 """Physics-Informed Neural Network for the SFR ULOF transient."""
 
-from __future__ import annotations
-
 from pinn_sfr_transient.config import SFRParams
 from pinn_sfr_transient.physics import (
     flow_fraction,

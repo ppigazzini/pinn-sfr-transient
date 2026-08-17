@@ -5,8 +5,6 @@ themselves so a weighting scheme can be swapped, or removed, without touching th
 physics — which is what makes an ablation a config change.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 import jax

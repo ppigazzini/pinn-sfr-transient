@@ -15,8 +15,6 @@ raises coverage, it does not raise confidence in the plots.
 Everything runs at a coarse mesh and a short horizon so the suite stays quick.
 """
 
-from __future__ import annotations
-
 import runpy
 import sys
 

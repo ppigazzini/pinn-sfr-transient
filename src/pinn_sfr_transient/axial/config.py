@@ -23,8 +23,6 @@ residuals live in ``physics``, the solver in ``reference``, and the networks in
 ``pinn_torch`` / ``pinn_jax``.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from typing import Any
 

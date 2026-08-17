@@ -37,8 +37,6 @@ has decomposed this same integral for fifteen years for that reason.
     OMP_NUM_THREADS=8 uv run python tools/plan_a_adjoint.py --plot adjoint.png
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 from pathlib import Path

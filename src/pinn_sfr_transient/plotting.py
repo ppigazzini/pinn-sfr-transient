@@ -1,7 +1,5 @@
 """Figures for the ULOF reference transient (with optional PINN overlay)."""
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import TypedDict
 

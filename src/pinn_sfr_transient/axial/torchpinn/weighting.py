@@ -4,8 +4,6 @@ Pure functions of the per-chunk losses and the gradient norms, so a weighting
 scheme can be swapped or removed without touching the physics.
 """
 
-from __future__ import annotations
-
 try:
     import torch  # ty: ignore
 except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency

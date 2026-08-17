@@ -11,8 +11,6 @@ normalized residuals match the physical ODEs to machine precision.
 State vector ``y = [P, C_1, ..., C_6, T_f, T_c]`` (length 9).
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 
 import numpy as np

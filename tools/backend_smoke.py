@@ -39,8 +39,6 @@ with a known answer isolates the algorithm without needing the weights to match.
     uv run python tools/backend_smoke.py --optimizer ssbfgs --history 10
 """
 
-from __future__ import annotations
-
 import argparse
 import sys
 from dataclasses import fields

@@ -16,8 +16,6 @@ rather than numbers a run happened to produce:
 * both backends produce the same features from the same grid, to float64 precision.
 """
 
-from __future__ import annotations
-
 import numpy as np
 import pytest
 

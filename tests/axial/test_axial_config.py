@@ -6,8 +6,6 @@ net worth and changes sign where it should, and the manual's flooded-to-voided
 Doppler interpolation. No physics is solved here — that starts at M2.
 """
 
-from __future__ import annotations
-
 import numpy as np
 import pytest
 

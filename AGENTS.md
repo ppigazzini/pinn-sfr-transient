@@ -18,9 +18,16 @@ JAX/Equinox+Optax, and DeepXDE) learn the same non-dimensionalised residuals.
   a floor nobody runs is not a floor. `requires-python`, ruff's `target-version`
   and ty's `python-version` must agree; if they drift, the linter permits syntax the
   declared floor forbids. Google Colab is *not* a target (the axial PINN needs tens
-  of minutes of CPU per run). Every module uses
-  `from __future__ import annotations` (e.g. `TYPE_CHECKING`-only names in runtime
-  annotations).
+  of minutes of CPU per run).
+- **Do not add `from __future__ import annotations`.** It was in all 72 modules and
+  has been removed. Python 3.14 defers annotations natively (PEP 649/749), which
+  makes the import redundant, soft-deprecated, and *worse*: PEP 563 replaces every
+  annotation with a string, so `dataclasses.fields(...)[i].type` hands back
+  `"tuple[float, ...]"` instead of the type object. Code that inspects an annotation
+  must use `typing.get_origin`, never a substring of `str(annotation)` — see
+  `axial/checkpoint.py:_is_tuple`, which was doing exactly that. `TYPE_CHECKING`-only
+  names in runtime annotations are safe under PEP 649 with no future import, which
+  was the only reason the import was there.
 - Core deps (`numpy`, `scipy`, `matplotlib`) are always installed. The three
   deep-learning backends are **optional extras** and import-guarded: importing
   `pinn_torch` / `pinn_jax` / `pinn_deepxde` without the extra raises `SystemExit`,

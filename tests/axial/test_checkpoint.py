@@ -6,8 +6,6 @@ lane where a missing-extra import path is actually exercised. The round trips ne
 backend and ``importorskip`` out otherwise.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from dataclasses import fields

@@ -14,8 +14,6 @@ none of which relies on the solver being right:
 4. **Backend parity**: numpy, torch and JAX evaluating the same residual.
 """
 
-from __future__ import annotations
-
 import importlib
 
 import numpy as np

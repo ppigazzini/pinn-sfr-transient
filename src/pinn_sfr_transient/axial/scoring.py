@@ -11,8 +11,6 @@ Never imported by any training module, so nothing in a loss can reach the
 reference by accident. That separation is the protocol, not a convention.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 import numpy as np
