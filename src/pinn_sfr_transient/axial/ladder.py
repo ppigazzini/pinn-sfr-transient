@@ -258,7 +258,7 @@ def _reader(path: Path) -> tuple[dict | None, Any]:
     """
     try:
         head = checkpoint.header(path)
-    except (ValueError, KeyError):
+    except ValueError, KeyError:
         pass
     else:
         return (head, checkpoint.score) if "config" in head else (None, None)
@@ -266,7 +266,7 @@ def _reader(path: Path) -> tuple[dict | None, Any]:
         from pinn_sfr_transient.axial import legacy  # noqa: PLC0415 - optional extra
 
         head = legacy.header(path)
-    except (ValueError, KeyError, UnicodeDecodeError, ImportError, json.JSONDecodeError):
+    except ValueError, KeyError, UnicodeDecodeError, ImportError, json.JSONDecodeError:
         return None, None
     # A header without a `config` is not a checkpoint this can group. Returning it
     # anyway raised `KeyError` out of `build` and took the whole corpus run down with

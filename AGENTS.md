@@ -14,10 +14,13 @@ JAX/Equinox+Optax, and DeepXDE) learn the same non-dimensionalised residuals.
 
 ## Environment
 
-- **Python >= 3.13**, managed with **uv**. Google Colab is *not* a target (the
-  axial PINN needs tens of minutes of CPU per run). Every
-  module uses `from __future__ import annotations` for portability across
-  3.13-3.14 (e.g. `TYPE_CHECKING`-only names in runtime annotations).
+- **Python >= 3.14**, managed with **uv**, and 3.14 is the only version CI tests —
+  a floor nobody runs is not a floor. `requires-python`, ruff's `target-version`
+  and ty's `python-version` must agree; if they drift, the linter permits syntax the
+  declared floor forbids. Google Colab is *not* a target (the axial PINN needs tens
+  of minutes of CPU per run). Every module uses
+  `from __future__ import annotations` (e.g. `TYPE_CHECKING`-only names in runtime
+  annotations).
 - Core deps (`numpy`, `scipy`, `matplotlib`) are always installed. The three
   deep-learning backends are **optional extras** and import-guarded: importing
   `pinn_torch` / `pinn_jax` / `pinn_deepxde` without the extra raises `SystemExit`,
@@ -276,8 +279,8 @@ Broken inline LaTeX is a recurring problem — GitHub's renderer is strict. Rule
   it is green, in a throwaway environment so the working one is untouched:
 
 ```bash
-E=/tmp/venv-min; UV_PROJECT_ENVIRONMENT=$E uv sync --locked --python 3.13
-UV_PROJECT_ENVIRONMENT=$E uv run --python 3.13 --no-sync pytest --no-cov   # minimal lane
+E=/tmp/venv-min; UV_PROJECT_ENVIRONMENT=$E uv sync --locked --python 3.14
+UV_PROJECT_ENVIRONMENT=$E uv run --python 3.14 --no-sync pytest --no-cov   # minimal lane
 ```
 
 - **`uv sync` without the extras uninstalls them from the environment it targets.**
@@ -291,8 +294,8 @@ UV_PROJECT_ENVIRONMENT=$E uv run --python 3.13 --no-sync pytest --no-cov   # min
 ## CI / commits
 
 - `.github/workflows/test.yml` runs the suite on push/PR: a torch job (coverage
-  gate, Python 3.14), a JAX job (Python 3.13), and a core-only job (Python 3.13,
-  verifies the import guards). Actions are pinned to a full commit SHA with the
+  gate), a JAX-only job, and a core-only job that verifies the import guards. All
+  on 3.14, which is the only supported version. Actions are pinned to a full commit SHA with the
   version in a trailing comment — keep that pattern when adding or bumping actions.
 - `pre-commit` runs ruff on commit and ty + pytest on push. Run
   `uv run pre-commit run --all-files` before proposing a change.

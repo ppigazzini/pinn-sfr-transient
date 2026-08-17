@@ -332,7 +332,7 @@ Tooling: **uv** (project + envs), **ruff** (lint + format, `select = ["ALL"]`),
 **ty** (type check), **pre-commit** (local quality gate), **pytest**, and a GitHub
 Actions workflow ([`.github/workflows/test.yml`](.github/workflows/test.yml)) with
 three jobs: the CPU torch backend on Python 3.14 with an 85% coverage gate, the JAX
-backend on 3.13, and a core-only job on 3.13 that proves the optional-import guards
+backend alone, and a core-only job that proves the optional-import guards
 hold. `src/` layout, fully type-hinted, PEP 561 (`py.typed`).
 
 ## License

@@ -3,11 +3,15 @@ name = "pinn-sfr-transient"
 version = "0.0.1"
 description = "Physics-Informed Neural Network for the SFR Unprotected-Loss-of-Flow transient (point kinetics + lumped thermal-hydraulics + positive sodium void feedback)."
 readme = "README.md"
-# 3.13 is the floor; tested on 3.13 (min) and 3.14 in CI. **Google Colab support
-# was dropped deliberately** — the axial PINN needs tens of minutes of CPU per
-# run, so a hosted 3.12 runtime was never going to be the place to train it, and
-# holding the floor there cost a numpy-1.x compatibility shim for no benefit.
-requires-python = ">=3.13"
+# 3.14 is the floor, and it is the only version CI tests, because a floor nobody
+# runs is not a floor. It moved here from 3.13 together with the ruff
+# `target-version` and the ty `python-version` below: those three have to agree or
+# the linter permits syntax the declared floor forbids, which is worse than either
+# choice on its own. **Google Colab support was dropped deliberately** — the axial
+# PINN needs tens of minutes of CPU per run, so a hosted runtime was never going to
+# be the place to train it, and holding the floor there cost a numpy-1.x shim for
+# no benefit.
+requires-python = ">=3.14"
 license = "BlueOak-1.0.0"
 license-files = ["LICENSE"]
 authors = [{ name = "Pasquale Pigazzini", email = "pasquale.pigazzini@gmail.com" }]
@@ -16,7 +20,6 @@ keywords = ["pinn", "scientific-machine-learning", "nuclear", "sfr", "point-kine
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
-    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Physics",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
@@ -29,8 +32,8 @@ dependencies = [
     # resolution for reproducibility, so a high floor costs nothing and rules out
     # a class of "works on my resolution" bug. numpy >= 2 also lets the package
     # use `np.trapezoid` instead of carrying its own copy.
-    "numpy>=2.5.1",
-    "scipy>=1.18",
+    "numpy>=2.5.2",
+    "scipy>=1.18.0",
     "matplotlib>=3.11.1",
 ]
 
@@ -39,22 +42,22 @@ dependencies = [
 # builds are mutually exclusive (see [tool.uv] conflicts); the two frameworks can
 # coexist (e.g. `--extra torch-cpu --extra jax-cpu`).
 #
-# PyTorch backend (torch >= 2.13; CPython 3.13-3.14):
+# PyTorch backend (torch >= 2.13; CPython 3.14):
 #   uv sync --extra torch-cpu   # small CPU-only wheel from the PyTorch CPU index
 #   uv sync --extra torch-gpu   # CUDA build from PyPI (large: pulls the nvidia stack)
-torch-cpu = ["torch>=2.13"]
-torch-gpu = ["torch>=2.13"]
+torch-cpu = ["torch>=2.13.0"]
+torch-gpu = ["torch>=2.13.0"]
 # JAX backend (Equinox model + Optax optimisers). jax's CUDA wheels are on PyPI,
 # so no custom index is needed:
 #   uv sync --extra jax-cpu     # CPU-only jaxlib
 #   uv sync --extra jax-gpu     # CUDA jaxlib (pulls the nvidia stack)
-jax-cpu = ["jax>=0.11", "equinox>=0.13.8", "optax>=0.2.8"]
-jax-gpu = ["jax[cuda12]>=0.11", "equinox>=0.13.8", "optax>=0.2.8"]
+jax-cpu = ["jax>=0.11.0", "equinox>=0.13.8", "optax>=0.2.8"]
+jax-gpu = ["jax[cuda12]>=0.11.0", "equinox>=0.13.8", "optax>=0.2.8"]
 # DeepXDE variant — needs a torch backend, so combine with one:
 #   uv sync --extra deepxde --extra torch-cpu
-deepxde = ["deepxde>=1.15"]
+deepxde = ["deepxde>=1.15.0"]
 # Interactive walkthrough notebooks (notebooks/).
-notebook = ["jupyterlab>=4.6.2", "ipykernel>=7.3"]
+notebook = ["jupyterlab>=4.6.3", "ipykernel>=7.3.0"]
 
 [project.urls]
 Homepage = "https://github.com/ppigazzini/pinn-sfr-transient"
@@ -67,11 +70,11 @@ pinn-sfr = "pinn_sfr_transient.cli:main"
 # PEP 735 development dependency group (installed by `uv sync`).
 [dependency-groups]
 dev = [
-    "ruff>=0.16.1",
-    "ty>=0.0.69",
-    "pre-commit>=4.6.1",
+    "ruff>=0.16.3",
+    "ty>=0.0.72",
+    "pre-commit>=4.6.2",
     "pytest>=9.1.1",
-    "pytest-cov>=7.1",
+    "pytest-cov>=7.1.0",
     # Strips notebook outputs on commit so figure binaries are never committed.
     # This repository contains no images at all; plots are drawn into the
     # gitignored results/ and looked at locally. Pulls in nbformat for notebooks.
@@ -115,7 +118,7 @@ torch = [{ index = "pytorch-cpu", extra = "torch-cpu" }]
 # ----------------------------------------------------------------------------
 [tool.ruff]
 line-length = 100
-target-version = "py313"
+target-version = "py314"
 src = ["src", "tests"]
 # Notebooks use compact, idiomatic cell style (inline imports, semicolons in
 # plotting cells); lint the package, not the teaching notebook.
@@ -157,7 +160,7 @@ ignore = [
 
     # --- Annotations -----------------------------------------------------------
     # Every module uses `from __future__ import annotations` (portable across
-    # 3.13-3.14); keep dataclass/annotation imports at module scope rather than
+    # every supported version); keep dataclass/annotation imports at module scope
     # forcing them into TYPE_CHECKING blocks.
     "TC001",
     "TC002",
@@ -207,7 +210,7 @@ docstring-code-format = true
 # ty  (type checker)
 # ----------------------------------------------------------------------------
 [tool.ty.environment]
-python-version = "3.13"
+python-version = "3.14"
 
 [tool.ty.src]
 # Type-check the package source. Tests lean on dynamic fixtures, monkeypatching

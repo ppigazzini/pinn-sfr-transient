@@ -12,7 +12,7 @@ axial boiling model); for citations see [`references.md`](references.md).
 
 | Tool | Version | Needed for |
 |---|---|---|
-| Python | ≥ 3.13 | everything (uv can install it for you) |
+| Python | ≥ 3.14 | everything (uv can install it for you) |
 | [uv](https://docs.astral.sh/uv/) | ≥ 0.6 | project & environment management |
 | git | any recent | cloning / version control |
 | PyTorch | ≥ 2.13 | the PyTorch PINN backends — optional extra |

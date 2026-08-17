@@ -10,7 +10,7 @@ Implementations: `src/pinn_sfr_transient/pinn_torch.py` (from-scratch PyTorch) a
 `src/pinn_sfr_transient/pinn_jax.py` (from-scratch JAX / Equinox + Optax) — two
 equally first-class backends — plus `src/pinn_sfr_transient/pinn_deepxde.py`
 (DeepXDE). Target stack: **PyTorch ≥ 2.13** / **JAX ≥ 0.11** (Equinox ≥ 0.13.8,
-Optax ≥ 0.2.8) on Python ≥ 3.13, in **float64**, on **CPU**.
+Optax ≥ 0.2.8) on Python ≥ 3.14, in **float64**, on **CPU**.
 
 > **This is the model that works.** The 1D axially resolved boiling model is a
 > separate PINN with its own two backends, its own ansatz and its own recipe, and it

@@ -34,9 +34,9 @@ jobs:
           persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          version: "0.12.2"
+          version: "0.12.5"
           python-version: "3.14"
           enable-cache: true
 
@@ -79,9 +79,9 @@ jobs:
           persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          version: "0.12.2"
+          version: "0.12.5"
           python-version: "3.14"
           enable-cache: true
 
@@ -124,9 +124,9 @@ jobs:
           persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          version: "0.12.2"
+          version: "0.12.5"
           python-version: "3.14"
           enable-cache: true
 
@@ -139,9 +139,14 @@ jobs:
         run: uv run pytest --no-cov
 
   jax:
-    # The JAX backend on the minimum supported Python, without torch, for the
-    # mirror-image reason: the two backends must each stand up on their own.
-    name: jax backend alone, min Python
+    # The JAX backend without torch, for the mirror-image reason: the two backends
+    # must each stand up on their own.
+    #
+    # This lane used to also cover the minimum Python. It no longer does, because
+    # `requires-python` is now `>=3.14` and there is only one version to test. What
+    # it still isolates -- one backend, alone -- is the part that ever caught
+    # anything.
+    name: jax backend alone (no torch)
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -151,10 +156,10 @@ jobs:
           persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          version: "0.12.2"
-          python-version: "3.13"
+          version: "0.12.5"
+          python-version: "3.14"
           enable-cache: true
 
       - name: Sync dependencies (core + JAX backend + dev tools)
@@ -164,10 +169,11 @@ jobs:
         run: uv run pytest --no-cov
 
   minimal:
-    # Runs on the minimum supported version with no extras, so the lower bound of
-    # requires-python is exercised rather than asserted, and the optional-import
-    # guards are shown to degrade gracefully (their tests skip rather than error).
-    name: core only, min Python (no optional extras)
+    # No extras at all, so the optional-import guards are shown to degrade
+    # gracefully (their tests skip rather than error). This is the lane a working
+    # development environment can never reproduce, because it has every extra
+    # installed and therefore never takes a missing-extra path.
+    name: core only (no optional extras)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -177,10 +183,10 @@ jobs:
           persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          version: "0.12.2"
-          python-version: "3.13"
+          version: "0.12.5"
+          python-version: "3.14"
           enable-cache: true
 
       - name: Sync core + dev tools only
