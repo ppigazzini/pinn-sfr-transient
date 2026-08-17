@@ -50,7 +50,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from pinn_sfr_transient.axial import verification
+from pinn_sfr_transient.axial import ladder, tables, verification
 from pinn_sfr_transient.axial.config import AxialParams
 from pinn_sfr_transient.axial.reference import solve_reference
 from pinn_sfr_transient.axial.scoring import relative_l2
@@ -60,6 +60,11 @@ if TYPE_CHECKING:
 
 # The mesh every PINN table is scored against, and the mesh a study converges to.
 RULER_N = 160
+# Set from the command line by `ladder` / `ladder-rows`; see `main`.
+_MODELS_DIR = "models"
+_LADDER_JSON = "__DEV/studies/ladder.json"
+_LADDER_N = 0
+_CHECK = False
 FINEST_N = 640
 SEEDS = (0, 1, 2)
 # Fourier ladder for the margin study. Extended until the trend turns: 32 -> 256
@@ -401,6 +406,45 @@ def study_verify(out: Path) -> None:
     uncertainties come from here.
     """
     write_json(verification.report(), out)
+
+
+def study_ladder(out: Path) -> None:
+    """Score every saved checkpoint against one reference solve, and write the ladder.
+
+    Turns a published table from a training run into a query. Reads `models/` (override
+    with `--models`), groups by the configuration in each file's header rather than by
+    its name, and emits the JSON that `ladder-rows` renders and `--check` verifies the
+    documents against.
+    """
+    paths = sorted(Path(_MODELS_DIR).glob("*.eqx")) + sorted(Path(_MODELS_DIR).glob("*.pt"))
+    if not paths:
+        print(f"no checkpoints in {_MODELS_DIR}/ -- train with --save-models first")
+        return
+    ladder.build(paths, out, n_axial=_LADDER_N or ladder.RULER_N_AXIAL)
+
+
+def study_ladder_rows(out: Path) -> None:  # noqa: ARG001 - prints; the data file is the input
+    """Render the ladder's tables, or verify the documents still match them.
+
+    With `--check`, exits non-zero naming any rendered row absent from `docs/`, so a
+    measurement and the table quoting it cannot drift apart.
+    """
+    src = Path(_LADDER_JSON)
+    if not src.exists():
+        print(f"::error::{src} not found -- run `axial_study.py ladder` first")
+        raise SystemExit(1)
+    data = tables.load(src)
+    if not _CHECK:
+        print(tables.table(data))
+        print("\nerror / reference uncertainty (four is the threshold, one is the ruler):\n")
+        print(tables.ratio_table(data))
+        return
+    missing = tables.check(data)
+    for line in missing:
+        print(f"::error::ladder row absent from docs/: {line}")
+    print(f"{len(missing)} ladder rows absent from docs/")
+    if missing:
+        raise SystemExit(1)
 
 
 def study_ruler(out: Path) -> None:
@@ -2103,6 +2147,8 @@ def _interaction(rows: list[dict]) -> None:
 
 STUDIES = {
     "verify": study_verify,
+    "ladder": study_ladder,
+    "ladder-rows": study_ladder_rows,
     "ruler": study_ruler,
     "horizon": study_horizon,
     "budget": study_budget,
@@ -2180,6 +2226,30 @@ def main() -> int:
         help="override quasi-Newton iterations on arms that do not set their own",
     )
     ap.add_argument(
+        "--models",
+        default="models",
+        help="directory of checkpoints for the `ladder` sub-command",
+    )
+    ap.add_argument(
+        "--ladder-json",
+        default="__DEV/studies/ladder.json",
+        help="ladder data file that `ladder-rows` renders and checks against docs/",
+    )
+    ap.add_argument(
+        "--ladder-n-axial",
+        type=int,
+        default=0,
+        help="scoring mesh for `ladder`; 0 keeps the 160 every published table uses. "
+        "The temperature fields are NOT resolvable there -- docs/axial_physics.md "
+        "section 6.6 puts the film ratio at 1.05 -- so pass 2560 when the question is "
+        "how accurate the surrogate is rather than how it compares with old tables",
+    )
+    ap.add_argument(
+        "--check",
+        action="store_true",
+        help="`ladder-rows` only: fail naming any rendered row absent from docs/",
+    )
+    ap.add_argument(
         "--only",
         default=None,
         help="run only arms whose label contains one of these comma-separated "
@@ -2199,6 +2269,9 @@ def main() -> int:
         SEEDS = tuple(int(x) for x in args.seeds.split(","))
         print(f"seeds: {SEEDS}", flush=True)
     _ONLY = args.only
+    global _MODELS_DIR, _LADDER_JSON, _LADDER_N, _CHECK
+    _MODELS_DIR, _LADDER_JSON = args.models, args.ladder_json
+    _LADDER_N, _CHECK = args.ladder_n_axial, args.check
     global _HISTORY  # noqa: PLW0603
     _HISTORY = args.lbfgs_history
     global _ADAM, _QN
