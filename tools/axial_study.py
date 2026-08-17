@@ -10,6 +10,7 @@ A number is reproducible because the configuration that produced it is in the
 repository. Each sub-command here is one study, and each prints a table in the
 form the documentation carries it.
 
+    uv run python tools/axial_study.py verify       # section 6.5  — reference UNCERTAINTY
     uv run python tools/axial_study.py ruler        # section 6.5  — reference mesh convergence
     uv run python tools/axial_study.py horizon      # section 7.2.7 — the training horizon
     uv run python tools/axial_study.py budget       # section 7.5.3 — Adam against quasi-Newton
@@ -49,6 +50,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from pinn_sfr_transient.axial import verification
 from pinn_sfr_transient.axial.config import AxialParams
 from pinn_sfr_transient.axial.reference import solve_reference
 from pinn_sfr_transient.axial.scoring import relative_l2
@@ -267,10 +269,15 @@ def _row(  # noqa: PLR0913, PLR0917 - a row is the arm's identity plus its measu
     return row
 
 
-def write(rows: list[dict], out: Path) -> None:
-    """Persist a study's rows so a table can be rebuilt without re-running it."""
-    out.write_text(json.dumps(rows, indent=2), encoding="utf-8")
+def write_json(payload: Any, out: Path) -> None:  # noqa: ANN401 - any JSON-serialisable study result
+    """Persist a study's result so a table can be rebuilt without re-running it."""
+    out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     print(f"\nwrote {out}")
+
+
+def write(rows: list[dict], out: Path) -> None:
+    """Persist a study's rows. Most studies are a list of arms; see :func:`write_json`."""
+    write_json(rows, out)
 
 
 def mean_table(rows: list[dict], key: str = "arm") -> None:
@@ -381,8 +388,26 @@ def run_all(
 
 
 # --- studies ----------------------------------------------------------------
+def study_verify(out: Path) -> None:
+    """Measure the reference's uncertainty by Richardson extrapolation -- section 6.5.
+
+    Supersedes :func:`study_ruler`, which reports each mesh's distance to the finest
+    mesh **run**. That understates the error, because the finest mesh is itself in
+    error; the distance to the *extrapolated limit* is the quantity wanted, and it
+    needs an observed order, which `ruler` never computed.
+
+    `ruler` is kept because every published section 6.5 number was measured by it and
+    a metric that changes definition silently makes its own history unreadable. New
+    uncertainties come from here.
+    """
+    write_json(verification.report(), out)
+
+
 def study_ruler(out: Path) -> None:
-    """Measure how wrong the reference is -- section 6.5."""
+    """Measure how wrong the reference is -- section 6.5.
+
+    Superseded by :func:`study_verify` for any *new* uncertainty; see there.
+    """
     meshes = (40, 80, RULER_N, 320, FINEST_N)
     runs = {}
     for n in meshes:
@@ -2077,6 +2102,7 @@ def _interaction(rows: list[dict]) -> None:
 
 
 STUDIES = {
+    "verify": study_verify,
     "ruler": study_ruler,
     "horizon": study_horizon,
     "budget": study_budget,

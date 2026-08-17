@@ -610,6 +610,61 @@ Consequence: score the PINN against `n_axial >= 160`, and judge `α` on voided
 length and onset rather than a pointwise norm across an unconverged front. See
 [`axial_nn.md`](axial_nn.md) §6.
 
+### 6.6 Reference uncertainty, and why the scoring mesh is too coarse
+
+Reproduce with:
+
+```bash
+OMP_NUM_THREADS=8 uv run python tools/axial_study.py verify \
+    --out __DEV/studies/verify.json --cpu-block 0
+```
+
+Five doubling meshes, 142 s total on eight pinned cores. Each mesh's error is its
+distance from the Richardson limit; field columns come from the gap to the next mesh
+at the observed order, so the finest mesh has none. Observed orders: onset 1.00,
+onset height 1.00, voided length 0.99 — the first order the upwinding predicts.
+The margin reads 0.84 and is **not** extrapolated: it is a maximum over a discrete
+field, not a smooth functional, so it is not in the asymptotic range.
+
+| mesh | solve | onset [s] | L_void [m] | T_f | T_cl | T_s | T_c |
+|---|---|---|---|---|---|---|---|
+| 160 | 6.2 s | 0.010251 | 0.002895 | 1.473e-3 | 2.180e-3 | 1.553e-3 | 1.575e-3 |
+| 320 | 10.5 s | 0.005120 | 0.001465 | 7.256e-4 | 1.090e-3 | 7.757e-4 | 7.893e-4 |
+| 640 | 18.3 s | 0.002557 | 0.000737 | 3.617e-4 | 5.472e-4 | 3.877e-4 | 3.955e-4 |
+| 1280 | 35.4 s | 0.001277 | 0.000370 | 1.809e-4 | 2.747e-4 | 1.938e-4 | 1.980e-4 |
+| 2560 | 71.4 s | 0.000638 | 0.000186 | — | — | — | — |
+
+Quoting the distance to the finest mesh **run** instead — which is what
+`axial_study.py ruler` reports, and what every earlier §6.5 number is — understates
+the error by 14% on onset and 34% on voided length at 160 nodes, because the finest
+mesh is itself wrong.
+
+**The ruler is the same size as what it measures.** Against the shipped three-seed
+result in [`axial_nn.md`](axial_nn.md), at the current `RULER_N = 160`:
+
+| quantity | surrogate | reference at 160 | ratio |
+|---|---|---|---|
+| fuel `T_f` | 2.58e-3 | 1.473e-3 | 1.75 |
+| cladding `T_cl` | 3.72e-3 | 2.180e-3 | 1.71 |
+| film `T_s` | 1.63e-3 | 1.553e-3 | 1.05 |
+| coolant `T_c` | 1.69e-3 | 1.575e-3 | 1.07 |
+| boiling onset | 0.0042–0.0082 s | 0.010251 s | 0.41–0.80 |
+
+Calibration practice wants four. Nothing clears it, two sit at one, and **onset is
+below one** — that agreement measures the reference, not the network. Reaching four
+needs roughly 2560 nodes on the temperatures and 640 on onset; 2560 costs 71 s
+against 6 s, which is nothing beside a training run.
+
+**Not yet changed.** `RULER_N` is still 160, because moving it re-scores all 169 runs
+in `__DEV/studies/` against a different instrument and no number would stay
+comparable. The cost of the choice is now on the record; the choice is open.
+
+Two caveats. The surrogate errors above were themselves measured at 160 and move when
+the ruler moves, so the ratios are indicative. And re-scoring fixed models against a
+640-node reference was reported to drop temperature errors ~2.8x and to move onset the
+other way — **that is not reproduced by any committed command**, because nothing here
+saves a checkpoint yet. Do not quote it.
+
 ## 7. Known gaps and honest limits
 
 **Two energy-conservation defects, both found by the balance check:**
