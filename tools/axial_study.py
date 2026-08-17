@@ -11,6 +11,8 @@ repository. Each sub-command here is one study, and each prints a table in the
 form the documentation carries it.
 
     uv run python tools/axial_study.py verify       # section 6.5  — reference UNCERTAINTY
+    uv run python tools/axial_study.py ladder       # score models/ -> one JSON
+    uv run python tools/axial_study.py ladder-rows  # render it; --check gates docs/
     uv run python tools/axial_study.py ruler        # section 6.5  — reference mesh convergence
     uv run python tools/axial_study.py horizon      # section 7.2.7 — the training horizon
     uv run python tools/axial_study.py budget       # section 7.5.3 — Adam against quasi-Newton
@@ -442,11 +444,11 @@ def study_ladder_rows(out: Path) -> None:  # noqa: ARG001 - prints; the data fil
         print("\nerror / reference uncertainty (four is the threshold, one is the ruler):\n")
         print(tables.ratio_table(data))
         return
-    missing = tables.check(data)
-    for line in missing:
-        print(f"::error::ladder row absent from docs/: {line}")
-    print(f"{len(missing)} ladder rows absent from docs/")
-    if missing:
+    problems, blocks = tables.check(data)
+    for line in problems:
+        print(f"::error::{line}")
+    print(f"checked {blocks} fenced ladder table(s) in docs/; {len(problems)} problem(s)")
+    if problems:
         raise SystemExit(1)
 
 

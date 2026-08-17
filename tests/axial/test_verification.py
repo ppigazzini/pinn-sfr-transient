@@ -124,3 +124,20 @@ def test_report_requires_three_meshes_to_observe_an_order():
 def test_meshes_double():
     """:func:`richardson` assumes a refinement ratio of two; the default must honour it."""
     assert all(b == 2 * a for a, b in pairwise(verification.MESHES))
+
+
+def test_report_refuses_a_sequence_that_does_not_double():
+    """The default honouring the ratio says nothing about an argument that does not.
+
+    `richardson` receives three floats and cannot know what produced them, so a 1.5x
+    ladder yields a confident order and a confident limit that mean nothing. An
+    unmeasurable case has to be an error, not a silently wrong number.
+    """
+    with pytest.raises(ValueError, match="must double"):
+        verification.report(meshes=(160, 240, 360))
+
+
+def test_report_names_the_rung_that_breaks_the_ratio():
+    """A message that does not say where is a message that costs a bisection."""
+    with pytest.raises(ValueError, match=r"\(320, 960\)"):
+        verification.report(meshes=(160, 320, 960, 1920))

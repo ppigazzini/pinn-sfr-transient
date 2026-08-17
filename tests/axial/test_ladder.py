@@ -35,10 +35,11 @@ def _arm(iters, optimizer="lbfgs", **over):
     return arm
 
 
-def _data(*arms, ruler=None):
+def _data(*arms, ruler=None, arm_fields=("optimizer",)):
     return {
         "n_axial": 160,
         "n_out": 241,
+        "arm_fields": list(arm_fields),
         "ruler": ruler or {},
         "reference": {},
         "arms": list(arms),
@@ -47,30 +48,52 @@ def _data(*arms, ruler=None):
 
 
 # --- grouping: the defect the audit found in the companion implementation --
-def test_the_arm_key_separates_optimiser_families():
-    """Grouping on (points, iters) alone averages two optimisers into one row.
+def test_arm_fields_are_derived_from_what_actually_varies():
+    """A declared list of knobs is wrong the moment a new one is swept.
 
-    The companion implementation keyed on the budget and the collocation count only,
-    which is correct exactly as long as one optimiser family is in the corpus. Over a
-    mixed corpus a quasi-Newton arm and an AdEMAMix arm sharing a budget merge into a
-    row describing neither.
+    Both previous versions got this wrong. The companion keyed on `(points, iters)`,
+    merging optimiser families. The first fix here declared five keys, and over the
+    imported corpus that still averaged 136 of 334 checkpoints across different
+    learning rates -- putting `lr = 0.1`, which diverged, beside `lr = 1e-4`.
     """
-    qn = {"optimizer": "lbfgs", "first_order": "adam", "n_colloc": 5000}
-    fo = {"optimizer": "adam", "first_order": "ademamix", "n_colloc": 5000}
-    assert ladder.arm_key(qn, 50000) != ladder.arm_key(fo, 50000)
+    configs = [
+        {"optimizer": "adamw", "lr": 1e-4, "width": 64, "seed": 0},
+        {"optimizer": "adamw", "lr": 1e-1, "width": 64, "seed": 1},
+    ]
+    assert ladder.arm_fields(configs) == ("lr",), "only the varying knob separates arms"
 
 
-def test_the_arm_key_separates_every_declared_knob():
-    """A knob in ARM_KEYS that does not change the key is not actually separating arms."""
-    base = dict.fromkeys(ladder.ARM_KEYS, 1)
-    for key in ladder.ARM_KEYS:
-        other = base | {key: 2}
-        assert ladder.arm_key(base, 10) != ladder.arm_key(other, 10), key
+def test_arm_fields_pick_up_a_knob_nobody_declared():
+    """The property a hard-coded list cannot have."""
+    configs = [{"a_knob_invented_tomorrow": 1}, {"a_knob_invented_tomorrow": 2}]
+    assert ladder.arm_fields(configs) == ("a_knob_invented_tomorrow",)
+
+
+def test_arm_fields_ignore_the_seed_and_the_budget():
+    """Seeds are what a row averages over; the budget is the ladder's x-axis."""
+    configs = [
+        {"seed": 0, "lbfgs_iters": 10, "iters": 10, "adam_iters": 1, "log_every": 1, "w": 1},
+        {"seed": 1, "lbfgs_iters": 20, "iters": 20, "adam_iters": 2, "log_every": 9, "w": 1},
+    ]
+    assert ladder.arm_fields(configs) == ()
+
+
+def test_arm_fields_handle_a_json_list_where_a_tuple_was_stored():
+    """Config tuples come back from JSON as lists, which are unhashable in a key."""
+    configs = [{"bands": [1.0, 2.0]}, {"bands": [3.0]}]
+    assert ladder.arm_fields(configs) == ("bands",)
+    assert ladder.arm_key({"bands": [1.0, 2.0]}, 10, ("bands",))
+
+
+def test_the_arm_key_separates_optimiser_families():
+    """A quasi-Newton arm and an AdEMAMix arm sharing a budget are not one row."""
+    fields = ("optimizer",)
+    qn, fo = {"optimizer": "lbfgs"}, {"optimizer": "adamw"}
+    assert ladder.arm_key(qn, 50000, fields) != ladder.arm_key(fo, 50000, fields)
 
 
 def test_the_arm_key_separates_budgets():
-    cfg = {"optimizer": "lbfgs"}
-    assert ladder.arm_key(cfg, 20000) != ladder.arm_key(cfg, 50000)
+    assert ladder.arm_key({}, 20000, ()) != ladder.arm_key({}, 50000, ())
 
 
 def test_iters_come_from_the_filename_not_the_configured_total(tmp_path):
@@ -81,6 +104,21 @@ def test_iters_come_from_the_filename_not_the_configured_total(tmp_path):
 
 def test_iters_fall_back_to_the_config_for_a_file_saved_outside_the_hook(tmp_path):
     assert ladder.iters_of(tmp_path / "hand-named.eqx", {"lbfgs_iters": 7000}) == 7000
+
+
+def test_iters_accept_the_companion_spelling(tmp_path):
+    """The imported corpus calls it `iters`; reading only `lbfgs_iters` returned zero.
+
+    Every one of the 55 files in the per-family subdirectories is named `seedN.eqx`,
+    so the filename carries no budget and the fallback is all there is. 41 checkpoints
+    landed in a bogus `iters = 0` arm before this.
+    """
+    assert ladder.iters_of(tmp_path / "seed0.eqx", {"iters": 50000}) == 50000
+    assert ladder.iters_of(tmp_path / "seed0.eqx", {"adam_iters": 300000}) == 300000
+
+
+def test_iters_are_zero_only_when_nothing_records_them(tmp_path):
+    assert ladder.iters_of(tmp_path / "seed0.eqx", {}) == 0
 
 
 # --- the spread a table quotes --------------------------------------------
@@ -151,29 +189,115 @@ def test_the_selector_filters_arms():
     assert len(tables.rows(data, optimizer="lbfgs")) == 1
 
 
-def test_check_passes_when_the_document_carries_the_row(tmp_path):
-    """The point of the checker: docs and the data file cannot drift apart."""
+def test_rows_carry_the_columns_that_identify_the_arm():
+    """`iters` alone names up to a dozen arms once several knobs vary."""
+    data = _data(_arm(10000, optimizer="lbfgs"), _arm(10000, optimizer="adamw"))
+    rendered = tables.rows(data)
+    assert any("lbfgs" in r for r in rendered)
+    assert any("adamw" in r for r in rendered)
+
+
+def test_two_arms_differing_only_in_a_knob_do_not_render_identically():
+    """Identical strings would let one document line satisfy several data rows.
+
+    That silently weakens `check`: the drift it exists to catch would pass.
+    """
+    a = _arm(10000, optimizer="lbfgs")
+    b = _arm(10000, optimizer="adamw")
+    rendered = tables.rows(_data(a, b))
+    assert len(set(rendered)) == 2
+
+
+def test_a_pinned_selector_drops_its_own_column():
+    """A table already filtered to one optimiser should not repeat it every row."""
+    data = _data(_arm(10000), _arm(20000))
+    assert "lbfgs" not in tables.table(data, optimizer="lbfgs")
+
+
+def test_the_header_names_every_identifying_column():
+    data = _data(_arm(1), arm_fields=("optimizer", "lr"))
+    head = tables.table(data).splitlines()[0]
+    assert "optimizer" in head
+    assert "lr" in head
+
+
+def _doc(tmp_path, body):
+    docs = tmp_path / "docs"
+    docs.mkdir(exist_ok=True)
+    (docs / "x.md").write_text(body, encoding="utf-8")
+    return tmp_path
+
+
+def _fenced(data, selector=""):
+    sel = f" {selector}" if selector else ""
+    body = tables.table(data, **tables._parse_selector(selector))
+    return f"<!-- ladder:{sel} -->\n{body}\n<!-- /ladder -->\n"
+
+
+def test_check_passes_when_the_fenced_table_matches(tmp_path):
+    """The point of the checker: a document and the data file cannot drift apart."""
     data = _data(_arm(10000))
-    docs = tmp_path / "docs"
-    docs.mkdir()
-    (docs / "x.md").write_text("intro\n\n" + tables.rows(data)[0] + "\n", encoding="utf-8")
-    assert tables.check(data, tmp_path) == []
+    problems, blocks = tables.check(data, _doc(tmp_path, "intro\n\n" + _fenced(data)))
+    assert problems == []
+    assert blocks == 1
 
 
-def test_check_names_the_row_that_drifted(tmp_path):
-    """Change a measurement without re-rendering and the check must say which row."""
-    docs = tmp_path / "docs"
-    docs.mkdir()
-    (docs / "x.md").write_text(tables.rows(_data(_arm(10000)))[0], encoding="utf-8")
-    moved = _arm(10000, T_f={"mean": 9e-3, "half": 1e-4, "n": 3})
-    missing = tables.check(_data(moved), tmp_path)
-    assert len(missing) == 1
-    assert "9.00" in missing[0]
+def test_check_names_the_file_and_line_that_drifted(tmp_path):
+    """Change a measurement without re-rendering and the check must say where."""
+    stale = _data(_arm(10000))
+    root = _doc(tmp_path, _fenced(stale))
+    moved = _data(_arm(10000, T_f={"mean": 9e-3, "half": 1e-4, "n": 3}))
+    problems, blocks = tables.check(moved, root)
+    assert blocks == 1
+    assert len(problems) == 1
+    assert "x.md:1" in problems[0]
 
 
-def test_check_reports_everything_when_no_document_mentions_the_table(tmp_path):
-    (tmp_path / "docs").mkdir()
-    assert len(tables.check(_data(_arm(1), _arm(2)), tmp_path)) == 2
+def test_check_is_vacuous_but_visible_when_no_document_quotes_the_ladder(tmp_path):
+    """Zero problems from zero blocks must be distinguishable from zero from twelve.
+
+    A document that quietly loses its fence would otherwise pass by having nothing left
+    to check, which is the fail-open shape this repository keeps getting bitten by.
+    """
+    problems, blocks = tables.check(_data(_arm(1)), _doc(tmp_path, "no tables here"))
+    assert problems == []
+    assert blocks == 0
+
+
+def test_check_catches_an_unclosed_fence(tmp_path):
+    """An unterminated fence would otherwise swallow the rest of the document."""
+    problems, blocks = tables.check(_data(_arm(1)), _doc(tmp_path, "<!-- ladder: -->\n| x |\n"))
+    assert blocks == 0
+    assert "never closed" in problems[0]
+
+
+def test_check_honours_the_selector_on_the_fence(tmp_path):
+    """One document can hold several slices, each verified against its own filter."""
+    data = _data(_arm(10000, optimizer="lbfgs"), _arm(10000, optimizer="adamw"))
+    problems, blocks = tables.check(data, _doc(tmp_path, _fenced(data, "optimizer=lbfgs")))
+    assert problems == []
+    assert blocks == 1
+
+
+def test_a_selector_that_stops_matching_is_caught(tmp_path):
+    """Rename an optimiser and the slice empties; the document must not stay green."""
+    data = _data(_arm(10000, optimizer="lbfgs"))
+    root = _doc(tmp_path, _fenced(data, "optimizer=lbfgs"))
+    renamed = _data(_arm(10000, optimizer="lbfgs-ssbfgs"))
+    problems, _ = tables.check(renamed, root)
+    assert problems
+
+
+def test_the_selector_parser_coerces_types():
+    """Arms hold ints, floats and bools; a string selector would match nothing."""
+    got = tables._parse_selector("n_colloc=5000 lr=0.0001 cosine=True lr_warmup=False o=adamw")
+    assert got == {
+        "n_colloc": 5000,
+        "lr": 0.0001,
+        "cosine": True,
+        "lr_warmup": False,
+        "o": "adamw",
+    }
 
 
 # --- the ratio table, which is what says whether a number means anything ---
@@ -182,6 +306,75 @@ def test_the_ratio_table_divides_by_the_reference_uncertainty():
     ruler = dict.fromkeys([k for k, _ in ladder.METRICS], 1e-4)
     out = tables.ratio_table(_data(_arm(10000), ruler=ruler))
     assert "10.00" in out, "1e-3 against a 1e-4 ruler is a ratio of ten"
+
+
+def test_a_single_seed_arm_gets_no_plus_minus():
+    """`112.97 +/- 0.00` from one sample reads as perfect reproducibility.
+
+    The seed spread on this model has reached 12.5x and four published conclusions have
+    been overturned by the next seed. The `seeds` column says 1; a spread beside it
+    contradicts that.
+    """
+    arm = _arm(10000, seeds=1)
+    for k, _ in ladder.METRICS:
+        arm[k] = {"mean": 1e-3, "half": 0.0, "n": 1}
+    row = tables.rows(_data(arm))[0]
+    assert "±" not in row
+    assert "1.00" in row
+
+
+def test_the_spread_is_suppressed_per_metric_not_per_row():
+    """A metric can be single-seeded while its neighbours are not.
+
+    `_spread` counts the seeds that produced a *finite* value, so a rung where the
+    front formed on one seed of three reports `n = 1` for onset and `n = 3` for the
+    temperatures. Suppressing per row would hide that; suppressing per metric shows it.
+    """
+    arm = _arm(10000, onset={"mean": 0.1, "half": 0.0, "n": 1})
+    row = tables.rows(_data(arm))[0]
+    assert "0.1000 |" in row, "the single-seeded metric loses its spread"
+    assert "1.00 ± 0.10" in row, "the three-seeded ones keep theirs"
+
+
+def test_a_multi_seed_arm_keeps_its_spread():
+    arm = _arm(10000, T_f={"mean": 1e-3, "half": 1e-4, "n": 3})
+    assert "1.00 ± 0.10" in tables.rows(_data(arm))[0]
+
+
+def test_budgets_sort_numerically_not_as_text():
+    """Folding `iters` into a string key put 1,000,000 between 100,000 and 200,000."""
+    data = _data(_arm(1000000), _arm(100000), _arm(200000))
+    order = [r.split("|")[2].strip() for r in tables.rows(data)]
+    assert order == ["100,000", "200,000", "1,000,000"]
+
+
+def test_the_ratio_table_identifies_its_arms_too():
+    """A ratio row labelled only by budget names every arm sharing that budget."""
+    ruler = dict.fromkeys([k for k, _ in ladder.METRICS], 1e-4)
+    data = _data(_arm(10000, optimizer="lbfgs"), _arm(10000, optimizer="adamw"), ruler=ruler)
+    out = tables.ratio_table(data)
+    assert "lbfgs" in out
+    assert "adamw" in out
+    assert len(set(out.splitlines()[2:])) == 2
+
+
+def test_ratios_below_the_threshold_are_marked():
+    """A column of bare decimals makes the reader do the comparison 1300 times."""
+    ruler = dict.fromkeys([k for k, _ in ladder.METRICS], 1e-3)
+    resolvable = _arm(1, T_f={"mean": 8e-3, "half": 0.0, "n": 3})
+    marginal = _arm(2, T_f={"mean": 2e-3, "half": 0.0, "n": 3})
+    ruler_bound = _arm(3, T_f={"mean": 5e-4, "half": 0.0, "n": 3})
+    out = tables.ratio_table(_data(resolvable, marginal, ruler_bound, ruler=ruler)).splitlines()
+    assert "8.00 |" in out[2], "a ratio clearing four is unmarked"
+    assert "2.00 (<4)" in out[3], "a ratio between one and four is marginal"
+    assert "0.50 (<1)" in out[4], "a ratio below one is measuring the reference"
+
+
+def test_the_marking_threshold_is_the_declared_constant():
+    """A documented four and a hard-coded four drift apart; there must be one."""
+    from pinn_sfr_transient.axial import verification
+
+    assert tables.MIN_RATIO == verification.MIN_RATIO
 
 
 def test_the_ratio_table_says_so_when_there_is_no_ruler():

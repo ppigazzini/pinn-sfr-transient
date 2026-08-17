@@ -237,10 +237,23 @@ def report(
     quotes is grep-able in one file.
 
     At least three meshes are required: the observed order of convergence is measured
-    from three successive values, not assumed.
+    from three successive values, not assumed. They must also *double*, because
+    :func:`richardson` and :func:`_gap_to_limit` both bake in a refinement ratio of two;
+    the default honours that and an argument might not.
     """
     if len(meshes) < 3:
         msg = f"need at least three meshes to observe the order, got {list(meshes)}"
+        raise ValueError(msg)
+    # Checked here rather than trusted. `richardson` sees three floats and cannot know
+    # what meshes produced them, so a sequence like (160, 240, 360) would yield a
+    # confident order and a confident limit, both meaningless. An unmeasurable case has
+    # to be an error, not a silently wrong number.
+    bad = [(a, b) for a, b in pairwise(meshes) if b != 2 * a]
+    if bad:
+        msg = (
+            f"meshes must double: {list(meshes)} breaks at {bad[0]}. "
+            f"The extrapolation assumes a refinement ratio of {_RATIO:g}."
+        )
         raise ValueError(msg)
     p = p or AxialParams()
 

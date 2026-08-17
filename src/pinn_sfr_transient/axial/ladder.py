@@ -12,11 +12,13 @@ One reference solve serves the whole corpus, which is the entire economy of the 
 the solve costs tens of seconds and each checkpoint costs a fraction of that to score.
 
 **Rows are keyed by the header, not the filename.** A mis-named checkpoint groups by
-what it is. That also means an arm is identified by its *configuration*, and the
-grouping key includes the optimiser family — the companion implementation grouped on
-``(points, iters)`` alone, which is correct only as long as one optimiser is in the
-corpus. Run that over a mixed corpus and a quasi-Newton arm and an AdEMAMix arm sharing
-a budget average into one row that describes neither.
+what it is.
+
+**And the key is derived, not declared** — see :func:`arm_fields`. Two attempts got this
+wrong before the third: the companion grouped on ``(points, iters)``, which merges
+optimiser families, and the first version here declared five knobs, which still averaged
+136 of 334 checkpoints across learning rates spanning three orders of magnitude. Any
+declared list is a list of the knobs someone remembered.
 
 Every error is reported both raw and divided by the reference's own uncertainty at the
 scoring mesh, from :mod:`pinn_sfr_transient.axial.verification`. A ratio below four is
@@ -68,35 +70,70 @@ METRICS: tuple[tuple[str, str], ...] = (
 #: the value and not only the distance from the reference.
 VALUES: tuple[str, ...] = ("onset_t", "L_void_m", "margin_K")
 
-#: Knobs that identify an arm. `optimizer` and `first_order` are in here because a
-#: corpus with more than one optimiser family in it is the normal case, not the
-#: exception, and averaging across families produces a row describing neither.
-ARM_KEYS: tuple[str, ...] = (
-    "optimizer",
-    "first_order",
-    "n_colloc",
-    "fourier_features",
-    "lbfgs_history",
-)
+#: Config fields that do **not** identify an arm.
+#:
+#: `seed` is the axis a row averages over. The budget fields are the ladder's x-axis and
+#: are carried separately. `log_every` changes nothing about the model.
+#:
+#: Everything else identifies an arm, and that is the point — see :func:`arm_fields`.
+NOT_ARM: frozenset[str] = frozenset({"seed", "iters", "lbfgs_iters", "adam_iters", "log_every"})
 
 
-def arm_key(cfg: dict, iters: int) -> tuple:
-    """Identify the arm a checkpoint belongs to, from its stored configuration."""
-    return (*(cfg.get(k) for k in ARM_KEYS), iters)
+def _hashable(v: object) -> object:
+    """Make a config value usable in a grouping key. JSON gives lists back for tuples."""
+    return tuple(v) if isinstance(v, list) else v
+
+
+def arm_fields(configs: list[dict]) -> tuple[str, ...]:
+    """Config fields that actually **vary** across this corpus, and so separate arms.
+
+    Derived from the corpus rather than declared, and that is a correctness property
+    rather than a convenience. A hard-coded list is a list of the knobs someone thought
+    of, and it is wrong the moment a new one is swept — silently, by averaging two arms
+    into a row describing neither.
+
+    This is not hypothetical and it is not only the companion's mistake. That repository
+    keyed on ``(points, iters)``, which merges optimiser families. The first fix here
+    declared five keys instead, and over the imported corpus that still averaged **136
+    of 334 checkpoints** across different learning rates — putting ``lr = 0.1``, which
+    diverged, in the same row as ``lr = 1e-4``. The list was wrong in exactly the way a
+    declared list is always eventually wrong.
+
+    Deriving it cannot make that mistake: a knob that varies separates arms whether or
+    not anyone remembered it.
+    """
+    seen: dict[str, set] = {}
+    for cfg in configs:
+        for k, v in cfg.items():
+            if k not in NOT_ARM:
+                seen.setdefault(k, set()).add(_hashable(v))
+    return tuple(sorted(k for k, vals in seen.items() if len(vals) > 1))
+
+
+def arm_key(cfg: dict, iters: int, fields: tuple[str, ...]) -> tuple:
+    """Identify the arm a checkpoint belongs to, from its configuration and budget."""
+    return (*(_hashable(cfg.get(k)) for k in fields), iters)
 
 
 def iters_of(path: Path, cfg: dict) -> int:
     """Budget a checkpoint was written at.
 
-    `checkpoint.saver` encodes the *cumulative* quasi-Newton count in the filename,
-    because one run emits several rungs and the configuration records only the total it
-    was asked for. Falls back to the configured budget for a file saved outside the
-    ladder hook.
+    `checkpoint.saver` encodes the *cumulative* count in the filename, because one run
+    emits several rungs while the configuration records only the total it was asked for.
+    Falls back to the configuration for a file saved outside that hook.
+
+    **Both budget spellings are accepted.** The imported corpus calls it ``iters``; this
+    repository calls it ``lbfgs_iters``. Reading only the second put 41 checkpoints —
+    every one whose filename carries no ``iNNNN`` token, which is all 55 in the
+    per-family subdirectories — into a bogus ``iters = 0`` arm.
     """
     for part in Path(path).stem.split("_"):
         if part.startswith("i") and part[1:].isdigit():
             return int(part[1:])
-    return int(cfg.get("lbfgs_iters", 0))
+    for key in ("lbfgs_iters", "iters", "adam_iters"):
+        if cfg.get(key):
+            return int(cfg[key])
+    return 0
 
 
 def errors(m: dict[str, float]) -> dict[str, float]:
@@ -154,20 +191,30 @@ def _spread(vals: list[float]) -> dict[str, float]:
     }
 
 
-def _ruler(n_axial: int) -> dict[str, float]:
+#: Where `verify` writes the reference uncertainty the ratio columns divide by.
+VERIFY_JSON = Path("__DEV/studies/verify.json")
+
+
+def _ruler(n_axial: int, src: Path = VERIFY_JSON) -> dict[str, float]:
     """Read the reference uncertainty at the scoring mesh, from the verification study.
 
-    Read from `__DEV/studies/verify.json` when it is there and left absent when it is
-    not, rather than hard-coded. A hand-maintained table of five constants goes stale
-    silently the first time the mesh changes; the companion repository carries exactly
-    such a table and a comment asking the next person to remember to update it.
+    Read from a file rather than hard-coded. A hand-maintained table of five constants
+    goes stale silently the first time the mesh changes; the companion repository carries
+    exactly such a table with a comment asking the next person to remember.
+
+    Absence is **reported**, not swallowed. This is a relative path, so running from
+    another directory finds nothing, and a silent empty ruler means every ratio column
+    quietly disappears from the tables — which reads as "no problem" rather than "not
+    measured".
     """
-    src = Path("__DEV/studies/verify.json")
-    if not src.exists():
+    if not Path(src).exists():
+        print(f"  no reference uncertainty: {src} not found; ratio columns will be empty")
         return {}
-    data = json.loads(src.read_text())
+    data = json.loads(Path(src).read_text())
     row = data.get("uncertainty", {}).get(str(n_axial), {})
     if not row:
+        have = sorted(data.get("uncertainty", {}))
+        print(f"  no reference uncertainty at n_axial={n_axial}; verify.json has {have}")
         return {}
     return {
         "T_f": row.get("T_f", float("nan")),
@@ -210,15 +257,21 @@ def _reader(path: Path) -> tuple[dict | None, Any]:
     with anything trained from here on.
     """
     try:
-        return checkpoint.header(path), checkpoint.score
+        head = checkpoint.header(path)
     except (ValueError, KeyError):
         pass
+    else:
+        return (head, checkpoint.score) if "config" in head else (None, None)
     try:
         from pinn_sfr_transient.axial import legacy  # noqa: PLC0415 - optional extra
 
-        return legacy.header(path), legacy.score
-    except (ValueError, KeyError, UnicodeDecodeError, ImportError):
+        head = legacy.header(path)
+    except (ValueError, KeyError, UnicodeDecodeError, ImportError, json.JSONDecodeError):
         return None, None
+    # A header without a `config` is not a checkpoint this can group. Returning it
+    # anyway raised `KeyError` out of `build` and took the whole corpus run down with
+    # one bad file -- the opposite of the per-file skip this function exists to provide.
+    return (head, legacy.score) if "config" in head else (None, None)
 
 
 def build(
@@ -235,34 +288,46 @@ def build(
     """
     p = p or AxialParams()
     scoring_p = replace(p, n_axial=n_axial)
-    print(f"reference: {n_axial} axial nodes, {RULER_N_OUT} time samples", flush=True)
-    traj: AxialTrajectory = solve_reference(scoring_p, n_out=RULER_N_OUT)
 
-    rows: dict[tuple, list[dict[str, float]]] = {}
-    ref: dict[str, float] = {}
+    # Headers first, weights second. A header is one line and needs no backend, so the
+    # whole corpus can be indexed before a single reference solve is paid for -- and the
+    # arm fields have to be known before anything is grouped.
+    index: list[tuple[Path, dict, Any]] = []
     skipped: list[str] = []
     for path in sorted(paths):
         head, scorer = _reader(path)
         if head is None:
             skipped.append(f"{Path(path).name} (unreadable header)")
             continue
+        index.append((Path(path), _normalise(head["config"]), scorer))
+
+    fields = arm_fields([cfg for _, cfg, _ in index])
+    print(f"{len(index)} checkpoints; arms separated by: {', '.join(fields) or '(budget only)'}")
+    print(f"reference: {n_axial} axial nodes, {RULER_N_OUT} time samples", flush=True)
+    traj: AxialTrajectory = solve_reference(scoring_p, n_out=RULER_N_OUT)
+
+    rows: dict[tuple, list[dict[str, float]]] = {}
+    labels: dict[tuple, dict] = {}
+    ref: dict[str, float] = {}
+    for path, cfg, scorer in index:
         try:
             m = scorer(path, traj, scoring_p)
-        except (ImportError, ModuleNotFoundError):
-            skipped.append(f"{Path(path).name} ({head.get('backend', 'jax')} not installed)")
+        except (ImportError, ModuleNotFoundError) as exc:
+            skipped.append(f"{path.name} ({exc})")
             continue
-        key = arm_key(_normalise(head["config"]), iters_of(path, head["config"]))
+        key = arm_key(cfg, iters_of(path, cfg), fields)
         rows.setdefault(key, []).append(errors(m) | values(m))
+        labels[key] = {k: cfg.get(k) for k in fields} | {"iters": iters_of(path, cfg)}
         ref = {
             "onset_t": m["onset_t_tan"] - m["onset_t_err_tan_s"],
             "L_void_m": m["L_void_max_ref"],
             "margin_K": m["margin_K_ref"],
         }
-        print(f"  scored {Path(path).name}", flush=True)
+        print(f"  scored {path.name}", flush=True)
 
     arms = []
     for key, seeds in sorted(rows.items(), key=lambda kv: [str(x) for x in kv[0]]):
-        arm: dict[str, Any] = dict(zip((*ARM_KEYS, "iters"), key, strict=True))
+        arm: dict[str, Any] = dict(labels[key])
         arm["seeds"] = len(seeds)
         for name in [k for k, _ in METRICS] + list(VALUES):
             arm[name] = _spread([s[name] for s in seeds])
@@ -271,6 +336,7 @@ def build(
     data = {
         "n_axial": n_axial,
         "n_out": RULER_N_OUT,
+        "arm_fields": list(fields),
         "ruler": _ruler(n_axial),
         "reference": ref,
         "arms": arms,
