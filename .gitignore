@@ -29,6 +29,12 @@ htmlcov/
 # demand and the CLI recreates the directory, so the binaries are not tracked.
 /results/
 
+# Trained checkpoints. 89 MB of binary and growing; `axial_study.py ladder` distils
+# them into a few tens of kB of JSON, and THAT is what the tables read, so the corpus
+# can be lost without losing the published numbers. Never commit it -- Git LFS if it
+# ever has to be versioned.
+/models/
+
 # NO IMAGES IN THIS REPOSITORY, anywhere, ever.
 #
 # `docs/` is text and tables: a committed plot is a number that stops tracking the
