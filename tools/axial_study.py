@@ -408,6 +408,63 @@ def study_verify(out: Path) -> None:
     write_json(verification.report(), out)
 
 
+def study_ademamix(out: Path) -> None:
+    """AdEMAMix at 1M first-order iterations, three seeds -- the arm the corpus has once.
+
+    The imported corpus carries this configuration at **seed 0 only**
+    (`ademamix | lr 1e-4 | cosine | batch 500 | 10 000 points | f256 | 100k-1M x10`), and
+    AGENTS.md forbids a comparative headline from one seed. This runs 0, 1 and 2.
+
+    Warmup is not optional here. AdEMAMix mixes a slow EMA with a ~7000-step half-life at
+    five times the weight of the fast one; unwarmed it diverges on this problem, measured
+    at loss 5.9e+06 by 200 000 steps at exactly this learning rate and embedding width.
+    `alpha` and `b3` warm over `sf_warmup_frac`, and `lr_warmup` puts a linear warmup in
+    front of the cosine decay so the arm is comparable with a warmed Adam.
+
+    One run per seed, not one per rung: `adam_checkpoint_every` emits a checkpoint every
+    100k iterations, so three runs yield thirty scorable models.
+
+        OMP_NUM_THREADS=8 uv run python tools/axial_study.py ademamix --cpu-block 0
+        uv run python tools/axial_study.py ladder --out __DEV/studies/ladder.json
+    """
+    from pinn_sfr_transient.axial import checkpoint  # noqa: PLC0415 - optional extra
+    from pinn_sfr_transient.axial.jaxpinn import AxialTrainConfig  # noqa: PLC0415
+    from pinn_sfr_transient.axial.jaxpinn import train as train_j  # noqa: PLC0415
+
+    iters = _ADAM if _ADAM is not None else 1_000_000
+    every = max(1, iters // 10)
+    p = AxialParams()
+    rows = []
+    for seed in SEEDS:
+        cfg = AxialTrainConfig(
+            first_order="ademamix",
+            lr=1e-4,
+            lr_warmup=True,
+            fourier_features=256,
+            adam_colloc=500,
+            n_colloc=10000,
+            adam_iters=iters,
+            lbfgs_iters=0,
+            adam_checkpoint_every=every,
+            seed=seed,
+        )
+        # `_MODELS_DIR`, not the default: `saver` writes to `models/` unless told
+        # otherwise, and a short run under `--models /tmp/...` silently dumped its
+        # checkpoints into the imported corpus instead.
+        hook = checkpoint.saver(cfg, "jax", p, Path(_MODELS_DIR))
+
+        def save(n: int, model: Any, hook: Any = hook) -> None:  # noqa: ANN401
+            """Bind `hook` per seed: a late-bound closure would save every seed under one stamp."""
+            print(f"  saved {hook(n, model).name}", flush=True)
+
+        t0 = time.perf_counter()
+        print(f"\nseed {seed}: {iters} ademamix iters, checkpoint every {every}", flush=True)
+        train_j(p, cfg, verbose=True, on_checkpoint=save)
+        rows.append({"seed": seed, "iters": iters, "seconds": time.perf_counter() - t0})
+        write(rows, out)
+    print("\nscore with: uv run python tools/axial_study.py ladder")
+
+
 def study_ladder(out: Path) -> None:
     """Score every saved checkpoint against one reference solve, and write the ladder.
 
@@ -2150,6 +2207,7 @@ def _interaction(rows: list[dict]) -> None:
 
 STUDIES = {
     "verify": study_verify,
+    "ademamix": study_ademamix,
     "ladder": study_ladder,
     "ladder-rows": study_ladder_rows,
     "ruler": study_ruler,

@@ -5,6 +5,7 @@ weighting, samplers — lives in its own module and can be replaced without edit
 this file.
 """
 
+import math
 from typing import TYPE_CHECKING
 
 import jax
@@ -12,6 +13,8 @@ import jax.numpy as jnp
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    import chex
 
     from pinn_sfr_transient.axial.config import AxialParams
 
@@ -46,9 +49,11 @@ def train(
 ) -> tuple[AxialPinn, AxialParams, AxialTrainConfig]:
     """Adam (causal + adaptive block weights + RAR) then an L-BFGS polish.
 
-    ``on_checkpoint`` receives ``(cumulative quasi-Newton iterations, model)`` at each
-    entry of ``cfg.polish_checkpoints``, so one run can be scored at several budgets
-    instead of being re-run once per budget.
+    ``on_checkpoint`` receives ``(cumulative iterations, model)``: at each entry of
+    ``cfg.polish_checkpoints`` during the quasi-Newton stage, and every
+    ``cfg.adam_checkpoint_every`` iterations during the first-order one. Either way a
+    single run is scored at several budgets instead of being re-run once per budget --
+    which for a 10-rung first-order ladder is one run instead of ten.
     """
     p = p or AxialParams()
     cfg = cfg or AxialTrainConfig()
@@ -122,6 +127,16 @@ def train(
         model, opt_state, loss = step(model, opt_state, pts, w, anchor)
         if verbose and it % cfg.log_every == 0:
             print(f"[adam {it:6d}] loss={float(loss):.3e}")
+        # First-order budget ladder from ONE run. `it + 1` so a rung is named by the
+        # number of iterations actually taken. Schedule-free is converted first: its
+        # parameters are the `y` iterate and the answer is the running average `x`, so
+        # checkpointing `model` directly would save the wrong sequence.
+        every = cfg.adam_checkpoint_every
+        if on_checkpoint is not None and every and (it + 1) % every == 0:
+            snap = (
+                _schedule_free_x(model, opt_state) if cfg.first_order == "schedulefree" else model
+            )
+            on_checkpoint(it + 1, snap)
 
     # Schedule-free keeps two sequences: the gradients were evaluated at `y`, which is
     # what `model` holds, and the iterate to REPORT is the running average `x`. Convert
@@ -143,6 +158,16 @@ def _first_order(cfg: AxialTrainConfig) -> optax.GradientTransformation:
     is unnecessary, so composing it with one would measure a hybrid nobody proposed.
     """
     if cfg.first_order == "schedulefree":
+        if cfg.lr_warmup:
+            # Refused, not ignored. Schedule-free replaces the learning-rate schedule
+            # with an averaging sequence and warms the step size internally over the
+            # same `sf_warmup_frac`; wrapping it in an external warmup would either be
+            # silently dropped (as it was) or measure a hybrid nobody proposed.
+            msg = (
+                "lr_warmup and first_order='schedulefree' both schedule the step size; "
+                "schedule-free warms up internally over sf_warmup_frac. Pick one."
+            )
+            raise ValueError(msg)
         return optax.contrib.schedule_free_adamw(
             cfg.lr,
             warmup_steps=max(1, int(cfg.sf_warmup_frac * cfg.adam_iters)),
@@ -151,10 +176,94 @@ def _first_order(cfg: AxialTrainConfig) -> optax.GradientTransformation:
             # turning decay on as well would make any result unattributable.
             weight_decay=0.0,
         )
-    sched = optax.cosine_decay_schedule(cfg.lr, decay_steps=max(1, cfg.adam_iters), alpha=0.1)
+    sched = _lr_schedule(cfg)
     if cfg.first_order == "ademamix":
-        return optax.contrib.ademamix(sched)
+        return optax.contrib.ademamix(sched, b3=_b3_warmup(cfg), alpha=_alpha_warmup(cfg))
     return optax.adam(sched)
+
+
+#: AdEMAMix's final slow-EMA weight and the two decay endpoints its warmup runs between.
+#: optax's own defaults, restated because the warmup schedules need the endpoints.
+_ADEMAMIX_ALPHA: float = 5.0
+_ADEMAMIX_B1: float = 0.9
+_ADEMAMIX_B3: float = 0.9999
+
+
+def _warmup_steps(cfg: AxialTrainConfig) -> int:
+    """Warmup length in steps, as a fraction of the first-order budget.
+
+    A fraction rather than a count so it scales with the budget instead of silently
+    becoming the whole run at a short one.
+    """
+    return max(1, int(cfg.sf_warmup_frac * cfg.adam_iters))
+
+
+def _lr_schedule(cfg: AxialTrainConfig) -> optax.Schedule:
+    """Cosine decay, optionally with a linear warmup in front of it.
+
+    ``optax.warmup_cosine_decay_schedule`` rather than a hand-rolled ramp -- optax ships
+    warmup composed with cosine decay, and a local reimplementation of a library
+    schedule is a second thing to get wrong.
+
+    Off by default. Warmup changes the trajectory of **every** first-order arm, and the
+    plain Adam arm is where every published first-order number in this repository comes
+    from, so switching it on globally would move numbers that nothing else in the change
+    touches.
+    """
+    if not cfg.lr_warmup:
+        return optax.cosine_decay_schedule(cfg.lr, decay_steps=max(1, cfg.adam_iters), alpha=0.1)
+    return optax.warmup_cosine_decay_schedule(
+        init_value=0.0,
+        peak_value=cfg.lr,
+        warmup_steps=_warmup_steps(cfg),
+        decay_steps=max(1, cfg.adam_iters),
+        end_value=cfg.lr * 0.1,
+    )
+
+
+def _alpha_warmup(cfg: AxialTrainConfig) -> optax.Schedule:
+    """Ramp AdEMAMix's slow-EMA weight linearly from zero, then hold.
+
+    **Without this the method diverges on this problem, and slowly enough to waste a
+    run.** At its defaults AdEMAMix mixes a slow average whose half-life is about 7000
+    steps into the update at five times the weight of the fast one; applying both from
+    step zero amplifies gradients taken before either average is populated. Measured on
+    the companion repository at 10 000 points and f256: loss 5.9e+06 by 200 000 steps at
+    lr 1e-4 (1.3e+07 at 1e-3), saturation margins above +8000 K, a voided length of
+    0.65 m in a 0.4 m channel, and a NaN onset at one first checkpoint.
+
+    A short smoke test does not catch it. 400 steps cleared the unwarmed version, because
+    400 steps is far too few for a 7000-step average to accumulate. **A first-order arm
+    needs a smoke test longer than the slowest moving average it configures.**
+
+    ``optax.linear_schedule`` holds ``end_value`` past ``transition_steps``, which is
+    exactly the ramp-then-hold wanted; it agrees with the hand-rolled version to 2e-07.
+    """
+    return optax.linear_schedule(
+        init_value=0.0, end_value=_ADEMAMIX_ALPHA, transition_steps=_warmup_steps(cfg)
+    )
+
+
+def _b3_warmup(cfg: AxialTrainConfig) -> Callable[[chex.Numeric], jax.Array]:
+    """Ramp AdEMAMix's slow-EMA decay from ``b1`` to ``b3`` over the same warmup.
+
+    The one schedule here that optax does **not** ship, and the one that has to be
+    hand-written:
+    ``exp(ln a ln b / ((1 - s) ln b + s ln a))`` at warmup fraction ``s``. It is even in
+    the **half-life**, not in the decay, and the difference is not cosmetic. At the
+    midpoint this gives a half-life of 3469 steps -- half of the final 6931, as intended.
+    A linear ramp between the same endpoints gives a half-life of **13 steps**, i.e. no
+    slow memory at all until the very end of the warmup, which is not a warmup of the
+    thing the method depends on.
+    """
+    warm = _warmup_steps(cfg)
+    la, lb = math.log(_ADEMAMIX_B1), math.log(_ADEMAMIX_B3)
+
+    def schedule(count: chex.Numeric) -> jax.Array:
+        s = jnp.minimum(jnp.asarray(count) / warm, 1.0)
+        return jnp.minimum(jnp.exp(la * lb / ((1.0 - s) * lb + s * la)), _ADEMAMIX_B3)
+
+    return schedule
 
 
 def _schedule_free_x(model: AxialPinn, opt_state: optax.OptState) -> AxialPinn:

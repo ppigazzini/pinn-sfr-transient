@@ -251,6 +251,24 @@ class AxialTrainConfig:
     # ademamix failure above, where a fixed EMA horizon was 260x worse at 3000.
     sf_warmup_frac: float = 0.1
 
+    # Linear warmup in front of the cosine decay, over `sf_warmup_frac` of the
+    # first-order budget. `optax.warmup_cosine_decay_schedule` on the JAX side; the
+    # torch twin owns the field for config parity and does not implement it, like
+    # `first_order="ademamix"`.
+    #
+    # **Off by default**, because warmup changes the trajectory of every first-order
+    # arm and plain Adam is where every published first-order number here comes from.
+    # Turn it on for an arm that needs it -- AdEMAMix is warmed on `alpha` and `b3`
+    # regardless, which is a different warmup and not optional.
+    lr_warmup: bool = False
+
+    # Emit a checkpoint every N first-order iterations, so ONE run yields a whole
+    # budget ladder instead of one run per rung. `polish_checkpoints` does this for the
+    # quasi-Newton stage; with `lbfgs_iters = 0` that stage never runs and a pure
+    # first-order arm produced no checkpoints at all -- 10 rungs meant 10 runs.
+    # 0 disables it, which is every published number here.
+    adam_checkpoint_every: int = 0
+
     # Collocation counts per stage, and how often the polish redraws.
     #
     # `n_colloc` alone drove BOTH stages, which meant Adam ran full batch -- every step

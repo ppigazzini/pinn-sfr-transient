@@ -193,3 +193,49 @@ def test_freeze_after_refuses_to_share_the_stage_with_polish_refresh(backend):
 
     with pytest.raises(ValueError, match="same stage"):
         train(AxialParams(), cfg)
+
+
+def test_first_order_checkpoints_fire_without_a_polish():
+    """A pure first-order arm produced no checkpoints at all before this.
+
+    `on_checkpoint` was reachable only from the quasi-Newton stage, so with
+    `lbfgs_iters = 0` a ten-rung budget ladder meant ten training runs instead of one.
+    """
+    jax = pytest.importorskip("jax")
+    from pinn_sfr_transient.axial.config import AxialParams
+    from pinn_sfr_transient.axial.jaxpinn import AxialTrainConfig, train
+
+    seen: list[int] = []
+    cfg = AxialTrainConfig(
+        width=8,
+        depth=2,
+        fourier_features=8,
+        n_colloc=32,
+        adam_iters=20,
+        lbfgs_iters=0,
+        adam_checkpoint_every=5,
+        seed=0,
+    )
+    train(AxialParams(), cfg, verbose=False, on_checkpoint=lambda n, _m: seen.append(n))
+    assert seen == [5, 10, 15, 20], "a rung is named by the iterations actually taken"
+    assert jax is not None
+
+
+def test_first_order_checkpoints_are_off_by_default():
+    """Zero disables them, which is every published number here."""
+    pytest.importorskip("jax")
+    from pinn_sfr_transient.axial.config import AxialParams
+    from pinn_sfr_transient.axial.jaxpinn import AxialTrainConfig, train
+
+    seen: list[int] = []
+    cfg = AxialTrainConfig(
+        width=8,
+        depth=2,
+        fourier_features=8,
+        n_colloc=32,
+        adam_iters=10,
+        lbfgs_iters=0,
+        seed=0,
+    )
+    train(AxialParams(), cfg, verbose=False, on_checkpoint=lambda n, _m: seen.append(n))
+    assert seen == []

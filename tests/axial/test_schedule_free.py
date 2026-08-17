@@ -184,3 +184,98 @@ def test_the_polish_starts_from_x_not_y(monkeypatch):
         return np.concatenate([np.asarray(a).ravel() for a in leaves])
 
     np.testing.assert_array_equal(flat(seen["model"]), flat(x_only))
+
+
+# --- AdEMAMix warmup --------------------------------------------------------
+def test_ademamix_alpha_ramps_from_zero_and_then_holds():
+    """Applying the slow EMA at full weight from step zero diverges on this problem.
+
+    Measured on the companion repository at 10 000 points and f256: loss 5.9e+06 by
+    200 000 steps at lr 1e-4, saturation margin above +8000 K, a voided length of
+    0.65 m in a 0.4 m channel, and a NaN onset at one first checkpoint.
+    """
+    from pinn_sfr_transient.axial.jaxpinn import AxialTrainConfig
+    from pinn_sfr_transient.axial.jaxpinn.training import _ADEMAMIX_ALPHA, _alpha_warmup
+
+    cfg = AxialTrainConfig(adam_iters=1000, sf_warmup_frac=0.1)  # warm = 100
+    a = _alpha_warmup(cfg)
+    assert float(a(0)) == pytest.approx(0.0, abs=1e-6)
+    assert float(a(50)) == pytest.approx(_ADEMAMIX_ALPHA * 0.5)
+    assert float(a(100)) == pytest.approx(_ADEMAMIX_ALPHA)
+    assert float(a(10_000)) == pytest.approx(_ADEMAMIX_ALPHA), "constant after warmup"
+
+
+def test_ademamix_b3_interpolates_half_lives_and_never_overshoots():
+    """`b3` warms from `b1` along exp(ln a ln b / ((1-s) ln b + s ln a)), not linearly.
+
+    That schedule is even in the *half-life*, which is the quantity that matters: a
+    linear ramp in the decay spends almost all of its length near b1.
+    """
+    import math
+
+    import optax
+
+    from pinn_sfr_transient.axial.jaxpinn import AxialTrainConfig
+    from pinn_sfr_transient.axial.jaxpinn.training import (
+        _ADEMAMIX_B1,
+        _ADEMAMIX_B3,
+        _b3_warmup,
+    )
+
+    cfg = AxialTrainConfig(adam_iters=1000, sf_warmup_frac=0.1)
+    b = _b3_warmup(cfg)
+    assert float(b(0)) == pytest.approx(_ADEMAMIX_B1)
+    assert float(b(100)) == pytest.approx(_ADEMAMIX_B3)
+    assert float(b(10_000)) <= _ADEMAMIX_B3, "clamped; never overshoots the final decay"
+
+    # The point of this schedule is that it is even in the HALF-LIFE, not the decay.
+    # At the midpoint the half-life must be half the final one. A linear ramp between
+    # the same endpoints gives 13 steps instead of 3469 -- no slow memory at all until
+    # the very end of the warmup, which is not a warmup of what the method depends on.
+    half = lambda d: math.log(0.5) / math.log(d)  # noqa: E731
+    assert half(float(b(50))) == pytest.approx(half(_ADEMAMIX_B3) / 2, rel=0.02)
+    assert half(float(b(50))) > 100 * half(
+        float(optax.linear_schedule(_ADEMAMIX_B1, _ADEMAMIX_B3, 100)(50))
+    )
+
+
+def test_ademamix_is_wired_to_both_warmups():
+    """A warmup that is written but not passed to optax is not a warmup."""
+    import inspect
+
+    from pinn_sfr_transient.axial.jaxpinn import training
+
+    src = inspect.getsource(training._first_order)
+    assert "b3=_b3_warmup(cfg)" in src
+    assert "alpha=_alpha_warmup(cfg)" in src
+
+
+def test_lr_warmup_with_schedule_free_is_refused_not_ignored():
+    """Both schedule the step size; silently dropping one measures neither method.
+
+    Schedule-free warms up internally over the same `sf_warmup_frac`, so an external
+    warmup never reached the optimiser -- it was accepted and discarded.
+    """
+    from pinn_sfr_transient.axial.jaxpinn import AxialTrainConfig
+    from pinn_sfr_transient.axial.jaxpinn.training import _first_order
+
+    with pytest.raises(ValueError, match="both schedule the step size"):
+        _first_order(AxialTrainConfig(first_order="schedulefree", lr_warmup=True, adam_iters=10))
+
+
+def test_lr_warmup_reaches_the_ademamix_and_adam_arms():
+    """The knob is only worth having if the schedule it selects actually changes."""
+    import optax
+
+    from pinn_sfr_transient.axial.jaxpinn import AxialTrainConfig
+    from pinn_sfr_transient.axial.jaxpinn.training import _lr_schedule
+
+    for arm in ("adam", "ademamix"):
+        off = _lr_schedule(AxialTrainConfig(first_order=arm, lr=1e-4, adam_iters=1000))
+        on = _lr_schedule(
+            AxialTrainConfig(first_order=arm, lr=1e-4, adam_iters=1000, lr_warmup=True)
+        )
+        assert float(off(0)) == pytest.approx(1e-4), "no warmup starts at full rate"
+        assert float(on(0)) == pytest.approx(0.0, abs=1e-9), "warmup starts at zero"
+        assert float(on(100)) == pytest.approx(1e-4), "and peaks at the end of warmup"
+        assert isinstance(on, type(optax.warmup_cosine_decay_schedule(0.0, 1e-4, 10, 100)))
