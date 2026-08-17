@@ -72,8 +72,9 @@ dev = [
     "pre-commit>=4.6.1",
     "pytest>=9.1.1",
     "pytest-cov>=7.1",
-    # Strips notebook outputs on commit so figure binaries are never committed
-    # (they live once under docs/img/); pulls in nbformat for notebook tooling.
+    # Strips notebook outputs on commit so figure binaries are never committed.
+    # This repository contains no images at all; plots are drawn into the
+    # gitignored results/ and looked at locally. Pulls in nbformat for notebooks.
     "nbstripout>=0.9.1",
 ]
 

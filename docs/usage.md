@@ -73,9 +73,9 @@ JAX's CPU/CUDA wheels are plain PyPI packages.
 ## 3. Run the reference simulation (no PyTorch needed)
 
 This integrates the stiff ULOF system and writes the held-out reference
-trajectory (data only — the `.npz` the PINN trainers validate against). Figures
-are produced separately by `pinn-sfr figures` (§3.1), so PNGs only ever live in
-`docs/img/`.
+trajectory (data only — the `.npz` the PINN trainers validate against). Plots
+are produced separately by `pinn-sfr figures` (§3.1) into the gitignored
+`results/figures/`; no image is ever committed.
 
 ```bash
 uv run pinn-sfr reference
@@ -100,24 +100,26 @@ Output written to `results/` (gitignored, regenerable):
 
 Console prints peak power, peak temperatures, and peak void fraction.
 
-### 3.1 Regenerate the documentation figures
+### 3.1 Draw the transients, locally
 
-Every figure shown in the README and docs is rebuilt from the model — one command
-per model:
+**This repository contains no images and the documentation embeds none.** A
+committed plot is a number that stops tracking the code that produced it, and a
+figure is not a measurement — anything worth claiming is in a table with the
+command that produced it. These commands draw into `results/`, which is
+gitignored, for looking at on your own machine:
 
 ```bash
-uv run pinn-sfr figures              # 0D  -> docs/img/*.png
+uv run pinn-sfr figures              # 0D  -> results/figures/*.png
 uv run pinn-sfr figures --no-pinn    # ... skipping the optional PINN overlay
-uv run pinn-sfr axial figures        # 1D  -> docs/img/axial_*.png
+uv run pinn-sfr axial figures        # 1D  -> results/figures/axial_*.png
+uv run python -m pinn_sfr_transient.axial.charts   # -> results/charts/*.png
 ```
 
 The 0D command writes the reference transient, the reactivity decomposition, the
 phase portrait, the void-coefficient sweep and the peak-power safety map; with the
 `torch` extra installed it also trains a short PINN and adds `pinn_overlay.png`. The
 axial command writes the four material fields, the boiling front (voided length and
-the saturation level set) and the closed-loop reactivity split. Figures are always
-regenerated from `figures.py` — `src/pinn_sfr_transient/figures.py` and
-`src/pinn_sfr_transient/axial/figures.py` — and never committed from notebook output.
+the saturation level set) and the closed-loop reactivity split.
 
 ### 3.2 Interactive notebook (recommended for a first read)
 
@@ -246,7 +248,7 @@ numpy/scipy/matplotlib for the reference and the figures:
 uv run pinn-sfr axial reference                 # prescribed power -> results/axial_reference.npz
 uv run pinn-sfr axial reference --feedback      # closed prompt-jump kinetics
 uv run pinn-sfr axial reference --n-axial 320   # 160 or more is mesh-converged
-uv run pinn-sfr axial figures                   # -> docs/img/axial_*.png
+uv run pinn-sfr axial figures                   # -> results/figures/axial_*.png
 ```
 
 The reference sub-command prints boiling onset time and location, peak cladding

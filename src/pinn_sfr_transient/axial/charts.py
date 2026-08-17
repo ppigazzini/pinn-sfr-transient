@@ -13,7 +13,7 @@ picture of its own input.
 
 Run::
 
-    uv run python -m pinn_sfr_transient.axial.charts --outdir docs/img/charts
+    uv run python -m pinn_sfr_transient.axial.charts --outdir results/charts
     uv run python -m pinn_sfr_transient.axial.charts --only front,power
 
 Needs only numpy, scipy and matplotlib.
@@ -40,7 +40,7 @@ from pinn_sfr_transient.axial.scoring import onset_by_tangency
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-DEFAULT_OUTDIR = Path("docs/img/charts")
+DEFAULT_OUTDIR = Path("results/charts")
 _DPI = 140
 
 # The four material fields, in the order they are stacked everywhere else.

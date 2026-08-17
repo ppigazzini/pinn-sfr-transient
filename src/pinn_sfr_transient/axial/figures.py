@@ -1,13 +1,13 @@
 """Generate the axial model's figures from the model code (Annex A, N2).
 
 Single source of truth for every committed axial figure: run it and the images
-under ``docs/img/`` are rebuilt deterministically from the physics, with no
+under ``results/figures/`` are rebuilt deterministically from the physics, with no
 notebook or manual export in the loop.
 
 Run::
 
     uv run pinn-sfr axial figures
-    uv run python -m pinn_sfr_transient.axial.figures --outdir docs/img
+    uv run python -m pinn_sfr_transient.axial.figures --outdir results/figures
 
 Every figure needs only numpy, scipy and matplotlib.
 """
@@ -30,7 +30,7 @@ from pinn_sfr_transient.axial.reference import (
     solve_reference,
 )
 
-DEFAULT_OUTDIR = Path("docs/img")
+DEFAULT_OUTDIR = Path("results/figures")
 _DPI = 140
 
 

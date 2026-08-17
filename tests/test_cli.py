@@ -27,7 +27,7 @@ def test_reference_writes_trajectory_only(tmp_path, monkeypatch: pytest.MonkeyPa
 
     npz = tmp_path / "ulof_reference.npz"
     assert npz.exists()
-    # `reference` is data-only: no figure is written (figures -> docs/img/).
+    # `reference` is data-only: no figure is written (figures -> results/figures/).
     assert not (tmp_path / "ulof_reference.png").exists()
 
     data = np.load(npz)

@@ -29,12 +29,31 @@ htmlcov/
 # demand and the CLI recreates the directory, so the binaries are not tracked.
 /results/
 
-# The transient charts are DRAWN, never committed. `paper.yml` regenerates them from
-# the physics on every build, so a figure in the PDF is always the current model's --
-# a committed PNG is a number that stops tracking the code that produced it, which is
-# the same failure mode AGENTS.md records for tables. Rebuild with
-# `python -m pinn_sfr_transient.axial.charts`.
-/docs/img/charts/
+# NO IMAGES IN THIS REPOSITORY, anywhere, ever.
+#
+# `docs/` is text and tables: a committed plot is a number that stops tracking the
+# code that produced it, and a figure cannot be grepped against a
+# `__DEV/studies/*.json` row the way AGENTS.md requires every published number to
+# be.
+#
+# The nine PNGs under `docs/img/` went two different ways, deliberately. The three
+# added on this branch (`axial_feedback`, `axial_fields`, `axial_front`) were
+# purged from every feat-only commit by a history rewrite. The six inherited from
+# `main` are deleted here as an ordinary commit and left in `main`'s history --
+# rewriting a published branch to save 600 kB is not a trade worth making.
+#
+# The plotting code is kept -- `pinn-sfr figures`, `pinn-sfr axial figures` and
+# `python -m pinn_sfr_transient.axial.charts` -- and now draws into `results/`,
+# which is ignored above. Look at them locally; do not commit them.
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.webp
+*.svg
+*.ico
+*.pdf
 
 # Scratch / pasted logs (e.g. CI run logs saved locally)
 *.log

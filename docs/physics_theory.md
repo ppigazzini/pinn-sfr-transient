@@ -174,27 +174,19 @@ With the default parameters the excursion peaks near $1.38\times$ nominal at
 $\sim23$ s and settles to $\sim0.69\times$ — a **bounded, self-limiting**
 transient demonstrating the void-vs-Doppler competition.
 
-![ULOF reference transient: power, temperatures, sodium void fraction, and reactivity/flow](img/ulof_reference.png)
-
 Decomposing the total reactivity makes the competition explicit: the positive
 void term ramps up first and drives the excursion, then the negative Doppler term
 overtakes it and turns the power over (the black total crosses back through zero).
 
-![Reactivity components in dollars: void (+), Doppler (−), coolant (−), and total](img/feedback_competition.png)
-
 Plotting power against net reactivity, parameterised by time, turns each
 transient into a loop — flow loss drives reactivity positive (void), power swings
 up, fuel heating then pulls it negative (Doppler), and the system spirals back:
-
-![Phase portrait: power vs net reactivity for several void coefficients](img/phase_portrait.png)
 
 ### 4.1 Parameter dependence
 
 The size of the excursion is governed almost entirely by the sodium void
 coefficient $\alpha_{\text{void}}$. Increasing it raises the peak sharply — until
 the prompt negative Doppler can no longer bound the transient:
-
-![Power excursion for a range of sodium void coefficients](img/void_sweep.png)
 
 Sweeping both $\alpha_{\text{void}}$ and the pump coast-down time
 $\tau_{\text{pump}}$ gives a peak-power safety map: a steep gradient along
@@ -203,10 +195,11 @@ design point sits in the benign ($\sim1.4\times$) corner. This is the kind of
 *family* of transients the operator-learning extension targets
 (see [`neural_network.md`](neural_network.md) §8).
 
-![Peak-power safety map over the void coefficient and pump coast-down time](img/safety_map.png)
-
-All five figures are regenerated from the model by `uv run pinn-sfr figures`
-(`src/pinn_sfr_transient/figures.py`) — never exported by hand.
+No plots are carried here. `uv run pinn-sfr figures`
+(`src/pinn_sfr_transient/figures.py`) draws the five transients into the
+gitignored `results/figures/` if you want to look at them; this repository keeps
+no images, so anything a plot would show has to be stated as a number or not
+claimed.
 
 ---
 

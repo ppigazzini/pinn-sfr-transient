@@ -1,13 +1,13 @@
 """Generate the figures used in the README and ``docs/`` from the model code.
 
 This is the single source of truth for every committed figure: run it and the
-images under ``docs/img/`` are rebuilt deterministically from the physics, with
+images under ``results/figures/`` are rebuilt deterministically from the physics, with
 no notebook or manual export in the loop.
 
 Run::
 
-    uv run pinn-sfr figures                 # -> docs/img/*.png
-    uv run python -m pinn_sfr_transient.figures --outdir docs/img
+    uv run pinn-sfr figures                 # -> results/figures/*.png
+    uv run python -m pinn_sfr_transient.figures --outdir results/figures
 
 The four physics figures need only numpy/scipy/matplotlib. The optional PINN
 overlay is rendered only when ``torch`` is importable (``uv sync --extra torch-cpu``)
@@ -30,7 +30,7 @@ from pinn_sfr_transient.reference import Trajectory, solve_reference
 # Headless-safe backend for writing figure files (no display required).
 plt.switch_backend("Agg")
 
-DEFAULT_OUTDIR = Path("docs/img")
+DEFAULT_OUTDIR = Path("results/figures")
 
 # Void coefficients used by the sweep / phase / safety figures.
 _VOID_SWEEP = (4.0e-3, 6.0e-3, 8.0e-3, 1.0e-2)

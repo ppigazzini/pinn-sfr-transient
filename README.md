@@ -20,8 +20,6 @@ details live in [`docs/`](docs/) — see [Documentation](#documentation).
 
 ## The 0D model — a solved problem
 
-![ULOF reference transient — power, temperatures, sodium void fraction, and reactivity/flow](docs/img/ulof_reference.png)
-
 Loss of flow drives the coolant past the void-onset temperature; the positive
 void coefficient pushes power to **1.38× nominal at ≈ 23 s**, then negative
 Doppler feedback dominates and the power turns over, settling to ≈ 0.69× — a
@@ -29,8 +27,6 @@ bounded, self-limiting transient. Trained on residuals alone, the PINN recovers
 the whole trajectory ([`docs/neural_network.md`](docs/neural_network.md) §7).
 
 ## The 1D axial model — the current work
-
-![Axial boiling — voided length against time, and the saturation level set that defines the front](docs/img/axial_front.png)
 
 Because the 0D void surrogate cannot say *where* boiling starts, how far the void
 spreads, or that the sodium void worth **changes sign** near the top of the core —
@@ -216,10 +212,10 @@ new physics lands **off by default** so no published number moves when it does.
 ```bash
 uv sync                             # create .venv from pyproject + lockfile
 uv run pinn-sfr reference           # 0D stiff reference -> results/ (held-out data)
-uv run pinn-sfr figures             # (re)generate the 0D figures -> docs/img/
+uv run pinn-sfr figures             # draw the 0D transients -> results/figures/ (gitignored)
 uv run pinn-sfr axial reference     # 1D axial channel, prescribed power
 uv run pinn-sfr axial reference --feedback   # ... with the prompt-jump kinetics closed
-uv run pinn-sfr axial figures       # -> docs/img/axial_*.png
+uv run pinn-sfr axial figures       # -> results/figures/axial_*.png (gitignored)
 uv run pytest                       # the suite; backend tests skip without their extra
 ```
 
@@ -293,7 +289,7 @@ pinn-sfr-transient/
 │   ├── pinn_jax.py      # 0D JAX PINN (functional; Equinox + Optax)
 │   ├── pinn_deepxde.py  # 0D DeepXDE variant (same residuals, vanilla loop)
 │   ├── plotting.py      # 4-panel reference figure
-│   ├── figures.py       # regenerates the 0D docs/img/ figures
+│   ├── figures.py       # draws the 0D transients into results/ (never committed)
 │   ├── cli.py           # `pinn-sfr` (reference | figures | axial …)
 │   └── axial/
 │       ├── config.py    # AxialParams (mesh, geometry, feedback switches)
@@ -301,7 +297,7 @@ pinn-sfr-transient/
 │       ├── physics.py   # the residuals — ONE definition, shared by all three
 │       ├── scoring.py   # ONE scorer, numpy-only, never imported by a loss
 │       ├── reference.py # stiff axial solver -> AxialTrajectory
-│       ├── figures.py   # regenerates the axial docs/img/ figures
+│       ├── figures.py   # draws the axial transients into results/ (never committed)
 │       ├── torchpinn/   # PyTorch backend, split config/archs/ansatz/model/
 │       │                #   weighting/training/evaluate
 │       ├── jaxpinn/     # JAX backend, the same split plus residuals/samplers
@@ -311,7 +307,8 @@ pinn-sfr-transient/
 │                        #   and test_hostile_audit.py — the algebra checked against
 │                        #   dense matrices, scipy and sympy rather than against
 │                        #   this project's own other half
-├── docs/                # theory, usage, references; img/ holds ALL figures;
+├── docs/                # theory, usage, references — TEXT AND TABLES ONLY, no
+│                        #   images anywhere in this repository;
 │                        #   sas4a/ mirrors the manual
 ├── tools/               # axial_study.py       — every published axial table, one
 │                        #   sub-command per study, because a number is reproducible

@@ -19,7 +19,7 @@ from pinn_sfr_transient.reference import solve_reference
 
 def _run_reference(args: argparse.Namespace) -> None:
     # Produces the held-out reference *data* only (the .npz consumed by the PINN
-    # trainers). Figures are the job of `pinn-sfr figures` -> docs/img/, so PNGs
+    # trainers). Figures are the job of `pinn-sfr figures` -> results/figures/, so PNGs
     # live in exactly one place.
     p = SFRParams(t_end=args.t_end)
     traj = solve_reference(p, n_out=args.n_out)
@@ -37,7 +37,7 @@ def _run_reference(args: argparse.Namespace) -> None:
     npz = outdir / "ulof_reference.npz"
     np.savez(npz, t=traj.t, P=traj.P, C=traj.C, Tf=traj.Tf, Tc=traj.Tc)
     print(f"  trajectory -> {npz}")
-    print("  (figures: run `pinn-sfr figures` -> docs/img/)")
+    print("  (figures: run `pinn-sfr figures` -> results/figures/)")
 
 
 def _run_figures(args: argparse.Namespace) -> None:
@@ -119,7 +119,7 @@ def build_parser() -> argparse.ArgumentParser:
     ref.add_argument("--outdir", type=str, default="results", help="output directory")
     ref.set_defaults(func=_run_reference)
 
-    fig = sub.add_parser("figures", help="regenerate the README/docs figures (-> docs/img/)")
+    fig = sub.add_parser("figures", help="regenerate the README/docs figures (-> results/figures/)")
     fig.add_argument("--outdir", type=Path, default=DEFAULT_OUTDIR, help="output directory")
     fig.add_argument("--no-pinn", action="store_true", help="skip the optional PINN overlay")
     fig.add_argument("--safety-n", type=int, default=16, help="safety-map grid resolution")
@@ -136,7 +136,7 @@ def build_parser() -> argparse.ArgumentParser:
     aref.add_argument("--outdir", type=str, default="results", help="output directory")
     aref.set_defaults(func=_run_axial_reference)
 
-    afig = axial_sub.add_parser("figures", help="regenerate the axial figures (-> docs/img/)")
+    afig = axial_sub.add_parser("figures", help="draw the axial transients (-> results/figures/)")
     afig.add_argument("--outdir", type=Path, default=DEFAULT_OUTDIR, help="output directory")
     afig.add_argument("--n-axial", type=int, default=160, help="axial nodes")
     afig.set_defaults(func=_run_axial_figures)

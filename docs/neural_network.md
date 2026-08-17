@@ -247,16 +247,13 @@ $L_2$ norm for $P$, $T_f$, $T_c$. The reference is the only "data", and it is
 used strictly for this final error metric — never in the loss.
 
 Trained on the physics residuals alone — no reference data — the network recovers
-the full transient: the dashed PINN curves below sit on top of the reference in
-every panel, including the sodium void fraction and net reactivity, which are
-*derived* from the PINN's predicted temperatures rather than fit directly:
+the full transient, including the sodium void fraction and net reactivity, which
+are *derived* from the PINN's predicted temperatures rather than fit directly.
 
-![Reference vs trained PINN: power, temperatures, sodium void fraction, and reactivity/flow](img/pinn_overlay.png)
-
-This overlay is produced by `uv run pinn-sfr figures` (with the `torch-cpu`
-extra), which trains the PINN with the adaptive recipe above and writes
-`docs/img/pinn_overlay.png` — so the fit can be inspected visually alongside the
-$L_2$ metric.
+`uv run pinn-sfr figures` (with the `torch-cpu` extra) trains the PINN with the
+adaptive recipe above and draws the overlay into the gitignored
+`results/figures/`, if you want to inspect the fit alongside the $L_2$ metric.
+It is not committed: the metric is the claim, the plot is not.
 
 ---
 
