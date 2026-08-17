@@ -98,10 +98,10 @@ four times: D38, D39, the budget sweep's "monotonic" front degradation, and §7.
 
   What this costs, stated rather than hidden: **a comparative headline is now a
   statement about the JAX implementation**, not about the formulation in general. Say
-  so in the sentence. If a result would change a published default or a paper claim,
-  the torch confirmation is worth buying deliberately — but as a decision, not a
-  reflex. This supersedes the older requirement that every comparative claim hold in
-  both implementations, and `paper/` §4 was written under that older rule.
+  so in the sentence. If a result would change a published default or a headline claim
+  in `docs/`, the torch confirmation is worth buying deliberately — but as a decision,
+  not a reflex. This supersedes the older requirement that every comparative claim hold
+  in both implementations.
 - **Never write a comparative headline from one seed.** Three seeds with per-seed
   ranges, or say "seed N, one sample" in the sentence that states the result — not
   in a caveat further down. A hedge below a confident headline does not work.
@@ -178,22 +178,33 @@ four times: D38, D39, the budget sweep's "monotonic" front degradation, and §7.
   outside it, the rung's *position* was the claim.
 - **An ablation is a statement about the formulation it was run on.** Change the
   formulation and every negative result on the shelf is provisional again (D59).
-- **The paper is a nuclear engineering paper, not a machine-learning one.** `docs/` and
-  `__DEV/` collect everything — every ML measurement, every retraction, every physics
-  derivation. `paper/` does not. It describes the **default ML system briefly** — ansatz,
-  embedding, optimiser schedule, precision, in about a page — and spends its length on
-  the **physics**: the governing equations as used, where each closure comes from in the
-  SAS4A manual, the registered deviations and their justification, the reference solution
-  and its uncertainty, what the surrogate reproduces correctly, and **what it does not yet
-  solve**. A reader should be able to judge the reactor physics without knowing what
-  L-BFGS is. Optimiser comparisons, seed statistics and backend parity belong in `docs/`
-  and are cited from the paper, not reproduced in it.
-- **The paper is not exempt from "reproducible by a committed command".** Every number in
-  `paper/` must be locatable in a `__DEV/studies/*.json` row, and the check is to grep for
-  it. A draft claimed a *funded* optimiser bake-off reaching "0.0296 against 0.0401" when
-  the funded bake-off had never been run and neither number existed in any study file —
-  `0.0296` was the control arm of six unrelated studies. The rule was being enforced on
-  studies, and the paper is not a study, so nothing caught it. Grep the number.
+- **Markdown in `docs/` is the only publication format, and it is text and tables.**
+  There is no `paper/` — it was removed with the LaTeX and Typst copies and the lane that
+  built them. `docs/` explains **how to build and train the PINN**; it is not the paper in
+  Markdown. Short tables of convergence metrics against the reference belong there, with
+  the command that produced each. `__DEV/` keeps the working record behind them.
+- **No images. Anywhere in this repository, ever.** `docs/` embeds none. A committed plot
+  is a number that stops tracking the code that produced it, and a figure cannot be
+  grepped against a study row the way the rule below requires. `.gitignore` refuses every
+  image extension, and the plotting code draws into the gitignored `results/` — look at
+  the output locally, never commit it.
+  **When purging one, rewrite only what the branch itself added.** The three PNGs this
+  branch introduced were filtered out of `main..feat/axial-boiling`; the six inherited
+  from `main` were deleted by an ordinary commit and left in `main`'s history. Rewriting a
+  published branch forces a hard reset on every clone, which is not a trade worth making
+  to reclaim a few hundred kB — and the packed history is 2 MB either way, so the bloat
+  argument does not carry it.
+- **`docs/` is not exempt from "reproducible by a committed command".** Every number in
+  `docs/` must be locatable in a `__DEV/studies/*.json` row, and the check is to grep for
+  it. This rule has now caught three things, and all three were in prose rather than in a
+  study. A draft claimed a *funded* optimiser bake-off reaching "0.0296 against 0.0401"
+  when the funded bake-off had never been run and neither number existed in any study
+  file — `0.0296` was the control arm of six unrelated studies. Then the paper's
+  Richardson uncertainty table and its mesh-sensitivity table turned out to have no
+  committed command behind either; `tools/axial_study.py verify` now produces the first,
+  and the second is recorded in `docs/axial_physics.md` §6.5 as unreproduced with the
+  command that would settle it. The rule was being enforced on studies, and prose is not
+  a study, so nothing caught any of them. **Grep the number.**
 - **Check the budget a row was actually run at, not the one the sub-command implies.**
   `optbakeoff.json` looks like output of the `bakeoff` sub-command and is not: every row
   carries `adam_iters = 3000, lbfgs_iters = 300`, the starved diagonal that `bakeoff`
