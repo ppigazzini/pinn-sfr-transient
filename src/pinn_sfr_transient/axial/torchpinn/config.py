@@ -199,20 +199,28 @@ class AxialTrainConfig:
     # "ademamix" adds a slow gradient EMA (arXiv:2409.03137), measured ~2x better than
     # Adam beyond 8000 iterations and ~260x WORSE at 3000, because the slow
     # EMA has not warmed up -- so it is gated on budget, never swapped in blind.
-    # JAX only: torch has no AdEMAMix and one is deliberately not written.
+    #
+    # JAX only, and `training.py` RAISES on the other values rather than substituting
+    # Adam. It did substitute, silently, so a torch arm labelled `ademamix` in a study
+    # was Adam and nothing in the run said otherwise. This comment used to declare the
+    # non-implementation and protect nothing.
     first_order: str = "adam"
 
-    # Warmup as a FRACTION of the first-order budget, used by the JAX backend's
-    # "schedulefree" arm. Present here so the two configs stay field-for-field equal --
-    # the parity check in `tools/backend_smoke.py` compares fields and defaults, and a
-    # knob that exists on one side only is exactly the silent fork AGENTS.md forbids.
-    # Torch has no schedule-free optimiser and this value is unused there.
+    # Warmup as a FRACTION of the first-order budget. A fraction rather than a step
+    # count so it scales with the budget instead of silently becoming the whole run at
+    # a short one.
+    #
+    # It names the JAX "schedulefree" arm's internal warmup, which torch does not have,
+    # AND the length of `lr_warmup`'s ramp, which torch does. One field, two uses, both
+    # live here.
     sf_warmup_frac: float = 0.1
 
     # Linear warmup in front of the cosine decay, over `sf_warmup_frac` of the
-    # first-order budget. `optax.warmup_cosine_decay_schedule` on the JAX side; the
-    # torch twin owns the field for config parity and does not implement it, like
-    # `first_order="ademamix"`.
+    # first-order budget. `optax.warmup_cosine_decay_schedule` on the JAX side;
+    # `LinearLR` into `CosineAnnealingLR` through `SequentialLR` here, which is torch's
+    # shipped equivalent. The two agree to 9.4e-11 after the ramp and differ by at most
+    # `lr / warmup` during it, because optax starts at exactly zero and torch's
+    # `start_factor` must be positive.
     #
     # **Off by default**, because warmup changes the trajectory of every first-order
     # arm and plain Adam is where every published first-order number here comes from.
