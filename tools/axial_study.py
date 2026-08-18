@@ -467,6 +467,7 @@ def study_ademamix(out: Path) -> None:
             lbfgs_iters=0,
             adam_checkpoint_every=every,
             sf_warmup_frac=_WARMUP_FRAC or 0.1,
+            rar_every=2000 if _RAR is None else _RAR,
             seed=seed,
         )
         # `_MODELS_DIR`, not the default: `saver` writes to `models/` unless told
