@@ -309,9 +309,22 @@ class AxialPinn(nn.Module):
         Two forward-mode passes rather than five reverse ones: the map is
         ``R^2 -> R^4``, so a single ``jvp`` per input direction yields all four
         components at once.
+
+        The coordinates are **detached but not marked** ``requires_grad``. Forward mode
+        carries the derivative in the tangent, so nothing here needs a reverse-mode leaf
+        at the inputs; marking them built a backward graph down to ``zeta`` and
+        ``t_hat`` whose gradients were computed by every ``loss.backward()`` and then
+        discarded. It also made the whole residual stack uncompilable -- AOTAutograd
+        refuses a graph that returns a tensor derived from an in-graph
+        ``requires_grad_()``, because functionalisation drops the flag. Removing it
+        leaves the loss bitwise identical and the parameter gradients agreeing to
+        2.2e-16, one ulp against a maximum gradient of 8.2.
+
+        It is also a plain eager win, the discarded backward work being real: together
+        with the scalar fast path in ``_backend.xp``, the eager loop went from 7.2 to
+        10.7 iterations per second at f256 with 500 points on 8 pinned cores.
         """
-        z = zeta.detach().requires_grad_(requires_grad=True)
-        h = that.detach().requires_grad_(requires_grad=True)
+        z, h = zeta.detach(), that.detach()
         theta, d_dt = torch.func.jvp(
             lambda a: self.normalised_state(z, a), (h,), (torch.ones_like(h),)
         )

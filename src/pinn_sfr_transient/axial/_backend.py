@@ -12,6 +12,16 @@ from typing import Any
 
 import numpy as np
 
+#: Python scalars dispatch to numpy, and are separated out because
+#: ``torch.compile`` cannot trace the module sniff below when the argument is one.
+#: Dynamo constant-folds ``type(tensor).__module__`` but represents ``float.__module__``
+#: as an opaque attribute, so ``.startswith`` on it aborts the trace -- and it *is*
+#: reached in the residuals, where ``saturation_temperature(p.p_system)`` passes a float.
+#: An ``isinstance`` guard in front of the sniff folds away at trace time and leaves the
+#: whole residual stack a single graph. Behaviour is unchanged: ``"builtins"`` never
+#: matched either branch, so a scalar returned numpy before and returns numpy now.
+_SCALARS = (bool, int, float, complex)
+
 
 def xp(x: Any) -> Any:  # noqa: ANN401 - deliberately backend-agnostic
     """Return the array module (``numpy``, ``torch`` or ``jax.numpy``) matching ``x``.
@@ -22,6 +32,8 @@ def xp(x: Any) -> Any:  # noqa: ANN401 - deliberately backend-agnostic
     (``jaxlib._jax.ArrayImpl``) and tracers (``jax._src...``) -- because both
     module paths start with ``jax``.
     """
+    if isinstance(x, _SCALARS):
+        return np
     mod = type(x).__module__
     if mod.startswith("torch"):
         import torch  # noqa: PLC0415 - optional extra, imported only when used
@@ -42,6 +54,8 @@ def like(x: Any, values: Any) -> Any:  # noqa: ANN401 - deliberately backend-agn
     JAX arrays. ``numpy_array * tensor`` raises, so the constant has to be moved
     rather than the field.
     """
+    if isinstance(x, _SCALARS):
+        return np.asarray(values)
     mod = type(x).__module__
     if mod.startswith("torch"):
         import torch  # noqa: PLC0415 - optional extra, imported only when used
