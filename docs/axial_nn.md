@@ -20,6 +20,22 @@ quasi-Newton stage independently at fixed f128 — the question §7.5.3 and §7.
 answered under a constraint. Committed but unrun: `frontfrac`,
 `capacity-optimiser`.
 
+> **Every number below predates the retirement of the early-time collocation
+> cluster, and none has been re-measured since.** Both axial samplers used to draw
+> `n_colloc` uniform points *plus* `n_colloc // 2` confined to the first 40% of the
+> window, unconditionally and with no way to switch it off. At `n_colloc = 500` that
+> is 750 points drawn, 60.4% of them in `t_hat < 0.4` where nothing happens, and only
+> 13.3% in the window containing boiling onset at `t_hat = 0.665` — against 20% for a
+> uniform draw. The companion implementation measured it worse in every time window
+> and deleted it; this one kept drawing it. It is now retired in both backends.
+>
+> Two consequences, and the second is the larger. **Point counts in the tables are
+> 1.5× the configured `n_colloc`** — the batch-size knob was a lie, so a row reading
+> `adam_colloc = 500` was run at 750. And **the formulation changed**, so by this
+> project's own rule every result on the shelf is provisional until re-run: an
+> ablation is a statement about the formulation it was measured on. Re-measurement is
+> the largest open item in §0.4.
+
 ### 0.1 Where the accuracy stands
 
 | configuration | `T_f` | `T_s` | `L_void` | worst-seed margin | front |
@@ -102,6 +118,8 @@ capacity decides *how sharp a peak is representable at all*.
 | **M6 acceptance** | **failed**, 11.1% on `L2(P)` against a 1% bar |
 | **D-TH-2** | `z`-dependent flow after voiding: implemented, and Radau cannot step it |
 | **D-FB-3** | five feedback mechanisms omitted; the model is **non-conservative** in that direction |
+| **Re-measurement after the sampler change** | retiring the early-time cluster (§0) changed the formulation, so every table here is provisional until re-run. Largest single item on this list, and none of it is started |
+| **The compiled torch loop** | `compile=True` makes torch 1.78×–1.96× faster than jitted JAX at matched settings (§7.5.19). Whether that should move the measurement backend is undecided: it is one width, one thread count, one machine, and says nothing about accuracy |
 
 ### 0.5 Why the best known configuration is not the default
 
@@ -2048,7 +2066,8 @@ worst-seed margin:
 | **adam3000** [jax] | 0.0762 · +2.4 K | 0.0545 · +3.7 K | 0.0358 · +5.3 K |
 
 > **Read with §7.5.38.** This surface is measured at `n_colloc = 4000` — 6000 points once
-> the early-time cluster is counted — which is **1.41 residuals per parameter** against the
+> the early-time cluster is counted, which the sampler no longer draws (§0) — giving
+> **1.41 residuals per parameter** against the
 > 17 029-parameter body (§7.5.37a), so the system is mildly *over*determined. A quasi-Newton
 > iteration is full-batch and therefore linear in the point count, so the affordability of
 > a 3000- or 30000-iteration quasi-Newton stage is itself a consequence of that count. The
@@ -2591,6 +2610,12 @@ These networks are small and the step is `jvp`-bound, so past roughly 8 threads 
 of the machine idles — running six studies at 8 threads each is closer to optimal
 than one at 48.
 
+**Taken with §7.5.10 and §7.5.17, this reversed the backend recommendation.** JAX is
+equally accurate (1.08× at f512, 2–3% on an identical objective at matched memory)
+and, against an eager torch loop, 4.4× faster. It had looked slower *and* weaker for
+most of this project's life, and both readings were artefacts of unequal settings —
+one an unset `memory_size`, the other an unset thread budget.
+
 ##### And the speed half has now reversed again, for the same class of reason
 
 Every number above compares against **eager** PyTorch. That was the only PyTorch
@@ -3023,10 +3048,20 @@ per nominal iteration, measured at matched configuration and matched iteration c
 
 **The quasi-Newton stage is the cheapest of the three, in both configurations** — 1.09×
 to 1.16× cheaper per iteration than the first-order methods it is supposed to be an
-expensive alternative to. The mechanism is implementation, not theory: the quasi-Newton
-stage is a jitted `fori_loop` while the Adam stage steps through Python, and at this
-problem size the per-step cost is dominated by the residual gradient, which both pay
-identically. Adam and AdEMAMix are also indistinguishable from each other at the step
+expensive alternative to. The mechanism is implementation, not theory: at this problem
+size the per-step cost is dominated by the residual gradient, which both stages pay
+identically, and what separated them was dispatch — the quasi-Newton stage was a jitted
+`fori_loop` while the first-order stage stepped through Python, three dispatch
+round-trips per iteration with the cores idle between them.
+
+> **That asymmetry is gone.** The JAX first-order loop now draws and updates inside one
+> `lax.fori_loop`, with Python running only at cadence boundaries — a RAR refresh, a
+> weight update, a pseudo-time re-anchor, a checkpoint, a log line — and
+> `_next_boundary` returning the distance to the next one so no event moves. Measured
+> before: **15.6% of wall time outside the compiled region** (4.19 ms drawing against
+> 22.76 ms in the fused step). After: **38.3 it/s on 8 cores**, against 33 it/s unfused
+> on 12. The per-iteration comparison in this table predates the change and the gap it
+> reports is therefore an upper bound on what remains. Adam and AdEMAMix are also indistinguishable from each other at the step
 level — measured back to back at identical configuration, `ademamix/adam = 0.994`.
 
 That removes the usual justification for the Adam→L-BFGS split. The literature calls
@@ -3089,6 +3124,11 @@ points when `front_frac` is active. So the difference is the *provenance of the 
 nothing else — two independent samples from one sampler. No published comparison is
 affected.
 
+> The cluster in that description is **retired** (§0). Identical they were, and
+> identically wrong: both starved the window where the front forms. The parity
+> conclusion here still holds — it was a statement about the two backends agreeing,
+> and they agreed before and agree now.
+
 > An earlier revision of this paragraph said only "both are single uniform draws", which
 > reads as though torch might not carry the RAR reservoir into its polish. It does
 > (`parts = [pts, early, *([self.rar] if self.rar.numel() else [])]`). Recorded because
@@ -3148,9 +3188,10 @@ and prescribes overdetermining the system: collocation points substantially exce
 parameters. Other work sets point counts per sub-problem specifically to hold the
 residuals-to-parameters ratio fixed.
 
-This model's numbers are on the wrong side of that line. The sampler draws
-`n_colloc` uniform points **plus `n_colloc // 2`** in an early-time cluster, so the
-shipped `n_colloc = 4000` is **6000 points** per step; at four residual blocks each and
+This model's numbers are on the wrong side of that line. At the time these were
+measured the sampler drew `n_colloc` uniform points **plus `n_colloc // 2`** in an
+early-time cluster — retired since, §0 — so the shipped `n_colloc = 4000` was
+**6000 points** per step; at four residual blocks each and
 49 797 *trainable* parameters (50 309 includes the 512 frozen `B` entries):
 
 | `n_colloc` | points drawn | residuals | residuals / parameters | `qn30000` cost |
@@ -3577,8 +3618,10 @@ measures the axis directly, moving one knob — the size of the fixed polish set
 
 Reference: `L_void` 0.38116, margin +69.24 K. Rulers (§7.5.22): temperatures 1.1 to
 1.6e-3, onset 0.009 s. Ratios are against the 17 029-parameter body (§7.5.37a);
-`polish_colloc` is `n` and the sampler adds `n // 2` early-time points, so the rungs are
-labelled by point count, which is the physical quantity.
+`polish_colloc` is `n` and the sampler added `n // 2` early-time points when this ran, so
+the rungs are labelled by point count, which is the physical quantity and is unaffected by
+the cluster's retirement (§0) — a re-run reaches the same rung at `polish_colloc = n`
+rather than `2n/3`.
 
 **The axis is a threshold with a flat top**, and the transition occupies one rung rather
 than falling between two. Below it the failure is an absence rather than a degradation:
