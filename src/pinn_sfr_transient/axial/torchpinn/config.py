@@ -428,6 +428,38 @@ class AxialTrainConfig:
     #                   point, and because a PINN loss is not a quadratic.
     optimizer: str = "lbfgs"
 
+    # Run the first-order loss under `torch.compile` -- the torch analogue of the JAX
+    # twin's `eqx.filter_jit`, which is always on there. Steady state at f256 with 500
+    # collocation points, 8 threads pinned with `taskset`, machine otherwise idle, from
+    # four runs of `tools/backend_smoke.py --compile` (best of three warm budget-pairs
+    # each, so neither compilation nor a single hiccup is in the figure):
+    #
+    #     eager      90.2 - 99.7 ms/iteration     (10.0 - 11.1 it/s)
+    #     compiled    6.6 -  8.9 ms/iteration    (112.9 - 152.7 it/s)
+    #     speedup    10.7x - 15.1x
+    #
+    # A RANGE and not a point. The eager arm is steady to 1.12x within a run; the
+    # compiled arm is the variable one, up to 1.81x, because at 8 ms an iteration any
+    # interference is a large fraction of it. The third digit of a speedup here is not
+    # a real quantity -- "over 10x" is the claim that survives a re-run.
+    #
+    # The gain is fusion of elementwise work, not matmul: a step issues ~800 `aten::mul`
+    # and ~230 `aten::add` against 96 `aten::mm`, and the forward-mode passes in
+    # `state_and_grads` decompose into hundreds more `prims::` ops that eager dispatches
+    # one at a time. `residual_blocks` alone goes 70.4 ms -> 6.7 ms.
+    #
+    # It does not move a number. `uv run python tools/backend_smoke.py --compile` trains
+    # 200 Adam iterations both ways from one seed and reports
+    # `||dparams|| / ||params|| = 3.6e-16` -- a few ulp -- so this is the same kind of
+    # change as `foreach=True`, not a thread-count change.
+    #
+    # **Off by default anyway, because compilation is not free**: 12-40 s per input
+    # shape, and RAR grows the collocation set by `rar_add` until `rar_cap`, so a
+    # default run pays for up to 20 shapes. At ~85 ms saved per iteration that is worth
+    # having above roughly 10 000 first-order iterations and a loss below it -- and the
+    # default budget is 30. Long runs set it; the test suite must not.
+    compile: bool = False
+
     device: str = "cpu"
     seed: int = 0
     log_every: int = 1000

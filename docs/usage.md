@@ -316,6 +316,23 @@ OMP_NUM_THREADS=8 uv run python tools/axial_study.py plan-a     # closed-loop po
 The training studies take tens of minutes per arm. `ruler` is 42 seconds and needs
 no deep-learning extra at all.
 
+**`--compile` on a long torch arm.** The torch first-order loss runs under
+`torch.compile` when asked, which is over 10x at f256 with 500 collocation points
+(10.7x to 15.1x across four runs on 8 pinned cores) and changes nothing else — 200
+iterations trained both ways from one seed agree to `3.6e-16` in the parameter vector.
+It is opt-in because compilation costs 12 to 40 seconds per collocation shape, and RAR
+produces a new shape every `rar_every`, so a short arm never earns it back:
+
+```bash
+OMP_NUM_THREADS=8 uv run python tools/axial_study.py budget --compile
+uv run python tools/backend_smoke.py --compile   # re-measure both halves of that claim
+```
+
+`--dynamic` is deliberately not offered. Automatic dynamic shapes switch on by
+themselves at the second distinct collocation count, and `torch._make_dual` then fails
+on a symbolic size: forward-mode autodiff and dynamic shapes cannot be combined in
+PyTorch 2.13, so the compiled path pins static shapes and recompiles per size.
+
 **Accuracy: do not quote it from here.** The axial PINN does **not** meet its 1%
 bar. [`axial_nn.md`](axial_nn.md) §5–§7 carries every measurement, including which
 of them are superseded, and it is the only place in this repository where an axial

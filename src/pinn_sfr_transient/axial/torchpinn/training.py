@@ -301,6 +301,21 @@ class Trainer:
         # thread-count change it does not move a published number.
         opt = torch.optim.Adam(self.model.parameters(), lr=cfg.lr, foreach=True)
         sched = self._lr_schedule(opt)
+        # The loss, compiled or not. `fullgraph=True` because a partial compile here is
+        # worth ~nothing and hides the reason: the residual stack broke into eight
+        # graphs until `_backend.xp` stopped sniffing `__module__` on Python scalars and
+        # `state_and_grads` stopped marking its inputs `requires_grad`. A silent
+        # fallback to eager would have left both defects in place looking like a 3%
+        # regression. `dynamic=False` is NOT tuning: automatic dynamic shapes -- which
+        # switch on by themselves at the second distinct collocation count, and RAR
+        # produces one every `rar_every` -- make `torch._make_dual` fail on a symbolic
+        # size, so forward-mode AD and dynamic shapes cannot be combined in 2.13. Static
+        # shapes recompile per size instead, which is the cost the config comment quotes.
+        loss_fn = (
+            torch.compile(self.causal_loss, fullgraph=True, dynamic=False)
+            if cfg.compile
+            else self.causal_loss
+        )
         n_adam = cfg.adam_colloc
         for it in range(cfg.adam_iters):
             # Time-window curriculum: the horizon opens from `1/n_windows` to 1
@@ -320,7 +335,7 @@ class Trainer:
             if cfg.pts_every and it % cfg.pts_every == 0:
                 self.pseudo_time_step(t_max)
             opt.zero_grad()
-            loss = self.causal_loss(*self.collocation(t_max, n_adam), t_max)
+            loss = loss_fn(*self.collocation(t_max, n_adam), t_max)
             loss.backward()
             opt.step()
             sched.step()

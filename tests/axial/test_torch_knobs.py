@@ -155,3 +155,38 @@ def test_polish_refresh_and_freeze_after_are_mutually_exclusive() -> None:
     cfg = _cfg(adam_iters=2, lbfgs_iters=20, polish_refresh=5, freeze_after=10)
     with pytest.raises(ValueError, match="same stage"):
         train(P, cfg)
+
+
+def test_compile_is_requested_fullgraph_and_static(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When `compile` is on, the loss is compiled with both settings that matter.
+
+    Neither is tuning. ``fullgraph=True`` because a partial compile here is worth close
+    to nothing and hides the reason -- the residual stack broke into eight graphs until
+    two defects were fixed, and a silent fallback to eager would have shown that as a 3%
+    regression rather than as an error. ``dynamic=False`` because automatic dynamic
+    shapes switch on at the second distinct collocation count -- RAR produces one every
+    ``rar_every`` -- and ``torch._make_dual`` then fails on a symbolic size, so
+    forward-mode AD and dynamic shapes cannot be combined in 2.13.
+
+    The equivalence of the compiled and eager answers is checked by
+    ``uv run python tools/backend_smoke.py --compile``, which is a minute of
+    compilation and does not belong in this suite.
+    """
+    calls: list[dict] = []
+
+    def fake_compile(fn: object, **kw: object) -> object:
+        calls.append(kw)
+        return fn
+
+    monkeypatch.setattr(torch, "compile", fake_compile)
+    train(P, _cfg(compile=True))
+    assert calls == [{"fullgraph": True, "dynamic": False}]
+
+
+def test_compile_off_by_default_does_not_compile(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The default must stay eager: the suite cannot afford 12-40 s per input shape."""
+    calls: list[dict] = []
+    monkeypatch.setattr(torch, "compile", lambda fn, **kw: (calls.append(kw), fn)[1])
+    train(P, _cfg())
+    assert calls == []
+    assert AxialTrainConfig().compile is False

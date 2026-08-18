@@ -68,6 +68,8 @@ _CHECK = False
 _WARMUP_FRAC = None
 _LR = None
 _RAR = None
+#: `--compile`: torch arms run under `torch.compile`. Off unless asked for.
+_COMPILE = False
 FINEST_N = 640
 SEEDS = (0, 1, 2)
 # Fourier ladder for the margin study. Extended until the trend turns: 32 -> 256
@@ -155,9 +157,19 @@ def score(fields: tuple, traj: Any) -> dict[str, float]:  # noqa: ANN401
 
 
 def train_torch(**kw: Any) -> Callable[[Any], tuple]:  # noqa: ANN401
-    """Train the torch backend and return a predictor over the ruler's grid."""
+    """Train the torch backend and return a predictor over the ruler's grid.
+
+    ``--compile`` runs the first-order loss under `torch.compile` -- over 10x at f256
+    (10.7x to 15.1x across four runs), and agreeing with eager to 3.6e-16 over 200
+    iterations (`backend_smoke.py --compile`), so it changes the wall-clock and nothing
+    else. It is a flag rather than the default because compilation costs 12-40 s per
+    input shape and RAR produces a new one every `rar_every`, which a short arm never
+    earns back. An arm that sets `compile` itself keeps its own value.
+    """
     from pinn_sfr_transient.axial.torchpinn import AxialTrainConfig, train  # noqa: PLC0415
 
+    if _COMPILE and "compile" not in kw:
+        kw["compile"] = True
     model = train(AxialParams(), AxialTrainConfig(log_every=10**9, **kw))
     return lambda traj: model.predict(traj.zeta, traj.t)
 
@@ -2380,6 +2392,12 @@ def main() -> int:
         help="`ladder-rows` only: fail naming any rendered row absent from docs/",
     )
     ap.add_argument(
+        "--compile",
+        action="store_true",
+        help="run torch arms under `torch.compile` (over 10x at f256, agreeing with eager "
+        "to 3.6e-16; costs 12-40 s per collocation shape, so it only pays on long arms)",
+    )
+    ap.add_argument(
         "--only",
         default=None,
         help="run only arms whose label contains one of these comma-separated "
@@ -2410,6 +2428,8 @@ def main() -> int:
     _RAR = args.rar_every
     global _HISTORY  # noqa: PLW0603
     _HISTORY = args.lbfgs_history
+    global _COMPILE  # noqa: PLW0603
+    _COMPILE = args.compile
     global _ADAM, _QN
     _ADAM, _QN = args.adam_iters, args.lbfgs_iters
     if _ADAM is not None or _QN is not None:
