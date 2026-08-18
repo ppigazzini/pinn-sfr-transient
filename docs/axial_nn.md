@@ -2250,7 +2250,7 @@ turns entirely on the time**, and at *this* budget the time fails.
 > ### SUPERSEDED — at the funded budget the time criterion is met
 >
 > The 0.62–0.84 s above was measured at `qn3000`, where `T_s ≈ 0.029`. At the shipped
-> default (§7.5.20, `adam30/qn30000`, `T_s = 0.0017`) it is **0.0006–0.0181 s**. The
+> default (the `adam30/qn30000` rung, `T_s = 0.0017`) it is **0.0006–0.0181 s**. The
 > paragraph stands as a statement about the arm it was run on; it is not a statement
 > about the model. See §7.5.16a.
 
@@ -2489,6 +2489,102 @@ needed. What did matter is that the rates enter scaled by the **trained** horizo
 rather than `t_end`, since `t_train_frac` shortens the window and a wrongly scaled
 rate would decay the basis far too fast while still training happily. That is
 asserted against the physics rather than against itself.
+
+#### 7.5.19 The speed comparison, made properly for the first time
+
+Every torch-vs-JAX wall-clock before this one ran torch at `OMP_NUM_THREADS=8`
+against JAX using **~230 threads** — XLA's CPU backend sizes its own Eigen pool
+from `hardware_concurrency()` and ignores the OpenMP variable torch obeys. That is
+a thread-count comparison wearing a backend comparison's clothes, and `AGENTS.md`'s
+"a wall-clock needs a stated thread budget" was being satisfied on paper while being
+violated in fact.
+
+Both backends given all 48 cores, run **sequentially** on an idle machine, identical
+weights, identical points, objective verified identical (`2.3148662743e-01`, 1.2e-16
+apart), f512 with 6000 points:
+
+| | Adam | quasi-Newton | total |
+|---|---|---|---|
+| torch | 146.20 s (731.0 ms/it) | 99.03 s (990.3 ms/it) | 245.23 s |
+| **jax** | 34.64 s (173.2 ms/it) | 20.80 s (208.0 ms/it) | **55.44 s** |
+| jax/torch | **0.24×** | **0.21×** | **0.23×** |
+
+**JAX is 4.4× faster, and the published 2.4× understates it** — on the quasi-Newton
+phase alone, the phase §7.5.11 shows does all the work, it is **4.8×**.
+
+**But the thread asymmetry did not invalidate the old ratios**, and an earlier
+revision of this document claimed it did. At 8 threads the same benchmark gives
+2270 vs 530 ms/it — ratio **0.23**. At 48 threads, 990 vs 208 — ratio **0.21**. The
+two backends scale almost identically with thread count (torch 2.3×, JAX 2.5× from
+8 to 48 threads), so the ratio is robust. What was wrong was the absolute numbers
+and the claim of a pinned budget, not the comparison.
+
+**And JAX's answers depend on the thread count**, which no timing caveat covers.
+`OMP_NUM_THREADS` binds torch and is ignored by XLA's CPU backend, so a JAX arm
+nominally at 8 threads was measured creating **291**. Thread count changes float
+reduction order, so this is a *correctness* issue and not only a timing one:
+
+| affinity | threads | `sum T_c` |
+|---|---|---|
+| 48 cores | 291 | 31802.5076120401**35** |
+| 8 cores | 56 | 31802.5076120401**57** |
+
+About 3 ulp — numerically harmless, and fatal to §4's "reproduces run to run to four
+digits", which was only ever true of torch.
+
+**Affinity is what JAX obeys, and the core *count* is what matters.** Pinning to 8
+cores reproduces bitwise on repeat, and a *different* block of 8 gives the identical
+answer — so concurrent studies can take different blocks and stay comparable.
+`axial_study.py --cpu-block K` does this, every row now records the affinity
+alongside `OMP_NUM_THREADS`, and a row without it cannot be compared on wall-clock.
+
+**Both scale badly, which is a planning fact.** Six times the threads buys 2.3–2.5×.
+These networks are small and the step is `jvp`-bound, so past roughly 8 threads most
+of the machine idles — running six studies at 8 threads each is closer to optimal
+than one at 48.
+
+**Taken with §7.5.10 and §7.5.17, this reverses the backend recommendation.** JAX is
+now equally accurate (1.08× at f512, 2–3% on an identical objective at matched
+memory) and 4.4× faster. It looked slower *and* weaker for most of this project's
+life, and both readings were artefacts of unequal settings — one an unset
+`memory_size`, the other an unset thread budget. `§0.6` now recommends it and
+`axial_study.py` leads with it.
+
+#### 7.5.21 Is M4's criterion attainable? — the ruler check
+
+§7.5.16 argued that one cell is 0.405 K of `T_c`, a relative `L2` of 0.0026, only
+1.6–2.3× above the reference's own error — D35's failure mode, an acceptance bar
+sitting at the ruler's precision. **That worry is now measured, and it is wrong.**
+
+`tools/m4_bar.py` refines the reference against itself. No network is involved:
+solve at `n_axial` 40 → 1280 and watch how far the reference's *own* onset moves.
+
+| `n_axial` | `Δt` threshold | `Δζ` threshold | `Δt` tangency | `Δζ` tangency |
+|---|---|---|---|---|
+| 40 | 0.000 s | 0.44 cells | 0.050 s | 1.94 cells |
+| 80 | 0.000 s | 0.56 cells | 0.019 s | 0.94 cells |
+| **160** (scoring) | **0.000 s** | **0.06 cells** | **0.009 s** | **0.44 cells** |
+| 320 | 0.000 s | 0.19 cells | 0.004 s | 0.19 cells |
+| 640 | 0.000 s | 0.06 cells | 0.001 s | 0.06 cells |
+
+**At the scoring mesh the reference's own onset is uncertain by 0.06 cells and
+0.009 s.** A one-cell, half-second criterion therefore sits an order of magnitude
+*above* the ruler, not inside it. **M4's criterion is sound and the target is
+attainable** — which means the failure is genuinely the network's, and chasing it is
+worthwhile rather than chasing discretisation error.
+
+The earlier worry confused two quantities: the *temperature* error (1.1–1.6e-3
+relative `L2`) is not the *onset* error, and onset is far better converged than a
+pointwise temperature because it is a threshold crossing of a monotone field.
+
+Two things the ladder also settles:
+
+**The threshold onset time is quantised, not converged.** It reads `0.000 s` at every
+mesh because the 0.25 s output grid puts every answer in the same bin. That is the
+same artefact §7.5.16 found in the network's scores, appearing in the reference.
+
+**The tangency height converges to `ζ = 1`**, exactly the last cell centre at every
+mesh, which is what proves it is reporting the outlet rather than locating a front.
 
 #### 7.5.22 Every bar now carries the ruler's uncertainty beside it
 
@@ -2765,7 +2861,7 @@ three seeds per cell, `fourier_bands ∈ {single, (1,4,16)}` × `lbfgs_iters ∈
 | **`single/qn30000`** | **0.0017** | .0016–.0017 | **+67.6 K** | **0.3784** | **99.3%** |
 | `bands/qn30000` | 0.0096 | .0073–.0139 | +31.3 K | 0.3523 | 92.4% |
 
-**The control passed first.** `single/qn30000` reproduces §7.5.20 exactly — 0.0017, range
+**The control passed first.** `single/qn30000` reproduces the `qn30000` rung exactly — 0.0017, range
 1.06, margin +67.6 K — so the harness had not moved and the other three cells are
 readable.
 
@@ -2861,7 +2957,7 @@ level — measured back to back at identical configuration, `ademamix/adam = 0.9
 That removes the usual justification for the Adam→L-BFGS split. The literature calls
 higher-order methods "computationally expensive" (arXiv:2605.24278's own phrasing); here
 the higher-order stage is **faster per iteration and 19× more accurate**, and the
-first-order stage is very nearly free to delete — §7.5.20 measured `adam0/qn30000` at
+first-order stage is very nearly free to delete — the `qnladder` sweep measured `adam0/qn30000` at
 0.0018 against `adam30`'s 0.0017, with overlapping seed ranges.
 
 > **The cost result is hardware-scoped; the accuracy results are not.** Two different
@@ -2945,7 +3041,7 @@ every mechanism the loop exists to run is unreachable:
 | pseudo-time anchors | **no** | `pts_every = 0` |
 
 So 30 iterations buys 30 Adam steps and 30 redraws of the collocation set, and nothing
-else. That is the mechanical reason §7.5.20's `adam0` and `adam30` are indistinguishable
+else. That is the mechanical reason `adam0` and `adam30` are indistinguishable
 — 0.0018 [.0017–.0022] against 0.0017 [.0016–.0017], overlapping — since the two
 configurations differ only in a PRNG key and thirty warm-up steps. It is not that Adam's
 contribution is small; **at this budget Adam is barely in the recipe.**
@@ -2957,7 +3053,7 @@ configuration every recent number was measured at.
 
 #### 7.5.31a The budget split is a consequence of our collocation count, not only of the optimisers
 
-A caveat on §7.5.11 and §7.5.20, argued rather than measured, and recorded now because it
+A caveat on §7.5.11 and on the `qnladder` sweep, argued rather than measured, and recorded because it
 is the kind of thing this project otherwise rediscovers as a retraction.
 
 > ## Retracted: the premise is an arithmetic error
@@ -3004,7 +3100,7 @@ not the counting one. The resampling fix applies only to the *Adam* stage; the
 quasi-Newton stage is fixed-set **and** underdetermined, which is squarely the regime that
 paper describes.
 
-**The consequence for the headline.** §7.5.11 and §7.5.20 conclude that the quasi-Newton
+**The consequence for the headline.** §7.5.11 and the `qnladder` sweep conclude that the quasi-Newton
 axis does all the work and the Adam axis none. That is measured and stands *at this
 collocation count* — but the count is what makes the measurement affordable. A
 quasi-Newton iteration is full-batch, so its cost is linear in the point count; an Adam
@@ -3169,7 +3265,7 @@ the shipped `adam30/qn30000` row, where RAR never fires.
 
 #### 7.5.34 Removing the Adam stage makes the axial model *better* — 2×2, three seeds
 
-§7.5.20 measured `adam0/qn30000` at 0.0018 against `adam30`'s 0.0017 and called them
+The `qnladder` sweep measured `adam0/qn30000` at 0.0018 against `adam30`'s 0.0017 and called them
 indistinguishable, which made Adam look merely useless. §7.5.30 then showed why that was a
 weak test: at 30 iterations the Adam loop does nothing at all, so it compared no Adam
 against almost no Adam.
@@ -3194,7 +3290,7 @@ measured here. Both `adam10000` cells carry the widest spreads in the study, 2.8
 4.1×, so the Adam stage adds variance as well as error.
 
 **So the first-order stage is not merely removable, it is harmful at this budget.** That
-does not contradict §7.5.20; it explains it. Thirty Adam iterations do nothing and cost
+does not contradict that; it explains it. Thirty Adam iterations do nothing and cost
 nothing; ten thousand do something, and what they do is move the parameters somewhere a
 curvature-based method does worse from.
 
@@ -3561,7 +3657,7 @@ survived two hours.
 #### 7.5.39 The quasi-Newton budget, measured at last on the collocation count it should be
 
 Every budget conclusion in this document was measured at the wrong point count. §7.5.11,
-§7.5.20 and §7.5.31 ran at 6000 points, which §7.5.38 shows is 1.5× more than even the
+The `qnladder` sweep and §7.5.31 ran at 6000 points, which §7.5.38 shows is 1.5× more than even the
 onset claim needs; §7.5.29's axis ran at 3000, which is the bistable rung. The two axes
 have been confounded throughout, and this separates them: **`f64 adam0`, 5000 points, the
 budget as the only knob, three seeds per rung.**
@@ -3674,7 +3770,7 @@ uv run python tools/axial_study.py adamcheck --seeds 0 --cpu-block 0 \
 
 Every "is the first-order stage enough?" measurement in this document ran Adam under our
 own cosine decay (`optax.cosine_decay_schedule`, `alpha = 0.1`). So each of them — §7.5.11,
-§7.5.20, §7.5.29, §7.5.34 — has been open to the same objection: *Adam did not plateau,
+the `qnladder` sweep, §7.5.29, §7.5.34 — has been open to the same objection: *Adam did not plateau,
 our schedule ran out.* The objection is reasonable and it has never been tested.
 
 **Schedule-free AdamW** (arXiv:2405.15682, `optax.contrib.schedule_free_adamw`) is the
