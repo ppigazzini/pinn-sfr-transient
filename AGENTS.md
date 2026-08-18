@@ -161,6 +161,32 @@ four times: D38, D39, the budget sweep's "monotonic" front degradation, and §7.
   turning point. At equal *wall-clock* the same arms reverse: 300 is 1.09x worse
   and the optimum is 100. A ladder measured on the wrong x-axis is not a weak
   result, it is an inverted one.
+- **A per-iteration cost measured as a difference of two wall-clocks needs the minimum
+  of several repeats, not one sample.** Differencing amplifies jitter: at 200 iterations
+  against 400 the two timings are seconds apart, so half a second of interference moves
+  the answer ~30%. One sample per run gave 6.36, 7.79, 8.10, 8.45, 10.27 and 10.53 ms for
+  identical work on an idle machine, and a cross-backend ratio built on single samples
+  came out 1.35x, 0.99x and 1.25x on three consecutive tries — it **reversed**. Noise
+  here is one-sided, so take the minimum and print the spread beside it; and if the gap
+  you are reporting is smaller than the spread within either arm, you have not measured
+  a difference. `tools/backend_smoke.py --timing` does both and says so.
+- **A partial `torch.compile` measures your graph breaks, not your kernels.** Always
+  `fullgraph=True`. `torch.compile` was measured at 1.06x here, written up as "BLAS-bound
+  work Inductor cannot improve", and used for four milestones to argue the JAX speed
+  advantage was unexplained. The residual stack was breaking into **eight graphs**; with
+  the graph whole the same model compiles to over 10x and the backend ordering reverses.
+  A silent fallback to eager reports a real number that answers a different question.
+  Also: automatic dynamic shapes and forward-mode AD do not compose in torch 2.13 —
+  `torch._make_dual` fails on a symbolic size — so pin `dynamic=False` and pay the
+  recompile per shape.
+- **Field parity is not behavioural parity.** `backend_smoke.py` compares the two config
+  dataclasses field for field, which stops a knob landing in one backend only, and cannot
+  see a field both declare and only one reads. Six were in that state — `adam_colloc`,
+  `polish_colloc`, `polish_refresh`, `adam_checkpoint_every`, `lr_warmup`, and
+  `first_order`, so a torch arm labelled `ademamix` ran plain Adam and said nothing. When
+  a backend does not implement a knob, **raise**: a declaration in a config comment that
+  the code does not enforce is a comment. Test that the config reaches the algorithm, not
+  that training completes — a dropped config still converges to something.
 - **Two implementations of the same algorithm must be compared at equal
   hyper-parameters, and that has to be checked rather than assumed.** `optax.lbfgs`
   defaults to `memory_size=10`; `torch.optim.LBFGS` was passed `history_size=50`.
@@ -244,7 +270,8 @@ four times: D38, D39, the budget sweep's "monotonic" front degradation, and §7.
 
 ## Docs & Markdown math (GitHub renders these)
 
-Broken inline LaTeX is a recurring problem — GitHub's renderer is strict. Rules:
+What a sentence may claim is [`docs/writing.md`](docs/writing.md). This section is the
+narrower question of whether GitHub renders it, and the renderer is strict:
 
 - **Never split one token across the math/text boundary.** `$^{238}$U` renders as
   a *dangling superscript* — garbage. Write isotopes as plain text (`U-238`,
