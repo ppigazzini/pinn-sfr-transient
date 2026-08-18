@@ -66,20 +66,22 @@ class Trainer:
         return self.model.residual_blocks(zeta, that)
 
     def collocation(self, t_max: float = 1.0) -> tuple[torch.Tensor, torch.Tensor]:
-        """Uniform points over ``(zeta, t_hat)``, clustered early, plus the RAR reservoir."""
+        """Uniform points over ``(zeta, t_hat)``, plus the RAR set.
+
+        **No early-time cluster.** It was drawn unconditionally here and is retired; see
+        the JAX twin's sampler for the measurement that retired it.
+        """
         if self.cfg.feedback:
             # Plan A collocates in TIME only: the axial direction is the fixed
             # quadrature the reactivity integral needs (section 3.5a).
             that = self._rand(self.cfg.n_time, 1) * t_max
-            early = self._rand(self.cfg.n_time // 2, 1) * 0.4 * t_max
-            allt = torch.cat([that, early], dim=0)
-            return allt, allt
+            return that, that
         n = self.cfg.n_colloc
         pts = self._rand(n, 2)
         pts[:, 1] *= t_max
-        early = self._rand(n // 2, 2)
-        early[:, 1] *= 0.4 * t_max  # fastest dynamics live early in the window
-        parts = [pts, early, *([self.rar] if self.rar.numel() else [])]
+        parts = [pts]
+        if self.rar.numel():
+            parts.append(self.rar)
         if self.model.use_front and self.cfg.front_frac > 0.0:
             parts.append(self._front_points(int(n * self.cfg.front_frac), t_max))
         elif self.cfg.front_level_set and self.cfg.front_frac > 0.0:

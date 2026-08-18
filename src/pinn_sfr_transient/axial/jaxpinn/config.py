@@ -348,6 +348,7 @@ class AxialTrainConfig:
     # RAR keeps a FIXED count so `jit` never recompiles (the torch twin grows an
     # unbounded reservoir instead — same idea, framework-appropriate form).
     rar_every: int = 2000
+
     rar_pool: int = 20000
     rar_keep: int = 400
 

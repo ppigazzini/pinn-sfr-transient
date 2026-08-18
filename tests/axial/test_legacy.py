@@ -142,8 +142,14 @@ def test_every_checkpoint_header_parses():
 
 @needs_corpus
 def test_the_corpus_is_the_expected_size():
-    """334 files. A recursive glob finds them; a flat one finds 279 and says nothing."""
-    assert len(_corpus) == 334
+    """334 IMPORTED files. A recursive glob finds them; a flat one finds 279 silently.
+
+    Counts only the companion's naming (`pNNNN_iNNNN_...`), because `models/` also
+    accumulates checkpoints this repository writes, which carry a `jax_`/`torch_` prefix.
+    Asserting on the total made the test fail the moment a local run saved a rung.
+    """
+    imported = [f for f in _corpus if not f.name.startswith(("jax_", "torch_"))]
+    assert len(imported) == 334
 
 
 @needs_corpus

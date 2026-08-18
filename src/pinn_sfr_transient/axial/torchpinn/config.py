@@ -305,6 +305,7 @@ class AxialTrainConfig:
 
     # Residual-based adaptive refinement [Wu et al. 2023]
     rar_every: int = 2000
+
     rar_pool: int = 20000
     rar_add: int = 200
     rar_cap: int = 4000

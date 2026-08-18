@@ -32,7 +32,15 @@ def _collocation(
     t_max: float = 1.0,
     model: AxialPinn | None = None,
 ) -> tuple:
-    """Uniform points with an early-time cluster; time-only when feedback is on.
+    """Uniform points over ``(zeta, t_hat)``; time-only when feedback is on.
+
+    **Uniform, with no early-time cluster.** An extra ``n_colloc // 2`` points crammed
+    into the first 40% of the window used to be drawn unconditionally here. It is
+    retired: the companion repository measured it worse in every time window and worst
+    where its own density was highest, and it was not defensible on its own terms
+    either -- it made ``n_colloc = 500`` draw 750 points, so the batch knob did not mean
+    what it said, and it put 60% of the sample in ``t_hat < 0.4`` where nothing happens
+    while boiling onset at ``t_hat = 0.665`` sat in a window getting 13% instead of 20%.
 
     ``t_max`` is the time-window curriculum of ``n_windows``. When the front
     network is on, a share ``front_frac`` of the points is drawn near the
@@ -41,20 +49,20 @@ def _collocation(
     algebraically.
     """
     if cfg.feedback:
-        k1, k2 = jax.random.split(key)
-        that = jnp.concatenate(
-            [
-                jax.random.uniform(k1, (cfg.n_time, 1)) * t_max,
-                jax.random.uniform(k2, (cfg.n_time // 2, 1)) * 0.4 * t_max,
-            ]
-        )
+        # Two-way split kept for the same reason as below: `k1` must not move.
+        k1, _k2 = jax.random.split(key)
+        that = jax.random.uniform(k1, (cfg.n_time, 1)) * t_max
         zeta_q = jnp.asarray(p.zeta_nodes().reshape(-1, 1))
         weights = tuple(jnp.asarray(w) for w in kinetics_weights(p))
         return that, zeta_q, weights
-    k1, k2, k3, k4 = jax.random.split(key, 4)
+    # Still split FOUR ways although the cluster that used `k2` is gone. Splitting
+    # three ways would hand a different `k1` to the uniform draw and silently move
+    # every remaining number, which is the RNG-stream hazard REPORT-02 section 5
+    # records: the companion moved boiling-onset error from 0.0314 s to 0.0103 s by
+    # changing which key the draw consumes, with nothing else altered.
+    k1, _k2, k3, k4 = jax.random.split(key, 4)
     pts = jax.random.uniform(k1, (cfg.n_colloc, 2)).at[:, 1].multiply(t_max)
-    early = jax.random.uniform(k2, (cfg.n_colloc // 2, 2)).at[:, 1].multiply(0.4 * t_max)
-    parts = [pts, early]
+    parts = [pts]
     if model is not None and uses_front(cfg) and cfg.front_frac > 0.0:
         n = int(cfg.n_colloc * cfg.front_frac)
         t_f = jax.random.uniform(k3, (n, 1)) * t_max
