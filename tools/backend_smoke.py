@@ -83,6 +83,9 @@ COMPILE_ATOL = 1e-12
 # needs it; the eager arm runs it too so the two are timed the same way.
 WARM_ITERS = 20
 
+#: Quasi-Newton iterations in the compile check's second stage, differenced against 3x.
+QN_ITERS = 50
+
 # How many times the timed pair is repeated, and why the estimator is a MINIMUM.
 #
 # The per-iteration cost is a DIFFERENCE of two wall-clocks, which amplifies jitter: at
@@ -225,15 +228,18 @@ def check_first_order(lr: float = 1e-2) -> list[str]:
     `torch.optim` has neither AdEMAMix nor schedule-free, so the torch backend takes them
     from `pytorch_optimizer` where the JAX one takes them from `optax.contrib`. Two
     libraries, one algorithm, which is the configuration that produced this project's most
-    expensive defect -- and it produced another one here. Compared bare, AdEMAMix came out
-    **32.3x apart**; the update rules agree to 1.001x with constant hyper-parameters, and
-    the entire gap was that optax drives a schedule with the number of updates ALREADY
-    APPLIED, counting 0, 1, 2, while `pytorch_optimizer` counts its own steps 1, 2, 3. The
-    warmup was therefore offset by one step between the backends. Aligned, they agree to
-    1.002x.
+    expensive defect -- so it is checked rather than assumed.
 
-    Run on the same ill-conditioned quadratic as the quasi-Newton check, from the same
-    start, at hyper-parameters spelled once and handed to both.
+    **AdEMAMix is compared with its schedules held CONSTANT**, which isolates the update
+    rule: so compared, the two agree to 1.001x. They are deliberately NOT compared through
+    the warmup, because the libraries index it differently -- optax drives a schedule with
+    the number of updates already applied (0, 1, 2, ...) and `pytorch_optimizer` counts its
+    own steps (1, 2, 3, ...). That is each library's convention, not a defect in either;
+    what is configured externally is the same warmup LENGTH. Neither is shifted to match
+    the other, because shifting optax would stop this backend reproducing the reference
+    implementation it is built to match. A comparison run at a warmup short enough for one
+    step to matter measures the convention, not the method; `tests/axial/test_schedule_free.py`
+    pins the two schedule shapes against each other at a realistic warmup instead.
     """
     import jax  # noqa: PLC0415
     import optax  # noqa: PLC0415
@@ -241,24 +247,19 @@ def check_first_order(lr: float = 1e-2) -> list[str]:
     import torch  # noqa: PLC0415
     from jax import numpy as jnp  # noqa: PLC0415
 
-    from pinn_sfr_transient.axial.jaxpinn.config import AxialTrainConfig  # noqa: PLC0415
     from pinn_sfr_transient.axial.jaxpinn.training import (  # noqa: PLC0415
-        _alpha_warmup,
-        _b3_warmup,
+        _ADEMAMIX_ALPHA,
+        _ADEMAMIX_B3,
     )
 
     d = _quadratic()
     x0 = np.random.default_rng(0).normal(size=QUAD_N)
-    # `sf_warmup_frac * adam_iters` must land on FIRST_ORDER_WARMUP in both backends.
-    cfg = AxialTrainConfig(
-        adam_iters=FIRST_ORDER_ITERS, sf_warmup_frac=FIRST_ORDER_WARMUP / FIRST_ORDER_ITERS
-    )
 
     def torch_final(arm: str) -> float:
         x = torch.tensor(x0.copy(), requires_grad=True)
         dd = torch.tensor(d)
         opt = (
-            po.AdEMAMix([x], lr=lr, alpha=5.0, t_alpha_beta3=FIRST_ORDER_WARMUP)
+            po.AdEMAMix([x], lr=lr, alpha=5.0, t_alpha_beta3=None)
             if arm == "ademamix"
             else po.ScheduleFreeAdamW([x], lr=lr, warmup_steps=FIRST_ORDER_WARMUP)
         )
@@ -278,7 +279,7 @@ def check_first_order(lr: float = 1e-2) -> list[str]:
             return 0.5 * jnp.sum(dj * z**2)
 
         opt = (
-            optax.contrib.ademamix(lr, b3=_b3_warmup(cfg), alpha=_alpha_warmup(cfg))
+            optax.contrib.ademamix(lr, b3=_ADEMAMIX_B3, alpha=_ADEMAMIX_ALPHA)
             if arm == "ademamix"
             else optax.contrib.schedule_free_adamw(
                 lr, warmup_steps=FIRST_ORDER_WARMUP, weight_decay=0.0
@@ -391,7 +392,6 @@ def check_compile(iters: int, colloc: int, features: int) -> list[str]:
         "n_colloc": colloc,
         "fourier_features": features,
         "rar_every": 0,
-        "pts_every": 0,
         "log_every": 10**9,
     }
 
@@ -428,6 +428,28 @@ def check_compile(iters: int, colloc: int, features: int) -> list[str]:
     print(f"    compiled {rate[True]:7.2f} ms/iteration  ({1e3 / rate[True]:6.1f} it/s)")
     ratio = rate[False] / rate[True]
     print(f"    speedup  {ratio:7.2f}x   (steady state; compile cost differenced out)")
+
+    # The QUASI-NEWTON stage, which is the one that was left out. Its closure called
+    # `causal_loss` directly, so `compile=True` did nothing for it and nothing at all for
+    # an `adam_iters = 0` arm -- the shape of most funded configurations here. It is also
+    # the easier stage to compile: a fixed collocation set means one shape and one
+    # compilation, where the first-order loop recompiles as RAR grows the reservoir.
+    qn = {}
+    for compiled in (False, True):
+        kw_qn = {**kw, "adam_iters": 0, "polish_colloc": colloc}
+        samples = []
+        train(p, AxialTrainConfig(**{**kw_qn, "lbfgs_iters": 20}, compile=compiled))
+        for _ in range(TIMING_REPEATS):
+            t0 = time.perf_counter()
+            train(p, AxialTrainConfig(**{**kw_qn, "lbfgs_iters": QN_ITERS}, compile=compiled))
+            t1 = time.perf_counter()
+            train(p, AxialTrainConfig(**{**kw_qn, "lbfgs_iters": 3 * QN_ITERS}, compile=compiled))
+            samples.append((time.perf_counter() - t1 - (t1 - t0)) / (2 * QN_ITERS) * 1e3)
+        qn[compiled] = min(samples)
+    print(f"  quasi-Newton stage, {colloc} points, best of {TIMING_REPEATS}")
+    print(f"    eager    {qn[False]:7.2f} ms/iteration")
+    print(f"    compiled {qn[True]:7.2f} ms/iteration")
+    print(f"    speedup  {qn[False] / qn[True]:7.2f}x")
     print(f"    ||dparams|| / ||params|| = {rel:.3e}{'  (bitwise equal)' if bitwise else ''}")
     if rel > COMPILE_ATOL:
         msg = (
@@ -446,9 +468,6 @@ TIMING_KW = {
     "seed": 0,
     "lbfgs_iters": 0,
     "rar_every": 0,
-    "pts_every": 0,
-    "weight_max_ratio": 1.0,
-    "causal_eps": 0.0,
     "first_order": "adam",
     "log_every": 10**9,
 }
