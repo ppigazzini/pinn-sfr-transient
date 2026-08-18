@@ -338,6 +338,78 @@ def check_compile(iters: int, colloc: int, features: int) -> list[str]:
     return []
 
 
+#: The matched configuration both backends are timed on: first-order only, every
+#: cadence off, so each is a single compiled region and neither is being charged for
+#: Python the other does not run. Anything switched on here would have to be switched on
+#: identically, and the cheapest way to guarantee that is to switch it all off.
+TIMING_KW = {
+    "seed": 0,
+    "lbfgs_iters": 0,
+    "rar_every": 0,
+    "pts_every": 0,
+    "weight_max_ratio": 1.0,
+    "causal_eps": 0.0,
+    "first_order": "adam",
+    "log_every": 10**9,
+}
+
+
+def check_timing(iters: int, colloc: int, features: int) -> list[str]:
+    """Time one first-order iteration on each backend, at matched settings.
+
+    Not a pass/fail check -- it reports. The number it reports is the one the
+    measurement policy in AGENTS.md rests on, and that policy was set when the torch
+    loop ran eager, so it is worth being able to re-measure with one command.
+
+    Both arms warm up and then difference two budgets, so neither compilation nor
+    tracing is inside the figure, and both are float64. Pin the cores before believing
+    it: thread count changes reduction order as well as speed, and `OMP_NUM_THREADS`
+    binds torch while XLA sizes its own pool from `hardware_concurrency()`.
+    """
+    kw = {**TIMING_KW, "n_colloc": colloc, "adam_colloc": colloc, "fourier_features": features}
+
+    def rate(run: object) -> tuple[float, float]:
+        """Best-of-repeats per-iteration cost, and the spread across them."""
+        run(WARM_ITERS)  # ty: ignore
+        samples = []
+        for _ in range(TIMING_REPEATS):
+            t0 = time.perf_counter()
+            run(iters)  # ty: ignore
+            t1 = time.perf_counter()
+            run(2 * iters)  # ty: ignore
+            samples.append((time.perf_counter() - t1 - (t1 - t0)) / iters * 1e3)
+        return min(samples), max(samples) / min(samples)
+
+    from pinn_sfr_transient.axial.config import AxialParams  # noqa: PLC0415
+
+    p = AxialParams()
+    out: dict[str, tuple[float, float]] = {}
+    from pinn_sfr_transient.axial import pinn_jax as pj  # noqa: PLC0415
+    from pinn_sfr_transient.axial import torchpinn as tp  # noqa: PLC0415
+
+    def torch_run(n: int) -> object:
+        return tp.train(p, tp.AxialTrainConfig(**kw, adam_iters=n, compile=True))
+
+    def jax_run(n: int) -> object:
+        return pj.train(p, pj.AxialTrainConfig(**kw, adam_iters=n), verbose=False)
+
+    out["torch (compiled)"] = rate(torch_run)
+    out["jax (jitted)"] = rate(jax_run)
+
+    print(f"  {colloc} points, f{features}, {iters} iterations differenced against {2 * iters}")
+    print(f"  best of {TIMING_REPEATS} per backend")
+    for name, (ms, sp) in out.items():
+        print(f"    {name:18s} {ms:7.2f} ms/iteration  ({1e3 / ms:6.1f} it/s)   spread {sp:.2f}x")
+    fast = min(out, key=lambda k: out[k][0])
+    slow = max(out, key=lambda k: out[k][0])
+    ratio = out[slow][0] / out[fast][0]
+    print(f"    {fast} is {ratio:.2f}x faster, at this configuration and this thread count.")
+    if ratio < max(sp for _, sp in out.values()):
+        print("    BUT that gap is smaller than the spread within a backend, so these two")
+        print("    are not separated by this measurement. Do not write a headline from it.")
+    return []
+
+
 def main() -> int:  # noqa: C901, PLR0912, PLR0915 - a report reads better flat
     """Run the three checks and return non-zero if any of them fails."""
     ap = argparse.ArgumentParser(description=__doc__)
@@ -350,6 +422,11 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915 - a report reads better flat
         action="store_true",
         help="also check that torch's `cfg.compile` changes only the wall-clock "
         "(a minute or two: compilation is 12-40 s per input shape)",
+    )
+    ap.add_argument(
+        "--timing",
+        action="store_true",
+        help="report one first-order iteration on each backend at matched settings",
     )
     ap.add_argument("--compile-iters", type=int, default=200)
     ap.add_argument("--compile-colloc", type=int, default=500)
@@ -369,7 +446,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915 - a report reads better flat
 
     print(f"\n=== 2. optimiser parity: {args.optimizer}, history {args.history} ===")
     try:
-        import jax  # noqa: F401, PLC0415
+        import jax  # noqa: PLC0415
         import torch  # noqa: PLC0415
     except ImportError:
         print("  SKIP - both extras are needed and one is missing")
@@ -415,7 +492,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915 - a report reads better flat
     if args.compile:
         print("\n=== 4. torch.compile: same answer, less wall-clock ===")
         try:
-            import torch  # noqa: F401, PLC0415
+            import torch  # noqa: PLC0415
         except ImportError:
             print("  SKIP - the torch extra is missing")
         else:
@@ -426,6 +503,16 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915 - a report reads better flat
                     print(f"  FAIL  {q}")
             else:
                 print("  ok - compiled training matches eager")
+
+    if args.timing:
+        print("\n=== 5. matched per-iteration cost, both backends ===")
+        try:
+            import jax  # noqa: F401, PLC0415
+            import torch  # noqa: F401, PLC0415
+        except ImportError:
+            print("  SKIP - both extras are needed and one is missing")
+        else:
+            check_timing(args.compile_iters, args.compile_colloc, args.compile_features)
 
     print(f"\n{'PASS' if failures == 0 else f'{failures} FAILURE(S)'}")
     return 1 if failures else 0
