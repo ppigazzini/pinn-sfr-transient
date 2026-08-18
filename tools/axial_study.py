@@ -70,6 +70,8 @@ _LR = None
 _RAR = None
 #: `--compile`: torch arms run under `torch.compile`. Off unless asked for.
 _COMPILE = False
+#: `--save-dir`: write every checkpoint and the final model here, as they are produced.
+_SAVE_DIR = ""
 FINEST_N = 640
 SEEDS = (0, 1, 2)
 # Fourier ladder for the margin study. Extended until the trend turns: 32 -> 256
@@ -101,7 +103,6 @@ ADAM_LADDER = (0, 30)
 ADAM_ONLY_ITERS = 30000
 # The paper's 1D configuration (its Allen-Cahn row): 9 dyadic levels from 2 to 512, 14
 # features each. About 14300 grid parameters, the same order as our f256 embedding.
-BEIGNET_1D = {"beignet_levels": 9, "beignet_features": 14, "beignet_base": 2}
 # Spatial-band multipliers for the anisotropic embedding. None is the control:
 # isotropic, i.e. exactly the shipped default.
 ANISO_SCALES = (None, 2.0, 4.0, 8.0)
@@ -156,22 +157,85 @@ def score(fields: tuple, traj: Any) -> dict[str, float]:  # noqa: ANN401
     return relative_l2(fields, traj, AxialParams())
 
 
+def _disk_saver(cfg: Any, backend: str) -> Any:  # noqa: ANN401 - either backend's config
+    """Return a callback that writes each checkpoint to disk, or ``None`` if not asked.
+
+    **Training is hours and scoring is minutes, so nothing may be held only in memory.**
+    A run that is stopped -- or whose scorer faults -- must still leave every rung it
+    earned on disk. The reference CLI saves each intermediate as it is taken and saves
+    the final model BEFORE scoring, for exactly that reason; this is the same callback.
+
+    Without `--save-dir` a long run wrote nothing at all until it finished, so a
+    checkpoint could not be re-scored, inspected, or resumed while the run was alive.
+    """
+    if not _SAVE_DIR:
+        return None
+    from pinn_sfr_transient.axial import checkpoint  # noqa: PLC0415
+
+    directory = Path(_SAVE_DIR)
+    directory.mkdir(parents=True, exist_ok=True)
+    return checkpoint.saver(cfg, backend, AxialParams(), directory=directory)
+
+
+def _save_final(model: Any, cfg: Any, backend: str) -> None:  # noqa: ANN401
+    """Write the finished model before it is scored, as the reference CLI does."""
+    if not _SAVE_DIR:
+        return
+    from pinn_sfr_transient.axial import checkpoint  # noqa: PLC0415
+
+    ext = "eqx" if backend == "jax" else "pt"
+    n = getattr(cfg, "lbfgs_iters", 0) or getattr(cfg, "adam_iters", 0)
+    at = checkpoint.save(
+        Path(_SAVE_DIR) / f"{backend}_final_i{n}_s{cfg.seed}.{ext}",
+        model,
+        cfg,
+        backend=backend,
+        p=AxialParams(),
+    )
+    print(f"  saved final {at}", flush=True)
+
+
 def train_torch(**kw: Any) -> Callable[[Any], tuple]:  # noqa: ANN401
     """Train the torch backend and return a predictor over the ruler's grid.
 
-    ``--compile`` runs the first-order loss under `torch.compile` -- over 10x at f256
-    (10.7x to 15.1x across four runs), and agreeing with eager to 3.6e-16 over 200
-    iterations (`backend_smoke.py --compile`), so it changes the wall-clock and nothing
-    else. It is a flag rather than the default because compilation costs 12-40 s per
+    ``--compile`` runs the loss under `torch.compile` -- **both stages**. Over 10x on the
+    first-order loop at f256 (10.7x to 15.1x across four runs) and 6.4x on the
+    quasi-Newton one, agreeing with eager to 3.6e-16 over 200 iterations
+    (`backend_smoke.py --compile`), so it changes the wall-clock and nothing else. Worth
+    setting on any `adam_iters = 0` arm especially, since those got no compilation at all
+    until the polish closure started using it. It is a flag rather than the default
+    because compilation costs 12-40 s per
     input shape and RAR produces a new one every `rar_every`, which a short arm never
     earns back. An arm that sets `compile` itself keeps its own value.
     """
+    import copy  # noqa: PLC0415
+
     from pinn_sfr_transient.axial.torchpinn import AxialTrainConfig, train  # noqa: PLC0415
 
     if _COMPILE and "compile" not in kw:
         kw["compile"] = True
-    model = train(AxialParams(), AxialTrainConfig(log_every=10**9, **kw))
-    return lambda traj: model.predict(traj.zeta, traj.t)
+    cfg = AxialTrainConfig(log_every=10**9, **kw)
+    to_disk = _disk_saver(cfg, "torch")
+    if not cfg.polish_checkpoints and not cfg.adam_checkpoint_every:
+        model = train(AxialParams(), cfg)
+        _save_final(model, cfg, "torch")
+        return lambda traj: model.predict(traj.zeta, traj.t)
+
+    # A checkpointed run yields one row per budget from ONE solve, as the JAX twin does.
+    # The models must be COPIED: this backend mutates its parameters in place, so a
+    # closure over `model` would evaluate every budget at the final weights and report a
+    # flat ladder that looks converged.
+    seen: list[tuple[int, Any]] = []
+
+    def keep(n: int, m: Any) -> None:  # noqa: ANN401
+        if to_disk is not None:
+            print(f"  saved {to_disk(n, m)}", flush=True)
+        snap = copy.deepcopy(m)
+        seen.append((n, lambda traj, snap=snap: snap.predict(traj.zeta, traj.t)))
+
+    model = train(AxialParams(), cfg, on_checkpoint=keep)
+    _save_final(model, cfg, "torch")
+    return seen
 
 
 def train_jax(**kw: Any) -> Callable[[Any], tuple]:  # noqa: ANN401
@@ -183,11 +247,10 @@ def train_jax(**kw: Any) -> Callable[[Any], tuple]:  # noqa: ANN401
     `AxialTrainConfig()`. This discarded the cfg with `_`, so a JAX arm was
     trained under its arm's config and then **scored under the defaults** --
     `horizon()` reads `t_train_frac` from it, and the input width depends on
-    `level_set_input` and `front_net`.
+    the trained horizon.
 
     It surfaced as a crash rather than as a wrong number only because
-    `level_set_input` changes an array *shape*: the model was built with three
-    inputs and the evaluator fed it two. A knob that changes a *value* -- which
+    a knob changed an array *shape*. A knob that changes a *value* -- which
     `t_train_frac` does -- would have produced a plausible, wrong score in
     silence. That is D67 exactly: a default reasserting itself where a measured
     value was intended.
@@ -195,8 +258,13 @@ def train_jax(**kw: Any) -> Callable[[Any], tuple]:  # noqa: ANN401
     from pinn_sfr_transient.axial import pinn_jax as pj  # noqa: PLC0415
 
     cfg = pj.AxialTrainConfig(log_every=10**9, **kw)
-    if not cfg.polish_checkpoints:
+    to_disk = _disk_saver(cfg, "jax")
+    # BOTH cadences. This read `if not cfg.polish_checkpoints`, so a first-order arm that
+    # set `adam_checkpoint_every` took the un-checkpointed path and every rung it emitted
+    # was dropped on the floor -- one row for a run that had produced ten.
+    if not cfg.polish_checkpoints and not cfg.adam_checkpoint_every:
         model, p, cfg = pj.train(AxialParams(), cfg, verbose=False)
+        _save_final(model, cfg, "jax")
         return lambda traj: pj.predict(model, p, traj.zeta, traj.t, cfg)
 
     # One run, scored at several budgets. The callback fires with the model as it stood
@@ -207,9 +275,12 @@ def train_jax(**kw: Any) -> Callable[[Any], tuple]:  # noqa: ANN401
     pp = AxialParams()
 
     def keep(n: int, m: Any) -> None:  # noqa: ANN401
+        if to_disk is not None:
+            print(f"  saved {to_disk(n, m)}", flush=True)
         seen.append((n, lambda traj, m=m: pj.predict(m, pp, traj.zeta, traj.t, cfg)))
 
-    pj.train(pp, cfg, verbose=False, on_checkpoint=keep)
+    model, _, _ = pj.train(pp, cfg, verbose=False, on_checkpoint=keep)
+    _save_final(model, cfg, "jax")
     return seen
 
 
@@ -785,35 +856,6 @@ def _plan_a_power(backend: str, seed: int, t: np.ndarray) -> tuple[np.ndarray, n
     return pj.predict_power(model, p_ax, t, out_cfg)
 
 
-def study_combo(out: Path) -> None:
-    """Attack the mean and the extremum with different tools -- section 7.5.4.
-
-    Section 7.2.8 established that the two scores are close to independent: the
-    front is ``max T_c > T_boil`` and the temperature scores are averages. The
-    budget sweep improves the mean and costs the peak, monotonically.
-
-    So pair the arm that wins the mean with the remedy that wins the peak. Section
-    7.2.6's three-seed table separates them cleanly: Fourier features give `L_void`
-    0.2070 against a 0.1630 base while taking 11.1% off the mean, and the modified
-    MLP takes 16.1% off the mean while *halving* `L_void` to 0.0932. One raises the
-    peak, the other lowers it -- which is what reducing spectral bias should do to
-    an extremum, and what smoothing should do against it.
-
-    This is not the section 7.2.6 combination. That paired two mean-winners and
-    they did not compose. This pairs a mean-winner with a peak-winner, and the
-    reason to expect anything is mechanical rather than additive.
-    """
-    traj = ruler()
-    arms = (
-        ("C+fourier", {"adam_iters": 300, "lbfgs_iters": 3000, "fourier_features": 32}),
-        ("C+modified_mlp", {"adam_iters": 300, "lbfgs_iters": 3000, "modified_mlp": True}),
-        ("A+fourier", {"adam_iters": 3000, "lbfgs_iters": 300, "fourier_features": 32}),
-    )
-    rows = [run_arm(traj, label, "torch", seed=seed, **kw) for seed in SEEDS for label, kw in arms]
-    write(rows, out)
-    mean_table(rows)
-
-
 def study_regime(out: Path) -> None:
     """M9's reference half: the Objective 2 regime map.
 
@@ -1101,101 +1143,6 @@ def study_scaling(out: Path) -> None:
         )
 
 
-def study_levelset(out: Path) -> None:
-    """Fix the measure: sample collocation on the saturation level set -- section 7.5.6.
-
-    The loss is a **mean over the domain** and the front occupies a few percent of
-    the channel, so the front contributes a few percent of the objective however
-    long training runs. That is why 8000+500 iterations beat 3000+300 by 47% on
-    `T_s` and lose the front entirely (section 7.5.5): more optimisation converges
-    more precisely to a minimiser whose peak is wrong.
-
-    RAR cannot fix it -- after the algebraic closure the residual is small
-    everywhere, including across the front, so residual-magnitude sampling has no
-    signal. Sampling the level set `T_c = T_sat + dT_sup` does, and needs no
-    front-position network because under D-TH-3 the front IS that level set.
-
-    Run at the budget that loses the front, so the question is direct: does
-    front-aware sampling let more optimisation help the front instead of costing it?
-    """
-    traj = ruler()
-    big = {"adam_iters": 8000, "lbfgs_iters": 500}
-    arms = (
-        ("8k/500 plain", big),
-        ("8k/500 +levelset", {**big, "front_level_set": True, "front_frac": 0.25}),
-        (
-            "8k/500 +levelset+f128",
-            {**big, "front_level_set": True, "front_frac": 0.25, "fourier_features": 128},
-        ),
-    )
-    rows = run_all(
-        traj,
-        [
-            (f"{label} [{backend}]", {"backend": backend, "seed": seed, **kw})
-            for seed in SEEDS
-            for backend in BACKENDS
-            for label, kw in arms
-        ],
-        out,
-    )
-    mean_table(rows)
-    print("\ndoes front-aware sampling let a large budget keep the front?")
-    for label in dict.fromkeys(r["arm"] for r in rows):
-        v = [r for r in rows if r["arm"] == label]
-        mg = [r["margin_K"] for r in v]
-        ts = [r["T_s"] for r in v]
-        print(
-            f"  {label:28s} T_s {sum(ts) / len(ts):.4f}   margin min {min(mg):+6.1f} K   "
-            f"{'FRONT ON EVERY SEED' if min(mg) > 0 else 'front lost on >=1 seed'}"
-        )
-
-
-def study_frontfrac(out: Path) -> None:
-    """Sweep how much collocation goes to the front -- section 7.5.9.
-
-    Section 7.5.6 showed level-set sampling does what Annex C predicts: at a budget
-    that loses the front entirely, diverting collocation to the saturation level set
-    brings `max alpha` back from 0.735 to 0.998 and triples `L_void` -- and costs the
-    mean, 0.0365 to 0.0482 on `T_s`.
-
-    That is the measure controlling the trade, which is the mechanism. But 25% was
-    picked as a plausible number, not measured, and it is the only free parameter in
-    the fix. If the trade is smooth in `front_frac` there is a setting that buys the
-    front for less mean than 25% does; if it is not, the fix is blunter than the
-    diagnosis suggests and that is worth knowing too.
-
-    Judged on both quantities at once: `margin_K` at every seed AND `T_s`. An arm
-    that wins the front by giving up the mean is the `A + fourier` trade of section
-    7.5.4 again, not progress.
-    """
-    traj = ruler()
-    base = {"adam_iters": 8000, "lbfgs_iters": 500, "front_level_set": True}
-    rows = run_all(
-        traj,
-        [
-            (
-                f"front_frac={ff} [{backend}]",
-                {"backend": backend, "seed": seed, "front_frac": ff, **base},
-            )
-            for seed in SEEDS
-            for backend in BACKENDS
-            for ff in FRONT_FRACS
-        ],
-        out,
-    )
-    mean_table(rows)
-    print("\nthe trade, per arm -- does a smaller share buy the front for less mean?")
-    for label in dict.fromkeys(r["arm"] for r in rows):
-        v = [r for r in rows if r["arm"] == label]
-        mg = [r["margin_K"] for r in v]
-        ts = [r["T_s"] for r in v]
-        lv = [r["L_void_max"] for r in v]
-        print(
-            f"  {label:28s} T_s {sum(ts) / len(ts):.4f}   L_void {sum(lv) / len(lv):.4f}   "
-            f"margin min {min(mg):+6.1f} K"
-        )
-
-
 def study_capacity_optimiser(out: Path) -> None:
     """Test whether the JAX capacity plateau is `optax.lbfgs` -- section 7.5.10.
 
@@ -1348,42 +1295,6 @@ def _arm_summary(rows: list[dict]) -> None:
         )
 
 
-def study_lsinput(out: Path) -> None:
-    """Idea 3 in isolation: the level-set coordinate as a network input -- section 7.5.13.
-
-    The front is at a fixed value of `phi = (T_c - T_sat - dT_sup) / dT`, not at a
-    fixed `zeta`; in `(zeta, t)` its location moves and the network must learn that
-    motion. Feeding `phi` gives it a coordinate in which the front is *stationary*,
-    which is the same trick as a co-moving frame.
-
-    `phi` is built from the network's own `T_c`, so it comes from a bootstrap pass
-    with `phi = 0` -- and **without** `stop_gradient`, so the residual keeps the
-    term through `phi`.
-
-    Isolated: only `level_set_input` moves. It is a different mechanism from
-    `levelset` (which moves the *sampling* measure, section 7.5.6) and from the
-    `front_net` level set (which parameterises the interface); confounding the
-    three is how a mechanism gets credit for another's effect.
-    """
-    traj = ruler()
-    rows = run_all(
-        traj,
-        [
-            (
-                f"level_set_input={on} [{backend}]",
-                {"backend": backend, "seed": seed, "level_set_input": on},
-            )
-            for seed in SEEDS
-            for backend in BACKENDS
-            for on in (False, True)
-        ],
-        out,
-    )
-    mean_table(rows)
-    print("\ndoes a front-stationary coordinate buy anything, on every seed?")
-    _arm_summary(rows)
-
-
 def study_bands(out: Path) -> None:
     """Idea 2 in isolation: multi-scale Fourier bands -- section 7.5.14.
 
@@ -1413,123 +1324,6 @@ def study_bands(out: Path) -> None:
     )
     mean_table(rows)
     print("\ndoes covering more scales at fixed width beat picking one?")
-    _arm_summary(rows)
-
-
-def study_onset(out: Path) -> None:
-    """Put onset in the objective and read it by tangency -- section 7.5.16.
-
-    M4 asks for onset within 0.5 s and one cell, and it has never moved. Two
-    reasons, and only one is the network's.
-
-    **It was never in the objective.** Onset was read off a trained field
-    afterwards; every knob this tool sweeps was ranked on a mean (relative `L2`)
-    and later on an extremum (the margin). Neither is a *position*.
-
-    **The readout was square-root conditioned.** Onset happens at the maximum of
-    `T_c`, so near it `T_c ~ T_boil - kappa (zeta - zeta*)^2 / 2` and a field error
-    `eps` displaces a threshold crossing by `sqrt(2 eps / kappa)`. Against this
-    model's reference, `kappa = 1066 K` per unit `zeta` squared and `eps = 3.4 K`
-    at the best published accuracy.
-
-    The head replaces both with the tangency conditions -- `T_c = T_boil` and
-    `dT_c/dzeta = 0` at one point -- whose position sensitivity is
-    `delta(slope)/kappa`: linear, and divided by a *large* number.
-
-    Isolated, and the isolation matters more here than usual: this is the FOURTH
-    distinct use of the level set in this model, after the sampling measure
-    (7.5.6), the front network's interface, and `level_set_input` (7.5.13).
-    Overlapping mechanisms are how one collects another's credit.
-
-    Both readouts are scored on every arm, so the control arm alone answers
-    whether the *readout* helps, independently of whether the *head* does.
-    """
-    traj = ruler()
-    rows = run_all(
-        traj,
-        [
-            (
-                f"onset_head={on} [{backend}]",
-                {"backend": backend, "seed": seed, "onset_head": on},
-            )
-            for seed in SEEDS
-            for backend in BACKENDS
-            for on in (False, True)
-        ],
-        out,
-    )
-    mean_table(rows)
-    print("\nM4 is onset within 0.5 s AND one cell (0.00625). Threshold vs tangency readout:")
-    for label in dict.fromkeys(r["arm"] for r in rows):
-        v = [r for r in rows if r["arm"] == label]
-        thr = [
-            r["onset_zeta_err"] / 0.00625 for r in v if r["onset_zeta_err"] == r["onset_zeta_err"]
-        ]
-        tan = [
-            r["onset_zeta_err_tan"] / 0.00625
-            for r in v
-            if r.get("onset_zeta_err_tan") == r.get("onset_zeta_err_tan")
-        ]
-        t_err = [r["onset_t_err_s"] for r in v if r["onset_t_err_s"] == r["onset_t_err_s"]]
-        print(
-            f"  {label:28s} n={len(v)}  "
-            f"t_err {(sum(t_err) / len(t_err) if t_err else float('nan')):.2f} s   "
-            f"zeta threshold {(sum(thr) / len(thr) if thr else float('nan')):5.1f} cells   "
-            f"zeta tangency {(sum(tan) / len(tan) if tan else float('nan')):5.1f} cells"
-        )
-
-
-def study_laplace(out: Path) -> None:
-    """Laplace embedding -- alone, summed with Fourier, multiplied by it -- section 7.5.18.
-
-    A Fourier basis is oscillatory; this transient is built out of DECAY. The pump
-    coasts down at `1/tau_pump` and six precursor groups span 0.0124 to 3.01 per
-    second, a 243x range. Approximating `exp(-0.2 t)` over the window out of sines
-    costs many terms and still misses the tail; one exponential does it exactly.
-
-    The complementarity is not arbitrary: the oscillatory structure is in `zeta` and
-    the exponential structure is in `t`, which is the anisotropy section 7.5.12
-    measured on the bandwidth -- reached here from the physics instead of a sweep.
-
-    Three arms, and the choice between them is the hypothesis:
-
-    * `alone` -- rates fixed from the manual, no Fourier. The known-shape case, where
-      the embedding is a **fit** rather than a basis, and should need few features.
-    * `sum` -- concatenated blocks, right when the solution is a **superposition** of
-      an oscillatory part and a decaying one.
-    * `product` -- each Fourier group modulated by one rate, a damped sinusoid. Right
-      when the two are **coupled**, which is what a transient excursion is rather
-      than a sum of one of each. The feature total is unchanged, so any gain is the
-      coupling and not capacity.
-
-    `laplace_rates=()` is the control and reproduces the shipped default exactly.
-
-    The honest prior is that this may be inert: the ansatz is already multiplicative,
-    `theta = theta_0 exp(t_hat N)`, so a decaying mode is representable today. The
-    claim is that it becomes *easier*, not newly possible -- which is why the control
-    arm carries the weight and why 7.5.13, the last re-parameterisation tried, was
-    measured inert.
-    """
-    traj = ruler()
-    arms = [
-        ("off", {}),
-        *[
-            (m, {"laplace_rates": LAPLACE_RATES, "laplace_mode": m})
-            for m in ("alone", "sum", "product")
-        ],
-    ]
-    rows = run_all(
-        traj,
-        [
-            (f"laplace={label} [{backend}]", {"backend": backend, "seed": seed, **kw})
-            for seed in SEEDS
-            for backend in BACKENDS
-            for label, kw in arms
-        ],
-        out,
-    )
-    mean_table(rows)
-    print("\ndoes an exponential basis help a transient built out of decay?")
     _arm_summary(rows)
 
 
@@ -1726,472 +1520,6 @@ def study_fourierbudget(out: Path) -> None:
     _per_second(rows)
 
 
-def study_freezeenc(out: Path) -> None:
-    """Freeze the encoder for the polish, with an Adam budget that actually trains it.
-
-    §7.5.30 showed the first Linear -- the projection from the 512 Fourier features into
-    the trunk -- is 66% of the model, and §7.5.31a that letting the quasi-Newton stage
-    move it is what leaves that stage 2.1x UNDERdetermined: 24 000 residual entries
-    against 49 797 weights. Hold it and the polish optimises 16 965, a ratio of 1.41 --
-    overdetermined, which is the side of the line the literature prescribes.
-
-    **`adam_iters = 10000`, and that is the point of the arm rather than a detail.** The
-    encoder is an *encoder*: it decides which embedded frequencies the trunk sees, which
-    is a representation choice, and freezing it only means something once Adam has
-    actually learned one. At the shipped `adam30` the loop does nothing (§7.5.30 --
-    RAR, adaptive weights and the curriculum are all unreachable there), so the frozen
-    layer would be its random initialisation and the arm would measure a random-feature
-    method rather than this model.
-
-    The control is `fourierbudget`'s `f256 adam10000/qn30000`, which is byte-identical
-    to this arm except for the flag, so it is cited rather than re-run.
-    """
-    traj = ruler()
-    rows = run_all(
-        traj,
-        [
-            (
-                f"freeze={fz} adam10000/qn30000 [jax]",
-                {
-                    "backend": "jax",
-                    "seed": seed,
-                    "adam_iters": 10000,
-                    "lbfgs_iters": 30000,
-                    "freeze_encoder": fz,
-                },
-            )
-            for seed in SEEDS
-            for fz in (False, True)
-        ],
-        out,
-    )
-    mean_table(rows)
-    print("\ndoes an overdetermined polish beat an underdetermined one?")
-    _arm_summary(rows)
-    _per_second(rows)
-
-
-def study_adamcheck(out: Path) -> None:
-    """Test whether the Adam stage does ANYTHING -- one knob, at a funded polish.
-
-    The `qnladder` sweep measured `adam0/qn30000` at 0.0018 against `adam30`'s 0.0017 with
-    overlapping ranges, but §7.5.30 then showed why that was a weak test: at 30 iterations the
-    Adam loop does nothing at all -- RAR, adaptive weighting and the curriculum are every one of
-    them unreachable -- so it compared no Adam against almost no Adam.
-
-    This compares **no Adam** against **10 000 full-batch Adam steps**, which is a budget
-    where RAR fires and the loop is doing real work, at two embedding widths, with
-    everything downstream identical:
-
-    * `qn50000` at 6000 points (`polish_colloc = 6000`), **redrawn every 1000 iterations**
-      -- the blocked-restart protocol of arXiv:2605.24278, so the polish cannot overfit a
-      single draw and curvature stays consistent within each block;
-    * `f32` and `f64`, the two rungs §7.5.31 found indistinguishable from f256 at 42% of
-      the cost -- so this also asks whether Adam matters *more* when capacity is tight.
-
-    The comparison is exactly one knob: `adam_iters` 0 against 10 000. If the pairs come
-    out equal, the first-order stage is not merely cheap to shorten but
-    **removable**, and the recipe is a quasi-Newton solve from a random initialisation.
-    """
-    traj = ruler()
-    rows = run_all(
-        traj,
-        [
-            (
-                f"f{n} adam{a}/qn50000@6k-refresh1k [jax]",
-                {
-                    "backend": "jax",
-                    "seed": seed,
-                    "fourier_features": n,
-                    "adam_iters": a,
-                    "lbfgs_iters": 50000,
-                    "polish_colloc": 6000,
-                    "polish_refresh": 1000,
-                },
-            )
-            for seed in SEEDS
-            for n in (32, 64)
-            for a in (0, 10000)
-        ]
-        + [
-            # The blocked restart isolated. Identical to `f64 adam0/qn50000@6k-refresh1k`
-            # except the polish keeps ONE fixed set for all 50 000 iterations, which is
-            # what every published number here used. arXiv:2605.24278 runs its BFGS
-            # baseline in blocks; §7.5.30 notes a fixed set is both what makes curvature
-            # meaningful and what the stage can overfit. This says which effect wins.
-            (
-                "f64 adam0/qn50000@6k-fixed [jax]",
-                {
-                    "backend": "jax",
-                    "seed": seed,
-                    "fourier_features": 64,
-                    "adam_iters": 0,
-                    "lbfgs_iters": 50000,
-                    "polish_colloc": 6000,
-                    "polish_refresh": 0,
-                },
-            )
-            for seed in SEEDS
-        ]
-        + [
-            # How big should the fixed polish set be? §7.5.31a: the literature prescribes
-            # an OVERdetermined system and we have never run one. At f64 the trainable
-            # count is 25 221, so 6000 points (24 000 residuals) is a ratio of 0.95 --
-            # essentially square. The ladder runs both ways from there:
-            #
-            #   points  residuals  ratio
-            #     1000       4000  0.235    fails: T_s 0.0332, misses the onset bar
-            #     2000       8000  0.470    fails: T_s 0.0309
-            #     3000      12000  0.705
-            #     4000      16000  0.940    the determined point
-            #     5000      20000  1.175
-            #    (6000      24000  1.409)   the arm above, and the shipped count
-            #    10000      40000  2.349    equal to 6000, nothing bought
-            #    20000      80000  4.698
-            #
-            # The denominator is the MLP **body** (17 029), not the trainable total: the
-            # embedding is an encoder, and `mlp.layers[0].weight` is a read-out whose
-            # width follows it. The body is identical from f32 to f1024, which is why
-            # sec 7.5.31's capacity ladder is flat -- see sec 7.5.37a.
-            #
-            # Downward is where the axis turns out to matter, and abruptly: the failures
-            # are below the determined point and the successes above it, so these rungs
-            # bracket the threshold rather than sample a trend.
-            #
-            # `polish_colloc` IS the point count. It was `n * 2/3` while the sampler
-            # added an early-time cluster of `n // 2` on top; that cluster is retired, so
-            # the knob and the label are now the same number. The rows already recorded
-            # were measured at the labelled counts, and this keeps a re-run on them.
-            (
-                f"f64 adam0/qn50000@{pts}k-fixed [jax]",
-                {
-                    "backend": "jax",
-                    "seed": seed,
-                    "fourier_features": 64,
-                    "adam_iters": 0,
-                    "lbfgs_iters": 50000,
-                    "polish_colloc": n,
-                    "polish_refresh": 0,
-                },
-            )
-            for seed in SEEDS
-            for n, pts in (
-                (1000, 1),
-                (2000, 2),
-                (3000, 3),
-                (4000, 4),
-                (5000, 5),
-                (10000, 10),
-                (20000, 20),
-            )
-        ]
-        + [
-            # The quasi-Newton budget, re-measured at the point count the ladder above
-            # settles on. Every budget conclusion in this document (7.5.11, `qnladder`,
-            # 7.5.31) was measured at 6000 points, which the sweep now shows is 1.5x more
-            # than even the onset claim needs -- and 7.5.29 measured the axis at 3000,
-            # where four conclusions turned out to be artefacts of an under-converged
-            # optimiser. This asks where the budget saturates once the collocation set is
-            # the recommended one, so the two axes are not confounded.
-            #
-            # 5000 points and not 4000: 4000 is the temperature floor, 5000 is where
-            # onset drops below its own ruler, and onset is the quantity with headroom
-            # left (7.5.22). Measuring a budget against a saturated metric would answer
-            # nothing.
-            #
-            # Three seeds per rung, not one. A budget ladder crosses the same kind of
-            # transition the collocation ladder did, and 7.5.38's 3000-point rung is the
-            # standing demonstration that a single draw near one reads as converged.
-            (
-                f"f64 adam0/qn{k}@5k-fixed [jax]",
-                {
-                    "backend": "jax",
-                    "seed": seed,
-                    "fourier_features": 64,
-                    "adam_iters": 0,
-                    "lbfgs_iters": k,
-                    "polish_colloc": 5000,
-                    "polish_refresh": 0,
-                },
-            )
-            for seed in SEEDS
-            for k in (10000, 20000, 30000, 40000)
-        ]
-        + [
-            # Does the ENCODER have a finite amount of work to do? 10 000 iterations with
-            # the Fourier read-out trainable, then it is held for the remaining 40 000.
-            #
-            # sec 7.5.32 measured the all-or-nothing freeze and found it worse at either
-            # Adam budget, so the projection is evidently still earning its gradient. This
-            # asks whether it stops: if the representation settles early, the late
-            # iterations are carrying 33% (f64) or 66% (f256) of a curvature space that
-            # has stopped moving, and dropping it should help rather than hurt.
-            #
-            # f64 AND f256 because that is what makes it a test of the mechanism rather
-            # than a knob-turn. Freezing barely touches the fitting capacity -- 17 029 to
-            # 16 965, sec 7.5.37a -- so any gain has to come from the curvature dimension,
-            # which falls 3.0x at f256 and only 1.5x at f64. A conditioning effect must
-            # therefore be LARGER at f256. If the two widths gain equally, the explanation
-            # is something else.
-            #
-            # One solve per seed, scored at three budgets: `polish_checkpoints` carries
-            # the optimiser state across each stop, so the 30k and 40k rows are the
-            # trajectory this run actually took rather than three independent short runs.
-            (
-                f"f{n} adam0/qn50000-freeze10k@5k [jax]",
-                {
-                    "backend": "jax",
-                    "seed": seed,
-                    "fourier_features": n,
-                    "adam_iters": 0,
-                    "lbfgs_iters": 50000,
-                    "polish_colloc": 5000,
-                    "polish_refresh": 0,
-                    "freeze_after": 10000,
-                    "polish_checkpoints": (30000, 40000, 50000),
-                },
-            )
-            for seed in SEEDS
-            for n in (64, 256)
-        ]
-        + [
-            # The control the freeze arms are scored against, and it was missing.
-            #
-            # f256 with NO freeze, everything else identical -- same 5000 points, same
-            # 50 000 iterations, same three checkpoints. Without it, "freezing costs
-            # 2.4x at f256" compares an f256 arm against an f64 one and leans on
-            # sec 7.5.31's finding that the widths are equivalent, which was measured at
-            # 6000 points and a different budget. That is an inference standing where a
-            # measurement belongs, and it is the shape of the D67 failure.
-            # Widening it to f128 as well makes this the width ladder at the
-            # RECOMMENDED configuration. Every rung of sec 7.5.31's ladder was measured
-            # at 6000 points with a 10 000-iteration Adam stage, and sec 7.5.37a showed
-            # that ladder never varied capacity at all -- so whether the widths are still
-            # indistinguishable under adam0, a fixed 5000-point set and a funded polish
-            # has not been measured in the configuration this project now recommends.
-            (
-                f"f{n} adam0/qn50000@5k [jax]",
-                {
-                    "backend": "jax",
-                    "seed": seed,
-                    "fourier_features": n,
-                    "adam_iters": 0,
-                    "lbfgs_iters": 50000,
-                    "polish_colloc": 5000,
-                    "polish_refresh": 0,
-                    "polish_checkpoints": (30000, 40000, 50000),
-                },
-            )
-            for seed in SEEDS
-            for n in (128, 256)
-        ]
-        + [
-            # Schedule-free AdamW (arXiv:2405.15682), first order ONLY -- no polish.
-            #
-            # Every "is Adam enough" arm in this document ran Adam with a cosine decay,
-            # so "Adam plateaus" has always been entangled with "our schedule ends".
-            # Schedule-free removes the schedule rather than tuning it, which makes this
-            # the version of the question that is not about our own hyper-parameters.
-            #
-            # `lbfgs_iters = 0` is the point: 30 000 first-order iterations against the
-            # `qn30000` rung of the budget ladder at the same 5000 points, so the
-            # comparison is optimiser against optimiser at equal iteration count.
-            #
-            # Measured on JAX, as every long run here is. Both backends implement it --
-            # `optax.contrib` there, `pytorch_optimizer` in torch. The reported iterate is
-            # the averaged `x`, not the optimiser's `y`; see `_schedule_free_x` and
-            # tests/axial/test_schedule_free.py.
-            (
-                f"f64 sfadamw{a}/qn{q}@5k [jax]",
-                {
-                    "backend": "jax",
-                    "seed": seed,
-                    "fourier_features": 64,
-                    "first_order": "schedulefree",
-                    "sf_warmup_frac": 0.1,
-                    "adam_iters": a,
-                    "lbfgs_iters": q,
-                    "n_colloc": 5000,
-                    "polish_colloc": 5000,
-                },
-            )
-            # Two arms, and the pair is the point. `sfadamw30000/qn0` asks whether a
-            # first-order method with no schedule to run out of can reach the accuracy
-            # the quasi-Newton stage reaches at the same 30 000 iterations. The second
-            # asks the older question -- does a first-order warm start help the polish --
-            # but now with a warm start that is not ending on a decayed learning rate,
-            # which every previous version of that arm was.
-            #
-            # The polish begins from the AVERAGED iterate x, not the optimiser's y; the
-            # conversion happens before `_run_polish` and is pinned by
-            # tests/axial/test_schedule_free.py::test_the_polish_starts_from_x_not_y.
-            for seed in (0,)
-            for a, q in ((30000, 0), (10000, 30000))
-        ],
-        out,
-    )
-    mean_table(rows)
-    print("\nis the Adam stage removable, and how big must the polish set be?")
-    _arm_summary(rows)
-    _per_second(rows)
-
-
-def study_dlstyle(out: Path) -> None:
-    """Deep-learning-style schedule: many small-batch Adam steps, then a blocked polish.
-
-    Everything this project has measured about Adam was measured at **full batch** -- the
-    Adam stage evaluating the same 6000 points the quasi-Newton stage uses (§7.5.31a).
-    That is not how a first-order method is run anywhere: JAX-PI takes 200 000 steps of
-    4096 points, and the cost advantage that makes Adam attractive comes entirely from
-    the small batch. So "Adam buys nothing here" has only ever been tested against an
-    algorithm nobody uses.
-
-    This arm runs the protocol properly, and changes three things at once **on purpose**
-    -- it is a schedule, not an ablation, and the parts are known to interact:
-
-    * **Adam: 60 000 steps at 1000 points**, `adam_colloc = 1000`.
-    * **Then the encoder is frozen.** §7.5.32 measured freezing it after 10 000 full-batch
-      Adam steps as 7.2x worse -- but that is a statement about an encoder 10 000 steps
-      had barely moved. Sixty thousand small-batch steps is the regime where an encoder
-      is actually learned, which is the only regime where freezing it is a fair test.
-    * **Quasi-Newton: 30 000 iterations at 6000 points, redrawn every 1000.**
-      `polish_colloc = 6000` is the count every other table here uses, and
-      `polish_refresh = 1000` matches the blocked BFGS of arXiv:2605.24278. Curvature
-      stays consistent within a block; the stage as a whole can no longer overfit one
-      draw.
-
-    Read against `fourierbudget`'s `f256 adam10000/qn30000` (0.0019) and the shipped
-    `adam30/qn30000` (0.0017), both at full batch throughout.
-    """
-    traj = ruler()
-    rows = run_all(
-        traj,
-        [
-            (
-                "dlstyle adam60000@1k/qn30000@6k-refresh1k [jax]",
-                {
-                    "backend": "jax",
-                    "seed": seed,
-                    "adam_iters": 60000,
-                    "adam_colloc": 1000,
-                    "freeze_encoder": True,
-                    "lbfgs_iters": 30000,
-                    "polish_colloc": 6000,
-                    "polish_refresh": 1000,
-                },
-            )
-            for seed in SEEDS
-        ],
-        out,
-    )
-    mean_table(rows)
-    _arm_summary(rows)
-    _per_second(rows)
-
-
-def study_adamonly(out: Path) -> None:
-    """Test whether the ARCHITECTURE lets Adam replace quasi-Newton -- section 7.5.27.
-
-    arXiv:2605.24278 ("beignet") reports a trainable multi-resolution Fourier feature
-    pyramid reaching "an accuracy regime previously attained only by using computationally
-    expensive higher-order optimizers", **using Adam**. The claim is about the embedding,
-    not the optimiser, and that is what makes it testable here.
-
-    **Running our own Adam longer would test a strawman.** Section 7.5.11 measured our
-    Adam axis flat across two decades once the quasi-Newton stage is funded, and across
-    every study on disk it saturates near 0.04-0.05 whatever is spent -- adam3000/qn30
-    0.0762, adam8000/qn500 0.0485, adam16000/qn1000 0.0432 -- while at the same ~1200 s
-    the Newton-heavy adam30/qn3000 reaches 0.0302. Scaling Adam 500x moves the answer the
-    wrong way. So the question is not "more Adam", it is "a different function space".
-
-    **Two arms, one knob.** Both run `adam_iters = 30000, lbfgs_iters = 0` at our own
-    `lr = 1e-3` -- which is also the paper's base LR -- and differ only in the embedding:
-
-    * `fourier` -- the shipped random Fourier features, `B` FROZEN. The Adam-only
-      baseline, and the arm that attributes any gain to the architecture rather than to
-      spending the budget on Adam.
-    * `beignet` -- the paper's trainable pyramid at its own 1D configuration.
-
-    30000 is the shipped default's *quasi-Newton* count, so this is the shipped budget
-    spent entirely on Adam and is directly comparable to everything else measured here.
-
-    **The control is cited, not re-run.** `qnladder_s{0,1,2}.json` already carries
-    `adam30/qn30000` at three seeds on this backend and configuration -- `T_s = 0.0017`
-    in 9060 s -- and re-running it would double this study's cost to reproduce a number
-    measured on this tree. That is a stated exception to the control-arm rule, not an
-    assumption that it would have passed.
-
-    **What each outcome means.** If `beignet` approaches 0.0017 while `fourier` sits at
-    its usual 0.04-0.05, the paper transfers and the quasi-Newton stage is replaceable
-    here. If both saturate together, the pyramid buys nothing on this problem and
-    section 7.5.11 stands against a much stronger test than the grid alone could give.
-    Note the paper's own Table 2 has MLP+BFGS at 7.11e-20 against beignet+Adam's
-    6.63e-19, so even its own evidence is that Adam *reaches* the regime rather than
-    winning it.
-
-    **The risk to watch first is periodicity.** Fourier interpolation is periodic and
-    every benchmark in the paper is a periodic problem; this channel is not. `beignet_pad`
-    maps `zeta` into the interior of one period, and if that is insufficient the failure
-    will show as error concentrated at the inlet and outlet rather than as a uniformly
-    worse field.
-    """
-    traj = ruler()
-    rows = run_all(
-        traj,
-        [
-            (
-                f"{name} adam{ADAM_ONLY_ITERS}/qn0 [jax]",
-                {
-                    "backend": "jax",
-                    "seed": seed,
-                    "adam_iters": ADAM_ONLY_ITERS,
-                    "lbfgs_iters": 0,
-                    **extra,
-                },
-            )
-            for seed in SEEDS
-            for name, extra in (
-                ("fourier", {}),
-                ("beignet", BEIGNET_1D),
-                # No embedding at all: the coordinate-MLP baseline the beignet paper
-                # compares against, and the arm that says how much the frozen Fourier
-                # features are worth on their own under Adam.
-                ("nofourier", {"fourier_features": 0}),
-                # Same, with the slow-EMA first-order method. JAX only: torch has no
-                # AdEMAMix and one is deliberately not written for it. Named WITHOUT
-                # "nofourier": `--only` is an OR over substrings, so an arm name that
-                # contains another arm's name makes the two impossible to select apart.
-                ("ademamix", {"fourier_features": 0, "first_order": "ademamix"}),
-            )
-        ]
-        + [
-            # THE decisive arm for "is the embedding just a preconditioner?".
-            # 7.5.24 showed the multi-band embedding is subsumed by the budget. If the
-            # Fourier embedding is ALSO only a preconditioner, then no embedding at all
-            # plus a funded quasi-Newton stage should reach the same 0.0017 -- and the
-            # entire embedding axis, capacity ladder included, is redundant work.
-            # If it does NOT, the embedding buys representation that budget cannot.
-            (
-                f"nofourier adam30/qn{q} [jax]",
-                {
-                    "backend": "jax",
-                    "seed": seed,
-                    "adam_iters": 30,
-                    "lbfgs_iters": q,
-                    "fourier_features": 0,
-                },
-            )
-            for seed in SEEDS
-            for q in (30000,)
-        ],
-        out,
-    )
-    mean_table(rows)
-    print("\ndoes Adam alone reach the quasi-Newton stage, at comparable wall-clock?")
-    _arm_summary(rows)
-    _per_second(rows)
-
-
 def _per_second(rows: list[dict]) -> None:
     """Report each arm against its own wall-clock, which is the axis the decision is on.
 
@@ -2274,29 +1602,19 @@ STUDIES = {
     "optimizer": study_optimizer,
     "parity": study_parity,
     "plan-a": study_plan_a,
-    "combo": study_combo,
     "regime": study_regime,
     "regime-sign": study_regime_sign,
     "default": study_default,
     "margin": study_margin,
     "scaling": study_scaling,
-    "levelset": study_levelset,
-    "frontfrac": study_frontfrac,
     "capacity-optimiser": study_capacity_optimiser,
     "grid": study_grid,
     "aniso": study_aniso,
-    "lsinput": study_lsinput,
     "bands": study_bands,
-    "onset": study_onset,
-    "laplace": study_laplace,
     "qnladder": study_qnladder,
     "bakeoff": study_bakeoff,
     "bandsbudget": study_bandsbudget,
-    "adamonly": study_adamonly,
     "fourierbudget": study_fourierbudget,
-    "freezeenc": study_freezeenc,
-    "dlstyle": study_dlstyle,
-    "adamcheck": study_adamcheck,
 }
 
 
@@ -2399,6 +1717,13 @@ def main() -> int:
         "to 3.6e-16; costs 12-40 s per collocation shape, so it only pays on long arms)",
     )
     ap.add_argument(
+        "--save-dir",
+        default="",
+        help="write every checkpoint and the final model here AS THEY ARE PRODUCED, so a "
+        "run that is stopped still leaves what it earned; without it a long run writes "
+        "nothing until it finishes",
+    )
+    ap.add_argument(
         "--only",
         default=None,
         help="run only arms whose label contains one of these comma-separated "
@@ -2429,8 +1754,8 @@ def main() -> int:
     _RAR = args.rar_every
     global _HISTORY  # noqa: PLW0603
     _HISTORY = args.lbfgs_history
-    global _COMPILE  # noqa: PLW0603
-    _COMPILE = args.compile
+    global _COMPILE, _SAVE_DIR
+    _COMPILE, _SAVE_DIR = args.compile, args.save_dir
     global _ADAM, _QN
     _ADAM, _QN = args.adam_iters, args.lbfgs_iters
     if _ADAM is not None or _QN is not None:
