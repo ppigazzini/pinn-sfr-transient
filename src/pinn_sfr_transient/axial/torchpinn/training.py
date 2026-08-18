@@ -65,8 +65,16 @@ class Trainer:
             return self.model.closed_loop_blocks(that)
         return self.model.residual_blocks(zeta, that)
 
-    def collocation(self, t_max: float = 1.0) -> tuple[torch.Tensor, torch.Tensor]:
+    def collocation(
+        self, t_max: float = 1.0, n: int | None = None
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Uniform points over ``(zeta, t_hat)``, plus the RAR set.
+
+        ``n`` overrides ``cfg.n_colloc`` for one draw, which is how the two stages get
+        their own counts: ``adam_colloc`` for the first-order loop and ``polish_colloc``
+        for the quasi-Newton one. Both were fields the torch backend accepted and then
+        ignored -- ``n_colloc`` drove every draw, so an arm configured for a small Adam
+        batch silently ran full batch, which is a different algorithm.
 
         **No early-time cluster.** It was drawn unconditionally here and is retired; see
         the JAX twin's sampler for the measurement that retired it.
@@ -76,7 +84,7 @@ class Trainer:
             # quadrature the reactivity integral needs (section 3.5a).
             that = self._rand(self.cfg.n_time, 1) * t_max
             return that, that
-        n = self.cfg.n_colloc
+        n = n or self.cfg.n_colloc
         pts = self._rand(n, 2)
         pts[:, 1] *= t_max
         parts = [pts]
@@ -136,7 +144,7 @@ class Trainer:
         term pulled toward a state on the wrong manifold. Rebuild the tensor grid
         the Plan A state is actually defined on.
         """
-        zeta, that = self.collocation(t_max)
+        zeta, that = self.collocation(t_max, self.cfg.adam_colloc)
         if not self.cfg.feedback:
             return zeta, that
         n_z = self.model.zeta_q.shape[0]
@@ -268,6 +276,19 @@ class Trainer:
         instead of being re-run once per budget. The JAX twin takes the same argument.
         """
         cfg = self.cfg
+        if cfg.first_order != "adam":
+            # Refused, not silently substituted. Both other arms -- `ademamix` and
+            # `schedulefree` -- are optax algorithms with no torch equivalent, and
+            # AGENTS.md forbids hand-writing one. This loop ran plain Adam whatever the
+            # field said, so a torch arm labelled `ademamix` in a study was Adam, and
+            # nothing in the run said so. The config comment already declared the
+            # non-implementation; a declaration the code does not enforce is a comment.
+            msg = (
+                f"first_order={cfg.first_order!r} is implemented in the JAX backend only "
+                f"(optax.contrib); torch ships neither AdEMAMix nor schedule-free and one "
+                f"is deliberately not hand-written. Use pinn_jax, or first_order='adam'."
+            )
+            raise ValueError(msg)
         # `foreach=True` explicitly. PyTorch's auto-selection does NOT enable it on
         # CPU -- `_default_to_fused_or_foreach` returns `(False, False)` there, so
         # leaving it unset silently takes the single-tensor for-loop path on the only
@@ -279,9 +300,8 @@ class Trainer:
         # fields **bitwise identical** (checked at 200 Adam iterations), so unlike a
         # thread-count change it does not move a published number.
         opt = torch.optim.Adam(self.model.parameters(), lr=cfg.lr, foreach=True)
-        sched = torch.optim.lr_scheduler.CosineAnnealingLR(
-            opt, T_max=max(1, cfg.adam_iters), eta_min=cfg.lr * 0.1
-        )
+        sched = self._lr_schedule(opt)
+        n_adam = cfg.adam_colloc
         for it in range(cfg.adam_iters):
             # Time-window curriculum: the horizon opens from `1/n_windows` to 1
             # over training, so the network solves a short transient first and
@@ -294,22 +314,66 @@ class Trainer:
             # Skip the gradient-norm pass entirely when weighting is off: it costs
             # one backward per block and the answer is known to be ones.
             if cfg.weight_max_ratio > 1.0 and it and it % cfg.weight_update_every == 0:
-                self.update_block_weights(*self.collocation(t_max))
-            if it and it % cfg.rar_every == 0:
+                self.update_block_weights(*self.collocation(t_max, n_adam))
+            if cfg.rar_every and it and it % cfg.rar_every == 0:
                 self.rar_refine(t_max)
             if cfg.pts_every and it % cfg.pts_every == 0:
                 self.pseudo_time_step(t_max)
             opt.zero_grad()
-            loss = self.causal_loss(*self.collocation(t_max), t_max)
+            loss = self.causal_loss(*self.collocation(t_max, n_adam), t_max)
             loss.backward()
             opt.step()
             sched.step()
             if verbose and it % cfg.log_every == 0:
                 w = [f"{v:.1e}" for v in self.block_w.tolist()]
                 print(f"[adam {it:6d}] t<={t_max:.2f} loss={loss.item():.3e} w=[{','.join(w)}]")
+            # First-order checkpoints, on the same cadence and the same 1-indexed count
+            # as the JAX twin. Without this a pure first-order arm (`lbfgs_iters = 0`)
+            # emitted nothing at all -- the only callback site was the polish -- so a
+            # ten-rung budget ladder cost ten runs of the longest rung.
+            every = cfg.adam_checkpoint_every
+            if on_checkpoint is not None and every and (it + 1) % every == 0:
+                on_checkpoint(it + 1, self.model)
         if cfg.lbfgs_iters > 0:
             self._lbfgs(verbose=verbose, on_checkpoint=on_checkpoint)
         return self.model
+
+    def _lr_schedule(self, opt: torch.optim.Optimizer) -> torch.optim.lr_scheduler.LRScheduler:
+        """Cosine decay, optionally with a linear warmup in front of it.
+
+        Composed from ``LinearLR`` and ``CosineAnnealingLR`` through ``SequentialLR``,
+        which is torch's shipped equivalent of ``optax.warmup_cosine_decay_schedule`` --
+        the JAX twin's `_lr_schedule`. Both run the cosine over ``adam_iters - warmup``
+        down to ``0.1 lr``, so the two curves agree away from the first step.
+
+        They cannot agree *during* it: optax starts the ramp at exactly zero, and torch's
+        ``start_factor`` must be positive. ``1 / warmup`` makes the first step the first
+        rung of the same ladder rather than a no-op, and both reach the peak on the same
+        step; the ramps differ by at most ``lr / warmup`` -- at the first step, decaying
+        linearly to nothing. Measured over 100 iterations at ``lr = 1e-3``: 1.0e-04
+        during the warmup and **9.4e-11 after it**.
+
+        ``lr_warmup`` was a field this backend accepted and ignored -- the schedule was
+        unconditionally plain cosine.
+        """
+        cfg = self.cfg
+        total = max(1, cfg.adam_iters)
+        eta_min = cfg.lr * 0.1
+        if not cfg.lr_warmup:
+            return torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=total, eta_min=eta_min)
+        warm = max(1, int(cfg.sf_warmup_frac * cfg.adam_iters))
+        return torch.optim.lr_scheduler.SequentialLR(
+            opt,
+            [
+                torch.optim.lr_scheduler.LinearLR(
+                    opt, start_factor=1.0 / warm, end_factor=1.0, total_iters=warm
+                ),
+                torch.optim.lr_scheduler.CosineAnnealingLR(
+                    opt, T_max=max(1, total - warm), eta_min=eta_min
+                ),
+            ],
+            milestones=[warm],
+        )
 
     def _polish_stages(self) -> list[tuple[int, bool]]:
         """Return ``(iterations, freeze the encoder)`` for each block of the polish.
@@ -390,7 +454,39 @@ class Trainer:
             tolerance_change=1e-14,
         )
 
-    def _run_stages(self, closure, *, want_snaps: bool, verbose: bool) -> list:  # noqa: ANN001
+    def _run_refreshed(self, *, verbose: bool) -> list:
+        """Run the polish in blocks of ``polish_refresh``, on a fresh set each block.
+
+        A fixed collocation set is what makes curvature meaningful, and also what the
+        polish can overfit. Redrawing every block keeps the first property within a
+        block and drops the second across the stage; the optimiser is rebuilt each time
+        because its history would otherwise span two different objectives.
+        arXiv:2605.24278 runs its BFGS baseline in blocks of 1000 for this reason.
+
+        No checkpoints: a rung of a budget ladder has to be a point on ONE trajectory,
+        and each block here restarts the solve. The JAX twin drops them on this path too.
+        """
+        cfg = self.cfg
+        done, blk = 0, cfg.polish_refresh
+        while done < cfg.lbfgs_iters:
+            n = min(blk, cfg.lbfgs_iters - done)
+            zeta, that = self.collocation(n=cfg.polish_colloc)
+
+            def closure(zeta: torch.Tensor = zeta, that: torch.Tensor = that) -> torch.Tensor:
+                for q in self.model.parameters():
+                    q.grad = None
+                loss = self.causal_loss(zeta, that)
+                loss.backward()
+                return loss
+
+            opt = self._make_opt(n)
+            opt.step(closure)
+            done += n
+        if verbose:
+            print(f"[lbfgs] {cfg.lbfgs_iters} iterations in blocks of {blk}, set redrawn each")
+        return []
+
+    def _run_stages(self, closure, stages, *, want_snaps: bool, verbose: bool) -> list:  # noqa: ANN001
         """Step the polish through its stages and segments, returning the snapshots.
 
         One optimiser per *stage*, stepped once per *segment*. ``torch.optim.LBFGS``
@@ -402,7 +498,7 @@ class Trainer:
         cps = sorted(set(self.cfg.polish_checkpoints))
         snaps: list = []
         done = 0
-        for iters, freeze in self._polish_stages():
+        for iters, freeze in stages:
             if iters <= 0:
                 continue
             frozen = self._freeze_encoder(force=freeze)
@@ -437,22 +533,30 @@ class Trainer:
     ) -> None:
         """Quasi-Newton polish on a fixed collocation set, with a divergence guard.
 
-        One block, or two when ``freeze_after`` splits it. The guard spans the whole
-        stage rather than each block: the question a caller cares about is whether the
-        polish as a whole improved on what Adam handed it.
+        One block, or two when ``freeze_after`` splits it, or many when
+        ``polish_refresh`` redraws. The guard spans the whole stage rather than each
+        block: the question a caller cares about is whether the polish as a whole
+        improved on what Adam handed it.
         """
-        zeta, that = self.collocation()
+        stages = self._polish_stages()  # also rejects freeze_after with polish_refresh
+        zeta, that = self.collocation(n=self.cfg.polish_colloc)
         before = self.causal_loss(zeta, that).item()
         snapshot = [q.detach().clone() for q in self.model.parameters()]
 
-        def closure() -> torch.Tensor:
-            for q in self.model.parameters():
-                q.grad = None
-            loss = self.causal_loss(zeta, that)
-            loss.backward()
-            return loss
+        if self.cfg.polish_refresh > 0:
+            snaps = self._run_refreshed(verbose=verbose)
+        else:
 
-        snaps = self._run_stages(closure, want_snaps=on_checkpoint is not None, verbose=verbose)
+            def closure() -> torch.Tensor:
+                for q in self.model.parameters():
+                    q.grad = None
+                loss = self.causal_loss(zeta, that)
+                loss.backward()
+                return loss
+
+            snaps = self._run_stages(
+                closure, stages, want_snaps=on_checkpoint is not None, verbose=verbose
+            )
         after = self.causal_loss(zeta, that).item()
         if not np.isfinite(after) or after > before:
             with torch.no_grad():
