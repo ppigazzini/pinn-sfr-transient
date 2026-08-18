@@ -227,8 +227,8 @@ class Trainer:
         section 7.2.
 
         Only *ratios* between blocks can matter — Adam is scale-invariant to a
-        global factor, which is exactly the argument REPORT-01 D39 uses to show
-        fixed per-equation scaling is a no-op — so the target is renormalised to
+        global factor, which is exactly the argument that shows fixed
+        per-equation scaling is a no-op — so the target is renormalised to
         unit geometric mean before clamping. That leaves the relative balance
         untouched and bounds only the spread.
         """

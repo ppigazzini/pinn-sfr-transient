@@ -691,7 +691,7 @@ def test_decay_heat_removes_the_zero_power_attractor():
     """With `psi_f = 0` the total power is still positive — the point of §4.4.
 
     Without it, `P = c = 0` is an exact solution of the whole coupled system,
-    which is the collapse mode REPORT-01 §5.2 exists to diagnose.
+    which is the power-collapse mode this parameter exists to remove.
     """
     p = AxialParams(decay_fraction=0.065)
     h = p.steady_decay_heat(1.0)

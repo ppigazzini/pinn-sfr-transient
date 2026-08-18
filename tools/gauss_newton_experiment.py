@@ -5,7 +5,7 @@ with known answers. This measures whether it is worth anything.
 
 **The configuration is the shipped default** — `t_train_frac = 0.275`, f256, width 64,
 depth 5 — and the comparison is against the default budget, 30 Adam + 30000
-quasi-Newton, which §7.5.20 measured reaching `T_s = 0.0017`. Running an optimiser
+quasi-Newton, which the `qnladder` sweep measured reaching `T_s = 0.0017`. Running an optimiser
 comparison at some other budget is how the first bake-off wasted a day: it used the
 study's hardcoded 3000/300, which §7.5.11 had already shown is the regime where the
 quasi-Newton stage does not matter.

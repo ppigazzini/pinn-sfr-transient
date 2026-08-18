@@ -378,7 +378,7 @@ def residual_scales(p: AxialParams) -> tuple[float, ...]:
     was measured to destroy the model — see that function.
 
     **Applied to the residuals (see** :func:`residual_normalisation` **), and the
-    reason that changed is worth stating.** REPORT-01 D39 proved per-equation
+    reason that changed is worth stating.** D39 proved per-equation
     scaling was a no-op here, and the proof was sound *under its premise*:
     ``lambda_k = mean(g)/g_k`` is unbounded, so any fixed constant on block ``k``
     multiplies ``g_k`` and is cancelled exactly at the next weight update; Adam

@@ -195,7 +195,7 @@ class AxialTrainConfig:
     # JAX onto the published torch behaviour rather than moving both somewhere new.
     lbfgs_history: int = 50
 
-    # Laplace embedding (REPORT-01 section C.7, docs/axial_nn.md section 7.5.18).
+    # Laplace embedding (`docs/axial_nn.md` section 7.5.18).
     # Physical decay rates in 1/s; the embedding uses `exp(-s_k * t_end * t_hat)`.
     # `()` is off and is the control.
     #
@@ -224,8 +224,8 @@ class AxialTrainConfig:
     pts_growth: float = 1.5
 
     # The first-order stage's algorithm. "adam" is every published number here.
-    # "ademamix" adds a slow gradient EMA (arXiv:2409.03137); REPORT-01 records it ~2x
-    # better than Adam beyond 8000 iterations and ~260x WORSE at 3000, because the slow
+    # "ademamix" adds a slow gradient EMA (arXiv:2409.03137), measured here ~2x better
+    # than Adam beyond 8000 iterations and ~260x WORSE at 3000, because the slow
     # EMA has not warmed up -- so it is gated on budget, never swapped in blind.
     #
     # "schedulefree" is `optax.contrib.schedule_free_adamw` (arXiv:2405.15682). Two

@@ -141,8 +141,8 @@ class AxialParams:
     #
     # **This removes the zero-power attractor.** With `decay_fraction = 0` the
     # homogeneous kinetics have no source and `P = c = 0` is an exact solution of
-    # the whole coupled system -- the mode REPORT-01 section 5.2 spends its length
-    # on. With it non-zero, `psi_h` does not vanish when `psi_f` does. Typical
+    # the whole coupled system -- the power-collapse mode. With it non-zero, `psi_h`
+    # does not vanish when `psi_f` does. Typical
     # fission-product decay heat immediately after shutdown is 6-7% of nominal.
     decay_fraction: float = 0.0
     decay_lambda: FloatArray = field(

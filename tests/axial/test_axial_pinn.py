@@ -408,7 +408,7 @@ def test_precursors_start_at_one_and_stay_positive(plan_a_model):
 
     Positivity is not decoration: with `c > 0` and the pole guard on `beta - rho`,
     `P = sum(beta_i c_i)/(beta - rho)` cannot reach zero. That is the structural
-    answer to the power-collapse question REPORT-01 section 5.2 is about — the
+    answer to the power-collapse question — the
     trivial solution is removed by construction rather than avoided by training.
     """
     c0 = _precursors(plan_a_model, torch.zeros(1, 1, dtype=torch.float64))

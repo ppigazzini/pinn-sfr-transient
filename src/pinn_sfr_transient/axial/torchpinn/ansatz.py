@@ -31,8 +31,8 @@ def _precursors(model: AxialPinn, that: torch.Tensor) -> torch.Tensor:
     ``t_hat`` factor pins the initial condition for any weights, and the
     exponential makes the precursors positive by construction. Positivity is
     what makes
-    ``P = sum(beta_i c_i)/(beta - rho)`` unable to reach zero — the collapse mode
-    that REPORT-01 section 5.2 spends its length on.
+    ``P = sum(beta_i c_i)/(beta - rho)`` unable to reach zero — the power-collapse
+    mode this closure exists to remove.
     """
     return _bounded_exp(that * model.kin(that))
 

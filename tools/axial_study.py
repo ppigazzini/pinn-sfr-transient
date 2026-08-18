@@ -1534,7 +1534,7 @@ def study_laplace(out: Path) -> None:
 
 
 def study_qnladder(out: Path) -> None:
-    """Push the quasi-Newton axis until it ends, or show that it does not -- section 7.5.20.
+    """Push the quasi-Newton axis until it ends, or show that it does not.
 
     The most consequential open question in this project. Section 7.5.11 measured the
     quasi-Newton axis monotone across two decades on both backends, with no interior
@@ -1625,7 +1625,7 @@ def study_bandsbudget(out: Path) -> None:
 
     * Section 7.5.14 measured `fourier_bands = (1, 4, 16)` reaching 99.5% of the reference
       voided length at the old `qn = 3000` budget -- the best embedding number here.
-    * Section 7.5.20 measured `qn = 30000` at a single band reaching `T_s = 0.0017`,
+    * The `qnladder` sweep measured `qn = 30000` at a single band reaching `T_s = 0.0017`,
       15x better than `qn3000` and monotone on every seed.
 
     Both were read as independent wins and neither was measured against the other. The
@@ -1641,7 +1641,7 @@ def study_bandsbudget(out: Path) -> None:
     cannot, however many seeds each has, because neither ever varies the other factor.
 
     **The control arm is `single/qn30000`**, which is the shipped default and must
-    reproduce section 7.5.20's 0.0017. Read it before reading anything else: that arm is
+    reproduce that 0.0017. Read it before reading anything else: that arm is
     the reason D67 was caught, and a study whose control has moved is measuring the
     harness rather than the arms.
 
@@ -1774,10 +1774,10 @@ def study_freezeenc(out: Path) -> None:
 def study_adamcheck(out: Path) -> None:
     """Test whether the Adam stage does ANYTHING -- one knob, at a funded polish.
 
-    §7.5.20 measured `adam0/qn30000` at 0.0018 against `adam30`'s 0.0017 with overlapping
-    ranges, but §7.5.30 then showed why that was a weak test: at 30 iterations the Adam
-    loop does nothing at all -- RAR, adaptive weighting and the curriculum are every one
-    of them unreachable -- so it compared no Adam against almost no Adam.
+    The `qnladder` sweep measured `adam0/qn30000` at 0.0018 against `adam30`'s 0.0017 with
+    overlapping ranges, but §7.5.30 then showed why that was a weak test: at 30 iterations the
+    Adam loop does nothing at all -- RAR, adaptive weighting and the curriculum are every one of
+    them unreachable -- so it compared no Adam against almost no Adam.
 
     This compares **no Adam** against **10 000 full-batch Adam steps**, which is a budget
     where RAR fires and the loop is doing real work, at two embedding widths, with
@@ -1790,7 +1790,7 @@ def study_adamcheck(out: Path) -> None:
       the cost -- so this also asks whether Adam matters *more* when capacity is tight.
 
     The comparison is exactly one knob: `adam_iters` 0 against 10 000. If the pairs come
-    out equal, the first-order stage is not merely cheap to shorten (§7.5.20) but
+    out equal, the first-order stage is not merely cheap to shorten but
     **removable**, and the recipe is a quasi-Newton solve from a random initialisation.
     """
     traj = ruler()
@@ -1887,7 +1887,7 @@ def study_adamcheck(out: Path) -> None:
         ]
         + [
             # The quasi-Newton budget, re-measured at the point count the ladder above
-            # settles on. Every budget conclusion in this document (7.5.11, 7.5.20,
+            # settles on. Every budget conclusion in this document (7.5.11, `qnladder`,
             # 7.5.31) was measured at 6000 points, which the sweep now shows is 1.5x more
             # than even the onset claim needs -- and 7.5.29 measured the axis at 3000,
             # where four conclusions turned out to be artefacts of an under-converged

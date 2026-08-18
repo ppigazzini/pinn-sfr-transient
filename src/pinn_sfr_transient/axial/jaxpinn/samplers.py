@@ -57,8 +57,8 @@ def _collocation(
         return that, zeta_q, weights
     # Still split FOUR ways although the cluster that used `k2` is gone. Splitting
     # three ways would hand a different `k1` to the uniform draw and silently move
-    # every remaining number, which is the RNG-stream hazard REPORT-02 section 5
-    # records: the companion moved boiling-onset error from 0.0314 s to 0.0103 s by
+    # every remaining number, which is the RNG-stream hazard already seen once:
+    # the companion moved boiling-onset error from 0.0314 s to 0.0103 s by
     # changing which key the draw consumes, with nothing else altered.
     k1, _k2, k3, k4 = jax.random.split(key, 4)
     pts = jax.random.uniform(k1, (cfg.n_colloc, 2)).at[:, 1].multiply(t_max)

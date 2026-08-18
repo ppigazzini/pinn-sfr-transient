@@ -80,7 +80,7 @@ class AxialTrainConfig:
     # channel *inlet*, against a reference that is identically zero until 10.75 s
     # and then boils at the top.
     #
-    # This does not use the reference in the loss (REPORT-01 section 4.1). The
+    # This does not use the reference in the loss. The
     # horizon is a property of the model's validity range, not of its solution.
     # Plan A needs no truncation: with feedback the transient is self-limiting
     # and completes 60 s inside the property range.
@@ -121,7 +121,7 @@ class AxialTrainConfig:
     # so all blocks are O(1) [Ko & Park, JCP 529 113860 (2025)]. The natural rates
     # span 813x here (`physics.residual_scales`), almost all of it the void, which
     # is 8x beyond what `weight_max_ratio` can undo — so the fixed part has to
-    # come out analytically. REPORT-01 D39 measured this as a no-op, correctly,
+    # come out analytically. D39 measured this as a no-op, correctly,
     # back when the adaptive weights were unbounded and cancelled it.
     residual_scaling: bool = True
 
@@ -196,8 +196,8 @@ class AxialTrainConfig:
     level_set_input: bool = False
 
     # The first-order stage's algorithm. "adam" is every published number here.
-    # "ademamix" adds a slow gradient EMA (arXiv:2409.03137); REPORT-01 records it ~2x
-    # better than Adam beyond 8000 iterations and ~260x WORSE at 3000, because the slow
+    # "ademamix" adds a slow gradient EMA (arXiv:2409.03137), measured ~2x better than
+    # Adam beyond 8000 iterations and ~260x WORSE at 3000, because the slow
     # EMA has not warmed up -- so it is gated on budget, never swapped in blind.
     # JAX only: torch has no AdEMAMix and one is deliberately not written.
     first_order: str = "adam"
@@ -375,7 +375,7 @@ class AxialTrainConfig:
     # JAX onto the published torch behaviour rather than moving both somewhere new.
     lbfgs_history: int = 50
 
-    # Laplace embedding (REPORT-01 section C.7, docs/axial_nn.md section 7.5.18).
+    # Laplace embedding (`docs/axial_nn.md` section 7.5.18).
     # Physical decay rates in 1/s; the embedding uses `exp(-s_k * t_end * t_hat)`.
     # `()` is off and is the control.
     #

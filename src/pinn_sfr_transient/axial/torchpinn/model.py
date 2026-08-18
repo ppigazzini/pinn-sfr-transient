@@ -246,8 +246,8 @@ class AxialPinn(nn.Module):
         ``T_f`` from 722 K to -1 K over 115 iterations *while the loss fell*, and
         the logarithmic Doppler of Eq. 4.5-3 then returned NaN. The residual was
         perfectly content in that nonphysical region — the spurious-solution mode
-        of arXiv:2604.23528, and exactly what REPORT-01 section 5.2 item 8 says to
-        parameterise away. Constraining the ansatz to the physical manifold
+        of arXiv:2604.23528, and exactly the thing to parameterise away. Constraining
+        the ansatz to the physical manifold
         removes the region rather than penalising it.
 
         The structure is pinned to ``T_in`` at ``zeta = 0`` as a side effect, which
