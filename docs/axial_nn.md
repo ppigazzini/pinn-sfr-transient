@@ -20,7 +20,18 @@ quasi-Newton stage independently at fixed f128 — the question §7.5.3 and §7.
 answered under a constraint. Committed but unrun: `frontfrac`,
 `capacity-optimiser`.
 
-> **Every number below predates the retirement of the early-time collocation
+> **Every number below was measured on a different random stream from the one this code
+> now draws, and none has been re-measured.** `seed = 0` here used to take
+> `split(key)[1]` for the model where the reference implementation takes `split(key)[0]`,
+> derive the collocation set from a four-way split rather than `split(k_points)[0]`, and
+> run the first-order stream off the leftover of the model split rather than
+> `fold_in(key, 1)`. Same seed, different weights, different points, different batches —
+> with identical shapes and an identical parameter count, so nothing looked wrong. The
+> reference measures the key derivation alone at 0.0314 s → 0.0103 s of boiling-onset
+> error, and the seed spread on this problem reaches 12.5×. Tables here are therefore one
+> draw from a stream that no longer exists.
+>
+> **Every number below also predates the retirement of the early-time collocation
 > cluster, and none has been re-measured since.** Both axial samplers used to draw
 > `n_colloc` uniform points *plus* `n_colloc // 2` confined to the first 40% of the
 > window, unconditionally and with no way to switch it off. At `n_colloc = 500` that
@@ -118,7 +129,8 @@ capacity decides *how sharp a peak is representable at all*.
 | **M6 acceptance** | **failed**, 11.1% on `L2(P)` against a 1% bar |
 | **D-TH-2** | `z`-dependent flow after voiding: implemented, and Radau cannot step it |
 | **D-FB-3** | five feedback mechanisms omitted; the model is **non-conservative** in that direction |
-| **Re-measurement after the sampler change** | retiring the early-time cluster (§0) changed the formulation, so every table here is provisional until re-run. Largest single item on this list, and none of it is started |
+| **Re-measurement** | three changes now separate this code from the tables: the early-time cluster was retired, the RNG derivation was corrected to the reference's, and 24 knobs went. Every table here is provisional until re-run. Largest single item on this list, and none of it is started |
+| **The retired knobs** | 24 removed on measured evidence (§3.1). The measurements stay in §7; the options do not. A section that describes setting one is describing history |
 | **The compiled torch loop** | `compile=True` makes torch 1.78×–1.96× faster than jitted JAX at matched settings (§7.5.19). Whether that should move the measurement backend is undecided: it is one width, one thread count, one machine, and says nothing about accuracy |
 
 ### 0.5 Why the best known configuration is not the default
@@ -330,15 +342,30 @@ happens when the two disagree.
 |---|---|---|
 | `residual_scaling` | `True` | per-block variable scaling; §7.2.3 |
 | `void_closure` | `True` | the algebraic void, D-TH-3; §7.2.3–§7.2.4 |
-| `weight_max_ratio` | `1.0` (off) | adaptive block weights measured harmful; §7.2.1 |
-| `causal_eps` | `0.0` (off) | causal weighting measured harmful; §7.2.4 |
 | `t_train_frac` | `0.275` | the model's validity horizon, 16.5 s of 60 s. **Was `1.0`, which forms no front at all**; §7.2.4, §7.2.7 |
-| `front_net` | `False` | front-position network, measured worse on every metric |
-| `n_windows` | `1` (off) | neutral in the re-ablation; §7.2.5 |
 | `fourier_features` | `0` (off) | **now measured better** (−11.1% at 3 seeds); not adopted — see below |
-| `modified_mlp` | `False` (off) | **now measured better** (−16.1% at 3 seeds); not adopted — see below |
-| `pts_every` | `0` (off) | pseudo-time stepping measured harmful; §7.2.5 |
+| `fourier_bands` | `()` (off) | multi-scale bandwidth; `(1,4,16)` is the best front fidelity measured here, §7.5.14 |
+| `causal_chunks` | `32` | time windows the loss averages over, before averaging across them |
+| `first_order` | `"adam"` | the first-order stage. `"ademamix"` and `"schedulefree"` are the other arms |
 | `optimizer` | `"lbfgs"` | the quasi-Newton stage. `"ssbfgs"` selects limited-memory self-scaled BFGS; §7.5 |
+
+> **Twenty-four knobs were retired, and the sections measuring them are now history
+> rather than options.** Everything below that was `off by default because it was
+> measured harmful or inert` is gone from the code: the adaptive block weights
+> (`weight_max_ratio` and its cadence and momentum), the causal ramp (`causal_eps`),
+> pseudo-time stepping (`pts_every`, `pts_dtau`, `pts_growth`), the time-window
+> curriculum (`n_windows`), the modified MLP (`modified_mlp`), the front machinery
+> (`front_net`, `front_frac`, `front_level_set`, `level_set_input`), the onset head
+> (`onset_head`), the Laplace embedding (`laplace_rates`, `laplace_mode`), the Beignet
+> pyramid (five fields), the two encoder-freeze schedules (`freeze_encoder`,
+> `freeze_after`) and the blocked polish restart (`polish_refresh`).
+>
+> Each measurement that retired one is still recorded in §7 — a negative result is a
+> result — but the knob it names is no longer a thing you can set. The configuration
+> surface is 54 fields down to 30, against the reference implementation's 15.
+>
+> Ten study sub-commands went with them: `combo`, `levelset`, `frontfrac`, `lsinput`,
+> `onset`, `laplace`, `freezeenc`, `adamcheck`, `dlstyle`, `adamonly`.
 
 **Two defaults are open questions rather than settled ones.** §7.2.5 shows
 Fourier features and the modified MLP both improve every temperature under the
@@ -1275,6 +1302,26 @@ separately. That is elementwise work, it is exactly what fusion is for, and
 The general lesson is the one `fullgraph` now enforces: **a partial compile measures
 your graph breaks, not your kernels.** A silent fallback to eager reports the result
 as a small win and hides the reason.
+
+**And a second lesson, from the same knob a milestone later: check which code the switch
+actually reaches.** `compile` wrapped the first-order loss and nothing else. The
+quasi-Newton closure called `causal_loss` directly, so the polish ran eager however the
+knob was set — and for an `adam_iters = 0` arm, which is the shape of most funded
+configurations here, `compile=True` did nothing whatsoever. It is also the stage that
+evaluates the loss most, several times per iteration through the line search, and the
+easier of the two to compile: a fixed collocation set means one input shape and one
+compilation, where the first-order loop pays a recompile each time RAR grows the
+reservoir. Sharing one compiled callable between the stages gives, at 500 points and
+f256 from `tools/backend_smoke.py --compile`:
+
+| stage | eager | compiled | |
+|---|---|---|---|
+| first-order | 87.96 ms/iteration | 6.71 | 13.1× |
+| quasi-Newton | 104.58 ms/iteration | 16.30 | **6.4×** |
+
+The optimiser itself is not compiled and cannot be: `torch.optim.LBFGS` is wrapped in
+`torch._dynamo.disable` upstream. It does not need to be — its step is a two-loop
+recursion over 17 029 parameters, and the cost is the residual forward and backward.
 
 **The 2.4× reported above is therefore an eager-torch number**, as is every speed
 comparison in §7.5.19. Against the compiled loop the ordering reverses; see the

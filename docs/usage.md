@@ -285,7 +285,8 @@ field for field, which stops a knob landing in one backend only. It cannot see a
 both declare and only one reads, and six were in that state: `adam_colloc`,
 `polish_colloc`, `polish_refresh` and `adam_checkpoint_every` were dropped by torch, the
 schedule was plain cosine whatever `lr_warmup` said, and `first_order="ademamix"` ran
-plain Adam under that label. All six now act, and
+plain Adam under that label. Five now act and `polish_refresh` was retired outright —
+§7.5.37 measured the blocked restart it schedules as harmful.
 [`../tests/axial/test_torch_knobs.py`](../tests/axial/test_torch_knobs.py) asserts that
 the config reaches the algorithm rather than that training completes.
 
@@ -335,12 +336,16 @@ OMP_NUM_THREADS=8 uv run python tools/axial_study.py plan-a     # closed-loop po
 The training studies take tens of minutes per arm. `ruler` is 42 seconds and needs
 no deep-learning extra at all.
 
-**`--compile` on a long torch arm.** The torch first-order loss runs under
-`torch.compile` when asked, which is over 10x at f256 with 500 collocation points
-(10.7x to 15.1x across four runs on 8 pinned cores) and changes nothing else — 200
-iterations trained both ways from one seed agree to `3.6e-16` in the parameter vector.
+**`--compile` on a long torch arm.** The torch loss runs under `torch.compile` when
+asked — **both the first-order loop and the quasi-Newton polish**. At f256 with 500
+collocation points on 8 pinned cores: over 10× on the first-order loop (10.7× to 15.1×
+across four runs) and **6.4× on the polish** (104.58 → 16.30 ms per iteration). It
+changes nothing else — 200 iterations trained both ways from one seed agree to
+`3.6e-16` in the parameter vector.
+
 It is opt-in because compilation costs 12 to 40 seconds per collocation shape, and RAR
-produces a new shape every `rar_every`, so a short arm never earns it back:
+produces a new shape every `rar_every`, so a short arm never earns it back. The polish
+is the cheaper case: a fixed collocation set means one shape and one compilation:
 
 ```bash
 OMP_NUM_THREADS=8 uv run python tools/axial_study.py budget --compile
@@ -460,7 +465,7 @@ float32).
 | `[pinn] forward-mode autodiff unavailable…` | harmless; it auto-falls back to reverse mode. To force it, set `jacobian="reverse"` |
 | Validation step says "Run `pinn-sfr reference` first" | generate the reference `.npz` before training |
 | `ty` flags `torch`/`deepxde` symbols | expected; the optional backends are excluded from `ty` in `pyproject.toml` precisely so the gate does not flip on whether an extra is installed |
-| Training loss plateaus / diverges | raise `causal_eps`, lower `lr`, or increase `lbfgs_iters`; check `device`/precision |
+| Training loss plateaus / diverges | lower `lr` or increase `lbfgs_iters`; check `device`/precision. (For the 0D model, `causal_eps` is also available) |
 | An axial run takes far longer than the last one | another run is oversubscribing the cores; pin `OMP_NUM_THREADS` on both |
 | Two axial runs disagree at the same seed | check the thread budget matches before suspecting the code |
 

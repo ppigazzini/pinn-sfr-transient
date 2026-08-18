@@ -267,13 +267,14 @@ and stay comparable.
   so an equation citation can be checked without a network round-trip. Fetched by
   [`tools/fetch_sas_manual.py`](tools/fetch_sas_manual.py).
 - [`tools/axial_study.py`](tools/axial_study.py) — one sub-command per published
-  axial study: `ruler`, `horizon`, `budget`, `grid`, `qnladder`, `optimizer`,
-  `parity`, `plan-a`, `combo`, `margin`, `scaling`, `levelset`, `frontfrac`,
-  `capacity-optimiser`, `default`, `aniso`, `bands`, `lsinput`, `onset`, `laplace`,
-  `regime`, `regime-sign`. Every table in `axial_nn.md` and
-  `axial_physics.md` §10 is reproducible by one of them. This exists because it
-  once did not: a published configuration differed from the shipped default and
-  nobody could tell, since the measurement lived in an uncommitted scratch file.
+  axial study: `ademamix`, `aniso`, `bakeoff`, `bands`, `bandsbudget`, `budget`,
+  `capacity-optimiser`, `default`, `fourierbudget`, `grid`, `horizon`, `ladder`,
+  `ladder-rows`, `margin`, `optimizer`, `parity`, `plan-a`, `qnladder`, `regime`,
+  `regime-sign`, `ruler`, `scaling`, `verify`. This exists because it once did not: a
+  published configuration differed from the shipped default and nobody could tell, since
+  the measurement lived in an uncommitted scratch file.
+  `--save-dir` writes every checkpoint to disk as it is taken, so a run that is stopped
+  still leaves what it earned; ten sub-commands were retired with the knobs they drove.
 - [`docs/usage.md`](docs/usage.md) — install, run, train, use as a library, compute
   requirements, troubleshooting.
 - [`docs/writing.md`](docs/writing.md) — the standard every claim in this repository
