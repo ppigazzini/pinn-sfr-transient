@@ -55,12 +55,13 @@ def _collocation(
         zeta_q = jnp.asarray(p.zeta_nodes().reshape(-1, 1))
         weights = tuple(jnp.asarray(w) for w in kinetics_weights(p))
         return that, zeta_q, weights
-    # Still split FOUR ways although the cluster that used `k2` is gone. Splitting
-    # three ways would hand a different `k1` to the uniform draw and silently move
-    # every remaining number, which is the RNG-stream hazard already seen once:
-    # the companion moved boiling-onset error from 0.0314 s to 0.0103 s by
-    # changing which key the draw consumes, with nothing else altered.
-    k1, _k2, k3, k4 = jax.random.split(key, 4)
+    # THE UNIFORM DRAW CONSUMES `split(key)[0]`, the reference implementation's exact
+    # derivation. It consumed `split(key, 4)[0]`, a different stream -- and the comment
+    # that stood here defended that split on the grounds that it must not move, while it
+    # was already not the stream every reference number was drawn from. The optional
+    # draws below take FOLDED keys, so switching one on cannot perturb the base draw.
+    k1 = jax.random.split(key)[0]
+    k3, k4 = jax.random.fold_in(key, 2), jax.random.fold_in(key, 3)
     pts = jax.random.uniform(k1, (cfg.n_colloc, 2)).at[:, 1].multiply(t_max)
     parts = [pts]
     if model is not None and uses_front(cfg) and cfg.front_frac > 0.0:

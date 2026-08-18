@@ -219,7 +219,18 @@ class AxialPinn(eqx.Module):
     onset_raw: jax.Array | None
 
     def __init__(self, cfg: AxialTrainConfig, key: jax.Array) -> None:
-        k_field, k_kin, k_front, k_emb = jax.random.split(key, 4)
+        # THE REFERENCE IMPLEMENTATION'S SPLIT: the embedding takes `split(key)[0]` and
+        # the field network `split(key)[1]`, so the same seed builds the same weights.
+        # This was `split(key, 4)`, which handed both a different key -- identical shapes
+        # and an identical 25 221 parameter count, entirely different values, and no way
+        # to compare a run here with a reference one.
+        #
+        # The optional heads take FOLDED keys rather than widening the split, so turning
+        # one on cannot move the field network or the embedding. That is the property the
+        # four-way split was defending and could not deliver.
+        k_emb, k_field = jax.random.split(key)
+        k_kin = jax.random.fold_in(key, 2)
+        k_front = jax.random.fold_in(key, 3)
         use_front = bool(cfg.front_net and cfg.void_closure)
         n_in = 3 if (use_front or cfg.level_set_input) else 2
         if cfg.beignet_levels:

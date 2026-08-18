@@ -83,8 +83,20 @@ def train(  # noqa: C901, PLR0915 - one loop with five cadences; splitting it wo
     """
     p = p or AxialParams()
     cfg = cfg or AxialTrainConfig()
+    # THE REFERENCE IMPLEMENTATION'S DERIVATION, EXACTLY. `k_model` is `split(key)[0]`,
+    # the fixed collocation set comes off `k_points = split(key)[1]`, and the first-order
+    # stream is `fold_in(key, 1)` rather than a wider split -- splitting differently moves
+    # both of the others.
+    #
+    # This read `key, k_model = jax.random.split(key)`, taking the WRONG HALF for the
+    # model and deriving every draw from the other one. Same seed, different weights,
+    # different points: `seed = 0` here was not `seed = 0` there, so no number from this
+    # backend could be compared with a reference one, and the seed spread on this problem
+    # reaches 12.5x. The reference measures the key derivation alone at 0.0314 s -> 0.0103 s
+    # of boiling-onset error.
     key = jax.random.PRNGKey(cfg.seed)
-    key, k_model = jax.random.split(key)
+    k_model, k_points = jax.random.split(key)
+    k_step = jax.random.fold_in(key, 1)
     model = AxialPinn(cfg, k_model)
 
     n_blocks = (
@@ -108,6 +120,7 @@ def train(  # noqa: C901, PLR0915 - one loop with five cadences; splitting it wo
         updates, opt_state = optimizer.update(grads, opt_state, params)
         return eqx.apply_updates(model, updates), opt_state, loss
 
+    key = k_step  # the first-order stream; the polish takes `k_points` untouched
     rar: tuple | None = None
     anchor: tuple | None = None
     dtau = cfg.pts_dtau
@@ -219,8 +232,10 @@ def train(  # noqa: C901, PLR0915 - one loop with five cadences; splitting it wo
         model = _schedule_free_x(model, opt_state)
 
     if cfg.lbfgs_iters > 0:
-        key, pk = jax.random.split(key)
-        model = _run_polish(model, p, cfg, rar, w, pk, on_checkpoint, verbose=verbose)
+        # `k_points`, not a key derived from the first-order stream: the reference draws
+        # its fixed set from `split(key)[1]` whether or not a first-order stage ran, so an
+        # `adam_iters = 0` arm here draws exactly the reference's set.
+        model = _run_polish(model, p, cfg, rar, w, k_points, on_checkpoint, verbose=verbose)
     return model, p, cfg
 
 
