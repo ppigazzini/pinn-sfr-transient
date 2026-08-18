@@ -436,13 +436,36 @@ def study_ademamix(out: Path) -> None:
 
     The failure follows warmup completion by 24-52k in every case observed, including a
     probe whose warmup ended at 40k and which failed at 71k. **A longer warmup postpones
-    it rather than preventing it** -- the instability is full `alpha = 5.0` at this rate,
-    not an under-warmed EMA. `--lr` and `--warmup-frac` exist to search for a rate that
-    holds; `--lr 3e-5` is the arm under test.
+    it rather than preventing it.**
 
     The corpus this extends carries the arm at **seed 0 only** -- one of the two that
     fail. At one seed it would have shipped as a working configuration, which is the
     whole reason AGENTS.md forbids a headline from a single seed.
+
+    **The cause is this loop, not the method.** Three hypotheses, all wrong:
+
+      * *the learning rate* -- 3e-5 reached 143x its settled level by 200k. It slows
+        the failure; it does not prevent it.
+      * *residual-adaptive resampling* -- with `rar_every = 0` verified present in the
+        saved header, seeds 0 and 1 still diverged, at 35k and 65k. 2 of 3, exactly the
+        rate with RAR on.
+      * *warmup length* -- failure follows warmup completion by 15-52k at every length
+        tried, 20k through 100k.
+
+    A controlled head-to-head settles it. The companion's own loop, same seed 0, same
+    lr 1e-4, batch 500, f256, 20k warmup, 200k budget:
+
+        iters      companion        this loop (RAR off)
+         30k       1.36e-3          5.91e-4
+         40k       1.28e-3          6.07e-3
+         50k       1.14e-3          1.51e-2
+         80k       --               8.53e-1
+
+    Remaining suspects are the loss construction -- `causal_loss` with per-block
+    normalisation and adaptive weights, against a plain chunked mean of summed squared
+    residuals -- and the residual scaling. This loop's loss reads ~2.5x SMALLER
+    throughout, so it is not a simple scale factor; that points at the relative
+    weighting between blocks rather than the overall magnitude.
 
         OMP_NUM_THREADS=8 uv run python tools/axial_study.py ademamix --cpu-block 0
         uv run python tools/axial_study.py ladder --out __DEV/studies/ladder.json
