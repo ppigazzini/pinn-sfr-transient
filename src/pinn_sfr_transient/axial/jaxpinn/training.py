@@ -98,7 +98,13 @@ def train(
         # training, matching the torch twin. With n_windows = 1 this is a no-op.
         stage = min(int(it / max(cfg.adam_iters, 1) * cfg.n_windows) + 1, cfg.n_windows)
         t_max = stage / cfg.n_windows
-        if it and it % cfg.rar_every == 0:
+        # `cfg.rar_every and ...`: 0 means OFF, as it does for `polish_refresh`,
+        # `pts_every` and `adam_checkpoint_every`. Without the guard `it % 0` raises
+        # ZeroDivisionError, so RAR could not be disabled at all -- which matters
+        # because RAR is the one thing this loop adds to the batch that the
+        # companion's first-order step does not, and it is the leading suspect for
+        # the AdEMAMix divergence.
+        if cfg.rar_every and it and it % cfg.rar_every == 0:
             key, rk = jax.random.split(key)
             rar = _rar_points(model, p, cfg, rk, w)
         # FRESH points every step, plus the fixed-size RAR set. The count is

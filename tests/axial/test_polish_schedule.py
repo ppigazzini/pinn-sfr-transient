@@ -239,3 +239,41 @@ def test_first_order_checkpoints_are_off_by_default():
     )
     train(AxialParams(), cfg, verbose=False, on_checkpoint=lambda n, _m: seen.append(n))
     assert seen == []
+
+
+def test_rar_every_zero_disables_resampling_rather_than_raising():
+    """0 means OFF, as it does for every sibling cadence knob in this config.
+
+    `it % cfg.rar_every` raised ZeroDivisionError, so residual-adaptive resampling could
+    not be turned off at all. That mattered: RAR is the one thing this training loop adds
+    to a first-order batch that the companion's converging AdEMAMix arm never had, and it
+    could not be ablated to find out whether it was the cause.
+    """
+    pytest.importorskip("jax")
+    from pinn_sfr_transient.axial.config import AxialParams
+    from pinn_sfr_transient.axial.jaxpinn import AxialTrainConfig, train
+
+    cfg = AxialTrainConfig(
+        width=8,
+        depth=2,
+        fourier_features=8,
+        n_colloc=32,
+        adam_iters=12,
+        lbfgs_iters=0,
+        rar_every=0,
+        seed=0,
+    )
+    model, _, _ = train(AxialParams(), cfg, verbose=False)
+    assert model is not None
+
+
+def test_the_zero_off_convention_holds_across_the_cadence_knobs():
+    """A knob that means 'off' at 0 everywhere except one place is a trap."""
+    pytest.importorskip("jax")
+    from pinn_sfr_transient.axial.jaxpinn import AxialTrainConfig
+
+    cfg = AxialTrainConfig()
+    for knob in ("rar_every", "polish_refresh", "pts_every", "adam_checkpoint_every"):
+        assert hasattr(cfg, knob), knob
+    assert AxialTrainConfig(adam_checkpoint_every=0).adam_checkpoint_every == 0
+    assert AxialTrainConfig(rar_every=0).rar_every == 0

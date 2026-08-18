@@ -67,6 +67,7 @@ _LADDER_N = 0
 _CHECK = False
 _WARMUP_FRAC = None
 _LR = None
+_RAR = None
 FINEST_N = 640
 SEEDS = (0, 1, 2)
 # Fourier ladder for the margin study. Extended until the trend turns: 32 -> 256
@@ -2307,6 +2308,14 @@ def main() -> int:
         help="override quasi-Newton iterations on arms that do not set their own",
     )
     ap.add_argument(
+        "--rar-every",
+        type=int,
+        default=None,
+        help="override rar_every for the `ademamix` arm; 0 disables residual-adaptive "
+        "resampling entirely. The companion's first-order step has no RAR, and its arm "
+        "converged at the rate that diverges here",
+    )
+    ap.add_argument(
         "--lr",
         type=float,
         default=None,
@@ -2373,6 +2382,8 @@ def main() -> int:
     _WARMUP_FRAC = args.warmup_frac
     global _LR  # noqa: PLW0603
     _LR = args.lr
+    global _RAR  # noqa: PLW0603
+    _RAR = args.rar_every
     global _HISTORY  # noqa: PLW0603
     _HISTORY = args.lbfgs_history
     global _ADAM, _QN
