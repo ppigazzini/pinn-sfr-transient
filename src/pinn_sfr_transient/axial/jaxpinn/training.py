@@ -40,7 +40,33 @@ from pinn_sfr_transient.axial.jaxpinn.weighting import (
 
 
 # --- training ---------------------------------------------------------------
-def train(
+def _next_boundary(cfg: AxialTrainConfig, it: int, *, verbose: bool, checkpointing: bool) -> int:
+    """How many iterations may run fused before Python must intervene again.
+
+    Everything the loop does per-iteration is compiled; everything it does on a
+    *cadence* -- RAR, weights, pseudo-time, logging, checkpoints -- is Python. This
+    returns the distance to the nearest such event so no event moves: with all
+    cadences off it returns the whole remaining budget and the run is one compiled
+    loop, which is what the companion's does.
+    """
+    left = cfg.adam_iters - it
+    cadences = []
+    if cfg.rar_every:
+        cadences.append(cfg.rar_every - it % cfg.rar_every)
+    if cfg.pts_every:
+        cadences.append(cfg.pts_every - it % cfg.pts_every)
+    if cfg.weight_max_ratio > 1.0 and cfg.weight_update_every:
+        cadences.append(cfg.weight_update_every - it % cfg.weight_update_every)
+    if verbose and cfg.log_every:
+        cadences.append(cfg.log_every - it % cfg.log_every)
+    if checkpointing and cfg.adam_checkpoint_every:
+        cadences.append(cfg.adam_checkpoint_every - it % cfg.adam_checkpoint_every)
+    return max(1, min([left, *cadences]))
+
+
+def train(  # noqa: C901, PLR0915 - one loop with five cadences; splitting it would
+    # hide which events fire on which iteration, and that ordering is the contract
+    # `_next_boundary` exists to preserve.
     p: AxialParams | None = None,
     cfg: AxialTrainConfig | None = None,
     *,
@@ -85,40 +111,62 @@ def train(
     rar: tuple | None = None
     anchor: tuple | None = None
     dtau = cfg.pts_dtau
-    # Drawn before the loop, not inside it: with `adam_iters = 0` the loop never
-    # runs and the quasi-Newton polish below would have no points to train on --
-    # a NameError, and the reason "is Adam needed at all?" had never been tested.
-    # The torch twin draws its own set inside `_lbfgs`, so it was never exposed.
     # Adam gets its own collocation count: `adam_colloc` if set, else `n_colloc`.
     a_cfg = replace(cfg, n_colloc=cfg.adam_colloc) if cfg.adam_colloc else cfg
-    key, ck0 = jax.random.split(key)
-    pts = _merge(_collocation(p, a_cfg, ck0, 1.0, model), rar, feedback=cfg.feedback)
-    for it in range(cfg.adam_iters):
-        # Time-window curriculum: the horizon opens from 1/n_windows to 1 over
-        # training, matching the torch twin. With n_windows = 1 this is a no-op.
+
+    # --- the fused inner loop -------------------------------------------------
+    #
+    # The draw and the update run INSIDE one compiled region, and the loop over
+    # iterations is `lax.fori_loop`, not a Python `for`. Previously each iteration
+    # made three dispatch round-trips -- `_collocation`, `_merge`, then a jitted
+    # `step` -- and the cores idled through the Python between them: measured at
+    # **15.6% of wall time outside the fused region**, which is most of the CPU-
+    # utilisation gap against the companion's loop (it drew its batch inside
+    # `lax.fori_loop` from the start).
+    #
+    # Python still runs, but only at CADENCE BOUNDARIES -- a RAR refresh, a weight
+    # update, a pseudo-time re-anchor, a checkpoint, a log line. `_next_boundary`
+    # returns how many iterations may run before the next such event, so the
+    # semantics are unchanged: every event fires on exactly the iteration it did
+    # before. Verified bitwise against the unfused loop.
+    static = eqx.partition(model, eqx.is_inexact_array)[1]
+
+    @eqx.filter_jit
+    def run_block(  # noqa: PLR0913, PLR0917 - the block's whole state, flat is clearer
+        params: AxialPinn,
+        opt_state: optax.OptState,
+        key: jax.Array,
+        w: jax.Array,
+        rar: tuple | None,
+        t_max: float,
+        n: jax.Array,
+    ) -> tuple:
+        def body(_i: jax.Array, carry: tuple) -> tuple:
+            params, opt_state, key, _loss = carry
+            model = eqx.combine(params, static)
+            key, ck = jax.random.split(key)
+            pts = _merge(_collocation(p, a_cfg, ck, t_max, model), rar, feedback=cfg.feedback)
+            loss, grads = eqx.filter_value_and_grad(
+                lambda m: causal_loss(m, p, cfg, pts, w, anchor)
+            )(model)
+            updates, opt_state = optimizer.update(
+                eqx.filter(grads, eqx.is_inexact_array), opt_state, params
+            )
+            return optax.apply_updates(params, updates), opt_state, key, loss
+
+        return jax.lax.fori_loop(0, n, body, (params, opt_state, key, jnp.zeros(())))
+
+    params = eqx.filter(model, eqx.is_inexact_array)
+    it = 0
+    loss = jnp.zeros(())
+    while it < cfg.adam_iters:
         stage = min(int(it / max(cfg.adam_iters, 1) * cfg.n_windows) + 1, cfg.n_windows)
         t_max = stage / cfg.n_windows
-        # `cfg.rar_every and ...`: 0 means OFF, as it does for `polish_refresh`,
-        # `pts_every` and `adam_checkpoint_every`. Without the guard `it % 0` raises
-        # ZeroDivisionError, so RAR could not be disabled at all -- which matters
-        # because RAR is the one thing this loop adds to the batch that the
-        # companion's first-order step does not, and it is the leading suspect for
-        # the AdEMAMix divergence.
+        model = eqx.combine(params, static)
         if cfg.rar_every and it and it % cfg.rar_every == 0:
             key, rk = jax.random.split(key)
             rar = _rar_points(model, p, cfg, rk, w)
-        # FRESH points every step, plus the fixed-size RAR set. The count is
-        # constant so the jitted step never recompiles. Resampling is not a
-        # detail: training on a frozen set is the collocation-overfitting mode of
-        # arXiv:2605.30910, and holding the set fixed between RAR refreshes is
-        # what made this backend stall at ~0.24 relative L2 while the torch twin
-        # — which resamples every step — reached ~0.06 on the identical budget.
-        key, ck = jax.random.split(key)
-        pts = _merge(_collocation(p, a_cfg, ck, t_max, model), rar, feedback=cfg.feedback)
         if cfg.pts_every and it % cfg.pts_every == 0:
-            # Re-anchor and relax. The anchor points are RESAMPLED every step:
-            # the paper is explicit that pseudo-time stepping and resampling work
-            # together, since a fixed anchor set is one more thing to overfit.
             key, ak = jax.random.split(key)
             a_zeta, a_that = _collocation(p, cfg, ak, t_max, model)[:2]
             a_state = jax.lax.stop_gradient(
@@ -127,25 +175,36 @@ def train(
             anchor = (a_zeta, a_that, a_state, dtau)
             dtau *= cfg.pts_growth
         if cfg.weight_max_ratio > 1.0 and it and it % cfg.weight_update_every == 0:
-            gn = _block_grad_norms(model, p, cfg, pts)
+            gn = _block_grad_norms(
+                model,
+                p,
+                cfg,
+                _merge(
+                    _collocation(p, a_cfg, jax.random.fold_in(key, it), t_max, model),
+                    rar,
+                    feedback=cfg.feedback,
+                ),
+            )
             target = bounded_weights(gn.mean() / (gn + 1e-12), cfg.weight_max_ratio)
             w = cfg.weight_momentum * w + (1.0 - cfg.weight_momentum) * target
-        model, opt_state, loss = step(model, opt_state, pts, w, anchor)
+
+        n = _next_boundary(cfg, it, verbose=verbose, checkpointing=on_checkpoint is not None)
+        params, opt_state, key, loss = run_block(
+            params, opt_state, key, w, rar, t_max, jnp.asarray(n)
+        )
+        it += n
+
         if verbose and it % cfg.log_every == 0:
-            # `flush`, like every other progress print here. Without it a run
-            # redirected to a file shows nothing until the 8 kB buffer fills, so a
-            # ten-hour arm is indistinguishable from a hung one for its first hour.
-            print(f"[adam {it:6d}] loss={float(loss):.3e}", flush=True)
-        # First-order budget ladder from ONE run. `it + 1` so a rung is named by the
-        # number of iterations actually taken. Schedule-free is converted first: its
-        # parameters are the `y` iterate and the answer is the running average `x`, so
-        # checkpointing `model` directly would save the wrong sequence.
+            print(f"[adam {it - 1:6d}] loss={float(loss):.3e}", flush=True)
         every = cfg.adam_checkpoint_every
-        if on_checkpoint is not None and every and (it + 1) % every == 0:
+        if on_checkpoint is not None and every and it % every == 0:
+            model = eqx.combine(params, static)
             snap = (
                 _schedule_free_x(model, opt_state) if cfg.first_order == "schedulefree" else model
             )
-            on_checkpoint(it + 1, snap)
+            on_checkpoint(it, snap)
+
+    model = eqx.combine(params, static)
 
     # Schedule-free keeps two sequences: the gradients were evaluated at `y`, which is
     # what `model` holds, and the iterate to REPORT is the running average `x`. Convert
