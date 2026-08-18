@@ -279,6 +279,22 @@ Each backend is a **package**, and the entry-point module above is a facade over
 | modules | `config`, `archs`, `ansatz`, `model`, `weighting`, `training`, `evaluate` | `config`, `archs`, `ansatz`, `residuals`, `weighting`, `samplers`, `training`, `evaluate` |
 | knobs | `TrainConfig` — the same fields, with the same defaults, in both | |
 
+**Field parity is not behavioural parity, and the difference has bitten.** The check in
+[`../tools/backend_smoke.py`](../tools/backend_smoke.py) compares the two dataclasses
+field for field, which stops a knob landing in one backend only. It cannot see a field
+both declare and only one reads, and six were in that state: `adam_colloc`,
+`polish_colloc`, `polish_refresh` and `adam_checkpoint_every` were dropped by torch, the
+schedule was plain cosine whatever `lr_warmup` said, and `first_order="ademamix"` ran
+plain Adam under that label. All six now act, and
+[`../tests/axial/test_torch_knobs.py`](../tests/axial/test_torch_knobs.py) asserts that
+the config reaches the algorithm rather than that training completes.
+
+Two fields are declared divergences rather than defects. `first_order` accepts
+`"ademamix"` and `"schedulefree"` on JAX only — both are `optax.contrib` algorithms with
+no torch equivalent, and torch **raises** rather than substituting Adam. `compile` is
+torch-only, because the JAX step is always under `eqx.filter_jit` and there is nothing
+to switch.
+
 Two modules do not mirror each other, and that is torch's idiom rather than a
 design choice: `nn.Module` owns its parameters *and* its forward pass, so the ansatz
 and the residuals share `torchpinn.model`; and the sampler needs the model to place
