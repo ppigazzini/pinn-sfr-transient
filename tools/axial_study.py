@@ -1783,7 +1783,7 @@ def study_adamcheck(out: Path) -> None:
     where RAR fires and the loop is doing real work, at two embedding widths, with
     everything downstream identical:
 
-    * `qn50000` at 6000 points (`polish_colloc = 4000`), **redrawn every 1000 iterations**
+    * `qn50000` at 6000 points (`polish_colloc = 6000`), **redrawn every 1000 iterations**
       -- the blocked-restart protocol of arXiv:2605.24278, so the polish cannot overfit a
       single draw and curvature stays consistent within each block;
     * `f32` and `f64`, the two rungs §7.5.31 found indistinguishable from f256 at 42% of
@@ -1805,7 +1805,7 @@ def study_adamcheck(out: Path) -> None:
                     "fourier_features": n,
                     "adam_iters": a,
                     "lbfgs_iters": 50000,
-                    "polish_colloc": 4000,
+                    "polish_colloc": 6000,
                     "polish_refresh": 1000,
                 },
             )
@@ -1827,7 +1827,7 @@ def study_adamcheck(out: Path) -> None:
                     "fourier_features": 64,
                     "adam_iters": 0,
                     "lbfgs_iters": 50000,
-                    "polish_colloc": 4000,
+                    "polish_colloc": 6000,
                     "polish_refresh": 0,
                 },
             )
@@ -1858,9 +1858,10 @@ def study_adamcheck(out: Path) -> None:
             # are below the determined point and the successes above it, so these rungs
             # bracket the threshold rather than sample a trend.
             #
-            # `polish_colloc` is n, and the sampler adds n//2 early-time points, so 6667
-            # and 13333 give 10 000 and 19 999 points. The label states the point count,
-            # not the knob, because the point count is the physical quantity.
+            # `polish_colloc` IS the point count. It was `n * 2/3` while the sampler
+            # added an early-time cluster of `n // 2` on top; that cluster is retired, so
+            # the knob and the label are now the same number. The rows already recorded
+            # were measured at the labelled counts, and this keeps a re-run on them.
             (
                 f"f64 adam0/qn50000@{pts}k-fixed [jax]",
                 {
@@ -1875,13 +1876,13 @@ def study_adamcheck(out: Path) -> None:
             )
             for seed in SEEDS
             for n, pts in (
-                (667, 1),
-                (1333, 2),
-                (2000, 3),
-                (2667, 4),
-                (3333, 5),
-                (6667, 10),
-                (13333, 20),
+                (1000, 1),
+                (2000, 2),
+                (3000, 3),
+                (4000, 4),
+                (5000, 5),
+                (10000, 10),
+                (20000, 20),
             )
         ]
         + [
@@ -1909,7 +1910,7 @@ def study_adamcheck(out: Path) -> None:
                     "fourier_features": 64,
                     "adam_iters": 0,
                     "lbfgs_iters": k,
-                    "polish_colloc": 3333,
+                    "polish_colloc": 5000,
                     "polish_refresh": 0,
                 },
             )
@@ -1944,7 +1945,7 @@ def study_adamcheck(out: Path) -> None:
                     "fourier_features": n,
                     "adam_iters": 0,
                     "lbfgs_iters": 50000,
-                    "polish_colloc": 3333,
+                    "polish_colloc": 5000,
                     "polish_refresh": 0,
                     "freeze_after": 10000,
                     "polish_checkpoints": (30000, 40000, 50000),
@@ -1976,7 +1977,7 @@ def study_adamcheck(out: Path) -> None:
                     "fourier_features": n,
                     "adam_iters": 0,
                     "lbfgs_iters": 50000,
-                    "polish_colloc": 3333,
+                    "polish_colloc": 5000,
                     "polish_refresh": 0,
                     "polish_checkpoints": (30000, 40000, 50000),
                 },
@@ -2009,8 +2010,8 @@ def study_adamcheck(out: Path) -> None:
                     "sf_warmup_frac": 0.1,
                     "adam_iters": a,
                     "lbfgs_iters": q,
-                    "n_colloc": 3333,
-                    "polish_colloc": 3333,
+                    "n_colloc": 5000,
+                    "polish_colloc": 5000,
                 },
             )
             # Two arms, and the pair is the point. `sfadamw30000/qn0` asks whether a
@@ -2047,14 +2048,13 @@ def study_dlstyle(out: Path) -> None:
     This arm runs the protocol properly, and changes three things at once **on purpose**
     -- it is a schedule, not an ablation, and the parts are known to interact:
 
-    * **Adam: 60 000 steps at 1000 points.** `adam_colloc = 667` because the sampler adds
-      an early-time cluster of half the count, so 667 + 333 = 1000 drawn.
+    * **Adam: 60 000 steps at 1000 points**, `adam_colloc = 1000`.
     * **Then the encoder is frozen.** §7.5.32 measured freezing it after 10 000 full-batch
       Adam steps as 7.2x worse -- but that is a statement about an encoder 10 000 steps
       had barely moved. Sixty thousand small-batch steps is the regime where an encoder
       is actually learned, which is the only regime where freezing it is a fair test.
     * **Quasi-Newton: 30 000 iterations at 6000 points, redrawn every 1000.**
-      `polish_colloc = 4000` gives the 6000 points every other table here uses, and
+      `polish_colloc = 6000` is the count every other table here uses, and
       `polish_refresh = 1000` matches the blocked BFGS of arXiv:2605.24278. Curvature
       stays consistent within a block; the stage as a whole can no longer overfit one
       draw.
@@ -2072,10 +2072,10 @@ def study_dlstyle(out: Path) -> None:
                     "backend": "jax",
                     "seed": seed,
                     "adam_iters": 60000,
-                    "adam_colloc": 667,
+                    "adam_colloc": 1000,
                     "freeze_encoder": True,
                     "lbfgs_iters": 30000,
-                    "polish_colloc": 4000,
+                    "polish_colloc": 6000,
                     "polish_refresh": 1000,
                 },
             )
