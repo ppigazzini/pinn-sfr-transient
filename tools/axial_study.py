@@ -65,6 +65,8 @@ _MODELS_DIR = "models"
 _LADDER_JSON = "__DEV/studies/ladder.json"
 _LADDER_N = 0
 _CHECK = False
+_WARMUP_FRAC = None
+_LR = None
 FINEST_N = 640
 SEEDS = (0, 1, 2)
 # Fourier ladder for the margin study. Extended until the trend turns: 32 -> 256
@@ -424,6 +426,23 @@ def study_ademamix(out: Path) -> None:
     One run per seed, not one per rung: `adam_checkpoint_every` emits a checkpoint every
     100k iterations, so three runs yield thirty scorable models.
 
+    **This configuration diverges on 2 of 3 seeds and must not be published as-is.**
+    Measured here, 1M budget, `lr 1e-4`, `warmup_frac 0.1` (a 100k warmup):
+
+        seed 0  diverged at 124k   floor 1.3e-4 -> 15.6 by 170k, monotone
+        seed 2  diverged at 152k   floor 1.1e-3 -> 6.2,  peak 1.4e+03
+        seed 1  survived           floor 5.1e-5 at 215k, still falling
+
+    The failure follows warmup completion by 24-52k in every case observed, including a
+    probe whose warmup ended at 40k and which failed at 71k. **A longer warmup postpones
+    it rather than preventing it** -- the instability is full `alpha = 5.0` at this rate,
+    not an under-warmed EMA. `--lr` and `--warmup-frac` exist to search for a rate that
+    holds; `--lr 3e-5` is the arm under test.
+
+    The corpus this extends carries the arm at **seed 0 only** -- one of the two that
+    fail. At one seed it would have shipped as a working configuration, which is the
+    whole reason AGENTS.md forbids a headline from a single seed.
+
         OMP_NUM_THREADS=8 uv run python tools/axial_study.py ademamix --cpu-block 0
         uv run python tools/axial_study.py ladder --out __DEV/studies/ladder.json
     """
@@ -438,7 +457,7 @@ def study_ademamix(out: Path) -> None:
     for seed in SEEDS:
         cfg = AxialTrainConfig(
             first_order="ademamix",
-            lr=1e-4,
+            lr=_LR or 1e-4,
             lr_warmup=True,
             fourier_features=256,
             adam_colloc=500,
@@ -446,6 +465,7 @@ def study_ademamix(out: Path) -> None:
             adam_iters=iters,
             lbfgs_iters=0,
             adam_checkpoint_every=every,
+            sf_warmup_frac=_WARMUP_FRAC or 0.1,
             seed=seed,
         )
         # `_MODELS_DIR`, not the default: `saver` writes to `models/` unless told
@@ -2287,6 +2307,22 @@ def main() -> int:
         help="override quasi-Newton iterations on arms that do not set their own",
     )
     ap.add_argument(
+        "--lr",
+        type=float,
+        default=None,
+        help="override the learning rate for the `ademamix` arm. At the shipped 1e-4 the "
+        "arm diverged on 2 of 3 seeds (at 124k and 152k of 1M); this exists to test "
+        "whether the rate rather than the warmup length is the cause",
+    )
+    ap.add_argument(
+        "--warmup-frac",
+        type=float,
+        default=None,
+        help="override sf_warmup_frac for the `ademamix` arm. AdEMAMix warms `alpha` and "
+        "`b3` over this fraction of the budget; at 0.1 seed 0 diverged at 124k of 1M, so "
+        "this exists to test whether a longer warmup prevents it",
+    )
+    ap.add_argument(
         "--models",
         default="models",
         help="directory of checkpoints for the `ladder` sub-command",
@@ -2333,6 +2369,10 @@ def main() -> int:
     global _MODELS_DIR, _LADDER_JSON, _LADDER_N, _CHECK
     _MODELS_DIR, _LADDER_JSON = args.models, args.ladder_json
     _LADDER_N, _CHECK = args.ladder_n_axial, args.check
+    global _WARMUP_FRAC  # noqa: PLW0603
+    _WARMUP_FRAC = args.warmup_frac
+    global _LR  # noqa: PLW0603
+    _LR = args.lr
     global _HISTORY  # noqa: PLW0603
     _HISTORY = args.lbfgs_history
     global _ADAM, _QN
