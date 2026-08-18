@@ -126,9 +126,15 @@ def train(  # noqa: C901, PLR0915 - one loop with five cadences; splitting it wo
     #
     # Python still runs, but only at CADENCE BOUNDARIES -- a RAR refresh, a weight
     # update, a pseudo-time re-anchor, a checkpoint, a log line. `_next_boundary`
-    # returns how many iterations may run before the next such event, so the
-    # semantics are unchanged: every event fires on exactly the iteration it did
-    # before. Verified bitwise against the unfused loop.
+    # returns how many iterations may run before the next such event, so the schedule
+    # is exact: every event fires on the iteration the cadence says it does, including
+    # for periods that do not divide the budget. `tests/axial/test_fused_loop.py`
+    # reconstructs the whole event set from `_next_boundary` and pins it.
+    #
+    # That -- not agreement with the previous loop -- is the contract. The previous loop
+    # drew the early-time cluster on every iteration, which was measured worse in every
+    # time window and is retired (see `samplers.py`); reproducing its numbers is not a
+    # goal and matching them would be a defect.
     static = eqx.partition(model, eqx.is_inexact_array)[1]
 
     @eqx.filter_jit
