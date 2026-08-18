@@ -187,14 +187,20 @@ memory now an explicit shared setting — and **every JAX accuracy number was
 superseded and re-measured** (§7.5.17). With that fixed the two agree to 1.08× at
 the largest capacity measured.
 
-The second half is speed. Every timing comparison had PyTorch pinned to 8 threads
-while JAX quietly used every core, because JAX's CPU backend ignores the variable
-PyTorch obeys and sizes its own pool — 291 threads where 8 were asked for. Given the
-machine equally and run one at a time, **JAX is 4.4× faster**, and 4.8× on the
-quasi-Newton stage, which is the stage that does all the work (§7.5.19). So a
-backend that looked slower *and* weaker was neither; both readings were artefacts of
-unequal settings. PyTorch stays a first-class arm — two independent implementations
-agreeing is the strongest check here, and it is what caught the defect.
+The second half is speed, and it has now reversed twice for the same reason: a
+comparison run at unequal settings. First, every timing had PyTorch pinned to 8
+threads while JAX quietly used every core, because JAX's CPU backend ignores the
+variable PyTorch obeys and sizes its own pool — 291 threads where 8 were asked for.
+Given the machine equally, JAX came out 4.4× faster. Then that comparison turned out
+to be against an *eager* PyTorch loop, because the compiled path was breaking into
+eight graphs and looked worth only 1.06×. With the graph whole, **PyTorch is
+1.78×–1.96× faster** than jitted JAX at matched settings (§7.5.19).
+
+Neither reading was a property of a framework; both were properties of how the two
+were being run. JAX remains the backend the long runs use, on accuracy and on the
+weight of measurement already taken with it. PyTorch stays a first-class arm — two
+independent implementations agreeing is the strongest check here, and it is what
+caught the defect.
 
 [`docs/axial_nn.md`](docs/axial_nn.md) **§0 is the status quo** — accuracy, what is
 settled, what is open, and **§0.6 says which configuration to use**. §5–§7 carry

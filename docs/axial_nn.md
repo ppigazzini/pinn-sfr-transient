@@ -133,12 +133,29 @@ the documentation is a defect regardless of what the alternative scores.
 
 ### 0.6 Which configuration to use
 
-**Use JAX.** At matched thread count and matched curvature memory it is **4.4×
-faster** than PyTorch (§7.5.19) and within **1.08×** on accuracy at f512
-(§7.5.10) — for most of this project's life it looked slower *and* weaker on one
-axis, and both readings were artefacts (§7.5.17, §7.5.19). PyTorch remains a
-first-class arm: two independent implementations agreeing is the strongest check
-here, and it is what caught the defect.
+**Use JAX for the long runs**, on accuracy grounds and on inertia: it is within
+**1.08×** of PyTorch at f512 (§7.5.10), and every measurement on the shelf was taken
+with it. For most of this project's life it looked slower *and* weaker on one axis,
+and both readings were artefacts (§7.5.17, §7.5.19).
+
+**The speed argument for that choice no longer holds.** The 4.4× in §7.5.19 was
+measured against an eager PyTorch loop. With `compile=True` the ordering reverses —
+at 500 collocation points and f256 on 8 pinned cores, best of three repeats per run,
+four runs:
+
+| | ms/iteration | spread within a run |
+|---|---|---|
+| torch, compiled | 7.85 – 8.94 | 1.05× – 1.21× |
+| JAX, jitted | 15.36 – 16.61 | 1.03× – 1.14× |
+
+The ranges do not overlap and the gap, **1.78× to 1.96× in PyTorch's favour**, is well
+outside the within-backend spread. `uv run python tools/backend_smoke.py --timing`
+reproduces it. This is one width, one thread count, one machine, and it is a timing
+and not an accuracy result, so it does not on its own move the default — but the
+sentence "JAX is faster" is now false as written.
+
+PyTorch remains a first-class arm: two independent implementations agreeing is the
+strongest check here, and it is what caught the defect.
 
 All figures below are three seeds. Wall-clocks are **contended** — several jobs at
 `OMP_NUM_THREADS=8` — so treat them as ratios, not benchmarks; accuracy is
@@ -1197,23 +1214,53 @@ a shared implementation removes it entirely (below). Both backends reach
 2.36× from the contended three-seed runs, 2.41× from a clean uncontended
 500-iteration pair (torch 105.9 s, jax 44.0 s).
 
-**The cause is not compilation, contrary to what this section previously claimed.**
-The obvious explanation was that `eqx.filter_jit` compiles the whole step while
-torch runs eager. Measured, it is wrong. `torch.compile` on the torch step buys
-**1.06×**, at 17 s of compile time — for a 3000-iteration run that is ~19 s saved
-against 17 s spent, so it does not earn its place and is not adopted.
+**Compilation was the cause, and this section said the opposite for four
+milestones. Both the measurement and the explanation behind it are withdrawn.**
 
-The profile says why. Of a 211 ms torch step: forward 116 ms, backward 71 ms,
-optimiser 25 ms. **88% is forward-plus-backward through `torch.func.jvp` in
-float64** — dense BLAS-bound linear algebra, which Inductor cannot improve. The
-optimiser is 12%, and `foreach` is indistinguishable from noise here (198.5 ms
-against 199.9 ms with it off) because the model has 12 parameter tensors and
-17k parameters, so there is almost nothing to fuse.
+The claim was that `torch.compile` on the torch step buys 1.06× at 17 s of compile
+time, so it does not earn its place. The number was real. What it measured was not
+the technique but this repository's code: the residual stack broke into **eight
+graphs**, so almost every operation still ran eager and 1.06× is what a compile that
+does not happen is worth. `fullgraph=True` would have raised instead of silently
+falling back, and that is now how the compiled path is configured.
 
-**The 2.4× is therefore unattributed.** The remaining candidates are how XLA fuses
-`vmap`-of-`jvp` against `torch.func.jvp`, and the float64 CPU kernels each stack
-dispatches to. Neither has been measured. **TBD** — and until it is, the number
-should be reported as an observation, not explained.
+Two defects held the graph open, both fixed:
+
+* `_backend.xp` sniffed `type(x).__module__` to select the array module. Dynamo
+  constant-folds that for a tensor and not for a Python float, and the residuals do
+  pass one, through `saturation_temperature(p.p_system)`.
+* `state_and_grads` marked its coordinates `requires_grad`. Forward mode carries the
+  derivative in the tangent so nothing needed the reverse-mode leaf, but AOTAutograd
+  refuses a graph returning a tensor derived from an in-graph `requires_grad_()`.
+
+With a full graph, at f256 with 500 collocation points on 8 pinned cores, over four
+runs of `tools/backend_smoke.py --compile`:
+
+| | ms/iteration | it/s |
+|---|---|---|
+| eager | 90.2 – 99.7 | 10.0 – 11.1 |
+| compiled | 6.6 – 8.9 | 112.9 – 152.7 |
+
+**Over 10× — the range across runs is 10.7× to 15.1×.** A range because that is what
+the measurement supports: the eager arm is steady to 1.12× within a run and the
+compiled arm varies up to 1.81×, since at 8 ms an iteration any interference is a
+large fraction of it. The third digit of a speedup here is not a real quantity.
+
+**The profile explanation was wrong in the same way.** "88% is forward-plus-backward
+through `torch.func.jvp` in float64 — dense BLAS-bound linear algebra, which Inductor
+cannot improve" describes work that is *not* dense linear algebra. A step issues about
+**800 `aten::mul` and 230 `aten::add` against 96 `aten::mm`**, plus hundreds of
+`prims::` operations the forward-mode passes decompose into, each dispatched
+separately. That is elementwise work, it is exactly what fusion is for, and
+`residual_blocks` alone goes from 70.4 ms to 6.7 ms.
+
+The general lesson is the one `fullgraph` now enforces: **a partial compile measures
+your graph breaks, not your kernels.** A silent fallback to eager reports the result
+as a small win and hides the reason.
+
+**The 2.4× reported above is therefore an eager-torch number**, as is every speed
+comparison in §7.5.19. Against the compiled loop the ordering reverses; see the
+matched measurement there.
 
 **So M7's acceptance is not met at the default, for a reason now identified.** Two
 fields agree, two differ by a consistent 21%, and the difference is the optimiser
@@ -2509,8 +2556,9 @@ apart), f512 with 6000 points:
 | **jax** | 34.64 s (173.2 ms/it) | 20.80 s (208.0 ms/it) | **55.44 s** |
 | jax/torch | **0.24×** | **0.21×** | **0.23×** |
 
-**JAX is 4.4× faster, and the published 2.4× understates it** — on the quasi-Newton
-phase alone, the phase §7.5.11 shows does all the work, it is **4.8×**.
+**Against an eager torch loop JAX is 4.4× faster, and the published 2.4× understates
+it** — on the quasi-Newton phase alone, the phase §7.5.11 shows does all the work, it
+is **4.8×**. Read "eager" as load-bearing: the compiled loop reverses this, below.
 
 **But the thread asymmetry did not invalidate the old ratios**, and an earlier
 revision of this document claimed it did. At 8 threads the same benchmark gives
@@ -2543,12 +2591,39 @@ These networks are small and the step is `jvp`-bound, so past roughly 8 threads 
 of the machine idles — running six studies at 8 threads each is closer to optimal
 than one at 48.
 
-**Taken with §7.5.10 and §7.5.17, this reverses the backend recommendation.** JAX is
-now equally accurate (1.08× at f512, 2–3% on an identical objective at matched
-memory) and 4.4× faster. It looked slower *and* weaker for most of this project's
-life, and both readings were artefacts of unequal settings — one an unset
-`memory_size`, the other an unset thread budget. `§0.6` now recommends it and
-`axial_study.py` leads with it.
+##### And the speed half has now reversed again, for the same class of reason
+
+Every number above compares against **eager** PyTorch. That was the only PyTorch
+there was: the compiled path broke into eight graphs and bought 1.06×, which §7.3.2
+mistook for a property of `torch.compile` rather than of this repository's code. With
+those defects fixed and `fullgraph=True` enforcing the whole graph, at 500 collocation
+points and f256 on 8 pinned cores — best of three repeats within a run, four runs:
+
+| | ms/iteration | it/s | spread within a run |
+|---|---|---|---|
+| torch, compiled | 7.85 – 8.94 | 111.8 – 127.5 | 1.05× – 1.21× |
+| JAX, jitted | 15.36 – 16.61 | 60.2 – 65.1 | 1.03× – 1.14× |
+
+```bash
+uv run python tools/backend_smoke.py --timing
+```
+
+**1.78× to 1.96× in PyTorch's favour**, ranges not overlapping and the gap well
+outside the within-backend spread.
+
+This is a *timing*, at one width, one thread count, one machine, and it says nothing
+about accuracy — so it does not by itself move the default, and `§0.6` still leads
+with JAX on accuracy and on the weight of measurement already taken with it. What it
+does retire is the sentence "JAX is faster", which is now true only of the eager
+comparison it was measured on.
+
+**The estimator needed fixing before any of this could be said.** A per-iteration cost
+here is the difference of two wall-clocks, and one sample per run gave 6.36, 7.79,
+8.10, 8.45, 10.27 and 10.53 ms for identical work — from which the cross-backend ratio
+came out 1.35×, 0.99× and 1.25× on three consecutive tries, reversing. Wall-clock noise
+is one-sided, so the check now takes the minimum over three repeats and prints the
+spread; and when the cross-backend gap is smaller than the within-backend spread it
+says so and refuses the headline.
 
 #### 7.5.21 Is M4's criterion attainable? — the ruler check
 
@@ -3996,7 +4071,7 @@ collocation bug. Both are findings a single backend could not have produced.
 | Fourier + modified MLP combined | **measured, and it fails** — §7.2.6 |
 | Plan A, multiple seeds | **TBD** — one seed measured (§7.4) |
 | Backend parity, post-closure | **closed, for a third time and for the right reason** — §7.5.17. The gap was `optax.lbfgs`'s default `memory_size=10` against torch's 50. At matched memory the two implementations agree to 2–3% on an identical objective, and JAX f512 is 1.08× torch rather than 1.44× |
-| The JAX speed advantage | **re-measured at matched threads: 4.4× overall, 4.8× on the quasi-Newton phase** — §7.5.19. Still unattributed as to *why*; `torch.compile` accounts for 1.06× and is not the answer |
+| The JAX speed advantage | **reversed once PyTorch compiles** — §0.6, §7.3.2. The 4.4× of §7.5.19 was against an eager torch loop; with `compile=True` torch is 1.78×–1.96× faster at matched settings, four runs, non-overlapping ranges. The old attribution ("`torch.compile` accounts for 1.06× and is not the answer") measured eight graph breaks, not the technique |
 | Optimiser bake-off (SSBroyden / SSBFGS) | **TBD — not started**, and §7.5.11 makes it the highest-value remaining item: at three seeds on both backends the quasi-Newton axis is the *only* one that moves the front |
 | How many epochs it needs | **answered — 54 runs, nine cells, three seeds, both backends** — §7.5.11. Quasi-Newton monotone over two decades; the Adam axis flat once `qn3000` is set, so the default's Adam budget does no measurable work |
 | Three front-aimed embeddings | **measured, three seeds** — §7.5.12–§7.5.14. `fourier_bands=(1,4,16)` reaches 99.5% of the reference voided length; `zeta_scale=8` is real but cruder; `level_set_input` is inert at 1.95× the cost |

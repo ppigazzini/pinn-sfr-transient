@@ -78,11 +78,17 @@ class TrainConfig:
 
     # Modern-PyTorch knobs.
     jacobian: Literal["forward", "reverse"] = "forward"
-    # `torch.compile`. Off by default because it is **measured not to pay**, not
-    # because it breaks: on the axial twin it buys 1.06x at 17 s of compile time,
-    # since 88% of the step is forward-plus-backward through `torch.func.jvp` in
-    # float64 -- BLAS-bound work Inductor cannot improve (`docs/axial_nn.md`
-    # section 7.3.2). At small budgets it is a net loss.
+    # `torch.compile`. Off by default, and UNMEASURED on this model. The figure this
+    # comment used to carry -- 1.06x, "BLAS-bound work Inductor cannot improve" -- was
+    # the axial twin's, and it was wrong there: the graph was breaking into eight
+    # pieces, so 1.06x is what a compile that does not happen is worth. With the graph
+    # whole the axial model compiles to over 10x (`docs/axial_nn.md` section 7.3.2).
+    #
+    # The two defects behind that were both in axial-only code -- `axial/_backend.py`
+    # sniffing `__module__` on a Python scalar, and `axial/torchpinn/model.py` marking
+    # jvp inputs `requires_grad` -- so this model may or may not have the same problem.
+    # Compile with `fullgraph=True` before believing any speedup here: a partial
+    # compile measures graph breaks, not kernels.
     #
     # An earlier note here said `compile` "can interact awkwardly with `func`
     # transforms on some builds". That was never verified and does not reproduce

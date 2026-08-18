@@ -101,10 +101,18 @@ four times: D38, D39, the budget sweep's "monotonic" front degradation, and §7.
   shipped config. None of them needed a long run to find; all of them survived one
   because only one backend was looked at.
 
-  **The long runs are then JAX-only.** JAX is 4.4x faster at matched threads
-  (§7.5.19) and, once curvature memory matches, the two agree to 3% — so a full torch
-  replication buys a third-digit confirmation for 4.4x the machine time, and that
-  time is better spent on seeds or on a second arm.
+  **The long runs are then JAX-only**, and the reason is now accuracy and continuity
+  rather than speed: once curvature memory matches the two agree to 3%, and every
+  measurement on the shelf was taken with JAX, so a full torch replication buys a
+  third-digit confirmation of a number already in hand.
+
+  **The speed half of that argument is dead.** "JAX is 4.4x faster at matched threads"
+  was measured against an *eager* torch loop, because the compiled path broke into
+  eight graphs and looked worth 1.06x. With the graph whole, torch is **1.78x to 1.96x
+  faster** than jitted JAX at matched settings (`backend_smoke.py --timing`, four runs,
+  non-overlapping ranges, §7.5.19). Do not repeat the old sentence, and do not treat
+  the new one as a reason to switch either: it is one width on one machine and it says
+  nothing about accuracy.
 
   What this costs, stated rather than hidden: **a comparative headline is now a
   statement about the JAX implementation**, not about the formulation in general. Say
