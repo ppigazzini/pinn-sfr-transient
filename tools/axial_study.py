@@ -1997,9 +1997,10 @@ def study_adamcheck(out: Path) -> None:
             # `qn30000` rung of the budget ladder at the same 5000 points, so the
             # comparison is optimiser against optimiser at equal iteration count.
             #
-            # JAX only, as `optax.contrib` is where this lives -- the same standing
-            # divergence as ademamix. The reported iterate is the averaged `x`, not the
-            # optimiser's `y`; see `_schedule_free_x` and tests/axial/test_schedule_free.py.
+            # Measured on JAX, as every long run here is. Both backends implement it --
+            # `optax.contrib` there, `pytorch_optimizer` in torch. The reported iterate is
+            # the averaged `x`, not the optimiser's `y`; see `_schedule_free_x` and
+            # tests/axial/test_schedule_free.py.
             (
                 f"f64 sfadamw{a}/qn{q}@5k [jax]",
                 {

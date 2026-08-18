@@ -210,9 +210,8 @@ class AxialTrainConfig:
     # count so it scales with the budget instead of silently becoming the whole run at
     # a short one.
     #
-    # It names the JAX "schedulefree" arm's internal warmup, which torch does not have,
-    # AND the length of `lr_warmup`'s ramp, which torch does. One field, two uses, both
-    # live here.
+    # It names two things: the "schedulefree" arm's internal warmup, and the length of
+    # `lr_warmup`'s ramp. Both backends use it for both.
     sf_warmup_frac: float = 0.1
 
     # Linear warmup in front of the cosine decay, over `sf_warmup_frac` of the

@@ -6,6 +6,7 @@ needs the model to place points on the predicted front, and the loop needs
 mutable optimiser state.
 """
 
+import contextlib
 from typing import TYPE_CHECKING
 
 try:
@@ -15,7 +16,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency
     raise SystemExit(msg) from exc
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
 
     from pinn_sfr_transient.axial.config import AxialParams
 
@@ -33,6 +34,10 @@ from pinn_sfr_transient.axial.torchpinn.weighting import (
 
 # Candidates drawn per kept point when sampling the level set.
 _LEVEL_SET_POOL = 8
+
+#: AdEMAMix's final slow-EMA weight. `optax.contrib.ademamix`'s default and
+#: `pytorch_optimizer.AdEMAMix`'s, restated because the warmup is configured against it.
+_ADEMAMIX_ALPHA = 5.0
 
 
 class Trainer:
@@ -276,19 +281,6 @@ class Trainer:
         instead of being re-run once per budget. The JAX twin takes the same argument.
         """
         cfg = self.cfg
-        if cfg.first_order != "adam":
-            # Refused, not silently substituted. Both other arms -- `ademamix` and
-            # `schedulefree` -- are optax algorithms with no torch equivalent, and
-            # AGENTS.md forbids hand-writing one. This loop ran plain Adam whatever the
-            # field said, so a torch arm labelled `ademamix` in a study was Adam, and
-            # nothing in the run said so. The config comment already declared the
-            # non-implementation; a declaration the code does not enforce is a comment.
-            msg = (
-                f"first_order={cfg.first_order!r} is implemented in the JAX backend only "
-                f"(optax.contrib); torch ships neither AdEMAMix nor schedule-free and one "
-                f"is deliberately not hand-written. Use pinn_jax, or first_order='adam'."
-            )
-            raise ValueError(msg)
         # `foreach=True` explicitly. PyTorch's auto-selection does NOT enable it on
         # CPU -- `_default_to_fused_or_foreach` returns `(False, False)` there, so
         # leaving it unset silently takes the single-tensor for-loop path on the only
@@ -299,8 +291,12 @@ class Trainer:
         # It is free rather than a trade: horizontal fusion here leaves the trained
         # fields **bitwise identical** (checked at 200 Adam iterations), so unlike a
         # thread-count change it does not move a published number.
-        opt = torch.optim.Adam(self.model.parameters(), lr=cfg.lr, foreach=True)
-        sched = self._lr_schedule(opt)
+        opt = self._first_order()
+        # Schedule-free REPLACES the learning-rate schedule with an averaging sequence
+        # and warms the step size internally, so it runs at a constant rate. Composing
+        # it with the cosine would measure a hybrid nobody proposed; the JAX twin makes
+        # the same exception for the same reason.
+        sched = None if cfg.first_order == "schedulefree" else self._lr_schedule(opt)
         # The loss, compiled or not. `fullgraph=True` because a partial compile here is
         # worth ~nothing and hides the reason: the residual stack broke into eight
         # graphs until `_backend.xp` stopped sniffing `__module__` on Python scalars and
@@ -338,7 +334,8 @@ class Trainer:
             loss = loss_fn(*self.collocation(t_max, n_adam), t_max)
             loss.backward()
             opt.step()
-            sched.step()
+            if sched is not None:
+                sched.step()
             if verbose and it % cfg.log_every == 0:
                 w = [f"{v:.1e}" for v in self.block_w.tolist()]
                 print(f"[adam {it:6d}] t<={t_max:.2f} loss={loss.item():.3e} w=[{','.join(w)}]")
@@ -348,10 +345,108 @@ class Trainer:
             # ten-rung budget ladder cost ten runs of the longest rung.
             every = cfg.adam_checkpoint_every
             if on_checkpoint is not None and every and (it + 1) % every == 0:
-                on_checkpoint(it + 1, self.model)
+                with self._reportable(opt):
+                    on_checkpoint(it + 1, self.model)
+        # Schedule-free keeps two sequences and the gradients were taken at `y`; the
+        # iterate to REPORT is the running average `x`. Swap before anything downstream
+        # sees the model -- the polish, the caller, `predict`.
+        self._to_reportable(opt)
         if cfg.lbfgs_iters > 0:
             self._lbfgs(verbose=verbose, on_checkpoint=on_checkpoint)
         return self.model
+
+    def _first_order(self) -> torch.optim.Optimizer:
+        """Build the first-order optimiser named by ``cfg.first_order``.
+
+        ``adam`` is `torch.optim.Adam`. The other two are **not in `torch.optim`** --
+        AdEMAMix is pytorch/pytorch#135609 and still a proposal, and schedule-free has
+        never been proposed -- so they come from `pytorch_optimizer`, which is the same
+        choice the JAX twin makes in reaching for `optax.contrib` rather than writing
+        them. Hand-rolling either is what AGENTS.md forbids; taking a maintained
+        implementation is not.
+
+        The hyper-parameters are matched to the JAX twin's deliberately and the match was
+        checked rather than assumed, because an unset argument across two implementations
+        of one algorithm is this project's most expensive recurring defect (7.5.17):
+
+        * `AdEMAMix(betas=(0.9, 0.999, 0.9999), alpha=5.0, eps=1e-8, weight_decay=0.0)`
+          are `optax.contrib.ademamix`'s defaults exactly.
+        * `t_alpha_beta3` is the warmup length, and both libraries ramp identically:
+          `alpha` linearly as ``min(step alpha / t, alpha)``, and `b3` through
+          ``exp(ln b1 ln b3 / ((1 - s) ln b3 + s ln b1))``. The JAX side builds those two
+          schedules by hand from `optax.linear_schedule`; here they are the library's own
+          `schedule_alpha` and `schedule_beta3`, and the formulae agree term for term.
+        * `ScheduleFreeAdamW(betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0,
+          weight_lr_power=2.0)` are `optax.contrib.schedule_free_adamw`'s defaults exactly.
+
+        `weight_decay` stays at zero on both arms. AdamW with no decay is Adam plus the
+        schedule-free averaging, which is the one difference that arm is testing.
+        """
+        cfg = self.cfg
+        params = self.model.parameters()
+        if cfg.first_order == "adam":
+            # `foreach=True` for the same reason as the comment in `train`; the two
+            # library optimisers do their own fusion and take no such argument.
+            return torch.optim.Adam(params, lr=cfg.lr, foreach=True)
+        try:
+            import pytorch_optimizer as po  # noqa: PLC0415 - optional, only these arms
+        except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency
+            msg = (
+                f"first_order={cfg.first_order!r} needs `pytorch-optimizer`, which ships "
+                f"with the torch extras: `uv sync --extra torch-cpu`. Neither AdEMAMix nor "
+                f"schedule-free is in torch.optim."
+            )
+            raise SystemExit(msg) from exc
+        if cfg.first_order == "ademamix":
+            return po.AdEMAMix(
+                params, lr=cfg.lr, alpha=_ADEMAMIX_ALPHA, t_alpha_beta3=self._warmup_steps()
+            )
+        if cfg.first_order == "schedulefree":
+            if cfg.lr_warmup:
+                # Refused, not ignored. Schedule-free warms the step size internally over
+                # the same `sf_warmup_frac`, so an external warmup would either be dropped
+                # or measure a hybrid nobody proposed. The JAX twin refuses this too.
+                msg = (
+                    "lr_warmup and first_order='schedulefree' both schedule the step size; "
+                    "schedule-free warms up internally over sf_warmup_frac. Pick one."
+                )
+                raise ValueError(msg)
+            return po.ScheduleFreeAdamW(params, lr=cfg.lr, warmup_steps=self._warmup_steps())
+        msg = f"unknown first_order={cfg.first_order!r}; expected adam, ademamix or schedulefree"
+        raise ValueError(msg)
+
+    def _warmup_steps(self) -> int:
+        """Warmup length in steps, as a fraction of the first-order budget.
+
+        A fraction rather than a count so it scales with the budget instead of silently
+        becoming the whole run at a short one. Same expression as the JAX twin's.
+        """
+        return max(1, int(self.cfg.sf_warmup_frac * self.cfg.adam_iters))
+
+    def _to_reportable(self, opt: torch.optim.Optimizer) -> None:
+        """Put the model into the iterate that should be REPORTED, in place.
+
+        Schedule-free carries two sequences: gradients are evaluated at ``y``, which is
+        what the parameters hold while training, and the iterate to report is the running
+        average ``x``. `pytorch_optimizer` swaps between them with `train()`/`eval()`.
+        Everything downstream -- the polish, the caller, `predict`, a checkpoint -- must
+        see ``x``, and the JAX twin converts at exactly the same points. Reporting ``y``
+        is a silent accuracy loss that no test of the loss would catch.
+
+        A no-op for every other optimiser.
+        """
+        if hasattr(opt, "eval"):
+            opt.eval()
+
+    @contextlib.contextmanager
+    def _reportable(self, opt: torch.optim.Optimizer) -> Iterator[None]:
+        """Hold the model at the reportable iterate, then hand it back to training."""
+        self._to_reportable(opt)
+        try:
+            yield
+        finally:
+            if hasattr(opt, "train"):
+                opt.train()
 
     def _lr_schedule(self, opt: torch.optim.Optimizer) -> torch.optim.lr_scheduler.LRScheduler:
         """Cosine decay, optionally with a linear warmup in front of it.

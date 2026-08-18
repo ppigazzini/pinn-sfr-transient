@@ -312,10 +312,22 @@ def _alpha_warmup(cfg: AxialTrainConfig) -> optax.Schedule:
 
     ``optax.linear_schedule`` holds ``end_value`` past ``transition_steps``, which is
     exactly the ramp-then-hold wanted; it agrees with the hand-rolled version to 2e-07.
+
+    **Driven from step 1, not from optax's count 0.** optax calls a schedule with the
+    number of updates already applied, so the first update would see ``alpha = 0`` and
+    ``b3 = b1`` and the ramp would finish one step late; `pytorch_optimizer.AdEMAMix`,
+    which the torch backend uses, counts its own steps from 1. That one-step offset is
+    the whole difference between the two implementations, and it is not small where it
+    matters: on a cond-1e6 quadratic with a 40-step warmup the two disagreed by **32.3x**
+    and agree to **1.002x** once aligned. At the real budget -- a warmup of 10% of the
+    first-order iterations -- it is one part in tens of thousands and moves nothing, but a
+    short cross-backend check is exactly where the offset dominates, and a short
+    cross-backend check is how this project finds defects.
     """
-    return optax.linear_schedule(
+    ramp = optax.linear_schedule(
         init_value=0.0, end_value=_ADEMAMIX_ALPHA, transition_steps=_warmup_steps(cfg)
     )
+    return lambda count: ramp(jnp.asarray(count) + 1)
 
 
 def _b3_warmup(cfg: AxialTrainConfig) -> Callable[[chex.Numeric], jax.Array]:
@@ -334,7 +346,10 @@ def _b3_warmup(cfg: AxialTrainConfig) -> Callable[[chex.Numeric], jax.Array]:
     la, lb = math.log(_ADEMAMIX_B1), math.log(_ADEMAMIX_B3)
 
     def schedule(count: chex.Numeric) -> jax.Array:
-        s = jnp.minimum(jnp.asarray(count) / warm, 1.0)
+        # `count + 1` for the same reason as `_alpha_warmup`: optax counts updates
+        # already applied, the torch twin counts steps taken, and the two must index the
+        # same warmup or they are not running the same method.
+        s = jnp.minimum((jnp.asarray(count) + 1) / warm, 1.0)
         return jnp.minimum(jnp.exp(la * lb / ((1.0 - s) * lb + s * la)), _ADEMAMIX_B3)
 
     return schedule

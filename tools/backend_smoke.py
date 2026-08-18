@@ -212,6 +212,106 @@ def _jax_final(objective: str, x0: np.ndarray, knobs: dict) -> tuple[float, int]
     return float(f), 0
 
 
+#: First-order arms to compare across backends, and how long to run them. 400 steps with
+#: a 40-step warmup, because the warmup is where the two implementations can disagree and
+#: a run far longer than it would average the disagreement away.
+FIRST_ORDER_ITERS = 400
+FIRST_ORDER_WARMUP = 40
+
+
+def check_first_order(lr: float = 1e-2) -> list[str]:
+    """Compare the two first-order libraries on the same quadratic, same knobs.
+
+    `torch.optim` has neither AdEMAMix nor schedule-free, so the torch backend takes them
+    from `pytorch_optimizer` where the JAX one takes them from `optax.contrib`. Two
+    libraries, one algorithm, which is the configuration that produced this project's most
+    expensive defect -- and it produced another one here. Compared bare, AdEMAMix came out
+    **32.3x apart**; the update rules agree to 1.001x with constant hyper-parameters, and
+    the entire gap was that optax drives a schedule with the number of updates ALREADY
+    APPLIED, counting 0, 1, 2, while `pytorch_optimizer` counts its own steps 1, 2, 3. The
+    warmup was therefore offset by one step between the backends. Aligned, they agree to
+    1.002x.
+
+    Run on the same ill-conditioned quadratic as the quasi-Newton check, from the same
+    start, at hyper-parameters spelled once and handed to both.
+    """
+    import jax  # noqa: PLC0415
+    import optax  # noqa: PLC0415
+    import pytorch_optimizer as po  # noqa: PLC0415
+    import torch  # noqa: PLC0415
+    from jax import numpy as jnp  # noqa: PLC0415
+
+    from pinn_sfr_transient.axial.jaxpinn.config import AxialTrainConfig  # noqa: PLC0415
+    from pinn_sfr_transient.axial.jaxpinn.training import (  # noqa: PLC0415
+        _alpha_warmup,
+        _b3_warmup,
+    )
+
+    d = _quadratic()
+    x0 = np.random.default_rng(0).normal(size=QUAD_N)
+    # `sf_warmup_frac * adam_iters` must land on FIRST_ORDER_WARMUP in both backends.
+    cfg = AxialTrainConfig(
+        adam_iters=FIRST_ORDER_ITERS, sf_warmup_frac=FIRST_ORDER_WARMUP / FIRST_ORDER_ITERS
+    )
+
+    def torch_final(arm: str) -> float:
+        x = torch.tensor(x0.copy(), requires_grad=True)
+        dd = torch.tensor(d)
+        opt = (
+            po.AdEMAMix([x], lr=lr, alpha=5.0, t_alpha_beta3=FIRST_ORDER_WARMUP)
+            if arm == "ademamix"
+            else po.ScheduleFreeAdamW([x], lr=lr, warmup_steps=FIRST_ORDER_WARMUP)
+        )
+        for _ in range(FIRST_ORDER_ITERS):
+            opt.zero_grad()
+            (0.5 * (dd * x**2).sum()).backward()
+            opt.step()
+        if hasattr(opt, "eval"):
+            opt.eval()  # schedule-free reports `x`, not the `y` it stepped
+        with torch.no_grad():
+            return float(0.5 * (dd * x**2).sum())
+
+    def jax_final(arm: str) -> float:
+        dj = jnp.asarray(d)
+
+        def loss(z: jax.Array) -> jax.Array:
+            return 0.5 * jnp.sum(dj * z**2)
+
+        opt = (
+            optax.contrib.ademamix(lr, b3=_b3_warmup(cfg), alpha=_alpha_warmup(cfg))
+            if arm == "ademamix"
+            else optax.contrib.schedule_free_adamw(
+                lr, warmup_steps=FIRST_ORDER_WARMUP, weight_decay=0.0
+            )
+        )
+        z = jnp.asarray(x0.copy())
+        state = opt.init(z)
+        for _ in range(FIRST_ORDER_ITERS):
+            updates, state = opt.update(jax.grad(loss)(z), state, z)
+            z = optax.apply_updates(z, updates)
+        if arm == "schedulefree":
+            z = optax.contrib.schedule_free_eval_params(state, z)
+        return float(loss(z))
+
+    problems = []
+    for arm in ("ademamix", "schedulefree"):
+        a, b = torch_final(arm), jax_final(arm)
+        ratio = max(abs(a), abs(b)) / max(min(abs(a), abs(b)), 1e-300)
+        print(f"  {arm}")
+        print(f"    torch (pytorch_optimizer) {a:.8e}")
+        print(f"    jax   (optax.contrib)     {b:.8e}")
+        print(f"    ratio {ratio:.4f}   (tolerance {RATIO_TOL})")
+        if ratio > RATIO_TOL:
+            problems.append(
+                f"{arm}: the two libraries disagree by {ratio:.2f}x on a problem with a "
+                f"known answer. Diff the ARGUMENTS -- including how each drives its "
+                f"schedules -- before theorising about the libraries."
+            )
+        else:
+            print("    ok")
+    return problems
+
+
 def check_plumbing(iters: int) -> list[str]:
     """Check that a non-default config changes the answer in both backends.
 
@@ -476,6 +576,18 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915 - a report reads better flat
                 failures += 1
             else:
                 print("    ok")
+
+    print("\n=== 2b. first-order parity: pytorch_optimizer against optax.contrib ===")
+    try:
+        import jax  # noqa: PLC0415
+        import pytorch_optimizer  # noqa: F401, PLC0415
+    except ImportError:
+        print("  SKIP - both extras are needed and one is missing")
+    else:
+        problems = check_first_order()
+        failures += len(problems)
+        for q in problems:
+            print(f"  FAIL  {q}")
 
     if args.skip_plumbing:
         print("\n=== 3. config plumbing: SKIPPED by request ===")

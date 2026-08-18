@@ -289,11 +289,14 @@ plain Adam under that label. All six now act, and
 [`../tests/axial/test_torch_knobs.py`](../tests/axial/test_torch_knobs.py) asserts that
 the config reaches the algorithm rather than that training completes.
 
-Two fields are declared divergences rather than defects. `first_order` accepts
-`"ademamix"` and `"schedulefree"` on JAX only — both are `optax.contrib` algorithms with
-no torch equivalent, and torch **raises** rather than substituting Adam. `compile` is
-torch-only, because the JAX step is always under `eqx.filter_jit` and there is nothing
-to switch.
+All three `first_order` values work in both backends. `optax.contrib` supplies AdEMAMix
+and schedule-free AdamW on the JAX side; `torch.optim` has neither — AdEMAMix is
+pytorch/pytorch#135609 and still a proposal — so the torch side takes them from
+`pytorch-optimizer`, which the torch extras install. `uv run python
+tools/backend_smoke.py` compares the two libraries on a quadratic with a known answer.
+
+One field is a declared divergence: `compile` is torch-only, because the JAX step is
+always under `eqx.filter_jit` and there is nothing to switch.
 
 Two modules do not mirror each other, and that is torch's idiom rather than a
 design choice: `nn.Module` owns its parameters *and* its forward pass, so the ansatz

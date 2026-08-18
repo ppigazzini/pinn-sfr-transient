@@ -240,9 +240,11 @@ class AxialTrainConfig:
     #    conversion through `schedule_free_eval_params` is done in `training.py` and
     #    pinned by `tests/axial/test_schedule_free.py`.
     #
-    # "ademamix" and "schedulefree" are JAX-only, like the `optax.contrib` methods they
-    # wrap. The FIELD exists in both backends and its default is the same in both, so
-    # config parity holds; only the accepted values differ.
+    # All three values work in both backends. `optax.contrib` supplies these two here;
+    # `torch.optim` has neither, so the torch twin takes them from `pytorch_optimizer`.
+    # The two libraries agree to 1.002x (ademamix) and 1.059x (schedule-free) on a
+    # cond-1e6 quadratic -- see `tools/backend_smoke.py`, which checks it, and
+    # `_alpha_warmup` for the one-step indexing offset that had to be aligned first.
     first_order: str = "adam"
 
     # Warmup as a FRACTION of the first-order budget, for "schedulefree" only. A

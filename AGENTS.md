@@ -183,10 +183,13 @@ four times: D38, D39, the budget sweep's "monotonic" front degradation, and §7.
   dataclasses field for field, which stops a knob landing in one backend only, and cannot
   see a field both declare and only one reads. Six were in that state — `adam_colloc`,
   `polish_colloc`, `polish_refresh`, `adam_checkpoint_every`, `lr_warmup`, and
-  `first_order`, so a torch arm labelled `ademamix` ran plain Adam and said nothing. When
-  a backend does not implement a knob, **raise**: a declaration in a config comment that
-  the code does not enforce is a comment. Test that the config reaches the algorithm, not
-  that training completes — a dropped config still converges to something.
+  `first_order`, so a torch arm labelled `ademamix` ran plain Adam and said nothing.
+  **Raise, or implement it** — a declaration in a config comment that the code does not
+  enforce is a comment. `first_order` was resolved the second way: `torch.optim` has
+  neither AdEMAMix nor schedule-free, but `pytorch_optimizer` does, and taking a
+  maintained implementation is not the same as hand-writing one. Test that the config
+  reaches the algorithm, not that training completes — a dropped config still converges
+  to something.
 - **Two implementations of the same algorithm must be compared at equal
   hyper-parameters, and that has to be checked rather than assumed.** `optax.lbfgs`
   defaults to `memory_size=10`; `torch.optim.LBFGS` was passed `history_size=50`.

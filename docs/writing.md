@@ -213,7 +213,9 @@ because the measurement is checkable:
 And the one failure mode specific to a two-backend repository: **a contract the code
 does not enforce is a comment.** The torch config declared `first_order="ademamix"` a
 JAX-only arm, in prose, while the torch loop ran plain Adam under that label. The
-declaration was correct and it protected nothing. Raise, or implement it.
+declaration was correct and it protected nothing. Raise, or implement it — that one was
+implemented, once it turned out a maintained PyTorch AdEMAMix existed outside
+`torch.optim`, which the comment had also asserted was not the case.
 
 ### Commit messages
 

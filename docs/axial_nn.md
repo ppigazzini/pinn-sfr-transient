@@ -3895,8 +3895,9 @@ our schedule ran out.* The objection is reasonable and it has never been tested.
 version of the method whose entire claim is that no schedule is needed. It **replaces**
 the cosine rather than composing with it — a constant `lr = 1e-3`, its own warmup at 10%
 of the budget, `weight_decay = 0.0` so the only difference from Adam is the schedule-free
-averaging. Seed 0, 5000 points, f64, JAX only (this lives in `optax.contrib`, the same
-standing divergence as `ademamix`).
+averaging. Seed 0, 5000 points, f64, measured on JAX as every long run here is. Both
+backends implement the arm — `optax.contrib` on this side, `pytorch_optimizer` on the
+torch side, agreeing to 1.06× on a quadratic with a known answer.
 
 | arm | `T_s` | `L_void` | worst margin | max `α` | sec | load |
 |---|---|---|---|---|---|---|

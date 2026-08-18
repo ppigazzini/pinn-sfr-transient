@@ -76,14 +76,59 @@ def test_no_first_order_checkpoints_when_the_cadence_is_off() -> None:
 
 
 @pytest.mark.parametrize("arm", ["ademamix", "schedulefree"])
-def test_optax_only_first_order_arms_are_refused(arm: str) -> None:
-    """Refused loudly rather than run as Adam under the wrong label.
+def test_first_order_arms_run_and_are_not_adam(arm: str) -> None:
+    """Each arm trains, and produces a different model from Adam at the same seed.
 
-    Torch ships neither algorithm and AGENTS.md forbids hand-writing one, so the only
-    honest options are to raise or to fork the model silently. This is the raise.
+    `torch.optim` has neither algorithm, so these come from `pytorch_optimizer` --
+    a maintained implementation, which is the point: hand-writing one is what AGENTS.md
+    forbids, and taking a library is what the JAX twin does with `optax.contrib`.
+
+    The check is that the arm CHANGES something. A `first_order` that silently fell back
+    to Adam is exactly the defect this file exists for, and it is invisible in a single
+    run because the run still converges.
     """
-    with pytest.raises(ValueError, match="JAX backend only"):
-        train(P, _cfg(first_order=arm))
+    pytest.importorskip("pytorch_optimizer")
+    ref = train(P, _cfg(first_order="adam"))
+    ref_w = [q.detach().clone() for q in ref.parameters()]
+    got = train(P, _cfg(first_order=arm))
+    assert all(torch.isfinite(q).all() for q in got.parameters())
+    assert any(not torch.equal(a, b) for a, b in zip(ref_w, got.parameters(), strict=True)), (
+        f"first_order={arm!r} produced Adam's model exactly"
+    )
+
+
+def test_schedule_free_reports_the_averaged_iterate() -> None:
+    """Schedule-free must hand back ``x``, not the ``y`` its gradients were taken at.
+
+    The two sequences are not close early in a run, and returning ``y`` gives a
+    plausible, worse number with nothing to indicate anything went wrong. The JAX twin
+    converts through `schedule_free_eval_params` at the same points; here it is the
+    optimiser's own `eval()`.
+    """
+    pytest.importorskip("pytorch_optimizer")
+    cfg = _cfg(first_order="schedulefree")
+    tr = Trainer(AxialPinn(P, cfg), cfg)
+    opt = tr._first_order()
+    for _ in range(20):
+        opt.zero_grad()
+        tr.causal_loss(*tr.collocation(1.0), 1.0).backward()
+        opt.step()
+    y = [q.detach().clone() for q in tr.model.parameters()]
+    tr._to_reportable(opt)
+    x = [q.detach().clone() for q in tr.model.parameters()]
+    assert any(not torch.equal(a, b) for a, b in zip(y, x, strict=True)), "x and y identical"
+
+
+def test_schedule_free_refuses_an_external_warmup() -> None:
+    """Both schedule the step size; schedule-free warms up internally. Pick one."""
+    pytest.importorskip("pytorch_optimizer")
+    with pytest.raises(ValueError, match="both schedule the step size"):
+        train(P, _cfg(first_order="schedulefree", lr_warmup=True))
+
+
+def test_unknown_first_order_is_rejected() -> None:
+    with pytest.raises(ValueError, match="unknown first_order"):
+        train(P, _cfg(first_order="nonsense"))
 
 
 def test_warmup_ramps_then_decays_and_plain_cosine_does_not() -> None:

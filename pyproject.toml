@@ -45,8 +45,14 @@ dependencies = [
 # PyTorch backend (torch >= 2.13; CPython 3.14):
 #   uv sync --extra torch-cpu   # small CPU-only wheel from the PyTorch CPU index
 #   uv sync --extra torch-gpu   # CUDA build from PyPI (large: pulls the nvidia stack)
-torch-cpu = ["torch>=2.13.0"]
-torch-gpu = ["torch>=2.13.0"]
+# `pytorch-optimizer` carries the two first-order arms `torch.optim` does not:
+# AdEMAMix (arXiv:2409.03137) and schedule-free AdamW (arXiv:2405.15682). Both live in
+# `optax.contrib` on the JAX side, and neither is in core torch -- AdEMAMix is
+# pytorch/pytorch#135609, still a proposal. Taking the dependency is what keeps
+# `first_order` a real knob in both backends instead of a JAX-only one, and it is a
+# maintained implementation rather than a hand-written one.
+torch-cpu = ["torch>=2.13.0", "pytorch-optimizer>=3.10.1"]
+torch-gpu = ["torch>=2.13.0", "pytorch-optimizer>=3.10.1"]
 # JAX backend (Equinox model + Optax optimisers). jax's CUDA wheels are on PyPI,
 # so no custom index is needed:
 #   uv sync --extra jax-cpu     # CPU-only jaxlib
