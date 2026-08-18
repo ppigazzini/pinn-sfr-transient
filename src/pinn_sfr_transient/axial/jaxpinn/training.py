@@ -26,15 +26,12 @@ import optax
 from jax.flatten_util import ravel_pytree
 
 from pinn_sfr_transient.axial.config import AxialParams
-from pinn_sfr_transient.axial.jaxpinn.ansatz import normalised_state
 from pinn_sfr_transient.axial.jaxpinn.archs import AxialPinn
 from pinn_sfr_transient.axial.jaxpinn.config import AxialTrainConfig
 from pinn_sfr_transient.axial.jaxpinn.optimizers import minimize as ssbfgs_minimize
-from pinn_sfr_transient.axial.jaxpinn.residuals import n_field_blocks, uses_front
+from pinn_sfr_transient.axial.jaxpinn.residuals import n_field_blocks
 from pinn_sfr_transient.axial.jaxpinn.samplers import _collocation, _merge, _rar_points
 from pinn_sfr_transient.axial.jaxpinn.weighting import (
-    _block_grad_norms,
-    bounded_weights,
     causal_loss,
 )
 
@@ -53,10 +50,6 @@ def _next_boundary(cfg: AxialTrainConfig, it: int, *, verbose: bool, checkpointi
     cadences = []
     if cfg.rar_every:
         cadences.append(cfg.rar_every - it % cfg.rar_every)
-    if cfg.pts_every:
-        cadences.append(cfg.pts_every - it % cfg.pts_every)
-    if cfg.weight_max_ratio > 1.0 and cfg.weight_update_every:
-        cadences.append(cfg.weight_update_every - it % cfg.weight_update_every)
     if verbose and cfg.log_every:
         cadences.append(cfg.log_every - it % cfg.log_every)
     if checkpointing and cfg.adam_checkpoint_every:
@@ -64,7 +57,7 @@ def _next_boundary(cfg: AxialTrainConfig, it: int, *, verbose: bool, checkpointi
     return max(1, min([left, *cadences]))
 
 
-def train(  # noqa: C901, PLR0915 - one loop with five cadences; splitting it would
+def train(
     # hide which events fire on which iteration, and that ordering is the contract
     # `_next_boundary` exists to preserve.
     p: AxialParams | None = None,
@@ -83,47 +76,35 @@ def train(  # noqa: C901, PLR0915 - one loop with five cadences; splitting it wo
     """
     p = p or AxialParams()
     cfg = cfg or AxialTrainConfig()
-    # THE REFERENCE IMPLEMENTATION'S DERIVATION, EXACTLY. `k_model` is `split(key)[0]`,
-    # the fixed collocation set comes off `k_points = split(key)[1]`, and the first-order
-    # stream is `fold_in(key, 1)` rather than a wider split -- splitting differently moves
-    # both of the others.
+    # THE REFERENCE IMPLEMENTATION'S DERIVATION, EXACTLY. `k_model` is `split(key)[0]`
+    # and the fixed collocation set comes off `k_points = split(key)[1]`; the first-order
+    # stream is `fold_in(key, 1)` rather than a wider split, because splitting differently
+    # moves both of the others.
     #
-    # This read `key, k_model = jax.random.split(key)`, taking the WRONG HALF for the
-    # model and deriving every draw from the other one. Same seed, different weights,
-    # different points: `seed = 0` here was not `seed = 0` there, so no number from this
-    # backend could be compared with a reference one, and the seed spread on this problem
-    # reaches 12.5x. The reference measures the key derivation alone at 0.0314 s -> 0.0103 s
-    # of boiling-onset error.
+    # This used to read `key, k_model = jax.random.split(key)`, taking the WRONG HALF for
+    # the model and then deriving every draw from the other one. Same seed, different
+    # weights, different points: `seed = 0` here was not `seed = 0` there, so no number
+    # from this backend could be compared with the reference's, and the seed spread on
+    # this problem reaches 12.5x. The reference measures the key derivation alone at
+    # 0.0314 s -> 0.0103 s of boiling-onset error.
     key = jax.random.PRNGKey(cfg.seed)
     k_model, k_points = jax.random.split(key)
     k_step = jax.random.fold_in(key, 1)
     model = AxialPinn(cfg, k_model)
 
-    n_blocks = (
-        n_field_blocks(cfg)
-        + (1 if uses_front(cfg) else 0)
-        + (1 if cfg.feedback else 0)
-        + (1 if cfg.onset_head else 0)
-    )
-    w = jnp.ones(n_blocks)
+    w = jnp.ones(n_field_blocks(cfg) + (1 if cfg.feedback else 0))
     optimizer = _first_order(cfg)
     opt_state = optimizer.init(eqx.filter(model, eqx.is_inexact_array))
 
     @eqx.filter_jit
-    def step(
-        model: AxialPinn, opt_state: optax.OptState, pts: tuple, w: jax.Array, anchor: tuple | None
-    ) -> tuple:
-        loss, grads = eqx.filter_value_and_grad(lambda m: causal_loss(m, p, cfg, pts, w, anchor))(
-            model
-        )
+    def step(model: AxialPinn, opt_state: optax.OptState, pts: tuple, w: jax.Array) -> tuple:
+        loss, grads = eqx.filter_value_and_grad(lambda m: causal_loss(m, p, cfg, pts, w))(model)
         params = eqx.filter(model, eqx.is_inexact_array)
         updates, opt_state = optimizer.update(grads, opt_state, params)
         return eqx.apply_updates(model, updates), opt_state, loss
 
     key = k_step  # the first-order stream; the polish takes `k_points` untouched
     rar: tuple | None = None
-    anchor: tuple | None = None
-    dtau = cfg.pts_dtau
     # Adam gets its own collocation count: `adam_colloc` if set, else `n_colloc`.
     a_cfg = replace(cfg, n_colloc=cfg.adam_colloc) if cfg.adam_colloc else cfg
 
@@ -157,17 +138,14 @@ def train(  # noqa: C901, PLR0915 - one loop with five cadences; splitting it wo
         key: jax.Array,
         w: jax.Array,
         rar: tuple | None,
-        t_max: float,
         n: jax.Array,
     ) -> tuple:
         def body(_i: jax.Array, carry: tuple) -> tuple:
             params, opt_state, key, _loss = carry
             model = eqx.combine(params, static)
             key, ck = jax.random.split(key)
-            pts = _merge(_collocation(p, a_cfg, ck, t_max, model), rar, feedback=cfg.feedback)
-            loss, grads = eqx.filter_value_and_grad(
-                lambda m: causal_loss(m, p, cfg, pts, w, anchor)
-            )(model)
+            pts = _merge(_collocation(p, a_cfg, ck), rar, feedback=cfg.feedback)
+            loss, grads = eqx.filter_value_and_grad(lambda m: causal_loss(m, p, cfg, pts, w))(model)
             updates, opt_state = optimizer.update(
                 eqx.filter(grads, eqx.is_inexact_array), opt_state, params
             )
@@ -179,38 +157,12 @@ def train(  # noqa: C901, PLR0915 - one loop with five cadences; splitting it wo
     it = 0
     loss = jnp.zeros(())
     while it < cfg.adam_iters:
-        stage = min(int(it / max(cfg.adam_iters, 1) * cfg.n_windows) + 1, cfg.n_windows)
-        t_max = stage / cfg.n_windows
         model = eqx.combine(params, static)
         if cfg.rar_every and it and it % cfg.rar_every == 0:
             key, rk = jax.random.split(key)
             rar = _rar_points(model, p, cfg, rk, w)
-        if cfg.pts_every and it % cfg.pts_every == 0:
-            key, ak = jax.random.split(key)
-            a_zeta, a_that = _collocation(p, cfg, ak, t_max, model)[:2]
-            a_state = jax.lax.stop_gradient(
-                jax.vmap(lambda a, b, m=model: normalised_state(m, p, a, b, cfg))(a_zeta, a_that)
-            )
-            anchor = (a_zeta, a_that, a_state, dtau)
-            dtau *= cfg.pts_growth
-        if cfg.weight_max_ratio > 1.0 and it and it % cfg.weight_update_every == 0:
-            gn = _block_grad_norms(
-                model,
-                p,
-                cfg,
-                _merge(
-                    _collocation(p, a_cfg, jax.random.fold_in(key, it), t_max, model),
-                    rar,
-                    feedback=cfg.feedback,
-                ),
-            )
-            target = bounded_weights(gn.mean() / (gn + 1e-12), cfg.weight_max_ratio)
-            w = cfg.weight_momentum * w + (1.0 - cfg.weight_momentum) * target
-
         n = _next_boundary(cfg, it, verbose=verbose, checkpointing=on_checkpoint is not None)
-        params, opt_state, key, loss = run_block(
-            params, opt_state, key, w, rar, t_max, jnp.asarray(n)
-        )
+        params, opt_state, key, loss = run_block(params, opt_state, key, w, rar, jnp.asarray(n))
         it += n
 
         if verbose and it % cfg.log_every == 0:
@@ -328,21 +280,22 @@ def _alpha_warmup(cfg: AxialTrainConfig) -> optax.Schedule:
     ``optax.linear_schedule`` holds ``end_value`` past ``transition_steps``, which is
     exactly the ramp-then-hold wanted; it agrees with the hand-rolled version to 2e-07.
 
-    **Driven from step 1, not from optax's count 0.** optax calls a schedule with the
-    number of updates already applied, so the first update would see ``alpha = 0`` and
-    ``b3 = b1`` and the ramp would finish one step late; `pytorch_optimizer.AdEMAMix`,
-    which the torch backend uses, counts its own steps from 1. That one-step offset is
-    the whole difference between the two implementations, and it is not small where it
-    matters: on a cond-1e6 quadratic with a 40-step warmup the two disagreed by **32.3x**
-    and agree to **1.002x** once aligned. At the real budget -- a warmup of 10% of the
-    first-order iterations -- it is one part in tens of thousands and moves nothing, but a
-    short cross-backend check is exactly where the offset dominates, and a short
-    cross-backend check is how this project finds defects.
+    **Driven by optax's own count, which starts at 0**, exactly as the companion
+    implementation does. `pytorch_optimizer.AdEMAMix` counts its own steps from 1, so the
+    two libraries index their warmups one step apart. That is each library's convention,
+    not a defect in either: what is set externally is the same total warmup length, and
+    over one it is one part in the warmup. Do not shift either to match the other --
+    a `count + 1` here makes this arm stop reproducing the reference it is meant to.
+
+    The offset only looks large at a warmup so short that one step is a large fraction of
+    it: on a cond-1e6 quadratic with a 40-step warmup the two implementations differ by
+    32x. At the 100 000-step warmup a 1M-iteration arm uses it is 1e-5. A cross-library
+    check must therefore compare at a realistic warmup, or it measures the convention
+    rather than the method.
     """
-    ramp = optax.linear_schedule(
+    return optax.linear_schedule(
         init_value=0.0, end_value=_ADEMAMIX_ALPHA, transition_steps=_warmup_steps(cfg)
     )
-    return lambda count: ramp(jnp.asarray(count) + 1)
 
 
 def _b3_warmup(cfg: AxialTrainConfig) -> Callable[[chex.Numeric], jax.Array]:
@@ -361,10 +314,9 @@ def _b3_warmup(cfg: AxialTrainConfig) -> Callable[[chex.Numeric], jax.Array]:
     la, lb = math.log(_ADEMAMIX_B1), math.log(_ADEMAMIX_B3)
 
     def schedule(count: chex.Numeric) -> jax.Array:
-        # `count + 1` for the same reason as `_alpha_warmup`: optax counts updates
-        # already applied, the torch twin counts steps taken, and the two must index the
-        # same warmup or they are not running the same method.
-        s = jnp.minimum((jnp.asarray(count) + 1) / warm, 1.0)
+        # optax's own count, from 0, as the companion implementation has it. See
+        # `_alpha_warmup` on why this is not shifted to match the torch twin.
+        s = jnp.minimum(jnp.asarray(count) / warm, 1.0)
         return jnp.minimum(jnp.exp(la * lb / ((1.0 - s) * lb + s * la)), _ADEMAMIX_B3)
 
     return schedule
@@ -382,34 +334,14 @@ def _schedule_free_x(model: AxialPinn, opt_state: optax.OptState) -> AxialPinn:
     return eqx.combine(optax.contrib.schedule_free_eval_params(opt_state, params), static)
 
 
-def _polish_spec(cfg: AxialTrainConfig, model: AxialPinn):  # noqa: ANN202
-    """Which parameters the quasi-Newton stage is allowed to move.
+def _polish_spec(cfg: AxialTrainConfig, model: AxialPinn):  # noqa: ANN202, ARG001
+    """Which parameters the quasi-Newton stage may move: all of them.
 
-    Everything, unless ``freeze_encoder`` is set, in which case the **first Linear** --
-    the projection from the Fourier features into the trunk -- is held fixed and the
-    polish optimises the trunk alone.
-
-    That layer is an encoder: it decides which of the embedded frequencies the network
-    uses, which is a *representation* choice.
-
-    The determinacy argument this docstring used to make is **withdrawn**. Freezing takes
-    the trainable count from 17 029 to 16 965 -- 0.4% -- because the projection was never
-    fitting capacity (section 7.5.37a), so it cannot turn an underdetermined problem into
-    an overdetermined one. What it does change is the **curvature dimension**: the space
-    L-BFGS builds its pairs in drops from 49 797 to 16 965 at f256 and from 25 221 to
-    16 965 at f64. That is a conditioning argument, and it predicts the benefit should
-    scale with the embedding width.
-
-    Off by default, so no published number moves when it lands.
+    ``freeze_encoder`` and ``freeze_after`` used to hold the Fourier-to-trunk projection
+    fixed for part or all of the stage. Both are retired: freezing throughout was measured
+    worse at either Adam budget (7.5.32) and freezing part-way was **2.5x worse** (7.5.41).
     """
-    spec = jax.tree_util.tree_map(eqx.is_inexact_array, model)
-    if not cfg.freeze_encoder:
-        return spec
-    return eqx.tree_at(
-        lambda m: (m.mlp.layers[0].weight, m.mlp.layers[0].bias),
-        spec,
-        replace=(False, False),
-    )
+    return jax.tree_util.tree_map(eqx.is_inexact_array, model)
 
 
 def _run_polish(  # noqa: PLR0913, PLR0917 - the polish needs all of this state
@@ -423,60 +355,17 @@ def _run_polish(  # noqa: PLR0913, PLR0917 - the polish needs all of this state
     *,
     verbose: bool,
 ) -> AxialPinn:
-    """Run the quasi-Newton stage, in one block or in several with a fresh set each.
+    """Run the quasi-Newton stage: one solve, on one fixed collocation set.
 
-    ``polish_refresh = 0`` keeps the single fixed set every published number here used.
-    Above zero the set is redrawn every that many iterations and the optimiser restarted,
-    so its curvature history is consistent WITHIN a block and never spans two objectives
-    -- which is the point of a fixed set -- while the stage as a whole stops being able
-    to overfit one draw. arXiv:2605.24278 runs its BFGS baseline in blocks of 1000.
+    One path, as the reference implementation has. ``polish_refresh`` used to redraw the
+    set in blocks and restart the optimiser; 7.5.37 measured that the blocked restart
+    **hurts**, and it is retired along with the two freeze schedules.
     """
     q_cfg = replace(cfg, n_colloc=cfg.polish_colloc) if cfg.polish_colloc else cfg
-
-    def draw(k: jax.Array) -> tuple:
-        return _merge(_collocation(p, q_cfg, k, 1.0, model), rar, feedback=cfg.feedback)
-
-    cps = tuple(cfg.polish_checkpoints)
-
-    if cfg.freeze_after > 0:
-        if cfg.polish_refresh > 0:
-            msg = "freeze_after and polish_refresh both set; they schedule the same stage"
-            raise ValueError(msg)
-        # One set for both halves: the switch already discards the curvature history --
-        # the parameter vector changes length -- so redrawing here would confound a
-        # restart with a change of objective, and 7.5.37 measured the redraw at 1.5x worse.
-        pts = draw(key)
-        n1 = min(cfg.freeze_after, cfg.lbfgs_iters)
-        free = replace(cfg, lbfgs_iters=n1, freeze_encoder=False)
-        model = _lbfgs_polish(
-            model, p, free, pts, w, tuple(c for c in cps if c < n1), on_checkpoint, verbose=verbose
-        )
-        if verbose:
-            print(f"[lbfgs] encoder frozen after {n1} of {cfg.lbfgs_iters}", flush=True)
-        rest = replace(cfg, lbfgs_iters=cfg.lbfgs_iters - n1, freeze_encoder=True)
-        return _lbfgs_polish(
-            model,
-            p,
-            rest,
-            pts,
-            w,
-            tuple(c - n1 for c in cps if c > n1),
-            None if on_checkpoint is None else lambda n, m: on_checkpoint(n + n1, m),
-            verbose=verbose,
-        )
-
-    if cfg.polish_refresh <= 0:
-        return _lbfgs_polish(model, p, cfg, draw(key), w, cps, on_checkpoint, verbose=verbose)
-
-    done, blk = 0, cfg.polish_refresh
-    while done < cfg.lbfgs_iters:
-        n = min(blk, cfg.lbfgs_iters - done)
-        key, bk = jax.random.split(key)
-        model = _lbfgs_polish(model, p, replace(cfg, lbfgs_iters=n), draw(bk), w, verbose=False)
-        done += n
-    if verbose:
-        print(f"[lbfgs] {cfg.lbfgs_iters} iterations in blocks of {blk}, set redrawn each")
-    return model
+    pts = _merge(_collocation(p, q_cfg, key), rar, feedback=cfg.feedback)
+    return _lbfgs_polish(
+        model, p, cfg, pts, w, tuple(cfg.polish_checkpoints), on_checkpoint, verbose=verbose
+    )
 
 
 def _ssbfgs_polish(  # noqa: PLR0913, PLR0917 - the same state the caller holds

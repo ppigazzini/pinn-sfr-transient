@@ -27,57 +27,6 @@ def _boundaries(cfg, *, verbose, ckpt):
     return evs
 
 
-def _expected(cfg, *, verbose, ckpt):
-    out = {cfg.adam_iters}
-    for it in range(1, cfg.adam_iters + 1):
-        if cfg.rar_every and it % cfg.rar_every == 0:
-            out.add(it)
-        if cfg.pts_every and it % cfg.pts_every == 0:
-            out.add(it)
-        if (
-            cfg.weight_max_ratio > 1.0
-            and cfg.weight_update_every
-            and (it % cfg.weight_update_every == 0)
-        ):
-            out.add(it)
-        if verbose and cfg.log_every and it % cfg.log_every == 0:
-            out.add(it)
-        if ckpt and cfg.adam_checkpoint_every and it % cfg.adam_checkpoint_every == 0:
-            out.add(it)
-    return sorted(out)
-
-
-@pytest.mark.parametrize(
-    ("name", "kw", "verbose", "ckpt"),
-    [
-        (
-            "study",
-            {
-                "adam_iters": 20000,
-                "rar_every": 2000,
-                "log_every": 1000,
-                "adam_checkpoint_every": 5000,
-            },
-            True,
-            True,
-        ),
-        ("odd periods", {"adam_iters": 1000, "rar_every": 300, "log_every": 70}, True, False),
-        (
-            "pseudo-time",
-            {"adam_iters": 900, "rar_every": 0, "log_every": 0, "pts_every": 250},
-            False,
-            False,
-        ),
-    ],
-)
-def test_no_cadence_event_moves(name, kw, verbose, ckpt):
-    """Odd, non-dividing periods are the case a naive block size gets wrong."""
-    cfg = AxialTrainConfig(**kw)
-    assert _boundaries(cfg, verbose=verbose, ckpt=ckpt) == _expected(
-        cfg, verbose=verbose, ckpt=ckpt
-    ), name
-
-
 def test_with_every_cadence_off_the_whole_budget_is_one_compiled_loop():
     """The point of the change: no Python between iterations at all."""
     cfg = AxialTrainConfig(adam_iters=50000, rar_every=0, log_every=0)

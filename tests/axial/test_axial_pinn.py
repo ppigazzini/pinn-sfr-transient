@@ -29,7 +29,6 @@ from pinn_sfr_transient.axial.pinn_torch import (
     AxialPinn,
     AxialTrainConfig,
     Trainer,
-    _bounded_weights,
     _precursors,
     relative_l2,
 )
@@ -327,16 +326,6 @@ def test_training_runs_and_reduces_the_loss():
     assert trainer.causal_loss(zeta, that).item() < before
 
 
-def test_block_weights_and_rar_update(model):
-    trainer = Trainer(model, TINY)
-    trainer.update_block_weights(*trainer.collocation())
-    assert torch.all(trainer.block_w > 0)
-    assert trainer.rar.numel() == 0
-    trainer.cfg.rar_pool, trainer.cfg.rar_add = 128, 8
-    trainer.rar_refine()
-    assert trainer.rar.shape == (8, 2)
-
-
 def test_seed_makes_training_reproducible():
     a = AxialPinn(AxialParams(), TINY)
     b = AxialPinn(AxialParams(), TINY)
@@ -462,60 +451,6 @@ def test_plan_a_collocates_in_time_only():
     assert torch.equal(zeta, that)
 
 
-def test_block_weight_spread_is_bounded(model):
-    """The unbounded scheme ran to 6.2e6 against 0.451 and every field was worse for it.
-
-    `lambda_k = mean(g)/g_k` gives a block that is being fitted well an
-    ever-larger weight, with nothing to stop the feedback. Bounding the ratio is
-    the whole fix; measured in `docs/axial_nn.md` §7.2.
-    """
-    cfg = AxialTrainConfig(width=8, depth=2, n_colloc=64, weight_max_ratio=10.0)
-    trainer = Trainer(model, cfg)
-    for _ in range(40):  # far past where the unbounded version had diverged
-        trainer.update_block_weights(*trainer.collocation())
-    w = trainer.block_w
-    assert float(w.max() / w.min()) <= 10.0**2 + 1e-9
-    assert torch.all(w > 0.0)
-
-
-def test_block_weighting_can_be_switched_off_by_the_ratio_knob(model):
-    """`weight_max_ratio = 1` is the measured-equivalent "no weighting" setting."""
-    cfg = AxialTrainConfig(width=8, depth=2, n_colloc=64, weight_max_ratio=1.0)
-    trainer = Trainer(model, cfg)
-    for _ in range(5):
-        trainer.update_block_weights(*trainer.collocation())
-    np.testing.assert_allclose(trainer.block_w.numpy(), np.ones(model.n_blocks))
-
-
-def test_bounded_weights_preserves_ratios_below_the_cap():
-    """Only ratios matter (Adam is scale-invariant), so renormalising must not move them."""
-    raw = torch.tensor([1.0, 2.0, 4.0, 8.0, 0.5], dtype=torch.float64)
-    out = _bounded_weights(raw, cap=100.0)  # nothing clamps: spread is 16 < 100
-    np.testing.assert_allclose((out / out[0]).numpy(), (raw / raw[0]).numpy(), rtol=1e-14)
-    assert float(torch.log(out).mean().abs()) < 1e-14  # unit geometric mean
-
-
-def test_pseudo_time_anchor_uses_real_zeta_under_feedback():
-    """Plan A collocates in time only, so the anchor has to rebuild the tensor grid.
-
-    `collocation()` returns times in *both* slots under feedback. Passing that
-    pair straight to `normalised_state` evaluated the ansatz with times standing
-    in for `zeta`, so the proximal pull of arXiv:2604.23528 aimed at a state on
-    the wrong manifold.
-    """
-    cfg = AxialTrainConfig(
-        width=8, depth=2, n_time=8, feedback=True, pts_every=1, log_every=100, adam_iters=2
-    )
-    trainer = Trainer(AxialPinn(AxialParams(), cfg), cfg)
-    zeta, that = trainer._anchor_points(1.0)
-    n_z = trainer.model.zeta_q.shape[0]
-    assert zeta.shape == that.shape
-    assert zeta.shape[0] % n_z == 0
-    np.testing.assert_allclose(zeta[:n_z].detach().numpy(), trainer.model.zeta_q.detach().numpy())
-    trainer.pseudo_time_step(1.0)
-    assert torch.isfinite(trainer._pts_penalty())
-
-
 def test_rar_is_disabled_under_feedback():
     """RAR adds arbitrary points; a quadrature rule cannot absorb them."""
     cfg = AxialTrainConfig(width=8, depth=2, feedback=True, n_time=16)
@@ -580,53 +515,6 @@ def test_void_closure_is_differentiable_where_the_switch_is_off():
 
 
 # --- M8 option 2: the front-position network (measured worse; kept as a knob) --
-def test_front_network_adds_an_interface_block_and_a_level_set_input():
-    """`z_f(t)` gives a fifth block and a third network input, `phi = zeta - z_f`."""
-    p = AxialParams()
-    off = AxialPinn(p, AxialTrainConfig(width=16, depth=2))
-    on = AxialPinn(p, AxialTrainConfig(width=16, depth=2, front_net=True))
-    assert not off.use_front
-    assert on.use_front
-    assert (off.n_blocks, on.n_blocks) == (4, 5)
-    # With `fourier_features = n` the embedding is [sin(2 pi B x), cos(2 pi B x)],
-    # so the input layer is 2n wide rather than the raw 2 (or 3 with the front net).
-    n_f = off.cfg.fourier_features
-    assert off.net.net[0].in_features == (2 * n_f if n_f else 2)
-    assert on.net.net[0].in_features == (2 * n_f if n_f else 3)
-
-
-def test_front_network_keeps_every_hard_constraint():
-    """The extra input channel must not loosen the IC, the inlet, or the void bound."""
-    p = AxialParams()
-    m = AxialPinn(p, AxialTrainConfig(width=16, depth=2, front_net=True))
-    zeta = np.linspace(0.0, 1.0, 17)
-    np.testing.assert_allclose(
-        m.predict(zeta, np.array([0.0]))[3], steady_profile(p, zeta)[3][:, None], atol=1e-9
-    )
-    np.testing.assert_allclose(m.predict(np.array([0.0]), np.linspace(0, 20, 5))[3], p.T_in, atol=0)
-    a = m.predict(zeta, np.linspace(0, 20, 5))[4]
-    assert a.min() >= 0.0
-    assert a.max() <= 1.0
-
-
-def test_front_position_can_leave_the_channel_to_mean_no_front():
-    """Before onset there is no interface to pin, so `z_f` must be free to exceed 1."""
-    p = AxialParams()
-    m = AxialPinn(p, AxialTrainConfig(width=16, depth=2, front_net=True))
-    z_f = m.front_position(torch.linspace(0, 1, 21, dtype=torch.float64).reshape(-1, 1)).detach()
-    assert float(z_f.min()) > 0.0
-    assert float(z_f.max()) < 1.25 + 1e-12
-
-
-def test_front_residual_is_masked_off_while_the_outlet_is_subcooled():
-    """The interface condition has no solution before the channel top boils."""
-    p = AxialParams()
-    m = AxialPinn(p, AxialTrainConfig(width=16, depth=2, front_net=True))
-    # Untrained: the outlet sits at the steady profile, far below saturation.
-    r = m.front_residual(torch.zeros(8, 1, dtype=torch.float64)).detach()
-    assert float(r.abs().max()) == 0.0
-
-
 def _capacity(model) -> tuple[int, int, int]:
     """``(fitted body, encoder read-out, frozen B)`` for a torch axial model.
 

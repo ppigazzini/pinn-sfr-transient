@@ -37,7 +37,6 @@ BASE = {
     "width": 8,
     "depth": 2,
     "rar_every": 0,
-    "pts_every": 0,
     "log_every": 10**9,
     "adam_iters": 6,
     "lbfgs_iters": 0,
@@ -111,7 +110,7 @@ def test_schedule_free_reports_the_averaged_iterate() -> None:
     opt = tr._first_order()
     for _ in range(20):
         opt.zero_grad()
-        tr.causal_loss(*tr.collocation(1.0), 1.0).backward()
+        tr.causal_loss(*tr.collocation()).backward()
         opt.step()
     y = [q.detach().clone() for q in tr.model.parameters()]
     tr._to_reportable(opt)
@@ -180,28 +179,6 @@ def test_warmup_cosine_agrees_with_the_optax_schedule_after_the_ramp() -> None:
     assert worst < 1e-9
 
 
-def test_polish_refresh_redraws_and_restarts() -> None:
-    """``polish_refresh`` runs the polish in blocks, each on a fresh set.
-
-    Checked by counting optimiser constructions: one per block, because a history that
-    spanned two draws would span two objectives.
-    """
-    cfg = _cfg(adam_iters=2, lbfgs_iters=20, polish_refresh=5)
-    tr = Trainer(AxialPinn(P, cfg), cfg)
-    made = []
-    inner = tr._make_opt
-    tr._make_opt = lambda n: (made.append(n), inner(n))[1]
-    tr.train(verbose=False)
-    assert made == [5, 5, 5, 5]
-
-
-def test_polish_refresh_and_freeze_after_are_mutually_exclusive() -> None:
-    """Both schedule the same stage; the JAX twin raises here too."""
-    cfg = _cfg(adam_iters=2, lbfgs_iters=20, polish_refresh=5, freeze_after=10)
-    with pytest.raises(ValueError, match="same stage"):
-        train(P, cfg)
-
-
 def test_compile_is_requested_fullgraph_and_static(monkeypatch: pytest.MonkeyPatch) -> None:
     """When `compile` is on, the loss is compiled with both settings that matter.
 
@@ -235,3 +212,27 @@ def test_compile_off_by_default_does_not_compile(monkeypatch: pytest.MonkeyPatch
     train(P, _cfg())
     assert calls == []
     assert AxialTrainConfig().compile is False
+
+
+def test_the_quasi_newton_stage_compiles_too(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`compile` must reach the polish, not only the first-order loop.
+
+    This is the case that was broken: the polish closure called `causal_loss` directly,
+    so an `adam_iters = 0` arm -- the shape of most funded configurations here -- got no
+    compilation at all and `compile=True` was silently inert. Measured at 5000 points and
+    f64, compiling it is 159.66 -> 53.47 ms per quasi-Newton iteration.
+
+    Asserting on the request rather than the speed, so the test costs nothing: with no
+    first-order iterations at all, `torch.compile` must still have been asked for.
+    """
+    calls: list[dict] = []
+    monkeypatch.setattr(torch, "compile", lambda fn, **kw: (calls.append(kw), fn)[1])
+    train(P, _cfg(adam_iters=0, lbfgs_iters=3, compile=True))
+    assert calls == [{"fullgraph": True, "dynamic": False}], "the polish ran uncompiled"
+
+
+def test_the_loss_is_compiled_once_per_trainer() -> None:
+    """Both stages share one compiled callable rather than compiling twice."""
+    cfg = _cfg(compile=True)
+    tr = Trainer(AxialPinn(P, cfg), cfg)
+    assert tr._loss_fn() is tr._loss_fn()

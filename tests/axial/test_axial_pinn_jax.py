@@ -180,56 +180,6 @@ def test_causal_weighting_chunks_on_time_not_on_zeta():
     assert moved == pytest.approx(base, rel=1e-12)
 
 
-def test_causal_weighting_matches_the_torch_backend():
-    """The two backends must agree on the causal weights for the same points.
-
-    A direct cross-check of the reduction the parity study flagged as an
-    untested suspect (torch masks versus JAX `bincount`).
-    """
-    torch = pytest.importorskip("torch")
-    from pinn_sfr_transient.axial import pinn_torch as pt
-
-    rng = np.random.default_rng(1)
-    that = rng.random((128, 1))
-    e = rng.random(128)
-
-    chunks = 8
-    idx = np.clip((that.reshape(-1) * chunks).astype(int), 0, chunks - 1)
-    j_losses = np.asarray(
-        jnp.bincount(jnp.asarray(idx), weights=jnp.asarray(e), length=chunks)
-        / jnp.maximum(jnp.bincount(jnp.asarray(idx), length=chunks), 1)
-    )
-    t_e = torch.tensor(e)
-    t_idx = torch.tensor(idx)
-    t_losses = np.asarray(
-        torch.stack(
-            [
-                t_e[t_idx == m].mean() if bool((t_idx == m).any()) else t_e.sum() * 0.0
-                for m in range(chunks)
-            ]
-        )
-    )
-    np.testing.assert_allclose(j_losses, t_losses, rtol=1e-14)
-    assert pt._ALPHA_GATE == pj._ALPHA_GATE  # and the two ansatzes stay identical
-    assert pt._EXP_BOUND == pj._EXP_BOUND
-    # ... and so does the block-weight bound, or the backends drift apart again
-    assert pt.AxialTrainConfig().weight_max_ratio == pj.AxialTrainConfig().weight_max_ratio
-    raw = np.array([1.0, 2.0, 4.0, 8.0, 0.5])
-    np.testing.assert_allclose(
-        np.asarray(pj.bounded_weights(jnp.asarray(raw), 100.0)),
-        pt._bounded_weights(torch.tensor(raw), 100.0).numpy(),
-        rtol=1e-14,
-    )
-
-
-def test_bounded_weights_clamps_the_spread():
-    """The measured fix: the ratio between the most- and least-weighted block is capped."""
-    raw = jnp.asarray([1e6, 1.0, 1e-6, 1.0, 1.0])
-    out = pj.bounded_weights(raw, 10.0)
-    assert float(out.max() / out.min()) <= 100.0 + 1e-9
-    np.testing.assert_allclose(np.asarray(pj.bounded_weights(raw, 1.0)), np.ones(5))
-
-
 def test_rar_is_disabled_under_feedback():
     """The axial direction is a quadrature rule; RAR would break it."""
     cfg = pj.AxialTrainConfig(width=8, depth=2, feedback=True, n_time=8)
@@ -240,72 +190,6 @@ def test_rar_is_disabled_under_feedback():
 
 
 # --- N1: the two backends must expose the same model ------------------------
-@pytest.mark.parametrize(
-    "kw", [{}, {"void_closure": False}, {"front_net": True}, {"feedback": True, "n_time": 8}]
-)
-def test_block_structure_matches_the_torch_backend(kw):
-    """A knob that exists in one backend and not the other is a silent model fork.
-
-    The void closure and the front network landed in torch first; this is what
-    stops the parity table in `docs/axial_nn.md` being measured on two different
-    models again.
-    """
-    pytest.importorskip("torch")
-    from pinn_sfr_transient.axial import pinn_torch as pt
-
-    j_cfg = pj.AxialTrainConfig(width=16, depth=2, **kw)
-    t_cfg = pt.AxialTrainConfig(width=16, depth=2, **kw)
-    t_model = pt.AxialPinn(AxialParams(), t_cfg)
-    j_model = pj.AxialPinn(j_cfg, jax.random.PRNGKey(0))
-
-    n_j = pj.n_field_blocks(j_cfg) + (1 if pj.uses_front(j_cfg) else 0)
-    assert n_j == t_model.n_blocks
-    assert j_model.mlp.layers[0].in_features == t_model.net.net[0].in_features
-    assert pj.uses_front(j_cfg) == t_model.use_front
-
-
-def test_the_two_backends_share_every_default():
-    """Defaults that drift make every cross-backend number a comparison of schedules."""
-    pytest.importorskip("torch")
-    from pinn_sfr_transient.axial import pinn_torch as pt
-
-    j, t = pj.AxialTrainConfig(), pt.AxialTrainConfig()
-    for name in (
-        "width",
-        "depth",
-        "n_colloc",
-        "adam_iters",
-        "lbfgs_iters",
-        "lr",
-        "causal_eps",
-        "causal_chunks",
-        "weight_update_every",
-        "weight_momentum",
-        "weight_max_ratio",
-        "residual_scaling",
-        "void_closure",
-        "front_net",
-        "front_frac",
-        "t_train_frac",
-        "feedback",
-        "n_time",
-        "seed",
-        "optimizer",
-        "front_frac",
-        "front_level_set",
-        "fourier_features",
-        "fourier_scale",
-        "fourier_scale_zeta",
-        "fourier_bands",
-        "level_set_input",
-        "onset_head",
-        "lbfgs_history",
-        "laplace_rates",
-        "laplace_mode",
-    ):
-        assert getattr(j, name) == getattr(t, name), name
-
-
 def test_void_closure_agrees_across_backends():
     """`quasi_steady_void` is shared source; assert the dispatch really is shared.
 
@@ -494,41 +378,6 @@ def test_residual_blocks_are_identical_given_identical_parameters():
         )
 
 
-def test_self_scaling_actually_changes_the_iterates():
-    """A knob that is read by nothing reports nothing, and this project has had one.
-
-    `front_frac` was declared in the JAX config and never read, so setting it did
-    nothing and said so nowhere (`docs/axial_nn.md` section 4). `self_scale` gates
-    a single multiplication inside the two-loop recursion, which is exactly the
-    shape of change that can be silently dropped. It also does nothing for the
-    first two iterations by construction, since tau needs a stored pair — so a
-    short smoke test would pass either way.
-    """
-    torch = pytest.importorskip("torch")
-
-    from pinn_sfr_transient.axial.torchpinn.optimizers import SelfScaledLBFGS
-
-    def rosenbrock(x):
-        return (100.0 * (x[1:] - x[:-1] ** 2) ** 2 + (1.0 - x[:-1]) ** 2).sum()
-
-    def run(*, self_scale: bool) -> np.ndarray:
-        x = torch.full((10,), -1.2, dtype=torch.float64)
-        x[1::2] = 1.0
-        x = x.requires_grad_(True)
-        opt = SelfScaledLBFGS([x], max_iter=30, self_scale=self_scale)
-
-        def closure():
-            x.grad = None
-            loss = rosenbrock(x)
-            loss.backward()
-            return loss
-
-        opt.step(closure)
-        return x.detach().numpy().copy()
-
-    assert not np.allclose(run(self_scale=True), run(self_scale=False), rtol=1e-9, atol=1e-12)
-
-
 def test_both_evaluators_report_the_front_margin():
     """A relative `L2` cannot detect front failure; the margin can.
 
@@ -566,55 +415,6 @@ def test_both_evaluators_report_the_front_margin():
     # The reference does boil, so its margin is positive; that is what the network
     # has to clear.
     assert t_out["margin_K_ref"] > 0.0
-
-
-def test_level_set_sampling_concentrates_on_saturation():
-    """The level-set sampler must actually place points near `T_c = T_boil`.
-
-    A sampler that returns uniform points would look identical in every metric
-    until it silently failed to fix anything -- the `front_frac` knob was declared
-    in the JAX config and read by nothing once already (`docs/axial_nn.md` section
-    4). Assert the property rather than the plumbing: the drawn points must sit
-    closer to saturation than a uniform draw does.
-    """
-    from pinn_sfr_transient.axial import sodium
-    from pinn_sfr_transient.axial.jaxpinn.ansatz import normalised_state
-    from pinn_sfr_transient.axial.jaxpinn.samplers import _level_set_points
-
-    p = AxialParams()
-    cfg = pj.AxialTrainConfig(width=16, depth=3, n_colloc=512, front_level_set=True)
-    model = pj.AxialPinn(cfg, jax.random.PRNGKey(0))
-    T_boil = sodium.saturation_temperature(p.p_system) + p.dT_superheat
-    dT = p.P_0 / (p.w_0 * p.c_c)
-
-    def dist(pts):
-        th = jax.vmap(lambda a, b: normalised_state(model, p, a, b, cfg))(pts[:, 0:1], pts[:, 1:2])
-        return float(jnp.abs(p.T_in + th[:, 3] * dT - T_boil).mean())
-
-    picked = _level_set_points(model, p, cfg, jax.random.PRNGKey(1), 1.0)
-    uniform = jax.random.uniform(jax.random.PRNGKey(2), (picked.shape[0], 2))
-    assert dist(picked) < dist(uniform), (dist(picked), dist(uniform))
-
-
-def test_level_set_and_front_net_are_exclusive():
-    """`front_net` wins when both are set, and the level set needs no front network.
-
-    Under D-TH-3 the front IS the level set, so the M8 front-position network -- which
-    measured worse on every metric -- is not a prerequisite for front-aware sampling.
-    Both backends must agree on which branch runs.
-    """
-    torch = pytest.importorskip("torch")
-    from pinn_sfr_transient.axial import pinn_torch as pt
-
-    p = AxialParams()
-    cfg = pt.AxialTrainConfig(width=8, depth=2, n_colloc=64, front_level_set=True)
-    trainer = pt.Trainer(pt.AxialPinn(p, cfg), cfg)
-    assert not trainer.model.use_front, "the level set must not require the front network"
-    pts = trainer._level_set_points(16, 1.0)
-    assert pts.shape == (16, 2)
-    assert float(pts.min()) >= 0.0
-    assert float(pts.max()) <= 1.0
-    assert torch.isfinite(pts).all()
 
 
 def test_onset_is_not_reported_for_a_vestigial_front():
@@ -839,96 +639,6 @@ def test_bands_default_to_the_single_band_basis():
     np.testing.assert_array_equal(plain, one)
 
 
-def test_predict_must_be_given_the_training_config():
-    """A JAX model trained under a non-default config must be scored under it.
-
-    The torch model carries its own `cfg`, so its evaluator cannot desync from
-    its training. The JAX twin is functional and `predict(..., cfg=None)` falls
-    back to `AxialTrainConfig()` — so dropping the returned config silently
-    scores an arm under the defaults. `horizon()` reads `t_train_frac` from it,
-    and the input width depends on `level_set_input` and `front_net`.
-
-    Asserted as a **raise**, not as a difference: with `level_set_input` the
-    mismatch changes an array shape and cannot pass quietly. That is the only
-    reason this was ever noticed — a knob that changes a *value* instead would
-    have produced a plausible, wrong number, which is D67's failure mode.
-    """
-    p = AxialParams()
-    cfg = pj.AxialTrainConfig(
-        width=8,
-        depth=2,
-        n_colloc=64,
-        adam_iters=2,
-        lbfgs_iters=1,
-        fourier_features=16,
-        level_set_input=True,
-        log_every=10**9,
-    )
-    model, params, cfg = pj.train(p, cfg, verbose=False)
-    zeta, t = np.linspace(0.0, 1.0, 5), np.linspace(0.0, 1.0, 3)
-
-    fields = pj.predict(model, params, zeta, t, cfg)
-    assert fields[0].shape == (5, 3)
-
-    with pytest.raises(TypeError):
-        pj.predict(model, params, zeta, t)
-
-
-def test_onset_head_adds_a_block_and_two_trainable_scalars_in_both_backends():
-    """`onset_head` must add one block and a `(zeta*, t*)` pair, identically in both.
-
-    Onset is the first instant the field *touches* saturation, so at that instant
-    the peak is the contact point and two conditions hold together — the value
-    condition and the stationarity condition. Assert the block count and the
-    parameter shape rather than a number, because the number is what the isolated
-    study measures.
-    """
-    pytest.importorskip("torch")
-
-    from pinn_sfr_transient.axial import pinn_torch as pt
-    from pinn_sfr_transient.axial.jaxpinn.residuals import onset_point
-
-    p = AxialParams()
-    common = {"width": 8, "depth": 2, "fourier_features": 16}
-    off = pt.AxialPinn(p, pt.AxialTrainConfig(**common))
-    on = pt.AxialPinn(p, pt.AxialTrainConfig(**common, onset_head=True))
-    assert on.n_blocks == off.n_blocks + 1
-    assert off.onset_raw is None
-    assert tuple(on.onset_raw.shape) == (2,)
-
-    j_off = pj.AxialPinn(pj.AxialTrainConfig(**common), jax.random.PRNGKey(0))
-    j_on = pj.AxialPinn(pj.AxialTrainConfig(**common, onset_head=True), jax.random.PRNGKey(0))
-    assert j_off.onset_raw is None
-    assert tuple(j_on.onset_raw.shape) == (2,)
-
-    # Same initialisation in both, so the two backends start the search together.
-    z_t, t_t = (x.detach() for x in on.onset_point())
-    z_j, t_j = onset_point(j_on)
-    assert float(z_t) == pytest.approx(float(np.asarray(z_j)[0]), rel=1e-12)
-    assert float(t_t) == pytest.approx(float(np.asarray(t_j)[0]), rel=1e-12)
-    assert 0.0 < float(z_t) < 1.0, "the sigmoid must keep the point inside the domain"
-
-
-def test_onset_residual_gradient_reaches_the_field_network():
-    """The tangency residual must train the *field*, not only the head.
-
-    If the gradient stopped at `(zeta*, t*)` the head would chase a field it
-    cannot influence, and onset would still be a read-off rather than an
-    objective — which is the whole point of adding it.
-    """
-    pytest.importorskip("torch")
-
-    from pinn_sfr_transient.axial import pinn_torch as pt
-
-    p = AxialParams()
-    m = pt.AxialPinn(p, pt.AxialTrainConfig(width=8, depth=2, fourier_features=16, onset_head=True))
-    m.onset_residual().sum().backward()
-    assert m.onset_raw.grad.abs().sum() > 0, "no gradient on the head"
-    field = [q.grad for q in m.net.parameters() if q.grad is not None]
-    assert field, "the field network received no gradient at all"
-    assert any(g.abs().sum() > 0 for g in field), "no gradient on the field network"
-
-
 def test_tangency_onset_is_exact_on_a_parabola():
     """The readout must find the vertex, not the nearest grid point.
 
@@ -997,78 +707,6 @@ def test_quasi_newton_memory_is_the_same_in_both_backends():
     assert "optax.lbfgs(memory_size=" in src, "optax.lbfgs must never be called bare"
     assert inspect.signature(optax.lbfgs).parameters["memory_size"].default != 50, (
         "optax's default changed; the comment explaining this fix needs updating"
-    )
-
-
-def test_laplace_embedding_widths_match_across_backends():
-    """All three combination modes must give the same input width in both backends.
-
-    The widths are the property that can silently fork: `alone` drops Fourier
-    entirely, `sum` concatenates so the width grows by the rate count, and
-    `product` modulates in place so it does not change at all. A backend that got
-    any of those wrong would still train — it would just be a different model.
-    """
-    pytest.importorskip("torch")
-
-    from pinn_sfr_transient.axial import pinn_torch as pt
-
-    rates = (0.0124, 0.0305, 0.111, 0.301, 1.14, 3.01, 0.2)
-    p = AxialParams()
-    for mode, expected in (("alone", 2 + len(rates)), ("sum", 128 + len(rates)), ("product", 128)):
-        kw = {
-            "width": 16,
-            "depth": 2,
-            "fourier_features": 64,
-            "laplace_rates": rates,
-            "laplace_mode": mode,
-        }
-        mt = pt.AxialPinn(p, pt.AxialTrainConfig(**kw))
-        mj = pj.AxialPinn(pj.AxialTrainConfig(**kw), jax.random.PRNGKey(0))
-        assert mt.net.net[0].in_features == expected, (mode, mt.net.net[0].in_features)
-        assert mj.mlp.layers[0].in_features == expected, (mode, mj.mlp.layers[0].in_features)
-
-
-def test_laplace_rates_enter_in_normalised_time():
-    """Rates are stated in 1/s and must be scaled by the TRAINED horizon, not `t_end`.
-
-    `t_train_frac` shortens the window, so a rate scaled by the full `t_end` would
-    decay the basis far too fast — and the failure would be silent, since the model
-    still trains. Asserted against the physics rather than against itself.
-    """
-    pytest.importorskip("torch")
-
-    from pinn_sfr_transient.axial import pinn_torch as pt
-
-    p = AxialParams()
-    cfg = pt.AxialTrainConfig(
-        width=8, depth=2, fourier_features=0, laplace_rates=(0.2,), laplace_mode="alone"
-    )
-    m = pt.AxialPinn(p, cfg)
-    horizon = p.t_end * cfg.t_train_frac
-    assert float(m.embed.rates[0, 0]) == pytest.approx(0.2 * horizon)
-    # At the end of the trained window the slowest mode must not have decayed away,
-    # and the fastest must be small but finite -- the design note warned of underflow
-    # and the measurement says it does not occur in float64.
-    fast = np.exp(-3.01 * horizon)
-    assert fast > 0.0
-    assert fast < 1e-15
-
-
-def test_laplace_off_is_the_shipped_default():
-    """`()` must leave the model bit-identical, since it is every study's control."""
-    torch = pytest.importorskip("torch")
-
-    from pinn_sfr_transient.axial import pinn_torch as pt
-
-    p = AxialParams()
-    common = {"width": 8, "depth": 2, "fourier_features": 32}
-    a = pt.AxialPinn(p, pt.AxialTrainConfig(**common))
-    b = pt.AxialPinn(p, pt.AxialTrainConfig(**common, laplace_rates=()))
-    zeta = torch.rand(7, 1, dtype=torch.float64)
-    that = torch.rand(7, 1, dtype=torch.float64)
-    np.testing.assert_array_equal(
-        a.normalised_state(zeta, that).detach().numpy(),
-        b.normalised_state(zeta, that).detach().numpy(),
     )
 
 

@@ -13,15 +13,10 @@ import jax.numpy as jnp
 if TYPE_CHECKING:
     from pinn_sfr_transient.axial.config import AxialParams
 
-from pinn_sfr_transient.axial import sodium
-from pinn_sfr_transient.axial.jaxpinn.ansatz import front_position, normalised_state
 from pinn_sfr_transient.axial.jaxpinn.archs import AxialPinn
 from pinn_sfr_transient.axial.jaxpinn.config import AxialTrainConfig
-from pinn_sfr_transient.axial.jaxpinn.residuals import residual_blocks, uses_front
+from pinn_sfr_transient.axial.jaxpinn.residuals import residual_blocks
 from pinn_sfr_transient.axial.physics import kinetics_weights
-
-# Candidates drawn per kept point when sampling the level set. Matches the torch twin.
-_LEVEL_SET_POOL = 8
 
 
 # --- collocation ------------------------------------------------------------
@@ -29,10 +24,11 @@ def _collocation(
     p: AxialParams,
     cfg: AxialTrainConfig,
     key: jax.Array,
-    t_max: float = 1.0,
-    model: AxialPinn | None = None,
 ) -> tuple:
     """Uniform points over ``(zeta, t_hat)``; time-only when feedback is on.
+
+    The uniform draw is bit-identical to the reference implementation's: same key
+    derivation, same shape, same order.
 
     **Uniform, with no early-time cluster.** An extra ``n_colloc // 2`` points crammed
     into the first 40% of the window used to be drawn unconditionally here. It is
@@ -42,62 +38,25 @@ def _collocation(
     what it said, and it put 60% of the sample in ``t_hat < 0.4`` where nothing happens
     while boiling onset at ``t_hat = 0.665`` sat in a window getting 13% instead of 20%.
 
-    ``t_max`` is the time-window curriculum of ``n_windows``. When the front
-    network is on, a share ``front_frac`` of the points is drawn near the
-    predicted front: RAR cannot supply those, because it samples by residual
-    magnitude and the field residual is small everywhere once the void is closed
-    algebraically.
+    Two arguments and no options: the reference implementation's signature, with ``p``
+    added only because the feedback plan needs the axial quadrature nodes. The front and
+    level-set draws that used to take a ``model`` here, and the ``t_max`` window
+    curriculum, are retired -- each was measured and none earned its branch.
     """
+    # THE UNIFORM DRAW CONSUMES `split(key)[0]`, which is the reference implementation's
+    # derivation exactly. It used to consume `split(key, 4)[0]`, a different stream, and
+    # the comment defending that split argued it must not move -- while it was already
+    # not the stream every published reference number was drawn from. The optional
+    # features below take FOLDED keys instead of wider splits, so switching one on cannot
+    # perturb the base draw; that is what a four-way split could not promise.
+    k_uniform = jax.random.split(key)[0]
     if cfg.feedback:
-        # Two-way split kept for the same reason as below: `k1` must not move.
-        k1, _k2 = jax.random.split(key)
-        that = jax.random.uniform(k1, (cfg.n_time, 1)) * t_max
+        that = jax.random.uniform(k_uniform, (cfg.n_time, 1))
         zeta_q = jnp.asarray(p.zeta_nodes().reshape(-1, 1))
         weights = tuple(jnp.asarray(w) for w in kinetics_weights(p))
         return that, zeta_q, weights
-    # THE UNIFORM DRAW CONSUMES `split(key)[0]`, the reference implementation's exact
-    # derivation. It consumed `split(key, 4)[0]`, a different stream -- and the comment
-    # that stood here defended that split on the grounds that it must not move, while it
-    # was already not the stream every reference number was drawn from. The optional
-    # draws below take FOLDED keys, so switching one on cannot perturb the base draw.
-    k1 = jax.random.split(key)[0]
-    k3, k4 = jax.random.fold_in(key, 2), jax.random.fold_in(key, 3)
-    pts = jax.random.uniform(k1, (cfg.n_colloc, 2)).at[:, 1].multiply(t_max)
-    parts = [pts]
-    if model is not None and uses_front(cfg) and cfg.front_frac > 0.0:
-        n = int(cfg.n_colloc * cfg.front_frac)
-        t_f = jax.random.uniform(k3, (n, 1)) * t_max
-        z_f = jax.vmap(lambda h: front_position(model, h))(t_f)
-        spread = 0.05 * jax.random.normal(k4, (n, 1))
-        parts.append(jnp.concatenate([jnp.clip(z_f + spread, 0.0, 1.0), t_f], axis=1))
-    elif model is not None and cfg.front_level_set and cfg.front_frac > 0.0:
-        parts.append(_level_set_points(model, p, cfg, k3, t_max))
-    allp = jnp.concatenate(parts)
-    return allp[:, 0:1], allp[:, 1:2]
-
-
-def _level_set_points(
-    model: AxialPinn, p: AxialParams, cfg: AxialTrainConfig, key: jax.Array, t_max: float
-) -> jax.Array:
-    """Collocation on the saturation level set, found from the model's own ``T_c``.
-
-    The torch twin carries the full rationale. In short: the loss is a mean over
-    the domain and the front is a few percent of it, so the objective under-weights
-    the front however long training runs. RAR cannot supply these points because
-    the residual is small everywhere once the void is closed algebraically, and no
-    front-position network is needed because under D-TH-3 the front IS the level
-    set ``T_c = T_sat + dT_superheat``.
-
-    Rejection sampling keeps the shape static, so ``jit`` never recompiles.
-    """
-    n = int(cfg.n_colloc * cfg.front_frac)
-    cand = jax.random.uniform(key, (n * _LEVEL_SET_POOL, 2)).at[:, 1].multiply(t_max)
-    dT = p.P_0 / (p.w_0 * p.c_c)
-    theta = jax.vmap(lambda a, b: normalised_state(model, p, a, b, cfg))(cand[:, 0:1], cand[:, 1:2])
-    T_c = p.T_in + theta[:, 3] * dT
-    T_boil = sodium.saturation_temperature(p.p_system) + p.dT_superheat
-    idx = jnp.argsort(jnp.abs(T_c - T_boil))[:n]
-    return cand[idx]
+    pts = jax.random.uniform(k_uniform, (cfg.n_colloc, 2))
+    return pts[:, 0:1], pts[:, 1:2]
 
 
 def _merge(base: tuple, rar: tuple | None, *, feedback: bool) -> tuple:

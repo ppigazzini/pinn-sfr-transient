@@ -9,7 +9,6 @@ import equinox as eqx
 import jax
 import jax.numpy as jnp
 
-from pinn_sfr_transient.axial.config import AxialParams
 from pinn_sfr_transient.axial.jaxpinn.config import AxialTrainConfig
 from pinn_sfr_transient.axial.physics import N_GROUPS
 
@@ -77,88 +76,6 @@ class FourierEmbedding(eqx.Module):
         return jnp.concatenate([jnp.sin(proj), jnp.cos(proj)])
 
 
-class BeignetPyramid(eqx.Module):
-    """Trainable multi-resolution Fourier feature pyramid -- arXiv:2605.24278.
-
-    The torch twin carries the rationale and the registered deviation. The grids are
-    ordinary inexact arrays, so Equinox treats them as trainable -- deliberately, and in
-    contrast to `FourierEmbedding.B`, which is held under `stop_gradient`. That
-    difference IS the paper's mechanism.
-    """
-
-    grids: list[jax.Array]
-    pad: float = eqx.field(static=True)
-    n_out: int = eqx.field(static=True)
-
-    def __init__(  # noqa: PLR0913, PLR0917 - mirrors the torch twin's signature exactly
-        self, levels: int, features: int, base: int, noise: float, pad: float, key: jax.Array
-    ) -> None:
-        keys = jax.random.split(key, max(levels, 1))
-        self.grids = [
-            jax.random.normal(keys[k], (base * 2**k, features)) * noise for k in range(levels)
-        ]
-        self.pad = float(pad)
-        self.n_out = levels * features + 1
-
-    def __call__(self, x: jax.Array) -> jax.Array:
-        u = self.pad + x[:1] * (1.0 - 2.0 * self.pad)
-        feats = [x[1:2]]
-        for theta in self.grids:
-            n = theta.shape[0]
-            k = jnp.fft.fftfreq(n, d=1.0 / n)
-            hat = jnp.fft.fft(theta, axis=0)
-            phase = 2.0 * jnp.pi * u * k
-            feats.append((jnp.cos(phase) @ hat.real - jnp.sin(phase) @ hat.imag) / n)
-        return jnp.concatenate(feats)
-
-
-class LaplaceMix(eqx.Module):
-    """Exponential-decay basis in ``t_hat``, wrapping a Fourier embedding.
-
-    The torch twin carries the rationale. Rates arrive in physical ``1/s`` and are
-    scaled by the trained horizon here, so a caller states physics and this states
-    normalised time.
-    """
-
-    fourier: FourierEmbedding | None
-    mode: str = eqx.field(static=True)
-    rates: jax.Array
-
-    def __init__(
-        self,
-        fourier: FourierEmbedding | None,
-        rates: tuple[float, ...],
-        mode: str,
-        t_end: float,
-    ) -> None:
-        self.fourier = fourier
-        self.mode = mode
-        self.rates = jnp.asarray([r * t_end for r in rates], dtype=jnp.float64)
-
-    def __call__(self, x: jax.Array) -> jax.Array:
-        lap = jnp.exp(-self.rates * x[1])
-        if self.mode == "alone" or self.fourier is None:
-            return jnp.concatenate([x, lap])
-        f = self.fourier(x)
-        if self.mode == "sum":
-            return jnp.concatenate([f, lap])
-        n, k = f.shape[0], self.rates.shape[0]
-        per = n // k
-        parts = [f[j * per : ((j + 1) * per if j < k - 1 else n)] * lap[j] for j in range(k)]
-        return jnp.concatenate(parts)
-
-
-def laplace_width(cfg, n_in: int) -> int:  # noqa: ANN001
-    """Input width after the Laplace mix, so the first Linear can be sized."""
-    n_rates = len(cfg.laplace_rates)
-    if not n_rates:
-        return 2 * cfg.fourier_features if cfg.fourier_features else n_in
-    if cfg.laplace_mode == "alone":
-        return n_in + n_rates
-    base = 2 * cfg.fourier_features if cfg.fourier_features else n_in
-    return base + n_rates if cfg.laplace_mode == "sum" else base
-
-
 def fourier_scale_vector(cfg, n_in: int) -> tuple[float, ...] | None:  # noqa: ANN001
     """Per-input Fourier bandwidths, or ``None`` for an isotropic basis.
 
@@ -172,38 +89,6 @@ def fourier_scale_vector(cfg, n_in: int) -> tuple[float, ...] | None:  # noqa: A
     return (base * float(cfg.fourier_scale_zeta),) + (base,) * (n_in - 1)
 
 
-class ModifiedMLP(eqx.Module):
-    """Two-encoder MLP of [Wang, Teng & Perdikaris 2021], the architecture jaxpi uses.
-
-    Encoders ``U`` and ``V`` are computed once from the input and mixed into every
-    hidden layer, ``h <- (1 - z) U + z V``, so the input reaches the last layer
-    undiminished. Equinox's default ``Linear`` init is ``U(+/-1/sqrt(fan_in))`` on
-    weights and biases, which is what the torch twin sets explicitly.
-    """
-
-    u: eqx.nn.Linear
-    v: eqx.nn.Linear
-    first: eqx.nn.Linear
-    hidden: list
-    out: eqx.nn.Linear
-
-    def __init__(self, n_in: int, n_out: int, width: int, depth: int, key: jax.Array) -> None:
-        keys = jax.random.split(key, depth + 3)
-        self.u = eqx.nn.Linear(n_in, width, key=keys[0])
-        self.v = eqx.nn.Linear(n_in, width, key=keys[1])
-        self.first = eqx.nn.Linear(n_in, width, key=keys[2])
-        self.hidden = [eqx.nn.Linear(width, width, key=k) for k in keys[3 : depth + 2]]
-        self.out = eqx.nn.Linear(width, n_out, key=keys[depth + 2])
-
-    def __call__(self, x: jax.Array) -> jax.Array:
-        u, v = jnp.tanh(self.u(x)), jnp.tanh(self.v(x))
-        h = jnp.tanh(self.first(x))
-        for layer in self.hidden:
-            z = jnp.tanh(layer(h))
-            h = (1.0 - z) * u + z * v
-        return self.out(h)
-
-
 class AxialPinn(eqx.Module):
     """Field network, plus a precursor network when the kinetics loop is closed.
 
@@ -212,73 +97,43 @@ class AxialPinn(eqx.Module):
     operations require to be hashable — the same split the 0D JAX backend uses.
     """
 
-    mlp: eqx.nn.MLP | ModifiedMLP
+    mlp: eqx.nn.MLP
     kin: eqx.nn.MLP | None
-    front: eqx.nn.MLP | None
-    embed: FourierEmbedding | LaplaceMix | BeignetPyramid | None
-    onset_raw: jax.Array | None
+    embed: FourierEmbedding | None
 
     def __init__(self, cfg: AxialTrainConfig, key: jax.Array) -> None:
-        # THE REFERENCE IMPLEMENTATION'S SPLIT: the embedding takes `split(key)[0]` and
-        # the field network `split(key)[1]`, so the same seed builds the same weights.
-        # This was `split(key, 4)`, which handed both a different key -- identical shapes
-        # and an identical 25 221 parameter count, entirely different values, and no way
-        # to compare a run here with a reference one.
+        # THE REFERENCE IMPLEMENTATION'S SPLIT: embedding takes `split(key)[0]` and the
+        # field network `split(key)[1]`, so the same seed builds the same weights. This
+        # was `split(key, 4)`, which handed both a different key -- identical shapes and
+        # an identical 25 221 parameter count, entirely different values, and no way to
+        # compare a run here with a reference one.
         #
-        # The optional heads take FOLDED keys rather than widening the split, so turning
-        # one on cannot move the field network or the embedding. That is the property the
-        # four-way split was defending and could not deliver.
+        # The optional precursor head takes a FOLDED key rather than widening the split,
+        # so turning it on cannot move the field network or the embedding.
         k_emb, k_field = jax.random.split(key)
         k_kin = jax.random.fold_in(key, 2)
-        k_front = jax.random.fold_in(key, 3)
-        use_front = bool(cfg.front_net and cfg.void_closure)
-        n_in = 3 if (use_front or cfg.level_set_input) else 2
-        if cfg.beignet_levels:
-            # Replaces the random Fourier embedding rather than wrapping it; see the
-            # torch twin for why composing them would make any gain unattributable.
-            self.embed = BeignetPyramid(
-                cfg.beignet_levels,
-                cfg.beignet_features,
-                cfg.beignet_base,
-                cfg.beignet_noise,
-                cfg.beignet_pad,
+        n_in = 2
+        self.embed = (
+            FourierEmbedding(
+                n_in,
+                cfg.fourier_features,
+                cfg.fourier_scale,
                 k_emb,
+                fourier_scale_vector(cfg, n_in),
+                bands=cfg.fourier_bands,
             )
-            n_in = self.embed.n_out
-        else:
-            self.embed = (
-                FourierEmbedding(
-                    n_in,
-                    cfg.fourier_features,
-                    cfg.fourier_scale,
-                    k_emb,
-                    fourier_scale_vector(cfg, n_in),
-                    bands=cfg.fourier_bands,
-                )
-                if cfg.fourier_features
-                else None
-            )
-            if cfg.fourier_features:
-                n_in = 2 * cfg.fourier_features
-        if cfg.laplace_rates:
-            raw_in = 3 if (use_front or cfg.level_set_input) else 2
-            # The torch model is handed `p`; this constructor is not, so the
-            # horizon comes from the default parameters. Every study uses those,
-            # and the parity test asserts the two backends agree on the width.
-            t_end = AxialParams().t_end * cfg.t_train_frac
-            self.embed = LaplaceMix(self.embed, cfg.laplace_rates, cfg.laplace_mode, float(t_end))
-            n_in = laplace_width(cfg, raw_in)
-        self.mlp = (
-            ModifiedMLP(n_in, len(FIELDS), cfg.width, cfg.depth, k_field)
-            if cfg.modified_mlp
-            else eqx.nn.MLP(
-                in_size=n_in,
-                out_size=len(FIELDS),
-                width_size=cfg.width,
-                depth=cfg.depth,
-                activation=jnp.tanh,
-                key=k_field,
-            )
+            if cfg.fourier_features
+            else None
+        )
+        if cfg.fourier_features:
+            n_in = 2 * cfg.fourier_features
+        self.mlp = eqx.nn.MLP(
+            in_size=n_in,
+            out_size=len(FIELDS),
+            width_size=cfg.width,
+            depth=cfg.depth,
+            activation=jnp.tanh,
+            key=k_field,
         )
         # Precursors are functions of time alone, so a separate smaller network.
         self.kin = (
@@ -293,23 +148,3 @@ class AxialPinn(eqx.Module):
             if cfg.feedback
             else None
         )
-        # Front-position network: one input, one output, so it is cheap next to
-        # the field network. Off by default, like the torch twin.
-        self.front = (
-            eqx.nn.MLP(
-                in_size=1,
-                out_size=1,
-                width_size=max(8, cfg.width // 4),
-                depth=2,
-                activation=jnp.tanh,
-                key=k_front,
-            )
-            if use_front
-            else None
-        )
-        # Onset head, the torch twin's rationale verbatim: `(zeta*, t*)` as two raw
-        # scalars through a sigmoid, so both stay in the domain by construction.
-        # An array rather than a network -- onset is two numbers at fixed
-        # parameters. Initialised at logit 2.0 -> ~0.88, high in the channel and
-        # late in the window, where onset is in every regime the reference maps.
-        self.onset_raw = jnp.full((2,), 2.0) if cfg.onset_head else None

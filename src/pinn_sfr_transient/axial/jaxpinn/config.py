@@ -61,8 +61,6 @@ class AxialTrainConfig:
     lbfgs_iters: int = 30000
     lr: float = 1e-3
 
-    # Dimensionless: the prefix sum is normalised by the total. See the torch twin.
-    causal_eps: float = 0.0
     causal_chunks: int = 32
     # Fraction of `p.t_end` trained over — a scope decision; see the torch twin.
     # 16.5 s of the 60 s horizon: the reference stops exactly there, on every mesh
@@ -86,62 +84,11 @@ class AxialTrainConfig:
     # at all — so the published configuration sits 0.025 from where its headline
     # result vanishes. See `axial_nn.md` section 7.2.7.
     t_train_frac: float = 0.275
-    weight_update_every: int = 250
-    weight_momentum: float = 0.9
-    # Bound on the block-weight spread; off by default, see the torch twin.
-    weight_max_ratio: float = 1.0
     # Variable scaling per residual block; see the torch twin.
     residual_scaling: bool = True
     # Eliminate the void algebraically (D-TH-3); see the torch twin.
     void_closure: bool = True
-    # Front-position network (M8 option 2). Measured worse on every metric; see
-    # the torch twin for the table.
-    front_net: bool = False
-    front_frac: float = 0.25  # share of collocation drawn near the predicted front
-    # Share of collocation drawn on the **saturation level set** -- the points
-    # where the network's own `T_c` is near `T_sat + dT_superheat`.
-    #
-    # **This is a fix for a measure bug, not another loss term.** The loss is a
-    # mean over the domain and the front occupies a few percent of the channel, so
-    # the front region contributes a few percent of the objective no matter how
-    # long training runs. More optimisation therefore converges more accurately to
-    # a minimiser whose peak is wrong: 8000+500 iterations beat 3000+300 by 47% on
-    # `T_s` and lose the front entirely (`docs/axial_nn.md` section 7.5.5).
-    #
-    # RAR cannot supply these points. Once the void is closed algebraically the
-    # field residual is small *everywhere*, including across the front, so
-    # residual-magnitude sampling has no signal to follow -- the torch sampler has
-    # carried a comment saying exactly that since M8.
-    #
-    # It needs no front-position network: under D-TH-3 the front IS the level set
-    # `T_c = T_sat + dT_superheat`, and the network knows its own `T_c`.
-    # `front_level_set` selects that; `front_net` selects the M8 front network,
-    # which measured worse on every metric.
-    front_level_set: bool = False
-    # Feed the level-set coordinate `phi = (T_c - T_sat - dT_sup) / dT` as a third
-    # network input (idea 3).
-    #
-    # Under D-TH-3 the front IS the level set `phi = 0`, and the solution is
-    # **smooth in phi** where it is kinked in `zeta`. Giving the network that
-    # coordinate removes the sharpness rather than resolving it, which is a
-    # different move from the Fourier basis and, on paper, a stronger one.
-    #
-    # `T_c` is the network's own output, so the input depends on the output. This is
-    # resolved with a **bootstrap pass**: evaluate once with `phi = 0`, take the
-    # resulting `T_c`, and evaluate again with the real `phi`. **Gradients flow
-    # through both passes**, so the total derivative the residual needs includes the
-    # term through `phi`. Detaching `phi` would be cheaper and would silently make
-    # `d/dz` wrong -- it would train, produce plausible numbers, and corrupt the
-    # residual, which is the exact defect class this project keeps finding.
-    #
-    # Costs two forward passes and a deeper graph. Distinct from `front_net`, which
-    # fed `zeta - z_f(t)` from a SEPARATE learned network and measured worse.
-    level_set_input: bool = False
 
-    # --- remedies for the moving front; every one measured in docs/axial_nn.md --
-    # Time-window curriculum: train [0, w t_end] for growing w. Neutral in the
-    # section 7.2.5 re-ablation.
-    n_windows: int = 1
     # Random Fourier features against spectral bias [Tancik et al. 2020]. Measured
     # -11.1% at three seeds (section 7.2.6) but NOT adopted: it does not compose
     # with `modified_mlp`. 0 disables.
@@ -168,22 +115,6 @@ class AxialTrainConfig:
     # resolution *within* a band for coverage *across* bands.
     fourier_bands: tuple[float, ...] = ()
 
-    # Onset head: two trainable scalars `(zeta*, t*)` and the two tangency
-    # residuals that pin them (`onset_head`). Off by default.
-    #
-    # Onset is the first instant the field TOUCHES saturation, so at that instant
-    # the peak is the contact point and two conditions hold together:
-    #     T_c(zeta*, t*) = T_sat + dT_sup      and      d T_c/d zeta (zeta*, t*) = 0
-    # Reading the height off a threshold crossing instead asks a flat function
-    # where it crosses a value: near the peak the error law is
-    # `sqrt(2 eps / kappa)` -- a SQUARE ROOT. Stationarity is `delta(slope)/kappa`,
-    # linear and divided by a curvature of ~1066 K per unit zeta squared.
-    #
-    # It also puts onset in the OBJECTIVE. Every onset number in this project so
-    # far was read off a trained field afterwards; nothing ever optimised for it,
-    # which is the first reason M4 never moved.
-    onset_head: bool = False
-
     # Curvature pairs kept by the quasi-Newton stage. Explicit and shared, because
     # it was neither: torch passed `history_size=50` while the JAX default path
     # called `optax.lbfgs()` bare, whose default `memory_size` is **10**. Measured
@@ -194,34 +125,6 @@ class AxialTrainConfig:
     # 50 is not tuned; it is what torch was already using, kept so the fix moves
     # JAX onto the published torch behaviour rather than moving both somewhere new.
     lbfgs_history: int = 50
-
-    # Laplace embedding (`docs/axial_nn.md` section 7.5.18).
-    # Physical decay rates in 1/s; the embedding uses `exp(-s_k * t_end * t_hat)`.
-    # `()` is off and is the control.
-    #
-    # A Fourier basis is oscillatory and this transient is built out of DECAY:
-    # coast-down at 1/tau_pump and six precursor groups spanning 0.0124 to 3.01
-    # per second. Approximating exp(-0.2 t) over the window out of sines costs many
-    # terms and still misses the tail; one exponential does it exactly. The split
-    # is not arbitrary either -- the oscillatory structure is in `zeta` and the
-    # exponential structure is in `t`, which is the anisotropy section 7.5.12
-    # measured on the bandwidth, reached from the physics instead of a sweep.
-    laplace_rates: tuple[float, ...] = ()
-    # How the two bases combine. "alone" drops Fourier entirely (the known-shape
-    # case: a fit, not a basis). "sum" concatenates the blocks, which is right when
-    # the solution is a superposition. "product" modulates each Fourier group by one
-    # rate, giving damped sinusoids -- right when the two are coupled, which is what
-    # a transient excursion is rather than a sum of one of each.
-    laplace_mode: str = "sum"
-
-    # Two-encoder "modified MLP" [Wang, Teng & Perdikaris 2021]. Measured -16.1%,
-    # and likewise not adopted -- see section 7.2.6.
-    modified_mlp: bool = False
-    # Pseudo-time stepping [Wang, Koohy, Lu & Perdikaris, arXiv:2604.23528].
-    # Measured harmful: under it the boiling front does not form at all. 0 disables.
-    pts_every: int = 0
-    pts_dtau: float = 1.0
-    pts_growth: float = 1.5
 
     # The first-order stage's algorithm. "adam" is every published number here.
     # "ademamix" adds a slow gradient EMA (arXiv:2409.03137), measured here ~2x better
@@ -287,34 +190,6 @@ class AxialTrainConfig:
     # None means "use n_colloc", so the defaults are unchanged.
     adam_colloc: int | None = None
     polish_colloc: int | None = None
-    polish_refresh: int = 0
-
-    # Hold the Fourier->trunk projection FIXED during the quasi-Newton stage.
-    # That layer is an encoder -- it selects which embedded frequencies are used, a
-    # representation choice Adam's fresh-sample stream suits.
-    #
-    # The DETERMINACY argument this comment used to make was wrong and is withdrawn:
-    # freezing takes the trainable count from 17029 to 16965, a 0.4% change, because the
-    # projection was never fitting capacity in the first place (sec 7.5.37a). What
-    # freezing actually changes is the CURVATURE DIMENSION -- the space L-BFGS builds its
-    # pairs in drops from 49797 to 16965 at f256, and from 25221 to 16965 at f64. That is
-    # a conditioning argument, and it predicts the gain should scale with the embedding
-    # width, which is testable and is what `freeze_after` is for. Off by default.
-    freeze_encoder: bool = False
-
-    # Freeze that projection PART WAY THROUGH the quasi-Newton stage rather than for all
-    # of it. `freeze_after = k` runs k iterations with everything trainable and the
-    # remaining `lbfgs_iters - k` with the encoder held, on the SAME collocation set.
-    #
-    # sec 7.5.32 measured the all-or-nothing form and found it worse at either Adam
-    # budget: the projection evidently still has work to do. This asks whether it has a
-    # FINITE amount -- if the representation settles early and only the trunk keeps
-    # improving, the late iterations are paying for 33% (f64) or 66% (f256) of a
-    # curvature space that has stopped moving.
-    #
-    # Zero disables it. Incompatible with `polish_refresh`, which restarts the optimiser
-    # on its own schedule; setting both raises rather than silently picking one.
-    freeze_after: int = 0
 
     # Cumulative quasi-Newton iteration counts at which the model is handed to a
     # caller-supplied callback, so ONE run can be scored at several budgets instead of
@@ -327,25 +202,6 @@ class AxialTrainConfig:
     # measuring the checkpointing rather than the budget, and sec 7.5.37 measured that
     # restart at 1.5x worse. Empty disables it.
     polish_checkpoints: tuple[int, ...] = ()
-
-    # Trainable multi-resolution Fourier feature pyramid, arXiv:2605.24278 ("beignet").
-    # OFF by default (`levels = 0`), so no published number moves when it lands.
-    #
-    # The paper's claim is that this ARCHITECTURE, not a change of optimiser, lets Adam
-    # reach accuracy previously needing higher-order methods. It is therefore the only
-    # honest way to test "Adam replaces the quasi-Newton stage" here: section 7.5.11
-    # measured our unmodified Adam flat over two decades, so running it longer tests a
-    # strawman. Note the paper's own Table 2 has MLP+BFGS at 7.11e-20 against
-    # beignet+Adam's 6.63e-19, so the claim is that Adam REACHES the regime, not that it
-    # wins it.
-    #
-    # `beignet_pad` is a registered deviation: Fourier interpolation is periodic and this
-    # channel is not, so `zeta` is mapped into the interior of one period.
-    beignet_levels: int = 0
-    beignet_features: int = 14
-    beignet_base: int = 2
-    beignet_noise: float = 0.1
-    beignet_pad: float = 0.25
 
     # RAR keeps a FIXED count so `jit` never recompiles (the torch twin grows an
     # unbounded reservoir instead — same idea, framework-appropriate form).

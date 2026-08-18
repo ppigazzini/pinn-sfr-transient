@@ -40,7 +40,6 @@ jax.config.update("jax_enable_x64", True)
 from pinn_sfr_transient.axial.jaxpinn.ansatz import (
     _power_integral,
     _power_shape,
-    front_position,
     horizon,
     normalised_state,
     precursors,
@@ -54,7 +53,6 @@ from pinn_sfr_transient.axial.jaxpinn.archs import (
     N_TEMPS,
     AxialPinn,
     FourierEmbedding,
-    ModifiedMLP,
 )
 from pinn_sfr_transient.axial.jaxpinn.config import AxialTrainConfig
 from pinn_sfr_transient.axial.jaxpinn.evaluate import (
@@ -65,21 +63,14 @@ from pinn_sfr_transient.axial.jaxpinn.evaluate import (
 )
 from pinn_sfr_transient.axial.jaxpinn.residuals import (
     closed_loop_blocks,
-    front_residual,
     n_field_blocks,
-    onset_point,
-    onset_residual,
     residual_blocks,
     residual_vector,
-    uses_front,
 )
 from pinn_sfr_transient.axial.jaxpinn.samplers import _collocation, _merge, _rar_points
 from pinn_sfr_transient.axial.jaxpinn.training import train
 from pinn_sfr_transient.axial.jaxpinn.weighting import (
-    bounded_weights,
     causal_loss,
-    causal_weights,
-    pts_penalty,
 )
 
 __all__ = [
@@ -90,33 +81,24 @@ __all__ = [
     "AxialPinn",
     "AxialTrainConfig",
     "FourierEmbedding",
-    "ModifiedMLP",
     "_collocation",
     "_merge",
     "_power_integral",
     "_power_shape",
     "_rar_points",
-    "bounded_weights",
     "causal_loss",
-    "causal_weights",
     "closed_loop_blocks",
-    "front_position",
-    "front_residual",
     "horizon",
     "n_field_blocks",
     "normalised_state",
-    "onset_point",
-    "onset_residual",
     "precursors",
     "predict",
     "predict_power",
     "predict_reactivity_components",
-    "pts_penalty",
     "relative_l2",
     "residual_blocks",
     "residual_vector",
     "state_and_grads",
     "theta0",
     "train",
-    "uses_front",
 ]

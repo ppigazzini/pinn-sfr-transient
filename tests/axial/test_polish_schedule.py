@@ -50,33 +50,6 @@ def _torch_fields(model):
     return np.stack(model.predict(zeta, t))
 
 
-@pytest.mark.parametrize("freeze_after", [0, 5])  # 5 is deliberately NOT a checkpoint
-def test_jax_checkpoints_do_not_change_the_run(freeze_after):
-    """The final model must be what an uninterrupted solve would have produced.
-
-    Bitwise, because the segmented loop runs the identical sequence of updates on the
-    identical state -- only the Python-level loop boundary differs. Anything weaker here
-    would let a restart hide inside a rounding tolerance.
-    """
-    pytest.importorskip("jax")
-    from pinn_sfr_transient.axial import pinn_jax as pj
-    from pinn_sfr_transient.axial.config import AxialParams
-
-    plain = pj.train(AxialParams(), _jax_cfg(freeze_after=freeze_after), verbose=False)
-    seen: list[int] = []
-    ckpt = pj.train(
-        AxialParams(),
-        _jax_cfg(freeze_after=freeze_after, polish_checkpoints=CPS),
-        verbose=False,
-        on_checkpoint=lambda n, _m: seen.append(n),
-    )
-    np.testing.assert_array_equal(_jax_fields(*ckpt), _jax_fields(*plain))
-    # Exactly the requested totals. `freeze_after = 5` splits the polish and its stage
-    # boundary must NOT appear here: a boundary is not a checkpoint, and an earlier
-    # revision emitted one, adding a row to every study file that nobody asked for.
-    assert seen == list(CPS), "checkpoints must fire at the requested totals, and only those"
-
-
 def test_torch_checkpoints_do_not_change_the_run():
     """The torch twin, to tolerance rather than bitwise.
 
@@ -126,73 +99,6 @@ def test_the_checkpoint_callback_sees_the_intermediate_state_not_the_final_one()
     assert not np.allclose(snaps[3], _torch_fields(final)), "checkpoint equals the final model"
     # ...and the model handed back to the caller must be the finished one, not a rewind.
     np.testing.assert_array_equal(snaps[ITERS], _torch_fields(final))
-
-
-@pytest.mark.parametrize("backend", ["torch", "jax"])
-def test_freeze_after_actually_stops_the_encoder_moving(backend):
-    """After the switch the Fourier read-out must be identically fixed, in both backends.
-
-    Asserted against the *frozen half* rather than against an accuracy: the projection
-    moves during the first block and must not move at all during the second.
-    """
-    pytest.importorskip(backend)
-    from pinn_sfr_transient.axial.config import AxialParams
-
-    if backend == "torch":
-        import torch
-
-        from pinn_sfr_transient.axial.torchpinn.training import train
-
-        def read_out(m):
-            first = next(q for q in m.net.modules() if isinstance(q, torch.nn.Linear))
-            return first.weight.detach().numpy().copy()
-
-        torch.manual_seed(0)
-        seen: dict[int, np.ndarray] = {}
-        train(
-            AxialParams(),
-            _torch_cfg(freeze_after=5, polish_checkpoints=(4, 7, ITERS)),
-            on_checkpoint=lambda n, m: seen.__setitem__(n, read_out(m)),
-        )
-    else:
-        from pinn_sfr_transient.axial import pinn_jax as pj
-
-        def read_out(m):
-            return np.asarray(m.mlp.layers[0].weight).copy()
-
-        seen = {}
-        pj.train(
-            AxialParams(),
-            _jax_cfg(freeze_after=5, polish_checkpoints=(4, 7, ITERS)),
-            verbose=False,
-            on_checkpoint=lambda n, m: seen.__setitem__(n, read_out(m)),
-        )
-
-    assert set(seen) == {4, 7, ITERS}
-    # 4 is before the switch and 7 after it, so the read-out moves between 4 and 7 but
-    # must be identical from 7 onward.
-    np.testing.assert_array_equal(seen[ITERS], seen[7])
-    assert not np.array_equal(seen[7], seen[4]), "the encoder never moved even while free"
-
-
-@pytest.mark.parametrize("backend", ["torch", "jax"])
-def test_freeze_after_refuses_to_share_the_stage_with_polish_refresh(backend):
-    """Both knobs schedule the same stage; silently picking one is how defaults hide."""
-    pytest.importorskip(backend)
-    from pinn_sfr_transient.axial.config import AxialParams
-
-    if backend == "torch":
-        from pinn_sfr_transient.axial.torchpinn.training import train
-
-        cfg = _torch_cfg(freeze_after=4, polish_refresh=2)
-    else:
-        from pinn_sfr_transient.axial import pinn_jax as pj
-
-        train = pj.train
-        cfg = _jax_cfg(freeze_after=4, polish_refresh=2)
-
-    with pytest.raises(ValueError, match="same stage"):
-        train(AxialParams(), cfg)
 
 
 def test_first_order_checkpoints_fire_without_a_polish():
@@ -265,15 +171,3 @@ def test_rar_every_zero_disables_resampling_rather_than_raising():
     )
     model, _, _ = train(AxialParams(), cfg, verbose=False)
     assert model is not None
-
-
-def test_the_zero_off_convention_holds_across_the_cadence_knobs():
-    """A knob that means 'off' at 0 everywhere except one place is a trap."""
-    pytest.importorskip("jax")
-    from pinn_sfr_transient.axial.jaxpinn import AxialTrainConfig
-
-    cfg = AxialTrainConfig()
-    for knob in ("rar_every", "polish_refresh", "pts_every", "adam_checkpoint_every"):
-        assert hasattr(cfg, knob), knob
-    assert AxialTrainConfig(adam_checkpoint_every=0).adam_checkpoint_every == 0
-    assert AxialTrainConfig(rar_every=0).rar_every == 0

@@ -31,37 +31,28 @@ from pinn_sfr_transient.axial.torchpinn.ansatz import (
     _precursors,
 )
 from pinn_sfr_transient.axial.torchpinn.archs import (
-    _ALPHA_GATE,
     _EXP_BOUND,
-    _FRONT_MAX,
     FIELDS,
     MLP,
     N_TEMPS,
     FourierEmbedding,
-    ModifiedMLP,
     _bounded_exp,
 )
 from pinn_sfr_transient.axial.torchpinn.config import AxialTrainConfig
 from pinn_sfr_transient.axial.torchpinn.evaluate import relative_l2
 from pinn_sfr_transient.axial.torchpinn.model import AxialPinn
 from pinn_sfr_transient.axial.torchpinn.training import Trainer, train
-from pinn_sfr_transient.axial.torchpinn.weighting import _bounded_weights, _causal_weights
 
 __all__ = [
     "FIELDS",
     "MLP",
     "N_TEMPS",
-    "_ALPHA_GATE",
     "_EXP_BOUND",
-    "_FRONT_MAX",
     "AxialPinn",
     "AxialTrainConfig",
     "FourierEmbedding",
-    "ModifiedMLP",
     "Trainer",
     "_bounded_exp",
-    "_bounded_weights",
-    "_causal_weights",
     "_fuel_temperature",
     "_power_integral",
     "_power_shape",
