@@ -270,6 +270,10 @@ and stay comparable.
   nobody could tell, since the measurement lived in an uncommitted scratch file.
 - [`docs/usage.md`](docs/usage.md) — install, run, train, use as a library, compute
   requirements, troubleshooting.
+- [`docs/writing.md`](docs/writing.md) — the standard every claim in this repository
+  is held to, across the three surfaces that carry one: a page, a code comment and a
+  commit message. Grep the number, show the command, quote the uncertainty beside the
+  bar, and describe a gap as a gap.
 - [`docs/references.md`](docs/references.md) — annotated bibliography
   ([`docs/references.bib`](docs/references.bib) for LaTeX).
 - [`notebooks/01_ulof_walkthrough.ipynb`](notebooks/01_ulof_walkthrough.ipynb) —
