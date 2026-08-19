@@ -262,7 +262,7 @@ than its full table.
 
 **This removes the zero-power attractor.** At `decay_fraction = 0` the homogeneous
 kinetics have no source and `P = c = 0` is an exact solution of the whole coupled
-system — the collapse mode REPORT-01 §5.2 exists to diagnose. Non-zero, `ψ_h` does
+system — the power-collapse mode this parameter exists to remove. Non-zero, `ψ_h` does
 not vanish when `ψ_f` does: measured, `total_power(0, h) = 0.065`.
 
 ### D-FB-4 — Axial fuel expansion *(settled)*

@@ -219,7 +219,7 @@ maximum — and therefore onset — is always at the outlet, and any height metr
 reporting the mesh rather than the network (§7.5.16, retracted there).
 `onset_by_tangency` is still the better *time* readout, because the threshold time
 is quantised by the 0.25 s scoring grid; it says 0.62–0.84 s against a 0.5 s
-criterion. `onset_head` is measured harmful and stays off.
+criterion. `onset_head` was measured harmful and is **retired** (§3.1).
 
 ### 0.7 Method notes that changed the answers
 
@@ -305,9 +305,10 @@ Logging `min(T_f)` through training shows the optimiser walking
 after which `log(T_f/T_f0)` in the logarithmic Doppler (Eq. 4.5-3) returns NaN and
 Plan A dies. The residual was perfectly content in that region: the
 spurious-solution failure mode of
-[arXiv:2604.23528](https://arxiv.org/abs/2604.23528), and exactly what REPORT-01
-§5.2 item 8 says to parameterise away — advice this model had applied to the void
-and precursors but not to the temperatures. Constraining the ansatz to the
+[arXiv:2604.23528](https://arxiv.org/abs/2604.23528). Parameterising the constraint
+away is **our** remedy, not that paper's — it prescribes pseudo-time stepping, which
+§7.2.5 measures as harmful here and §3.1 retires. The same advice had already been
+applied to the void and the precursors but not to the temperatures. Constraining the ansatz to the
 physical manifold removes the region rather than penalising it.
 
 The exponent is bounded, `exp(S·tanh(x/S))` with `S = 4`, so it cannot overflow;
@@ -713,7 +714,7 @@ quoting §7.2.3 — the second retracts a result of the first.
 
 Four weighting variants × three seeds, torch, Plan B, 3000 Adam + 300 L-BFGS,
 scored against `n_axial = 160`. Only *ratios* between block weights can matter —
-Adam is scale-invariant to a global factor, which is the same argument REPORT-01
+Adam is scale-invariant to a global factor, which is the same argument that
 D39 uses against fixed per-equation scaling — so the intervention is bounding the
 spread, not the magnitude. `clipN` renormalises the target to unit geometric mean
 and clamps it to `[1/N, N]`; `none` switches the weighting off entirely.
@@ -832,7 +833,7 @@ temperatures. Before, the network predicted no void at all and the temperatures
 were free to fit the non-boiling part cleanly.
 
 That trade is worth taking — a model that produces a front 2× too long is nearer
-the physics than one that produces none, and REPORT-01 §4.1 is explicit that `α`
+the physics than one that produces none, and the design is explicit that `α`
 is judged on voided length and onset rather than on temperature `L2` — but it
 must be stated in those terms rather than reported as a clean win.
 
@@ -915,7 +916,7 @@ keeps `α = 0` where the physics says it must, and fails to raise it where the
 physics says it should. That is the honest M4 problem, and §7.2.2's number is
 why: `dα/dt̂` must reach 8.5e4 inside a front spanning a few percent of the
 domain. It is a resolution problem, not a weighting one, and the remedies for it
-are the free-boundary and level-set formulations of REPORT-01 §7.4 — a
+are the free-boundary and level-set formulations — a
 formulation change, which is M8's subject, not another loss term.
 
 #### 7.2.5 N6 — re-ablated against the algebraic closure, and D38 is half wrong
@@ -3000,7 +3001,7 @@ concentrated at the inlet and outlet rather than as a uniformly worse field, and
 distinction decides whether a negative is about the paper or about the port.
 
 Measured cost: **1.94× a Fourier-embedding Adam step** (1613 against 831 ms/iter).
-`axial_study.py adamonly` runs it against the frozen-Fourier embedding at the same 30000
+`axial_study.py adamonly` — a sub-command retired with the knobs it drove (§3.1) — ran it against the frozen-Fourier embedding at the same 30000
 Adam iterations and the same `lr = 1e-3`, one knob apart. Not yet measured.
 
 > The paper's own Table 2 puts MLP + BFGS at 7.11e-20 against beignet + Adam's 6.63e-19.
@@ -3091,7 +3092,7 @@ makes it *accurate*. Neither substitutes for the other.
 Adam-only at 30000 iterations reaches 0.0329 with the embedding against the funded
 stage's 0.0017 at comparable wall-clock — **19× worse** — and lands in the 0.04–0.05 band
 every Adam arm on disk saturates in. AdEMAMix, at `optax.contrib` defaults, is *worse*
-than Adam here (0.0460 against 0.0443), which does not reproduce `REPORT-01`'s 0D note of
+than Adam here (0.0460 against 0.0443), which does not reproduce the 0D note of
 ~2× better beyond 8000 iterations. One seed, at unswept `b3`/`alpha`, so it is stated as
 a sample and not as a refutation of that note.
 
@@ -3159,7 +3160,7 @@ first-order stage is very nearly free to delete — the `qnladder` sweep measure
 > against 50 309 parameters — **underdetermined by 3×** — so it could drive its fixed set
 > to zero and be arbitrarily wrong between the points. It is not. `T_s` is scored against
 > the Radau reference on a *different* grid, and 0.0017 with `L_void` at 99.3% is a
-> generalisation result, not a training-set one. `REPORT-01` §5.1 raised exactly this
+> generalisation result, not a training-set one. That worry was raised at design time,
 > worry — "it can overfit that set; always report trajectory error, not just loss" — and
 > the trajectory error is what this document reports.
 
@@ -3394,7 +3395,7 @@ first-order method is run anywhere — JAX-PI takes 200 000 steps of 4096 points
 cost advantage that makes Adam attractive comes entirely from the small batch. So "Adam
 buys nothing here" had only ever been tested against an algorithm nobody uses.
 
-`axial_study.py dlstyle` runs the protocol properly: **60 000 Adam steps at 1000 points**,
+`axial_study.py dlstyle` — retired with its knobs (§3.1) — ran the protocol properly: **60 000 Adam steps at 1000 points**,
 then the encoder frozen, then **30 000 quasi-Newton iterations at 6000 points redrawn
 every 1000** — blocked restarts as in arXiv:2605.24278, so curvature stays consistent
 within a block while the stage as a whole cannot overfit one draw.
@@ -3443,7 +3444,7 @@ indistinguishable, which made Adam look merely useless. §7.5.30 then showed why
 weak test: at 30 iterations the Adam loop does nothing at all, so it compared no Adam
 against almost no Adam.
 
-`axial_study.py adamcheck` compares **no Adam** against **10 000 full-batch Adam steps** —
+`axial_study.py adamcheck` — retired with its knobs (§3.1) — compared **no Adam** against **10 000 full-batch Adam steps** —
 a budget where RAR fires and the loop does real work — at two embedding widths, with an
 identical polish: 50 000 quasi-Newton iterations on 6000 points **redrawn every 1000**
 (the blocked-restart protocol of arXiv:2605.24278). Three seeds per cell.
@@ -3482,7 +3483,7 @@ curvature-based method does worse from.
 
 #### 7.5.35 The 0D model does the opposite, which is the cleanest evidence that this is formulation-dependent
 
-`REPORT-01` §5.1 states that "L-BFGS from scratch on a PINN loss stalls", citing Rathore
+It has been stated here that "L-BFGS from scratch on a PINN loss stalls", citing Rathore
 et al. — but no row in this repository measured it, and §7.5.34 contradicts it outright on
 the axial model. The 0D model, under the **same** optimiser implementation, the same JAX
 backend and the same `memory = 50`:
@@ -3498,7 +3499,7 @@ backend and the same `memory = 50`:
 move the power error 6%; 1000 iterations take it to 2.1× *worse than the untrained
 network*. That is not a stall, it is divergence in the trajectory.
 
-It is also the exact failure `REPORT-01` §5.1 warns about two sentences later: the polish
+It is also the exact failure that accompanies that claim: the polish
 "runs full-batch on a *fixed* collocation set — that is also how it can overfit that set.
 Always report trajectory error, not just loss." The 0D polish drives the collocation
 residual down while the trajectory goes the other way. The divergence guard does not catch
@@ -3525,7 +3526,7 @@ identical defect §7.5.17 traced in the axial model, where it accounted for the 
 cross-backend accuracy gap and was read as a framework difference for four milestones.
 
 The axial model was fixed. **The 0D model was not, and nobody looked.** So every 0D
-cross-backend comparison in this project is affected — including `REPORT-01` §5.1's table
+cross-backend comparison in this project is affected — including the 0D polish table
 reporting JAX's polish improving −74% / −40% against torch's −82% / −54%. That gap has
 exactly the shape the memory defect produces, and it is sitting in the report as a
 framework observation.
@@ -3538,7 +3539,11 @@ table should be re-measured or marked as measured at `memory_size = 10` on the J
 §7.5.30 posed a question it could not answer: the polish runs on one fixed collocation
 set, which is **both** what makes a curvature estimate meaningful — the pairs are
 meaningless if the objective moves underneath them — **and** what a 2× underdetermined
-stage can overfit. arXiv:2605.24278 runs its BFGS baseline in blocks of 1000 for the
+stage can overfit. arXiv:2605.24278 is reported here as running its BFGS baseline in
+blocks of 1000 — **unverified**: that paper is *Fourier Feature Pyramids for PINNs*, whose
+abstract describes a trainable multi-resolution embedding trained with Adam and says
+nothing about a blocked BFGS baseline. Read the claim as this repository's, not the
+paper's, until someone checks the body. It motivated `polish_refresh`, now retired for the
 second reason. Every published number here used the fixed set; every arm in §7.5.34 used
 the refresh; nobody had separated them.
 
@@ -4137,8 +4142,8 @@ answer to a starved budget is to fund it, not to widen the embedding.
 
 ### 7.6 Pseudo-time stepping
 
-Implemented (`pts_every`, `pts_dtau`, `pts_growth`), and **measured harmful** in
-the §7.2.5 re-ablation — it is off by default and no further work is planned. An
+Implemented as `pts_every`, `pts_dtau` and `pts_growth`, **measured harmful** in the
+§7.2.5 re-ablation, and **retired** (§3.1) — the three knobs no longer exist. An
 earlier ablation run was killed before finishing, which is why an interim version
 of this section recorded the accuracy as TBD.
 
@@ -4202,7 +4207,7 @@ Sorting every isolated arm by what it changed:
 **Change the function space or change the optimiser. Do not reweight the loss, and
 do not add residuals the PDE already implies.** That is not a hunch — it is thirteen
 measurements, and it is what the roadmap below is ordered against. The full version,
-with the 2026 literature it draws on, is `__DEV/REPORT-01-MILESTONES.md` Annex D, and the
+with the 2026 literature it draws on, is kept in the working notes, and the
 revised plan after a five-topic literature sweep is Annex E.
 
 > **The rule has since been narrowed, and it matters.** §7.5.13 fed the network a

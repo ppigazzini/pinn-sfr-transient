@@ -89,8 +89,9 @@ Annotated bibliography for `pinn-sfr-transient`. BibTeX entries are in
 - **Wang, Koohy, Lu & Perdikaris (2026).** *When PINNs go wrong: pseudo-time
   stepping against spurious solutions.* arXiv:2604.23528 — the spurious-solution
   failure mode that motivated the multiplicative ansatz of
-  [`axial_nn.md`](axial_nn.md) §2, and the source of the `pts_*` knobs, which that
-  document measures as harmful here (§7.2.5, §7.6).
+  [`axial_nn.md`](axial_nn.md) §2. Its own remedy, pseudo-time stepping, was implemented
+  here as the `pts_*` knobs, measured harmful (§7.2.5, §7.6) and **retired** (§3.1) — so
+  this repository takes the failure mode from the paper and rejects its cure.
 
 ### Optimisers for PINNs — the axial model's open question
 

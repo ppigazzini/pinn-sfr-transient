@@ -146,9 +146,12 @@ def test_warmup_ramps_then_decays_and_plain_cosine_does_not() -> None:
     assert lrs[:warm] == sorted(lrs[:warm])  # ramps
     assert max(lrs) == pytest.approx(cfg.lr)  # reaches the peak, does not exceed it
     assert lrs[-1] < lrs[warm]  # then decays
-    # ...to eta_min. The last SAMPLE is one step short of it, the schedule being read
-    # before each step rather than after, so this is 1e-2 and not tighter.
-    assert lrs[-1] == pytest.approx(cfg.lr * 0.1, rel=1e-2)
+    # ...to zero, which is `CosineAnnealingLR`'s own `eta_min` default and `optax`'s
+    # default for both of its cosine schedules. Both backends used to override it to
+    # `0.1 * lr`, which lifts the whole curve after the warmup rather than only its tail.
+    # The last SAMPLE is one step short of the end, the schedule being read before each
+    # step rather than after, so this is an upper bound and not an equality.
+    assert lrs[-1] < cfg.lr * 1e-3
 
     plain = _cfg(adam_iters=100, lr=1e-3)
     tr2 = Trainer(AxialPinn(P, plain), plain)
@@ -174,7 +177,7 @@ def test_warmup_cosine_agrees_with_the_optax_schedule_after_the_ramp() -> None:
         opt.step()
         sched.step()
     warm = max(1, int(cfg.sf_warmup_frac * cfg.adam_iters))
-    ref = optax.warmup_cosine_decay_schedule(0.0, cfg.lr, warm, cfg.adam_iters, cfg.lr * 0.1)
+    ref = optax.warmup_cosine_decay_schedule(0.0, cfg.lr, warm, cfg.adam_iters, 0.0)
     worst = max(abs(a - float(ref(i))) for i, a in enumerate(lrs) if i >= warm)
     assert worst < 1e-9
 
