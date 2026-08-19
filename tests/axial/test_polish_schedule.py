@@ -220,6 +220,12 @@ def test_a_polish_that_dies_leaves_its_earlier_rungs_behind(backend):
             on_checkpoint=on_checkpoint,
         )
     else:
+        # Gate on `torch` and NOT on the backend package: `torchpinn` turns a missing
+        # extra into `SystemExit`, which is a BaseException rather than an ImportError,
+        # so `importorskip` on the package cannot catch it and the test ERRORS instead
+        # of skipping. The JAX twin imports `jax` bare and raises ModuleNotFoundError,
+        # which is why only this arm broke the two backend-alone lanes.
+        pytest.importorskip("torch")
         mod = pytest.importorskip("pinn_sfr_transient.axial.torchpinn")
         run = lambda: mod.train(  # noqa: E731
             p, mod.AxialTrainConfig(log_every=10**9, **kw), on_checkpoint=on_checkpoint
