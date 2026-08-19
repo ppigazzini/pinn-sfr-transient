@@ -251,14 +251,26 @@ def _lr_schedule(cfg: AxialTrainConfig) -> optax.Schedule:
     from, so switching it on globally would move numbers that nothing else in the change
     touches.
     """
+    # **Annealed to ZERO, not floored at a tenth of the peak.** Both branches used to keep
+    # `0.1 * lr` at the end -- `alpha=0.1` here and `end_value=cfg.lr * 0.1` below -- which
+    # is not a small difference at the tail: `warmup_cosine_decay_schedule` interpolates
+    # the cosine between the peak and the floor, so lifting the floor lifts the whole
+    # curve after warmup. Measured against the reference implementation's schedule at a
+    # 20 000-step budget: identical through the warmup, 1.03x at 40% of the run, 1.14x at
+    # 60%, **1.76x at 80%**, and 1e-5 against ~0 at the end.
+    #
+    # Running the back half of a 1M-step AdEMAMix at nearly twice the intended rate, with
+    # `alpha = 5` and a slow average of half-life 7000, is what the divergence at 100k-200k
+    # looked like: the two implementations agree exactly until the warmup ends and separate
+    # only afterwards, which is precisely where the schedules part.
     if not cfg.lr_warmup:
-        return optax.cosine_decay_schedule(cfg.lr, decay_steps=max(1, cfg.adam_iters), alpha=0.1)
+        return optax.cosine_decay_schedule(cfg.lr, decay_steps=max(1, cfg.adam_iters))
     return optax.warmup_cosine_decay_schedule(
         init_value=0.0,
         peak_value=cfg.lr,
         warmup_steps=_warmup_steps(cfg),
         decay_steps=max(1, cfg.adam_iters),
-        end_value=cfg.lr * 0.1,
+        end_value=0.0,
     )
 
 

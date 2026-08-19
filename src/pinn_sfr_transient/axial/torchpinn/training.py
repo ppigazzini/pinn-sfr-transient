@@ -332,7 +332,14 @@ class Trainer:
         """
         cfg = self.cfg
         total = max(1, cfg.adam_iters)
-        eta_min = cfg.lr * 0.1
+        # `eta_min` LEFT AT ITS DEFAULT of 0, which is also `optax`'s default for both
+        # `cosine_decay_schedule` (`alpha`) and `warmup_cosine_decay_schedule`
+        # (`end_value`). Both backends used to override it to `0.1 * lr`, so neither
+        # cosine ever annealed: the floor is not a tail effect, because the cosine is
+        # interpolated between the peak and the floor and lifting the floor lifts the
+        # whole curve after warmup. Against the annealing schedule at a 1M budget ours
+        # ran 7% high at 500k, 75% high at 800k, and finished at 1e-5 rather than ~0.
+        eta_min = 0.0
         if not cfg.lr_warmup:
             return torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=total, eta_min=eta_min)
         warm = max(1, int(cfg.sf_warmup_frac * cfg.adam_iters))
