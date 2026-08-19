@@ -11,7 +11,7 @@ including the results that came out badly, which are most of them.
 ## 0. Status quo
 
 Every number is three seeds against an `n_axial = 160` reference on **both
-backends**, and every table is reproducible by a sub-command of
+backends** — a mesh the scorer no longer uses, see the note below —, and every table is reproducible by a sub-command of
 [`tools/axial_study.py`](../tools/axial_study.py). Complete: `ruler`, `horizon`,
 `budget`, `optimizer`, `parity`, `plan-a`, `combo`, `regime`, `regime-sign`,
 `default`, `scaling`, `levelset`, and `margin` through f1024 (the ladder's measured
@@ -20,8 +20,15 @@ quasi-Newton stage independently at fixed f128 — the question §7.5.3 and §7.
 answered under a constraint. Committed but unrun: `frontfrac`,
 `capacity-optimiser`.
 
-> **Every number below was measured on a different random stream from the one this code
-> now draws, and none has been re-measured.** `seed = 0` here used to take
+> **The scoring mesh moved from `n_axial = 160` to 2560, so every score below was taken
+> with a different instrument.** `docs/axial_physics.md` §6.6 measured the 160 ruler's own
+> error at the size of the model's — ratio 1.06 on the film field, 0.41–0.80 on onset,
+> against the four a claim needs. Re-scored at 2560, an unchanged model reports
+> `T_s = 3.29e-4` where 160 reported `1.594e-3`: a factor of 4.8 that was the ruler.
+> Numbers below are therefore not merely stale, they are in different units of accuracy.
+>
+> **Every number below was also measured on a different random stream from the one this
+> code now draws, and none has been re-measured.** `seed = 0` here used to take
 > `split(key)[1]` for the model where the reference implementation takes `split(key)[0]`,
 > derive the collocation set from a four-way split rather than `split(k_points)[0]`, and
 > run the first-order stream off the leftover of the model split rather than
@@ -70,8 +77,11 @@ the worst seed is the number to quote.
 (§7.2.9) — the repository failing to produce its own headline result. Both causes,
 the training horizon and the iteration budget, are fixed and pinned by tests.
 
-The ruler is not the limit. At `n = 160` the reference's own error is 1.1–1.6e-3
-(§6.5), so the 1% bar sits 6–9× above it and the failure is **20–45× the ruler**.
+The ruler is not the limit — and it is now a better ruler. Scoring moved to
+`n = 2560`, where the reference's own error is small enough for these fields to be
+resolvable at all: the error-to-uncertainty ratio is 4.2 there against 1.06 at the
+`n = 160` these tables were taken on, and a claim needs four
+([`axial_physics.md`](axial_physics.md) §6.6).
 
 ### 0.2 What is settled
 
@@ -129,7 +139,7 @@ capacity decides *how sharp a peak is representable at all*.
 | **M6 acceptance** | **failed**, 11.1% on `L2(P)` against a 1% bar |
 | **D-TH-2** | `z`-dependent flow after voiding: implemented, and Radau cannot step it |
 | **D-FB-3** | five feedback mechanisms omitted; the model is **non-conservative** in that direction |
-| **Re-measurement** | three changes now separate this code from the tables: the early-time cluster was retired, the RNG derivation was corrected to the reference's, and 24 knobs went. Every table here is provisional until re-run. Largest single item on this list, and none of it is started |
+| **Re-measurement** | four changes separate this code from the tables: the scoring mesh moved from 160 to 2560 nodes, the early-time cluster was retired, the RNG derivation was corrected to the reference's, and 24 knobs went. Every table here is provisional until re-run. Largest single item on this list, and none of it is started |
 | **The retired knobs** | 24 removed on measured evidence (§3.1). The measurements stay in §7; the options do not. A section that describes setting one is describing history |
 | **The compiled torch loop** | `compile=True` makes torch 1.78×–1.96× faster than jitted JAX at matched settings (§7.5.19). Whether that should move the measurement backend is undecided: it is one width, one thread count, one machine, and says nothing about accuracy |
 

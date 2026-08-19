@@ -43,12 +43,15 @@ if TYPE_CHECKING:
 
 #: Axial nodes and time samples the corpus is scored on.
 #:
-#: 160 is what every published axial table uses, so the ladder is comparable with them
-#: by default. It is **not** a mesh at which the temperature fields are resolvable:
-#: §6.6 measures the ratio of model error to reference uncertainty at 1.05 on the film
-#: field and below one on onset. Pass a finer mesh to `ladder` when the question is how
-#: accurate the surrogate is, rather than how it compares with the existing tables.
-RULER_N_AXIAL: int = 160
+#: 2560, the mesh at which these fields are actually resolvable. The ratio of model
+#: error to reference uncertainty is 4.2 here, 3.1 at 640, 1.9 at 320 and 1.06 at 160 --
+#: and a claim needs four. This was 160, which `docs/axial_physics.md` §6.6 had already
+#: measured as the reference's error being the size of the model's.
+#:
+#: The corpus was scored at 160, so a ladder built now is NOT comparable with rows built
+#: before this changed. That is the right way round: the old rows were comparable with
+#: each other and with nothing real.
+RULER_N_AXIAL: int = 2560
 RULER_N_OUT: int = 241
 
 #: Metrics carried by the ladder, and the quantity in `verification`'s uncertainty

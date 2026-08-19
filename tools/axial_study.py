@@ -58,8 +58,21 @@ from pinn_sfr_transient.axial.scoring import relative_l2
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-# The mesh every PINN table is scored against, and the mesh a study converges to.
-RULER_N = 160
+# The mesh every PINN table is scored against.
+#
+# **2560, because 160 was measuring the reference rather than the model.** An accuracy
+# claim needs the model's error to sit at least four times above the uncertainty of the
+# instrument reporting it (MIL-STD-45662A, ANSI/NCSL Z540), and on the film temperature
+# that ratio is 4.2 at 2560 nodes, 3.1 at 640, 1.9 at 320 and 1.06 at 160. At 160 the
+# reference's own error is the size of what it was being asked to resolve, which
+# `docs/axial_physics.md` §6.6 recorded and this constant then ignored for four
+# milestones.
+#
+# The cost argument never existed: a 2560-node reference solves in **74 s** against runs
+# of six hours. Measured on the four arms of the run4 study, moving the ruler from 160 to
+# 2560 changed `T_s` by 4.8x on an unchanged model -- 1.594e-3 against 3.29e-4 -- so
+# every score taken at 160 was reporting the ruler on that field.
+RULER_N = 2560
 # Set from the command line by `ladder` / `ladder-rows`; see `main`.
 _MODELS_DIR = "models"
 _LADDER_JSON = "__DEV/studies/ladder.json"
@@ -640,7 +653,10 @@ def study_ruler(out: Path) -> None:
 
     Superseded by :func:`study_verify` for any *new* uncertainty; see there.
     """
-    meshes = (40, 80, RULER_N, 320, FINEST_N)
+    # Explicit, and no longer keyed to `RULER_N`: this is a CONVERGENCE ladder, whose
+    # job is to show the reference approaching its own limit, and it must stay ordered
+    # and cheap whatever mesh the scoring uses.
+    meshes = (40, 80, 160, 320, FINEST_N)
     runs = {}
     for n in meshes:
         t0 = time.perf_counter()

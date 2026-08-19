@@ -655,9 +655,19 @@ below one** — that agreement measures the reference, not the network. Reaching
 needs roughly 2560 nodes on the temperatures and 640 on onset; 2560 costs 71 s
 against 6 s, which is nothing beside a training run.
 
-**Not yet changed.** `RULER_N` is still 160, because moving it re-scores all 169 runs
-in `__DEV/studies/` against a different instrument and no number would stay
-comparable. The cost of the choice is now on the record; the choice is open.
+**Changed.** `RULER_N` is **2560**. The argument for staying at 160 was that moving it
+re-scores every run in `__DEV/studies/` against a different instrument and no number
+stays comparable — true, and it was never a reason to keep measuring with an instrument
+this section had already shown to be the size of its subject. Those numbers were
+comparable with each other and with nothing else.
+
+The change was forced rather than chosen: the companion implementation scores on 2560 for
+this exact reason, and comparing our 160-node scores against its published ones produced a
+`T_s` gap of 4x that was entirely the two rulers. Re-scored on 2560, the same unchanged
+model reports `T_s = 3.29e-4` where 160 reported `1.594e-3`.
+
+Cost, measured here rather than estimated: **74 s** for the 2560-node solve, against
+training runs of six hours.
 
 Two caveats. The surrogate errors above were themselves measured at 160 and move when
 the ruler moves, so the ratios are indicative. And re-scoring fixed models against a
