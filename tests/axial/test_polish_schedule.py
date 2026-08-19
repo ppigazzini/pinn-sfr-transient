@@ -171,3 +171,59 @@ def test_rar_every_zero_disables_resampling_rather_than_raising():
     )
     model, _, _ = train(AxialParams(), cfg, verbose=False)
     assert model is not None
+
+
+@pytest.mark.parametrize("backend", ["jax", "torch"])
+def test_a_polish_that_dies_leaves_its_earlier_rungs_behind(backend):
+    """Checkpoints must reach the caller AS THEY ARE REACHED, not after the stage ends.
+
+    Both backends used to collect the polish snapshots in memory and hand them over once
+    the stage finished -- and only if the divergence guard approved. Two consequences,
+    both silent: a run stopped at 90 000 of 100 000 iterations left NOTHING, and a polish
+    that ended badly discarded the good rungs it had already earned along with the bad
+    ending, destroying the evidence of where it went wrong.
+
+    The check is the failure itself. The callback raises at the second rung; the first
+    must already have been handed over.
+    """
+    seen: list[int] = []
+
+    class StopError(RuntimeError):
+        pass
+
+    def on_checkpoint(n, _model):
+        seen.append(n)
+        if len(seen) == 2:
+            raise StopError
+
+    from pinn_sfr_transient.axial import AxialParams
+
+    p = AxialParams(n_axial=20)
+    kw = {
+        "seed": 0,
+        "fourier_features": 16,
+        "width": 8,
+        "depth": 2,
+        "adam_iters": 0,
+        "lbfgs_iters": 40,
+        "n_colloc": 64,
+        "polish_colloc": 64,
+        "rar_every": 0,
+        "polish_checkpoints": (10, 20, 30),
+    }
+    if backend == "jax":
+        mod = pytest.importorskip("pinn_sfr_transient.axial.pinn_jax")
+        run = lambda: mod.train(  # noqa: E731
+            p,
+            mod.AxialTrainConfig(log_every=10**9, **kw),
+            verbose=False,
+            on_checkpoint=on_checkpoint,
+        )
+    else:
+        mod = pytest.importorskip("pinn_sfr_transient.axial.torchpinn")
+        run = lambda: mod.train(  # noqa: E731
+            p, mod.AxialTrainConfig(log_every=10**9, **kw), on_checkpoint=on_checkpoint
+        )
+    with pytest.raises(StopError):
+        run()
+    assert seen == [10, 20], f"{backend}: rungs were buffered, not emitted as reached"

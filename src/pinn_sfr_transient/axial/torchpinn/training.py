@@ -394,12 +394,18 @@ class Trainer:
             tolerance_change=1e-14,
         )
 
-    def _run_stages(self, closure, *, want_snaps: bool) -> list:  # noqa: ANN001
-        """Step the polish, snapshotting at each requested budget. One solve, one set.
+    def _run_stages(self, closure, emit=None) -> list:  # noqa: ANN001
+        """Step the polish, emitting the model at each requested budget as it is reached.
 
         ``torch.optim.LBFGS`` keeps its curvature history in ``state``, so repeated
         ``.step()`` calls continue the same solve and a checkpoint costs a copy rather
         than a restart -- the rows are one trajectory, not a ladder of short runs.
+
+        **``emit`` fires the moment the rung is reached.** These snapshots used to be
+        collected here and handed over only after the whole stage finished, and only if
+        the divergence guard approved -- so a polish stopped at 90 000 of 100 000 left
+        nothing at all, and a polish that diverged threw away the good rungs it had
+        already earned along with the bad ending.
         """
         cps = sorted(set(self.cfg.polish_checkpoints))
         snaps: list = []
@@ -415,8 +421,10 @@ class Trainer:
             opt.param_groups[0]["max_eval"] = (seg - run) * 5 // 4 + 1
             opt.step(closure)
             run = seg
-            if want_snaps and run in cps:
+            if run in cps:
                 snaps.append((run, [q.detach().clone() for q in self.model.parameters()]))
+                if emit is not None:
+                    emit(run, self.model)
         return snaps
 
     def _lbfgs(
@@ -440,8 +448,11 @@ class Trainer:
             loss.backward()
             return loss
 
-        snaps = self._run_stages(closure, want_snaps=on_checkpoint is not None)
+        self._run_stages(closure, on_checkpoint)
         after = self._loss_fn()(zeta, that).item()
+        # The guard governs what the CALLER is handed and nothing else: the rungs were
+        # emitted as they were reached, and a rung is a fact about the run. Discarding
+        # them here, as this used to, threw away the evidence showing where it went wrong.
         if not np.isfinite(after) or after > before:
             with torch.no_grad():
                 for q, saved in zip(self.model.parameters(), snapshot, strict=True):
@@ -451,8 +462,6 @@ class Trainer:
             return
         if verbose:
             print(f"[lbfgs done] loss={after:.3e}")
-        for n, saved in snaps:  # only a polish that improved has states worth reporting
-            self._emit_checkpoint(on_checkpoint, n, saved)
 
 
 def train(

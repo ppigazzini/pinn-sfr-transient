@@ -398,25 +398,36 @@ def _ssbfgs_polish(  # noqa: PLR0913, PLR0917 - the same state the caller holds
     return eqx.combine(unravel(flat), static)
 
 
-def _segmented(body, params, state, total: int, checkpoints: tuple[int, ...]):  # noqa: ANN001, ANN202
-    """Run ``total`` iterations of ``body``, snapshotting the parameters at each stop.
+def _segmented(  # noqa: ANN202, PLR0913, PLR0917 - one loop's state, flat is clearer
+    body,  # noqa: ANN001
+    params,  # noqa: ANN001
+    state,  # noqa: ANN001
+    total: int,
+    checkpoints: tuple[int, ...],
+    emit=None,  # noqa: ANN001
+):
+    """Run ``total`` iterations of ``body``, emitting the parameters at each stop.
 
     The optimiser is **not** restarted at a stop: ``state`` is carried across the segment
     boundary, so the trajectory is the one a single uninterrupted `fori_loop` would take
     and a checkpoint costs one copy. Restarting instead would turn every checkpoint into
     a blocked restart, which section 7.5.37 measured at 1.5x worse -- the intermediate
     rows would then be measuring the checkpointing, not the budget.
+
+    **``emit`` is called the moment the rung is reached**, not after the stage finishes.
+    A checkpoint held until the end is worth nothing to a run that is stopped, and this
+    stage is hours long. Only the rungs asked for are emitted: a segment boundary that
+    nobody requested is not a checkpoint.
     """
     wanted = {b for b in checkpoints if 0 < b <= total}
     snaps, done = [], 0
     for b in [*sorted(wanted - {total}), total]:
         params, state = jax.lax.fori_loop(0, b - done, body, (params, state))
         done = b
-        # Only what was asked for. A stage boundary is not a checkpoint: with
-        # `freeze_after` the polish runs in two stages, and snapshotting each stage's
-        # end silently added a row at the freeze point that no caller requested.
         if done in wanted:
             snaps.append((done, params))
+            if emit is not None:
+                emit(done, params)
     return params, snaps
 
 
@@ -472,17 +483,18 @@ def _lbfgs_polish(  # noqa: PLR0913, PLR0917 - polish needs model, params, point
         updates, state = opt.update(grads, state, params, value=loss, grad=grads, value_fn=loss_fn)
         return optax.apply_updates(params, updates), state
 
-    params, snaps = _segmented(body, params, state, cfg.lbfgs_iters, checkpoints)
+    emit = None if on_checkpoint is None else lambda n, q: on_checkpoint(n, eqx.combine(q, static))
+    params, _ = _segmented(body, params, state, cfg.lbfgs_iters, checkpoints, emit)
     after = float(loss_fn(params))
-    # Same divergence guard as the torch twin: a bad line-search step can only
-    # cost time, never accuracy.
+    # Same divergence guard as the torch twin: a bad line-search step can only cost time,
+    # never accuracy. It governs what the CALLER is handed and nothing else -- the rungs
+    # were emitted as they were reached, and a rung is a fact about the run. Discarding
+    # them here, as this used to, threw away the evidence that would show where the
+    # divergence began.
     if not np.isfinite(after) or after > before:
         if verbose:
             print(f"[lbfgs] reverted: {before:.3e} -> {after:.3e} (kept Adam)")
         return model
     if verbose:
         print(f"[lbfgs done] loss={after:.3e}")
-    if on_checkpoint is not None:
-        for n, snap in snaps:
-            on_checkpoint(n, eqx.combine(snap, static))
     return eqx.combine(params, static)
